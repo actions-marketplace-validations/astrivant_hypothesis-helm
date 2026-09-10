@@ -33,7 +33,7 @@ The validation command runs Ruff lint/format, strict mypy, pydocstyle, pydoclint
 and the package's pytest suite. Source and test docstrings follow Astrivant's
 Google-style convention. No type-checking exclusions weaken the source checks.
 
-Unit and integration tests live under `src/hypothesis_helm/tests`. Helm must be
+Unit and integration tests live under `pkg/hypothesis_helm/tests`. Helm must be
 available for render tests; the neighboring Astrivant audit skips when absent.
 `ASTRIVANT_CHART=<path>` opts into the full whole-chart Astrivant integration gate.
 Fixture schemas deliberately containing documentation gaps are not processed by

@@ -187,6 +187,9 @@ def main(argv: list[str] | None = None) -> int:
             status = 0 if report["status"] == "passed" else 1
         print(json.dumps(report, indent=2))
         return status
+    except KeyboardInterrupt:
+        logger.info("Testing interrupted")
+        return 130
     except Exception as exc:
         print(json.dumps({"status": "error", "error": str(exc), "type": type(exc).__name__}))
         return 2

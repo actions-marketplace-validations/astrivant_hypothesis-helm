@@ -283,3 +283,18 @@ Collection-only runs stay serial. The explicit `--whole-chart` and
 `--exhaustive` modes remain serial; `auto` does not change their execution and
 they reject numeric `--jobs` values above one.
 The pre-commit hook inherits `--jobs auto` without configuration changes.
+
+## Progress and interruption
+
+A Rich progress bar shows completed/selected tests, the worker target, and elapsed
+time on stderr. It updates after each property finishes; redirected output keeps
+a final summary without terminal animations. Serial runs show the same progress
+through the bundled pytest plugin. Collection-only runs do not show a test bar.
+
+Press Ctrl-C to stop submitting tests and interrupt active pytest process groups,
+including their Helm children. Workers receive two seconds to finish cleanup,
+followed by SIGTERM and a further one-second grace period before SIGKILL. The
+command exits with status 130. Generated-suite runs retain the partial JUnit and
+run reports; unfinished parallel tests are marked skipped, and concurrency
+history records the interruption. The bar keeps its partial completion count.
+JSON stdout remains reserved for manifests emitted before shutdown.

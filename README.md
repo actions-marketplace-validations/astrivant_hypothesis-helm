@@ -1,4 +1,4 @@
-# Hypothesis Helm
+# Hypothesis
 
 Generate Python property tests for Helm chart values. The framework coalesces
 undocumented template levers into an in-memory `ruamel.yaml` document, enumerates
@@ -6,12 +6,13 @@ schema paths, and selects Hypothesis strategies from their types and constraints
 
 **Table of contents**
 
-- [Quick start](#quick-start)
-- [Architecture](#architecture)
-- [Repository map](#repository-map)
-- [Development](#development)
-- [Documentation](#documentation)
-- [License](#license)
+- [Hypothesis](#hypothesis)
+  - [Quick start](#quick-start)
+  - [Architecture](#architecture)
+  - [Repository map](#repository-map)
+  - [Development](#development)
+  - [Documentation](#documentation)
+  - [License](#license)
 
 ## Quick start
 
@@ -70,8 +71,8 @@ flowchart LR
 
 | Location | Responsibility |
 | --- | --- |
-| [`src/hypothesis_helm/`](src/hypothesis_helm/) | Schema generation, template discovery, rendering and CLI. |
-| [`src/hypothesis_helm/tests/`](src/hypothesis_helm/tests/) | Unit tests and real Helm integration tests. |
+| [`pkg/hypothesis_helm/`](pkg/hypothesis_helm/) | Schema generation, template discovery, rendering and CLI. |
+| [`pkg/hypothesis_helm/tests/`](pkg/hypothesis_helm/tests/) | Unit tests and real Helm integration tests. |
 | [`examples/`](examples/) | Small charts and a checked-in generated workload suite. |
 | [`scripts/`](scripts/) | Project interpreter, validation command and Helm plugin hooks. |
 | [`plugin.yaml`](plugin.yaml) | Installable Helm plugin manifest. |

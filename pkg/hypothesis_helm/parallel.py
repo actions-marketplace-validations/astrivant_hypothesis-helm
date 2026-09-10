@@ -5,7 +5,6 @@ Schedule individual pytest tests with fixed or PID-controlled concurrency.
 import json
 import logging
 import os
-import subprocess
 import sys
 import tempfile
 import time
@@ -13,7 +12,9 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 
+from .display import start_progress
 from .feedback import ThroughputController
+from .processes import Processes
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,7 +46,8 @@ def run_parallel(
         collected = workspace / "collected.json"
         collection_environment = dict(environment, HYPOTHESIS_HELM_COLLECT=str(collected))
         collection_environment.pop("HYPOTHESIS_HELM_MANIFEST_FD", None)
-        collection = subprocess.run(
+        processes = Processes()
+        collection = processes.run(
             [*command, "--collect-only"],
             cwd=directory,
             env=collection_environment,
@@ -92,7 +94,7 @@ def run_parallel(
             shard = command.copy()
             shard[report_index] = str(reports[index])
             shard[-1:] = [str(directory / nodes[index])]
-            completed = subprocess.run(
+            completed = processes.run(
                 shard,
                 cwd=directory,
                 env=worker_environment,
@@ -107,7 +109,10 @@ def run_parallel(
         pending: dict[Future[tuple[int, float]], int] = {}
         next_index = 0
         peak = 0
-        with ThreadPoolExecutor(max_workers=maximum, thread_name_prefix="helm-hypothesis") as pool:
+        interrupted = False
+        progress, task = start_progress(len(nodes), workers)
+        pool = ThreadPoolExecutor(max_workers=maximum, thread_name_prefix="helm-hypothesis")
+        try:
             while next_index < len(nodes) or pending:
                 while next_index < len(nodes) and len(pending) < controller.limit:
                     pending[pool.submit(execute, next_index)] = next_index
@@ -120,11 +125,13 @@ def run_parallel(
                     index = pending.pop(future)
                     status, now = future.result()
                     statuses.append(status)
+                    progress.update(task, advance=1, workers=controller.limit, refresh=True)
                     previous = controller.limit
                     if adaptive:
                         # A batch of simultaneous completions is not underutilization:
                         # all of these tasks ran under the pre-wait occupancy.
                         controller.completed(now, occupied, next_index < len(nodes))
+                        progress.update(task, workers=controller.limit, refresh=True)
                     if controller.limit != previous:
                         LOGGER.info(
                             "PID throughput %.3f tests/s: worker target %s -> %s",
@@ -142,12 +149,40 @@ def run_parallel(
                             "throughput": controller.throughput,
                         }
                     )
+        except KeyboardInterrupt:
+            interrupted = True
+            LOGGER.info("Interrupted; stopping active tests and preserving partial results")
+            processes.stop()
+            for future in pending:
+                future.cancel()
+        finally:
+            pool.shutdown(wait=True, cancel_futures=True)
+            if interrupted:
+                progress.update(task, description="Interrupted", workers=0)
+            progress.stop()
+        if interrupted:
+            for future, index in pending.items():
+                if future.cancelled():
+                    continue
+                status, now = future.result()
+                history.append(
+                    {
+                        "test": nodes[index],
+                        "exit_code": status,
+                        "elapsed": now - started,
+                        "active": 0,
+                        "target": 0,
+                        "throughput": controller.throughput,
+                    }
+                )
         (directory / "concurrency.json").write_text(
             json.dumps(
                 {
                     "mode": "auto" if adaptive else "fixed",
                     "maximum": maximum,
                     "peak": peak,
+                    "interrupted": interrupted,
+                    "not_started": nodes[next_index:],
                     "completions": history,
                 },
                 indent=2,
@@ -158,11 +193,19 @@ def run_parallel(
         merged = ET.SubElement(root, "testsuite", name="hypothesis-helm")
         totals = dict.fromkeys(("tests", "failures", "errors", "skipped"), 0)
         elapsed = 0.0
-        for report in reports:
-            if not report.is_file():
-                statuses.append(2)
+        for index, report in enumerate(reports):
+            try:
+                document = ET.parse(report).getroot()
+            except (FileNotFoundError, ET.ParseError):
+                if interrupted:
+                    case = ET.SubElement(merged, "testcase", name=nodes[index])
+                    ET.SubElement(case, "skipped", message="Interrupted before completion")
+                    totals["tests"] += 1
+                    totals["skipped"] += 1
+                else:
+                    statuses.append(2)
                 continue
-            for suite in ET.parse(report).getroot().iter("testsuite"):
+            for suite in document.iter("testsuite"):
                 for key in totals:
                     totals[key] += int(suite.get(key, "0"))
                 elapsed += float(suite.get("time", "0"))
@@ -170,4 +213,4 @@ def run_parallel(
         merged.attrib.update({key: str(value) for key, value in totals.items()})
         merged.set("time", str(elapsed))
         ET.ElementTree(root).write(directory / "junit.xml", encoding="utf-8", xml_declaration=True)
-        return max(statuses), peak
+        return (130 if interrupted else max(statuses)), peak

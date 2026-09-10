@@ -12,6 +12,7 @@ import pytest
 
 from hypothesis_helm.cli import main
 from hypothesis_helm.generate import generate_tests
+from hypothesis_helm.processes import Processes
 from hypothesis_helm.suite import run_suite
 
 
@@ -156,11 +157,14 @@ def test_runner_uses_own_interpreter(tmp_path: Path, monkeypatch: pytest.MonkeyP
     (tmp_path / "test_chart_values.py").write_text("# saved suite\n")
     calls: list[list[str]] = []
 
-    def execute(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def execute(
+        self: Processes, command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
         """
         Record the subprocess command and emulate a collection failure.
 
         Args:
+            self (Processes): Process owner replaced by this test.
             command (list[str]): Pytest invocation assembled by the runner.
             **kwargs (object): Subprocess execution options.
 
@@ -170,7 +174,7 @@ def test_runner_uses_own_interpreter(tmp_path: Path, monkeypatch: pytest.MonkeyP
         calls.append(command)
         return subprocess.CompletedProcess(command, 2)
 
-    monkeypatch.setattr(subprocess, "run", execute)
+    monkeypatch.setattr(Processes, "run", execute)
     assert run_suite(tmp_path, jobs=1) == 2
     assert calls[0][:3] == [sys.executable, "-m", "pytest"]
 
@@ -332,12 +336,13 @@ def test_adaptive_dispatches_each_completion(
     nodes = [f"test_chart_values.py::test_{index}" for index in range(30)]
 
     def execute(
-        command: list[str], *, env: dict[str, str], **kwargs: object
+        self: Processes, command: list[str], *, env: dict[str, str], **kwargs: object
     ) -> subprocess.CompletedProcess[str]:
         """
         Emulate isolated pytest runs with overlapping work and one failing test.
 
         Args:
+            self (Processes): Process owner replaced by this test.
             command (list[str]): Collection or single-property pytest command.
             env (dict[str, str]): Environment containing the collection destination.
             **kwargs (object): Remaining subprocess options.
@@ -365,7 +370,7 @@ def test_adaptive_dispatches_each_completion(
         return subprocess.CompletedProcess(command, status)
 
     monkeypatch.setattr(os, "process_cpu_count", lambda: 2)
-    monkeypatch.setattr(subprocess, "run", execute)
+    monkeypatch.setattr(Processes, "run", execute)
     arguments = ["run", str(tmp_path)]
     if explicit_auto:
         arguments += ["--jobs", "auto"]

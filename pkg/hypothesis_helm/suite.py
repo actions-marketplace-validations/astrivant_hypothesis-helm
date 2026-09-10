@@ -3,14 +3,17 @@ Run generated Python properties inside the Helm plugin's bundled environment.
 """
 
 import json
+import logging
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Literal
 
+from rich.console import Console
+
 from .output import MANIFEST_FD
 from .parallel import run_parallel
+from .processes import Processes
 
 
 def run_suite(
@@ -46,6 +49,7 @@ def run_suite(
     if not module.is_file():
         raise ValueError(f"no generated test suite found at {module}")
     (directory / "concurrency.json").unlink(missing_ok=True)
+    (directory / "junit.xml").unlink(missing_ok=True)
     # A dedicated config file prevents accidental adoption of the caller's pytest
     # settings; the generated module and any suite-local conftest remain editable.
     config = directory / "hypothesis-helm.pytest.ini"
@@ -79,28 +83,43 @@ def run_suite(
     environment.pop("PYTEST_ADDOPTS", None)
     environment.pop("PYTEST_PLUGINS", None)
     environment.pop("HYPOTHESIS_HELM_COLLECT", None)
+    environment.pop("HYPOTHESIS_HELM_PROGRESS", None)
     environment.pop("HYPOTHESIS_HELM_MANIFEST_LOCK", None)
     descriptor = MANIFEST_FD.get()
     environment.pop("HYPOTHESIS_HELM_MANIFEST_FD", None)
     if descriptor is not None:
         environment["HYPOTHESIS_HELM_MANIFEST_FD"] = str(descriptor)
-    if workers > 1 and not collect_only:
-        status, workers = run_parallel(
-            command, directory, environment, descriptor, workers, adaptive=jobs == "auto"
+    try:
+        if workers > 1 and not collect_only:
+            status, workers = run_parallel(
+                command, directory, environment, descriptor, workers, adaptive=jobs == "auto"
+            )
+        else:
+            workers = 1
+            environment["HYPOTHESIS_HELM_PROGRESS"] = "1"
+            completed = Processes().run(
+                command,
+                cwd=directory,
+                env=environment,
+                check=False,
+                pass_fds=() if descriptor is None else (descriptor,),
+                stdout=None if descriptor is None else sys.stderr,
+            )
+            status = completed.returncode if completed.returncode >= 0 else 130
+    except KeyboardInterrupt:
+        logging.getLogger(__name__).info("Testing interrupted")
+        status = 130
+    if status == 130:
+        Console(stderr=True).show_cursor()
+    if status == 130 and not (directory / "junit.xml").exists():
+        (directory / "junit.xml").write_text(
+            '<testsuites><testsuite name="hypothesis-helm" tests="0" '
+            'failures="0" errors="0" skipped="0"/></testsuites>'
         )
-    else:
-        workers = 1
-        completed = subprocess.run(
-            command,
-            cwd=directory,
-            env=environment,
-            check=False,
-            pass_fds=() if descriptor is None else (descriptor,),
-            stdout=None if descriptor is None else sys.stderr,
-        )
-        status = completed.returncode if completed.returncode >= 0 else 130
     report = {
-        "status": "collected"
+        "status": "interrupted"
+        if status == 130
+        else "collected"
         if status == 0 and collect_only
         else "passed"
         if status == 0

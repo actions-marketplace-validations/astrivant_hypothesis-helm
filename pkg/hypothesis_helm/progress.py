@@ -9,8 +9,12 @@ from pathlib import Path
 from typing import cast
 
 import pytest
+from rich.progress import Progress, TaskID
+
+from .display import start_progress
 
 LOGGER = logging.getLogger(__name__)
+DISPLAY: tuple[Progress, TaskID] | None = None
 
 
 def format_path(path: tuple[str | int, ...]) -> str:
@@ -81,6 +85,45 @@ def pytest_collection_finish(session: pytest.Session) -> None:
     Returns:
         None: Selected node IDs are saved when the scheduler requests collection.
     """
+    global DISPLAY
+    if os.environ.get("HYPOTHESIS_HELM_PROGRESS") == "1" and not session.config.option.collectonly:
+        DISPLAY = start_progress(len(session.items), 1)
     destination = os.environ.get("HYPOTHESIS_HELM_COLLECT")
     if destination is not None:
         Path(destination).write_text(json.dumps([item.nodeid for item in session.items]))
+
+
+def pytest_runtest_logfinish(nodeid: str, location: tuple[str, int | None, str]) -> None:
+    """
+    Advance serial progress after a selected property's teardown.
+
+    Args:
+        nodeid (str): Identifier of the completed test.
+        location (tuple[str, int | None, str]): File, line, and test description.
+
+    Returns:
+        None: Serial progress advances once per property.
+    """
+    if DISPLAY is not None:
+        progress, task = DISPLAY
+        progress.update(task, advance=1, refresh=True)
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """
+    Close serial progress and preserve its partial count on interruption.
+
+    Args:
+        session (pytest.Session): Finishing pytest session.
+        exitstatus (int): Pytest session status.
+
+    Returns:
+        None: The terminal cursor is restored and the final count remains visible.
+    """
+    global DISPLAY
+    if DISPLAY is not None:
+        progress, task = DISPLAY
+        if exitstatus == 2:
+            progress.update(task, description="Interrupted", workers=0)
+        progress.stop()
+        DISPLAY = None

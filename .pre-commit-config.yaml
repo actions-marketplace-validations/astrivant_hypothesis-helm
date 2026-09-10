@@ -6,13 +6,13 @@ repos:
     hooks:
       - id: pydocstyle
         args: [--config=pyproject.toml]
-        files: ^(src|scripts)/.*\.py$
+        files: ^(pkg|scripts)/.*\.py$
   - repo: https://github.com/jsh9/pydoclint
     rev: 0.6.6
     hooks:
       - id: pydoclint
         args: [--config=pyproject.toml]
-        files: ^(src|scripts)/.*\.py$
+        files: ^(pkg|scripts)/.*\.py$
   - repo: local
     hooks:
       - id: ruff-check
