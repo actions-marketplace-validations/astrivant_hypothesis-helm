@@ -110,7 +110,12 @@ def prepare(
                 staged = Path(temporary) / folder
                 shutil.copytree(repository / folder, staged)
                 staged.replace(snapshot)
-        LOGGER.info("Validating Kubernetes %s APIs using cached schemas %s", version, identity)
+        LOGGER.info(
+            "%s Kubernetes %s APIs using cached schemas %s",
+            "Planning validation for" if read_only else "Validating",
+            version,
+            identity,
+        )
     return json.dumps(
         {
             "version": version,

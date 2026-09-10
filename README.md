@@ -54,6 +54,7 @@ Audit values, configure test generation, or rerun a saved suite:
 
 ```sh
 helm hypothesis audit ./path/to/chart
+helm hypothesis test ./path/to/chart --strict
 helm hypothesis test ./path/to/chart --max-examples 50 --seed 42
 helm hypothesis test ./path/to/chart --match replicas
 helm hypothesis generate ./path/to/chart --output generated-tests
@@ -71,6 +72,11 @@ Add `--output json` (or `-o json`) to `test` or `run` to stream rendered
 manifests as JSON Lines, with progress and test reports on stderr. See
 [streaming to Kubeconform and Kubesec](docs/usage.md#stream-rendered-manifests)
 for a pipeline that validates each resource as it arrives.
+
+`--strict` requires all schema-declared and template-referenced configurable fields
+to exist in the original `values.yaml`, including optional fields and values with
+template fallbacks. Missing fields fail preflight; coalesced defaults and cached
+passes do not satisfy it. See [strict source values](docs/usage.md#strict-source-values).
 
 Each generated suite includes Python tests, coalesced YAML, an inferred schema,
 and a path/strategy inventory. Source charts remain unchanged. Inferred contracts
@@ -189,6 +195,36 @@ Use `--dry-run` to estimate work from the current cache before executing tests:
 helm hypothesis test examples/workload --match replicas --max-examples 6 \
   --seed 0 --shard none --dry-run
 ```
+
+Example output for a local run with a cold cache (paths and explanatory notes
+omitted):
+
+```json
+{
+  "status": "dry-run",
+  "cache_hit": false,
+  "rerun": "failed",
+  "selected_properties": 1,
+  "scheduled_properties": 1,
+  "reused_properties": 0,
+  "successful_example_budget": 6,
+  "worker_limit": 1,
+  "properties": [
+    {
+      "test": "test_chart_values.py::test_replicas_fc55c2d623",
+      "cached_outcome": null,
+      "action": "run",
+      "max_examples": 6
+    }
+  ],
+  "estimated_seconds": null
+}
+```
+
+`estimated_seconds: null` means there is no reliable duration estimate before
+execution. After a compatible passing run, the local plan instead reports
+`cache_hit: true`, `scheduled_properties: 0`, `reused_properties: 1`, and
+`successful_example_budget: 0`; the property's action becomes `reuse`.
 
 The JSON plan lists selected, scheduled, and reused properties, plus the total
 successful-example budget. With a cold cache, this selection schedules one

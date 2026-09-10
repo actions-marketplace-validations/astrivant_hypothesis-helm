@@ -155,6 +155,12 @@ def main(argv: list[str] | None = None) -> int:
             choices=("json",),
             help="stream one rendered manifest per JSON line on stdout; reports go to stderr",
         )
+    for command in (generate, test, run):
+        command.add_argument(
+            "--strict",
+            action="store_true",
+            help="require all configurable fields in source values.yaml and a clean audit",
+        )
     args = parser.parse_args(argv)
     logger = logging.getLogger("hypothesis_helm")
     handler = logging.StreamHandler()
@@ -181,6 +187,23 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
+        if args.command in ("generate", "test", "run") and args.strict:
+            source = args.chart if args.command != "run" else None
+            if source is None:
+                metadata = args.suite / "chart-source.json"
+                if not metadata.is_file():
+                    raise ValueError(
+                        "--strict run requires chart-source.json; regenerate the suite"
+                    )
+                source = args.suite / json.loads(metadata.read_text())["chart"]
+            strict_report = audit(Chart.load(source))
+            if strict_report["findings"] or strict_report["unresolved"]:
+                print(
+                    json.dumps(
+                        dict(strict_report, status="failed", reason="strict audit failed"), indent=2
+                    )
+                )
+                return 1
         if args.command in ("test", "run"):
             if args.kubeconform and not args.collect_only and not args.dry_run:
                 os.environ[ENVIRONMENT] = prepare(
@@ -206,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError(
                     "--dry-run applies to per-path suites and cannot combine with --collect-only"
                 )
+            if args.command == "test" and args.timeout <= 0:
+                raise ValueError("timeout must be positive")
             schema_state = None
             if args.kubeconform:
                 schema_state = {

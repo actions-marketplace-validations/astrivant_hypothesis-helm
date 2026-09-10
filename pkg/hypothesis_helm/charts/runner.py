@@ -19,6 +19,7 @@ from jsonschema import validators
 from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.presence import has_path
 from hypothesis_helm.charts.templates import discover
 from hypothesis_helm.reporting.output import emit_manifest
 from hypothesis_helm.reporting.progress import format_path
@@ -202,7 +203,7 @@ def _default_paths(value: object, prefix: tuple[str, ...] = ()) -> Iterator[tupl
 
 def audit(chart: Chart) -> dict[str, object]:
     """
-    Inventory referenced/default paths and documentation gaps without rendering.
+    Inventory schema, template, and default paths against the original values document.
 
     Args:
         chart (Chart): Loaded chart and its schema and defaults.
@@ -212,13 +213,18 @@ def audit(chart: Chart) -> dict[str, object]:
     """
     from attrs import asdict
 
+    from hypothesis_helm.charts.generate import enumerate_paths
+
     references, diagnostics = discover(chart.path)
     defaults = set(_default_paths(chart.defaults))
-    paths = defaults | {r.path for r in references if r.path}
+    declared = {entry.path: entry.schema for entry in enumerate_paths(chart.schema)}
+    paths = defaults | {r.path for r in references if r.path} | declared.keys()
     findings = []
-    for path in sorted(paths):
+    for path in sorted(paths, key=repr):
         LOGGER.info("Auditing path %s", format_path(path))
-        nodes = _schema_nodes(chart.schema, path, chart.schema)
+        nodes = _schema_nodes(chart.schema, tuple(str(segment) for segment in path), chart.schema)
+        if not nodes and path in declared:
+            nodes = [declared[path]]
         locations = [asdict(r) for r in references if r.path == path]
         if not nodes:
             findings.append({"path": list(path), "issue": "undocumented", "references": locations})
@@ -228,8 +234,15 @@ def audit(chart: Chart) -> dict[str, object]:
             findings.append(
                 {"path": list(path), "issue": "missing-description", "references": locations}
             )
-        if locations and path not in defaults and "*" not in path:
-            findings.append({"path": list(path), "issue": "no-default", "references": locations})
+        if not has_path(chart.defaults, path):
+            findings.append(
+                {
+                    "path": list(path),
+                    "issue": "no-default",
+                    "references": locations,
+                    "message": "Configurable field is absent from the original values.yaml",
+                }
+            )
     return {
         "chart": str(chart.path),
         "references": [asdict(r) for r in references],

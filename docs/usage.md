@@ -494,3 +494,35 @@ so their fingerprint matches a real run. Existing generated files, reports, and
 result caches are preserved. Pytest collection imports suite modules and conftest
 files, so custom import-time side effects still apply. `--dry-run` is for per-path
 suites and cannot be combined with `--collect-only`, `--whole-chart`, or `--exhaustive`.
+
+## Strict source values
+
+`--strict` requires every configurable path declared by the schema or resolved from
+templates to be explicitly present in the chart's original `values.yaml`. Optional
+schema fields count too, even if no template currently references them. A schema
+`default`, Helm `default`/`dig` fallback, or value inserted into the in-memory
+coalesced document does not satisfy this requirement.
+
+```sh
+helm hypothesis audit ./chart --strict
+helm hypothesis test ./chart --strict
+helm hypothesis generate ./chart --strict --output generated-tests
+helm hypothesis run generated-tests --strict
+```
+
+Missing fields produce `no-default` findings with their paths and available template
+locations. Strict commands exit with status 1 before generation, rendering, or schema
+downloads when the audit has findings or unresolved accesses. Existing checks for
+undocumented or untyped fields and missing descriptions still apply. A cached passing
+test result cannot bypass this preflight, including during `--dry-run`.
+
+Presence is checked by key, so an explicit `null` leaf is present; it must still
+satisfy the schema and render successfully when tested. A null parent does not
+supply nested keys. Named fields inside arrays or dynamic maps must appear in every
+entry. Empty collections are acceptable for scalar item values, but cannot demonstrate
+nested named fields: strict mode requires representative entries containing those
+fields. Fixed array positions must exist as well.
+
+Saved suites use `chart-source.json` to audit their original chart rather than the
+coalesced snapshot. Regenerate older suites without this metadata before using
+`run --strict`. Strict checks never modify the source `values.yaml`.
