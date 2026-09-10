@@ -1,6 +1,7 @@
 """Verify sparse schema caching and per-render conformity failures."""
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -51,6 +52,30 @@ def test_sparse_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     old = json.loads(conformity.prepare(cache, "1.30.0", "/usr/bin/true"))
     assert Path(configuration["schemas"]).is_dir()
     assert Path(old["schemas"]).is_dir()
+    newer = upstream / "v1.32.0-standalone-strict"
+    newer.mkdir()
+    (newer / "configmap-v1.json").write_text('{"type":"object","title":"new"}')
+    conformity.git(upstream, "add", ".")
+    conformity.git(
+        upstream,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.org",
+        "-c",
+        "commit.gpgsign=false",
+        "commit",
+        "-m",
+        "new release",
+    )
+    refreshed = json.loads(conformity.prepare(cache, "latest", "/usr/bin/true"))
+    assert refreshed["version"] == "1.32.0"
+    assert Path(configuration["schemas"]).is_dir()
+    restored_cache = tmp_path / "restored"
+    shutil.copytree(cache, restored_cache)
+    restored = json.loads(conformity.prepare(restored_cache, "latest", "/usr/bin/true", True))
+    assert restored["identity"] == refreshed["identity"]
+    assert Path(restored["schemas"]).is_relative_to(restored_cache)
     with pytest.raises(ValueError, match="no published"):
         conformity.prepare(cache, "9.9.9", "/usr/bin/true", True)
     with pytest.raises(ValueError, match="exact version"):
@@ -161,3 +186,5 @@ def test_cli_validation_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert conformity.ENVIRONMENT not in os.environ
     assert cli.main([*arguments, "--collect-only"]) == 0
     assert prepared == ["1.31.0"]
+    assert cli.main(["schemas", "--schema-cache-dir", str(tmp_path)]) == 0
+    assert prepared == ["1.31.0", "latest"]

@@ -95,6 +95,13 @@ def main(argv: list[str] | None = None) -> int:
     test.add_argument("--kube-version")
     test.add_argument("--allow-empty", action="store_true")
     test.add_argument("--artifact-dir", type=Path, default=Path("reports/hypothesis-helm"))
+    schemas = commands.add_parser("schemas", help="prepare the sparse Kubernetes schema cache")
+    schemas.add_argument("--schema-version", default="latest")
+    schemas.add_argument(
+        "--schema-cache-dir", type=Path, default=Path(".cache/hypothesis-helm/schemas")
+    )
+    schemas.add_argument("--schema-offline", action="store_true")
+    schemas.add_argument("--kubeconform-binary", default="kubeconform")
     for command in (test, run):
         command.add_argument(
             "--kubeconform", action="store_true", help="validate Kubernetes API schemas"
@@ -156,6 +163,16 @@ def main(argv: list[str] | None = None) -> int:
         stack.enter_context(redirect_stdout(sys.stderr))
     previous_conformity = os.environ.pop(ENVIRONMENT, None)
     try:
+        if args.command == "schemas":
+            print(
+                prepare(
+                    args.schema_cache_dir,
+                    args.schema_version,
+                    args.kubeconform_binary,
+                    args.schema_offline,
+                )
+            )
+            return 0
         if args.command in ("test", "run"):
             if args.kubeconform and not args.collect_only:
                 os.environ[ENVIRONMENT] = prepare(

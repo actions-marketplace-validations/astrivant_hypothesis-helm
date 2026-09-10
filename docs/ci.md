@@ -184,9 +184,25 @@ nor remote cache provisioning is required for the local disk cache.
 
 The action exposes `kubeconform: 'true'`, `schema-version: 'latest'`,
 `schema-cache-dir`, `schema-offline: 'false'`, and `kubeconform-binary` inputs.
-Provision Git and kubeconform on the runner before invoking the action; the binary
-input can point to a preinstalled executable. Pin `schema-version` for reproducibility.
+The action installs kubeconform by default (`kubeconform-version: v0.7.0`); the
+binary input can point to a preinstalled executable. API validation defaults to
+enabled. Git must be available on the runner. Pin `schema-version` for reproducibility.
 Restore/save the entire schema cache directory (default
 `.cache/hypothesis-helm/schemas`) with your provider's cache facility. Set
 `schema-offline: 'true'` only after those schemas have been cached. Each matrix shard
 then validates locally, without downloading schemas for individual test cases.
+
+
+Schema persistence is enabled by default in the GitHub Action. Separate
+`actions/cache/restore` and `actions/cache/save` steps preserve the sparse checkout,
+Git metadata, and immutable snapshots even after a failing test. Cache keys include
+the runner platform and requested Kubernetes version, with a unique key per run and
+prefix restoration; this allows `latest` to refresh instead of freezing an immutable
+CI cache entry forever. Set `schema-cache: 'false'` to opt out of remote persistence.
+The repository's own Action workflow explicitly uses validation and this cache.
+
+The CircleCI reference orb prepares and saves schemas before running properties.
+The GitLab README job uses `cache:when: always`. Neither requires putting schemas
+inside the report directory. `helm hypothesis schemas --schema-version latest
+--schema-cache-dir .cache/hypothesis-helm/schemas` can prepare the cache independently
+without generating or running tests.

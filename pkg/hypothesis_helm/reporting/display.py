@@ -10,6 +10,7 @@ from rich.progress import (
     TaskID,
     TextColumn,
     TimeElapsedColumn,
+    TimeRemainingColumn,
 )
 
 
@@ -30,6 +31,8 @@ def start_progress(total: int, workers: int) -> tuple[Progress, TaskID]:
         MofNCompleteColumn(),
         TextColumn("workers={task.fields[workers]}"),
         TimeElapsedColumn(),
+        TextColumn("ETA"),
+        TimeRemainingColumn(),
         console=Console(stderr=True),
         auto_refresh=False,
         redirect_stdout=False,

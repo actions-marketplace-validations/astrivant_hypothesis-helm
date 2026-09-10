@@ -19,6 +19,12 @@ orbs:
           seed:
             type: integer
             default: 0
+          schema-version:
+            type: string
+            default: latest
+          schema-cache-dir:
+            type: string
+            default: .cache/hypothesis-helm/schemas
           artifact-dir:
             type: string
             default: reports/hypothesis-helm
@@ -30,6 +36,8 @@ orbs:
                 HH_JOBS: << parameters.jobs >>
                 HH_MAX_EXAMPLES: << parameters.max-examples >>
                 HH_SEED: << parameters.seed >>
+                HH_SCHEMA_VERSION: << parameters.schema-version >>
+                HH_SCHEMA_CACHE_DIR: << parameters.schema-cache-dir >>
                 HH_ARTIFACT_DIR: << parameters.artifact-dir >>
               command: |
                 mkdir -p "$HH_ARTIFACT_DIR"
@@ -37,6 +45,9 @@ orbs:
                   --jobs "$HH_JOBS" \
                   --max-examples "$HH_MAX_EXAMPLES" \
                   --seed "$HH_SEED" \
+                  --kubeconform \
+                  --schema-version "$HH_SCHEMA_VERSION" \
+                  --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
                   --shard auto \
                   --rerun all \
                   --artifact-dir "$HH_ARTIFACT_DIR" \
@@ -51,6 +62,9 @@ orbs:
           plugin-path:
             type: string
             default: .
+          kubeconform-version:
+            type: string
+            default: v0.7.0
           helm-version:
             type: string
             default: v3.19.0
@@ -66,6 +80,12 @@ orbs:
           seed:
             type: integer
             default: 0
+          schema-version:
+            type: string
+            default: latest
+          schema-cache-dir:
+            type: string
+            default: .cache/hypothesis-helm/schemas
           artifact-dir:
             type: string
             default: reports/hypothesis-helm
@@ -74,9 +94,13 @@ orbs:
         parallelism: << parameters.parallelism >>
         steps:
           - checkout
+          - restore_cache:
+              keys:
+                - helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-
           - run:
               name: Install Helm and the local Hypothesis plugin
               environment:
+                HH_KUBECONFORM_VERSION: << parameters.kubeconform-version >>
                 HH_HELM_VERSION: << parameters.helm-version >>
                 HH_PLUGIN_PATH: << parameters.plugin-path >>
               command: |
@@ -85,8 +109,26 @@ orbs:
                   -o "$install_dir/helm.tar.gz"
                 tar -xzf "$install_dir/helm.tar.gz" -C "$install_dir"
                 sudo install "$install_dir/linux-amd64/helm" /usr/local/bin/helm
+                curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${HH_KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+                  -o "$install_dir/kubeconform.tar.gz"
+                tar -xzf "$install_dir/kubeconform.tar.gz" -C "$install_dir" kubeconform
+                sudo install "$install_dir/kubeconform" /usr/local/bin/kubeconform
                 PYTHON=python3.13 helm plugin install "$HH_PLUGIN_PATH"
+          - run:
+              name: Prepare Kubernetes schemas before testing
+              environment:
+                HH_SCHEMA_VERSION: << parameters.schema-version >>
+                HH_SCHEMA_CACHE_DIR: << parameters.schema-cache-dir >>
+              command: |
+                helm hypothesis schemas --schema-version "$HH_SCHEMA_VERSION" \
+                  --schema-cache-dir "$HH_SCHEMA_CACHE_DIR"
+          - save_cache:
+              key: helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-{{ epoch }}-{{ .Environment.CIRCLE_NODE_INDEX }}
+              paths:
+                - << parameters.schema-cache-dir >>
           - test:
+              schema-version: << parameters.schema-version >>
+              schema-cache-dir: << parameters.schema-cache-dir >>
               chart: << parameters.chart >>
               jobs: << parameters.jobs >>
               max-examples: << parameters.max-examples >>

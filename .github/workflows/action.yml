@@ -20,6 +20,9 @@ jobs:
         with:
           chart: examples/workload
           max-examples: '5'
+          kubeconform: 'true'
+          schema-version: latest
+          schema-cache-dir: .cache/hypothesis-helm/schemas
           job-index: ${{ strategy.job-index }}
           job-total: ${{ strategy.job-total }}
       - name: Check shard outputs

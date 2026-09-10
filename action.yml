@@ -39,8 +39,14 @@ inputs:
     description: Optional pytest keyword expression applied before sharding.
     default: ''
   kubeconform:
-    description: Enable strict API validation (requires kubeconform on the runner).
-    default: 'false'
+    description: Enable strict API validation and automatic kubeconform installation.
+    default: 'true'
+  kubeconform-version:
+    description: Kubeconform release to install when using the default binary.
+    default: v0.7.0
+  schema-cache:
+    description: Restore and save Kubernetes schemas between workflow runs.
+    default: 'true'
   schema-version:
     description: Kubernetes schema version, latest stable or exact X.Y.Z.
     default: latest
@@ -112,6 +118,29 @@ runs:
         plugin_root="$(mktemp -d "$RUNNER_TEMP/hypothesis-helm.XXXXXX")"
         HELM_PLUGINS="$plugin_root" PYTHON=python helm plugin install "$ACTION_PATH"
         echo "plugins=$plugin_root" >> "$GITHUB_OUTPUT"
+    - name: Install kubeconform
+      if: ${{ inputs.kubeconform == 'true' && inputs.kubeconform-binary == 'kubeconform' }}
+      shell: bash
+      env:
+        KUBECONFORM_VERSION: ${{ inputs.kubeconform-version }}
+      run: |
+        case "$RUNNER_OS" in Linux) platform=linux ;; macOS) platform=darwin ;; esac
+        case "$RUNNER_ARCH" in X64) architecture=amd64 ;; ARM64) architecture=arm64 ;; *) exit 1 ;; esac
+        install_dir="$(mktemp -d "$RUNNER_TEMP/kubeconform.XXXXXX")"
+        curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-${platform}-${architecture}.tar.gz" \
+          -o "$install_dir/kubeconform.tar.gz"
+        tar -xzf "$install_dir/kubeconform.tar.gz" -C "$install_dir" kubeconform
+        chmod +x "$install_dir/kubeconform"
+        echo "$install_dir" >> "$GITHUB_PATH"
+    - name: Restore Kubernetes schemas
+      id: schemas
+      if: ${{ inputs.kubeconform == 'true' && inputs.schema-cache == 'true' }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ inputs.schema-cache-dir }}
+        key: helm-schemas-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.schema-version }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ inputs.job-index }}
+        restore-keys: |
+          helm-schemas-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.schema-version }}-
     - name: Test chart values
       id: test
       shell: bash
@@ -137,6 +166,12 @@ runs:
         HH_RERUN: ${{ inputs.rerun }}
         HH_ARTIFACT_DIR: ${{ inputs.artifact-dir }}
       run: '"$ACTION_PATH/.plugin-venv/bin/python" -m hypothesis_helm.integrations.github_action'
+    - name: Save Kubernetes schemas
+      if: ${{ always() && inputs.kubeconform == 'true' && inputs.schema-cache == 'true' && steps.schemas.outputs.cache-primary-key != '' && steps.schemas.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ inputs.schema-cache-dir }}
+        key: ${{ steps.schemas.outputs.cache-primary-key }}
     - name: Upload this shard's results
       if: ${{ always() && inputs.upload-artifacts == 'true' && steps.test.outputs.report-dir != '' }}
       uses: actions/upload-artifact@v7

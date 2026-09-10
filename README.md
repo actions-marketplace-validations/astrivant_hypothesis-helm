@@ -3,7 +3,8 @@
 <img src="img/logos/logo-transparent.png" alt="Astrivant logo" width="25%" />
 
 Hypothesis turns Helm chart schemas and template references into executable Python
-property tests. It discovers undocumented values, generates inputs from their types
+property tests, which can then be validated against the control plane's API. 
+It discovers undocumented values, generates inputs from their types
 and constraints, and renders the chart to expose configuration failures and reduce
 them to reproducible examples. Run the suite directly through Helm, with optional
 manifest streaming for Kubernetes schema and security validation.
@@ -14,7 +15,9 @@ manifest streaming for Kubernetes schema and security validation.
   - [Install](#install)
   - [Quick Start](#quick-start)
   - [Architecture](#architecture)
+    - [Worked example: `$.replicas` to validated Deployments](#worked-example-replicas-to-validated-deployments)
   - [Parallel execution](#parallel-execution)
+    - [Runtime estimates](#runtime-estimates)
   - [Distributed sharding](#distributed-sharding)
   - [CI and GitHub Action](#ci-and-github-action)
     - [CircleCI inline orb](#circleci-inline-orb)
@@ -89,6 +92,69 @@ flowchart LR
     Helm --> Assertions[Resource assertions and counterexamples]
 ```
 
+### Worked example: `$.replicas` to validated Deployments
+
+Start with [`examples/workload/values.yaml`](examples/workload/values.yaml):
+`replicas: 1`. Its [schema](examples/workload/values.schema.json) declares an
+integer between `0` and `5`, inclusive. The [template](examples/workload/templates/resource.yaml)
+reads that lever directly:
+
+```yaml
+spec:
+  replicas: {{ .Values.replicas }}
+```
+
+Discovery resolves `.Values.replicas` to `$.replicas`. Coalescing keeps the existing
+value `1` and its documented constraints; nothing needs to be inferred for this
+path. The integer bounds select `st.integers(min_value=0, max_value=5)`.
+
+From this repository, with Helm, the plugin, Git, and kubeconform installed, run:
+
+```sh
+mkdir -p reports
+helm hypothesis test examples/workload \
+  --match replicas --max-examples 6 --seed 0 --shard none --rerun all \
+  --kubeconform --schema-version 1.35.0 \
+  --schema-cache-dir .cache/hypothesis-helm/schemas \
+  --artifact-dir reports/replicas --output json > reports/replicas.jsonl
+```
+
+The command prepares the cached Kubernetes schemas and writes
+`reports/replicas/test_chart_values.py`. Its replica property contains the following
+code (imports, fixture, and docstring omitted):
+
+```python
+@pytest.mark.hypothesis_helm_path(('replicas',))
+@settings(max_examples=6, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(value=st.integers(min_value=0, max_value=5), data=st.data())
+def test_replicas_fc55c2d623(chart: Chart, value: object, data: DataObject) -> None:
+    check_path(chart, ('replicas',), value, data, options=OPTIONS)
+```
+
+For a draw of `3`, `check_path` replaces `replicas` in a copy of the coalesced
+values, leaving `image.repository: nginx` and `image.tag: stable`. It checks that
+this complete input satisfies the values schema, then runs `helm template` against
+a temporary chart. The resulting Deployment has `spec.replicas: 3` and image
+`nginx:stable`. The resource is emitted as one JSON line and validated against the
+cached Kubernetes 1.35.0 Deployment schema. A rendering or validation error fails
+the property; Hypothesis then tries to reduce the failing input.
+
+The amount of work is concrete:
+
+| Stage | Work generated | Why |
+| --- | --- | --- |
+| Generate the suite | **4 Python property tests** | Paths are `$.replicas`, `$.image`, `$.image.repository`, and `$.image.tag`; object containers also receive a property. |
+| Select tests | **1 property** | `--match replicas` filters execution after generation; it does not reduce the generated suite. |
+| Execute this example | **6 successful inputs, 6 Helm renders, 6 kubeconform invocations** | The verified run exercised each integer from `0` through `5`, with a six-example budget and valid unchanged sibling values. |
+| Produce results | **6 Deployment JSON lines; 1 passing JUnit test case** | This chart emits one Deployment per render. JUnit counts the property, not its individual Hypothesis examples. |
+
+`--rerun all` makes the command execute even if the path passed previously. Six
+renders is the observed successful result for this example, not a general promise
+of `--max-examples 6`: rejected inputs, failure replay, and shrinking can change the
+work. Removing `--match` runs all four properties, each with its own example budget;
+it does not enumerate the `6 × 2 × 2 = 24` whole-chart combinations. Progress and
+ETA count completed properties, so this selected run finishes at **1/1**, not **6/6**.
+
 ## Parallel execution
 
 The unit of parallel work is a generated property for a values path. Each property
@@ -114,6 +180,16 @@ so small suites may benefit less from parallelism. Automatic tuning seeks higher
 throughput within its bounds; it does not guarantee a global optimum. Use
 `--jobs N` for fixed concurrency or `--jobs 1` for serial execution. The explicit
 whole-chart and exhaustive modes remain serial.
+
+### Runtime estimates
+
+The progress bar shows a live ETA based on completed properties. It starts unknown
+and updates as measurements arrive; JUnit reports record each property's duration.
+Schema types alone cannot predict runtime: Helm branches and resource counts,
+Hypothesis input rejection and shrinking, and runner contention all affect cost.
+`--max-examples` is a sampling budget, not an exact render count. Treat the ETA as a
+rough estimate, particularly while automatic worker concurrency changes or a failing
+property is shrinking. No reliable time estimate is claimed before tests execute.
 
 ## Distributed sharding
 
@@ -146,8 +222,14 @@ from their node environment variables; local and single-job runs use the full
 suite. Use `--shard INDEX/TOTAL` to override detection or `--shard none` to
 disable it.
 
-The repository includes a [GitHub Action](action.yml) that installs the tool,
-runs the chart tests, and uploads per-shard reports and manifests. For a GitHub
+The repository includes a [GitHub Action](action.yml) that installs the tool and
+kubeconform, validates against cached Kubernetes schemas by default, and uploads
+per-shard reports and manifests. `schema-version` defaults to `latest`, and
+`schema-cache-dir` defaults to `.cache/hypothesis-helm/schemas`, outside `reports/`.
+The action restores schemas before testing and saves updates even when tests fail;
+set `schema-cache: 'false'` to disable remote cache persistence or
+`kubeconform: 'false'` to disable API validation. A supplied `kubeconform-binary`
+path uses that executable instead of installing one. For a GitHub
 matrix, pass `strategy.job-index` and `strategy.job-total` through the action's
 `job-index` and `job-total` inputs; GitHub does not export these automatically
 as environment variables.
@@ -160,8 +242,10 @@ can verify the action before it is released.
 
 [`.circleci/config.yml`](.circleci/config.yml) defines the reference-only
 `hypothesis-helm` inline orb. Its `test` command runs the installed plugin;
-its `test-chart` job checks out the repository, installs Helm and the local plugin,
-runs the command, and uploads JUnit results and JSON manifests. The repository's
+its `test-chart` job checks out the repository, installs Helm, kubeconform and the
+local plugin, restores and refreshes the schema cache, runs the command, and uploads
+JUnit results and JSON manifests. It saves schemas before testing so failed tests
+do not prevent the next run from reusing them. The repository's
 workflows do not invoke this job.
 
 After copying the orb's `orbs:` definition into your configuration, you could
@@ -180,6 +264,8 @@ workflows:
           max-examples: 50
           seed: 0
           artifact-dir: reports/hypothesis-helm
+          schema-version: latest
+          schema-cache-dir: .cache/hypothesis-helm/schemas
 ```
 
 `plugin-path` points to a checkout of this plugin. The job defaults to Python 3.13,
@@ -188,7 +274,10 @@ property. With `parallelism: 3`, the tool reads `CIRCLE_NODE_INDEX` and
 `CIRCLE_NODE_TOTAL` to assign shards. The command uses `--rerun all` so every
 assigned path runs in CI. To reuse only the command in an existing job, call
 `hypothesis-helm/test` after installing Helm and the plugin; it accepts the same
-chart, worker, example, seed, and artifact parameters.
+chart, worker, example, seed, artifact, and schema parameters. It requires kubeconform
+as well. `schema-version` defaults to `latest`; use an exact version such as `1.35.0`
+to select another Kubernetes release. The sparse checkout and immutable snapshots
+live in `schema-cache-dir`, separate from reports.
 
 ### GitLab CI job
 
@@ -204,6 +293,15 @@ helm-properties:
   variables:
     HELM_VERSION: v3.19.0
     HELM_CHART: ./chart
+    KUBECONFORM_VERSION: v0.7.0
+    K8S_VERSION: latest
+    SCHEMA_CACHE_DIR: .cache/hypothesis-helm/schemas
+  cache:
+    key: "helm-schemas-v1-linux-amd64-${K8S_VERSION}-${CI_NODE_INDEX}"
+    paths:
+      - .cache/hypothesis-helm/schemas/
+    policy: pull-push
+    when: always
   before_script:
     - apt-get update
     - apt-get install -y --no-install-recommends ca-certificates curl git
@@ -212,12 +310,18 @@ helm-properties:
         -o /tmp/helm.tar.gz
       tar -xzf /tmp/helm.tar.gz -C /tmp
       install /tmp/linux-amd64/helm /usr/local/bin/helm
+      curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+        -o /tmp/kubeconform.tar.gz
+      tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+      install /tmp/kubeconform /usr/local/bin/kubeconform
     - PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm
   script:
     - mkdir -p reports/hypothesis-helm
     - |
       helm hypothesis test "$HELM_CHART" \
         --shard auto --jobs auto --max-examples 50 --seed 0 --rerun all \
+        --kubeconform --schema-version "$K8S_VERSION" \
+        --schema-cache-dir "$SCHEMA_CACHE_DIR" \
         --artifact-dir reports/hypothesis-helm --output json \
         > "reports/hypothesis-helm/manifests-${CI_NODE_INDEX}.jsonl"
   artifacts:
@@ -228,6 +332,12 @@ helm-properties:
     reports:
       junit: reports/hypothesis-helm/shards/*/junit.xml
 ```
+
+Set `K8S_VERSION` to an exact release or leave it at `latest`. If changing
+`SCHEMA_CACHE_DIR`, change `cache.paths` to match. The example restores and saves
+schemas on both successful and failed runs, with independent cache keys per shard.
+A cache miss downloads the selected schemas from GitHub through sparse checkout;
+a hit still refreshes the catalog so `latest` can advance.
 
 Each node runs its own adaptive worker pool and reports its own exit status.
 JUnit reports live under `shards/INDEX-of-TOTAL/`; the example also preserves

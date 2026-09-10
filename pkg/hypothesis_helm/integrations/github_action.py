@@ -80,7 +80,7 @@ def main() -> int:
             command += ["--cache-dir", cache_dir]
         if os.environ.get("HH_CACHE", "true").lower() == "false":
             command.append("--no-cache")
-        if os.environ.get("HH_KUBECONFORM", "false").lower() == "true":
+        if os.environ.get("HH_KUBECONFORM", "true").lower() == "true":
             command += [
                 "--kubeconform",
                 "--schema-version",

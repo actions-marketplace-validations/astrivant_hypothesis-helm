@@ -436,3 +436,21 @@ Path-result cache keys include the schema content identity, resolved Kubernetes
 version, and validator binary digest. Enabling validation or changing any of these
 requires a fresh property run. Use `--rerun all` to validate fresh manifests again
 when an unchanged local suite previously passed.
+
+
+### Preparing schemas independently
+
+`helm hypothesis schemas --schema-version latest --schema-cache-dir
+.cache/hypothesis-helm/schemas` fetches the remote catalog, sparsely checks out the
+selected strict schema version, and prints the resolved configuration as JSON.
+Use it before a CI cache-save step when schema downloads must survive a later
+failing test. It accepts `--schema-offline` and `--kubeconform-binary` as well.
+
+### Timing estimates
+
+The progress bar's ETA uses measured property completion rates and stays unknown
+until enough observations exist. JUnit durations measure individual properties,
+including generation, rendering, validation, and shrinking. Neither is a reliable
+prediction based solely on schema types: input rejection, branch-dependent output,
+shrinking, and changing parallelism affect elapsed time. The ETA excludes schema
+preparation and collection, which happen before the progress bar starts.
