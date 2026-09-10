@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes
+from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes, seed_key
 from hypothesis_helm.integrations.sharding import Shard
 
 
@@ -131,16 +131,20 @@ def estimate_suite(
         assigned = json.loads(assignment.read_text()) if assignment.exists() else None
     retry = rerun == "failed" or (rerun == "auto" and not in_ci(environment))
     compatible = schema_state is None or schema_state.get("status") == "cached"
-    cache_file = cache_root / (
-        fingerprint(
-            directory,
-            seed,
-            match,
-            str(shard),
-            (cache_root, (artifact_dir or logical).resolve()),
-            suite_location=logical,
+    cache_file = (
+        cache_root
+        / seed_key(seed)
+        / (
+            fingerprint(
+                directory,
+                seed,
+                match,
+                str(shard),
+                (cache_root, (artifact_dir or logical).resolve()),
+                suite_location=logical,
+            )
+            + ".json"
         )
-        + ".json"
     )
     outcomes = read_outcomes(cache_file) if cache and compatible else {}
     examples = budgets(module)

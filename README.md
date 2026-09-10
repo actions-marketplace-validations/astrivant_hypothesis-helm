@@ -226,6 +226,10 @@ execution. After a compatible passing run, the local plan instead reports
 `cache_hit: true`, `scheduled_properties: 0`, `reused_properties: 1`, and
 `successful_example_budget: 0`; the property's action becomes `reuse`.
 
+Result caches are grouped under `<cache-dir>/<sha256(seed)>/`, with a separate
+suite fingerprint per entry. `--dry-run` looks up the same seed-specific entries
+as execution.
+
 The JSON plan lists selected, scheduled, and reused properties, plus the total
 successful-example budget. With a cold cache, this selection schedules one
 property with a budget of six. With a compatible cached success, a local rerun

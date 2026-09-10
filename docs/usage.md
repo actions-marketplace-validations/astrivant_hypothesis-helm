@@ -360,6 +360,14 @@ Custom fixtures must also avoid mutating shared files or external resources.
 
 ## Persistent path results
 
+Result entries use `<cache-dir>/<sha256(seed)>/<suite-fingerprint>.json`. The seed
+key is the SHA-256 hex digest of the seed's UTF-8 decimal representation; `--seed 0`
+uses `5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9`.
+The inner fingerprint retains chart, schema, implementation, and selection checks,
+so changing inputs cannot reuse a stale success just because the seed is unchanged.
+Execution and `--dry-run` use the same layout. Older flat cache entries are left
+untouched and treated as cold; the next execution writes the new layout.
+
 `helm hypothesis test` and `helm hypothesis run` cache completed path outcomes under
 `<artifact-dir>/cache/` (inside the shard directory when sharding). With a valid
 cache, local runs retry failed, skipped, and incomplete paths; previously passing

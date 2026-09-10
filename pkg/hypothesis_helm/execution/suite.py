@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from rich.console import Console
 
-from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes
+from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes, seed_key
 from hypothesis_helm.execution.parallel import run_parallel
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.integrations.sharding import Shard
@@ -112,16 +112,21 @@ def run_suite(
     if cache and not collect_only:
         cache_root = (cache_dir or results / "cache").resolve()
         cache_root.mkdir(parents=True, exist_ok=True)
-        cache_file = cache_root / (
-            fingerprint(
-                directory,
-                seed,
-                match,
-                str(shard),
-                (cache_root, (artifact_dir or directory).resolve()),
+        cache_file = (
+            cache_root
+            / seed_key(seed)
+            / (
+                fingerprint(
+                    directory,
+                    seed,
+                    match,
+                    str(shard),
+                    (cache_root, (artifact_dir or directory).resolve()),
+                )
+                + ".json"
             )
-            + ".json"
         )
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
         cached = read_outcomes(cache_file)
         environment["HYPOTHESIS_HELM_CACHE_RESULTS"] = str(cache_results)
         if retry and cached:

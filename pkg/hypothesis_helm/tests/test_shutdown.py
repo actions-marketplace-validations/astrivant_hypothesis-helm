@@ -97,7 +97,7 @@ def test_shutdown(index):
         assert process.returncode == 130, diagnostics
         assert json.loads((tmp_path / "report.json").read_text())["status"] == "interrupted"
         assert "test_shutdown[0]" in (tmp_path / "junit.xml").read_text()
-        cached = json.loads(next((tmp_path / "cache").glob("*.json")).read_text())
+        cached = json.loads(next((tmp_path / "cache").rglob("*.json")).read_text())
         assert cached["test_chart_values.py::test_shutdown[0]"] == "passed"
         assert cached.get("test_chart_values.py::test_shutdown[1]") != "passed"
         assert json.loads(output.splitlines()[0])["metadata"]["name"] == "done"

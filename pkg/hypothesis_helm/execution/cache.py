@@ -35,6 +35,19 @@ def in_ci(environment: Mapping[str, str]) -> bool:
     )
 
 
+def seed_key(seed: int) -> str:
+    """
+    Hash the canonical decimal seed into a stable cache namespace.
+
+    Args:
+        seed (int): Hypothesis seed, including zero or a negative integer.
+
+    Returns:
+        str: SHA-256 hex digest of the seed's UTF-8 decimal representation.
+    """
+    return hashlib.sha256(str(seed).encode("utf-8")).hexdigest()
+
+
 def fingerprint(
     directory: Path,
     seed: int,

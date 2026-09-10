@@ -116,7 +116,7 @@ def test_collect_only_and_teardown_failure(tmp_path: Path, monkeypatch: pytest.M
         "def test_skip(): pass\n"
     )
     assert run_suite(tmp_path, jobs=1) == 1
-    cached = next((tmp_path / "cache").glob("*.json"))
+    cached = next((tmp_path / "cache").rglob("*.json"))
     before = cached.read_bytes()
     assert set(read_outcomes(cached).values()) == {"failed", "skipped"}
     assert run_suite(tmp_path, collect_only=True) == 0
@@ -155,3 +155,37 @@ def test_nested_implementation_invalidation(
     tests.mkdir()
     (tests / "test_runner.py").write_text("test-only change")
     assert fingerprint(suite, 0, None, "none") == after
+
+
+def test_seed_namespaces(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Isolate seeds while retaining multiple content fingerprints within each seed namespace.
+
+    Args:
+        tmp_path (Path): Suite and persistent cache directory.
+        monkeypatch (pytest.MonkeyPatch): Select local rerun defaults.
+
+    Returns:
+        None: Execution and dry runs reuse only their seed's compatible entries.
+    """
+    from hypothesis_helm.execution.cache import seed_key
+    from hypothesis_helm.execution.estimate import estimate_suite
+
+    monkeypatch.setenv("CI", "false")
+    module = tmp_path / "test_chart_values.py"
+    module.write_text("def test_pass(): pass\n")
+    assert seed_key(0) == "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+    assert run_suite(tmp_path, jobs=1, seed=0) == 0
+    first = next((tmp_path / "cache" / seed_key(0)).glob("*.json"))
+    original = first.read_bytes()
+    assert estimate_suite(tmp_path, seed=1)["scheduled_properties"] == 1
+    assert not (tmp_path / "cache" / seed_key(1)).exists()
+    assert run_suite(tmp_path, jobs=1, seed=1) == 0
+    for seed in (0, 1):
+        plan = estimate_suite(tmp_path, seed=seed)
+        assert plan["scheduled_properties"] == 0
+        assert Path(str(plan["result_cache"])).parent.name == seed_key(seed)
+    module.write_text("def test_pass(): assert True\n")
+    assert run_suite(tmp_path, jobs=1, seed=0) == 0
+    assert len(list((tmp_path / "cache" / seed_key(0)).glob("*.json"))) == 2
+    assert first.read_bytes() == original
