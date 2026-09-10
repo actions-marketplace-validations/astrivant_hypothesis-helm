@@ -28,6 +28,22 @@ Python test names with a pytest keyword expression; path segments are included i
 those names. `--collect-only` generates and lists the tests without rendering.
 An empty selection returns a nonzero status rather than reporting success.
 
+Progress is logged for each path as it is coalesced, assigned a generated test,
+and tested. Generation messages go to stderr so `generate` keeps its JSON output
+on stdout. Test progress appears live, once per selected property rather than once
+per Hypothesis example:
+
+```text
+[INFO] Coalescing path $.image.tag
+[INFO] Generating test for path $.image.tag (schema)
+[INFO] Testing path $.image.tag
+```
+
+`audit` similarly logs each audited path. Wildcard items appear as `[*]`; unusual
+keys use quoted bracket notation.
+`--match` limits test execution logs to selected properties. `--collect-only`
+logs generation and lists tests without claiming to execute them.
+
 The plugin invokes pytest with its own Python interpreter, pins the invocation's
 Hypothesis seed, and streams failures and progress to the Helm console. Ambient
 pytest configuration, `PYTEST_ADDOPTS`, and auto-loaded third-party pytest plugins

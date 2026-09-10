@@ -17,12 +17,15 @@ from hypothesis_helm.suite import run_suite
 
 @pytest.mark.integration
 @pytest.mark.skipif(not shutil.which("helm"), reason="Helm is required")
-def test_helm_workflow_generates_and_runs(tmp_path: Path) -> None:
+def test_helm_workflow_generates_and_runs(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+) -> None:
     """
     Run per-path properties through the same entry point used by Helm.
 
     Args:
         tmp_path (Path): Temporary directory receiving generated artifacts.
+        capfd (pytest.CaptureFixture[str]): Captured Helm and child pytest console output.
 
     Returns:
         None: Generated tests pass and the report records the invocation seed.
@@ -47,6 +50,11 @@ def test_helm_workflow_generates_and_runs(tmp_path: Path) -> None:
     assert report["seed"] == 42
     assert (tmp_path / "test_chart_values.py").is_file()
     assert 'tests="4"' in (tmp_path / "junit.xml").read_text()
+    output = capfd.readouterr()
+    assert "[INFO] Coalescing path $.replicas" in output.err
+    assert "[INFO] Generating test for path $.image.tag (schema)" in output.err
+    for path in ("$.replicas", "$.image", "$.image.repository", "$.image.tag"):
+        assert output.out.count(f"[INFO] Testing path {path}\n") == 1
 
 
 @pytest.mark.integration

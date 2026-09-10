@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import subprocess
 import tempfile
 from collections.abc import Callable, Iterator, Sequence
@@ -20,7 +21,10 @@ from ruamel.yaml.error import YAMLError
 from . import yamlio
 from .contracts import json_value, mapping, schema_strategy, sequence
 from .finite import enumerate_values
+from .progress import format_path
 from .templates import discover
+
+LOGGER = logging.getLogger(__name__)
 
 
 @define
@@ -211,6 +215,7 @@ def audit(chart: Chart) -> dict[str, object]:
     paths = defaults | {r.path for r in references if r.path}
     findings = []
     for path in sorted(paths):
+        LOGGER.info("Auditing path %s", format_path(path))
         nodes = _schema_nodes(chart.schema, path, chart.schema)
         locations = [asdict(r) for r in references if r.path == path]
         if not nodes:

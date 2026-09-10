@@ -40,6 +40,7 @@ def chart() -> Iterator[Chart]:
 
 
 # Path: ('replicas',); contract: schema
+@pytest.mark.hypothesis_helm_path(("replicas",))
 @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(value=st.integers(min_value=0, max_value=5), data=st.data())
 def test_replicas_fc55c2d623(chart: Chart, value: object, data: DataObject) -> None:
@@ -58,6 +59,7 @@ def test_replicas_fc55c2d623(chart: Chart, value: object, data: DataObject) -> N
 
 
 # Path: ('image',); contract: schema
+@pytest.mark.hypothesis_helm_path(("image",))
 @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(
     value=from_schema(
@@ -94,6 +96,7 @@ def test_image_45e0390eb7(chart: Chart, value: object, data: DataObject) -> None
 
 
 # Path: ('image', 'repository'); contract: schema
+@pytest.mark.hypothesis_helm_path(("image", "repository"))
 @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(value=st.sampled_from(["nginx", "busybox"]), data=st.data())
 def test_image_repository_7df0ac81c4(chart: Chart, value: object, data: DataObject) -> None:
@@ -112,6 +115,7 @@ def test_image_repository_7df0ac81c4(chart: Chart, value: object, data: DataObje
 
 
 # Path: ('image', 'tag'); contract: schema
+@pytest.mark.hypothesis_helm_path(("image", "tag"))
 @settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(value=st.sampled_from(["stable", "latest"]), data=st.data())
 def test_image_tag_5c4ac61fdd(chart: Chart, value: object, data: DataObject) -> None:
