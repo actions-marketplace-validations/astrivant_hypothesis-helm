@@ -1,31 +1,48 @@
 # Hypothesis
 
-Generate Python property tests for Helm chart values. The framework coalesces
-undocumented template levers into an in-memory `ruamel.yaml` document, enumerates
-schema paths, and selects Hypothesis strategies from their types and constraints.
+Hypothesis turns Helm chart schemas and template references into executable Python
+property tests. It discovers undocumented values, generates inputs from their types
+and constraints, and renders the chart to expose configuration failures and reduce
+them to reproducible examples. Run the suite directly through Helm, with optional
+manifest streaming for Kubernetes schema and security validation.
+
+<img src="img/logos/logo-transparent.png" alt="Astrivant logo" width="25%" />
 
 **Table of contents**
 
 - [Hypothesis](#hypothesis)
-  - [Quick start](#quick-start)
+  - [Install](#install)
+  - [Quick Start](#quick-start)
   - [Architecture](#architecture)
   - [Repository map](#repository-map)
   - [Development](#development)
   - [Documentation](#documentation)
   - [License](#license)
 
-## Quick start
+## Install
 
 Requires Helm 3 and Python 3.13+. The plugin installs its Python dependencies,
 including the test runner, automatically.
 
 ```sh
 PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm
+```
+
+To install from a local checkout:
+
+```sh
+PYTHON=python3.13 helm plugin install .
+```
+
+## Quick Start
+
+Test a chart using its values schema and template references:
+
+```sh
 helm hypothesis test ./path/to/chart
 ```
 
-From a local checkout, use `helm plugin install .`. Chart testing, auditing,
-generation, and rerunning saved tests are all Helm commands:
+Audit values, configure test generation, or rerun a saved suite:
 
 ```sh
 helm hypothesis audit ./path/to/chart
