@@ -114,7 +114,8 @@ Discovery resolves `.Values.replicas` to `$.replicas`. Coalescing keeps the exis
 value `1` and its documented constraints; nothing needs to be inferred for this
 path. The integer bounds select `st.integers(min_value=0, max_value=5)`.
 
-From this repository, with Helm, the plugin, Git, and kubeconform installed, run:
+From this repository, with Helm, the plugin, Git, and
+[kubeconform](https://github.com/yannh/kubeconform) installed, run:
 
 ```sh
 mkdir -p reports
@@ -447,7 +448,8 @@ continue to test the full selection. Use `--rerun all` for a fresh run,
 to disable it. See [persistent path results](docs/usage.md#persistent-path-results)
 and [CI cache setup](docs/ci.md#persisting-path-outcomes).
 
-Enable optional Kubernetes API schema validation with
+Enable optional Kubernetes API schema validation using
+[kubeconform](https://github.com/yannh/kubeconform) with
 `helm hypothesis test ./chart --kubeconform --schema-version 1.35.0`.
 The version defaults to the latest published stable schemas; strict schemas are
 cached through a sparse Git checkout for offline and parallel reuse.
