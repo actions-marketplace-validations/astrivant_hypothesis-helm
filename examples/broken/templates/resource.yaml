@@ -1,0 +1,9 @@
+{{- if eq (int .Values.replicas) 0 }}
+{{- fail "replicas=0 is documented but unsupported" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+data:
+  replicas: {{ .Values.replicas | quote }}

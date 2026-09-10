@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "hypothesis-helm"
+version = "0.1.0"
+description = "Property-based Helm chart testing and value-reference auditing"
+authors = ["Emma Doyle"]
+readme = "README.md"
+license = "GPL-3.0-only"
+packages = [{include = "hypothesis_helm", from = "src"}]
+include = [{path = "plugin.yaml", format = ["sdist"]}, {path = "scripts", format = ["sdist"]}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+hypothesis = "^6.131"
+hypothesis-jsonschema = "^0.23"
+jsonschema = "^4.23"
+PyYAML = "^6.0"
+attrs = "^25.3"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+ruff = "^0.15"
+
+[tool.poetry.scripts]
+hypothesis-helm = "hypothesis_helm.cli:main"
+
+[build-system]
+requires = ["poetry-core>=2.0,<3.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: requires Helm", "astrivant: optional neighboring Astrivant chart"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

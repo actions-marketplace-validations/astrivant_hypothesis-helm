@@ -1,0 +1,12 @@
+name: hypothesis
+version: "0.1.0"
+usage: "Audit and property-test chart values"
+description: "Schema-driven Hypothesis tests and template value discovery for Helm charts"
+ignoreFlags: false
+platformCommand:
+  - command: "$HELM_PLUGIN_DIR/scripts/run.sh"
+platformHooks:
+  install:
+    - command: "$HELM_PLUGIN_DIR/scripts/install.sh"
+  update:
+    - command: "$HELM_PLUGIN_DIR/scripts/install.sh"

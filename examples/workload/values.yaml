@@ -1,0 +1,4 @@
+image:
+  repository: nginx
+  tag: stable
+replicas: 1

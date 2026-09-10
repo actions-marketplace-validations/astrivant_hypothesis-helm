@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  {{- if .Values.enabled }}
+  annotations:
+    example: enabled
+  {{- end }}
+data:
+  message: {{ .Values.message | quote }}

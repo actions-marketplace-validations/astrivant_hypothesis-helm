@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message",
+    "enabled"
+  ],
+  "properties": {
+    "message": {
+      "type": "string",
+      "pattern": "^[a-z]{0,12}$",
+      "description": "ConfigMap message"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Add the optional annotation"
+    }
+  }
+}
