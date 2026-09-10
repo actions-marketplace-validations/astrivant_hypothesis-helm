@@ -231,3 +231,55 @@ configuration. Their exit statuses determine pipeline success; external validato
 findings are not fed back into Hypothesis for shrinking or recorded as pytest
 assertions. Configure any score threshold separately from Kubesec's scan exit
 status. In `generate`, `--output` continues to specify the suite directory.
+
+## Adaptive parallel test execution
+
+`helm hypothesis test` and `helm hypothesis run` default to `--jobs auto`.
+Auto mode starts with the available logical CPU count and uses PID feedback
+to adjust active worker concurrency as individual tests finish. Its ceiling is
+four times the available CPU count, capped by the number of selected tests.
+Use `--jobs N` / `-j N` for fixed concurrency, or `--jobs 1` for serial execution:
+
+```sh
+helm hypothesis test ./chart
+helm hypothesis test ./chart --jobs auto -o json
+helm hypothesis run reports/hypothesis-helm --jobs 4
+helm hypothesis run reports/hypothesis-helm -j 1
+```
+
+The controller measures completed tests per second, including interpreter startup,
+rendering, shrinking, and manifest-output backpressure. Each completion updates
+the measurement window. To reduce timing noise, control adjustments wait for at
+least one target-sized group of completions (minimum two) and 100 milliseconds.
+Startup, concurrency drain, and the final partially occupied queue do not count
+as evidence that higher concurrency reduces throughput.
+
+Since the maximum throughput is unknown, the controller probes nearby concurrency
+levels and estimates the marginal throughput change per worker. A PID controller
+uses that gradient to approach zero marginal gain, with a filtered derivative,
+integral anti-windup, and a one-worker adjustment limit per measurement window.
+Periodic probes allow further exploration; flat throughput favors fewer workers.
+This seeks a local throughput maximum within the bounds, rather than guaranteeing
+an optimum for heterogeneous tests or changing host load. Short suites may finish
+before enough measurements exist to adjust concurrency.
+
+A thread pool dispatches one selected property at a time into an isolated pytest
+interpreter. Lowering concurrency lets active tests finish before replacing them;
+it never cancels a property's Hypothesis generation or shrinking.
+[Pytest is not generally thread-safe](https://docs.pytest.org/en/stable/explanation/flaky.html#thread-safety),
+so pytest state stays isolated. With concurrent execution, module and session
+fixtures run separately for each property. Interpreter and fixture startup costs
+can dominate very small tests; `--jobs 1` uses a single pytest invocation.
+
+Workers preserve live path logs and JSON manifest streaming. Manifest order
+depends on scheduling; writes are synchronized so even large JSON lines remain
+intact. Results are merged into `junit.xml`. `report.json` records the jobs mode,
+peak scheduled worker count, and aggregate exit status. `concurrency.json`
+records each completed test, elapsed time, exit code, active count, target count,
+and latest measured throughput. Target changes also appear in progress logs.
+Any failed worker fails the command.
+
+Collection-only runs stay serial. The explicit `--whole-chart` and
+`--exhaustive` modes remain serial; `auto` does not change their execution and
+they reject numeric `--jobs` values above one.
+The pre-commit hook inherits `--jobs auto` without configuration changes.

@@ -9,12 +9,34 @@ import os
 import sys
 from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
+from typing import Literal
 
 from .generate import generate_tests
 from .generated import RenderOptions
 from .output import MANIFEST_FD
 from .runner import Chart, audit, check_chart
 from .suite import run_suite
+
+
+def parse_jobs(value: str) -> int | Literal["auto"]:
+    """
+    Parse automatic throughput tuning or a positive fixed worker count.
+
+    Args:
+        value (str): Value supplied to the jobs option.
+
+    Returns:
+        int | Literal["auto"]: Validated concurrency setting.
+    """
+    if value == "auto":
+        return "auto"
+    try:
+        count = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("jobs must be auto or a positive integer") from exc
+    if count < 1:
+        raise argparse.ArgumentTypeError("jobs must be auto or a positive integer")
+    return count
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -72,6 +94,13 @@ def main(argv: list[str] | None = None) -> int:
     test.add_argument("--artifact-dir", type=Path, default=Path("reports/hypothesis-helm"))
     for command in (test, run):
         command.add_argument(
+            "--jobs",
+            "-j",
+            type=parse_jobs,
+            default="auto",
+            help="auto (default): PID throughput tuning; N: fixed worker count; 1: serial",
+        )
+        command.add_argument(
             "--output",
             "-o",
             choices=("json",),
@@ -94,7 +123,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "run":
             return run_suite(
-                args.suite, seed=args.seed, match=args.match, collect_only=args.collect_only
+                args.suite,
+                seed=args.seed,
+                match=args.match,
+                collect_only=args.collect_only,
+                jobs=args.jobs,
             )
         chart = Chart.load(args.chart)
         if args.command == "generate":
@@ -126,9 +159,15 @@ def main(argv: list[str] | None = None) -> int:
             if diagnostics:
                 print("Review paths.json for unresolved or inferred template values.", flush=True)
             return run_suite(
-                args.artifact_dir, seed=args.seed, match=args.match, collect_only=args.collect_only
+                args.artifact_dir,
+                seed=args.seed,
+                match=args.match,
+                collect_only=args.collect_only,
+                jobs=args.jobs,
             )
         else:
+            if args.jobs not in ("auto", 1):
+                raise ValueError("--jobs applies to per-path suites; whole-chart modes are serial")
             if args.match is not None or args.collect_only:
                 raise ValueError("--match and --collect-only apply to per-path tests only")
             report = check_chart(

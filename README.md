@@ -37,7 +37,9 @@ helm hypothesis run generated-tests
 `test` generates a Python property per values path, executes the suite inside the
 plugin environment, and returns its exit status. Generated source, values,
 schemas, JUnit results and a run report stay in `reports/hypothesis-helm` by default.
-Use `--artifact-dir` to choose a different location.
+Use `--artifact-dir` to choose a different location. Tests default to `--jobs auto`,
+which adjusts concurrency using PID throughput feedback. Set `--jobs N` for a fixed
+worker count or `--jobs 1` to run serially.
 
 Add `--output json` (or `-o json`) to `test` or `run` to stream rendered
 manifests as JSON Lines, with progress and test reports on stderr. See

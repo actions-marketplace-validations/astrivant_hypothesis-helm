@@ -4,6 +4,8 @@ Display readable value paths during generation and pytest execution.
 
 import json
 import logging
+import os
+from pathlib import Path
 from typing import cast
 
 import pytest
@@ -67,3 +69,18 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
     else:
         # Older or hand-edited suites may not carry generated path metadata.
         LOGGER.info("Testing %s", item.name)
+
+
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """
+    Export selected node IDs for the thread-pool scheduler.
+
+    Args:
+        session (pytest.Session): Session after keyword selection and collection.
+
+    Returns:
+        None: Selected node IDs are saved when the scheduler requests collection.
+    """
+    destination = os.environ.get("HYPOTHESIS_HELM_COLLECT")
+    if destination is not None:
+        Path(destination).write_text(json.dumps([item.nodeid for item in session.items]))

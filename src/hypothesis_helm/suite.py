@@ -7,8 +7,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Literal
 
 from .output import MANIFEST_FD
+from .parallel import run_parallel
 
 
 def run_suite(
@@ -17,6 +19,7 @@ def run_suite(
     seed: int = 0,
     match: str | None = None,
     collect_only: bool = False,
+    jobs: int | Literal["auto"] = "auto",
 ) -> int:
     """
     Execute a saved generated suite with the plugin's Python and pytest.
@@ -30,14 +33,19 @@ def run_suite(
         seed (int): Hypothesis seed applied to every property in this invocation.
         match (str | None): Optional pytest keyword expression selecting value paths.
         collect_only (bool): Whether to list tests without invoking Helm rendering.
+        jobs (int | Literal["auto"]): Fixed worker count or automatic PID throughput tuning.
 
     Returns:
         int: Pytest exit status, or 130 when the child is interrupted.
     """
+    if isinstance(jobs, int) and jobs < 1:
+        raise ValueError("jobs must be positive")
+    workers = jobs if isinstance(jobs, int) else 4 * (os.process_cpu_count() or 1)
     directory = directory.resolve()
     module = directory / "test_chart_values.py"
     if not module.is_file():
         raise ValueError(f"no generated test suite found at {module}")
+    (directory / "concurrency.json").unlink(missing_ok=True)
     # A dedicated config file prevents accidental adoption of the caller's pytest
     # settings; the generated module and any suite-local conftest remain editable.
     config = directory / "hypothesis-helm.pytest.ini"
@@ -70,19 +78,27 @@ def run_suite(
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     environment.pop("PYTEST_ADDOPTS", None)
     environment.pop("PYTEST_PLUGINS", None)
+    environment.pop("HYPOTHESIS_HELM_COLLECT", None)
+    environment.pop("HYPOTHESIS_HELM_MANIFEST_LOCK", None)
     descriptor = MANIFEST_FD.get()
     environment.pop("HYPOTHESIS_HELM_MANIFEST_FD", None)
     if descriptor is not None:
         environment["HYPOTHESIS_HELM_MANIFEST_FD"] = str(descriptor)
-    completed = subprocess.run(
-        command,
-        cwd=directory,
-        env=environment,
-        check=False,
-        pass_fds=() if descriptor is None else (descriptor,),
-        stdout=None if descriptor is None else sys.stderr,
-    )
-    status = completed.returncode if completed.returncode >= 0 else 130
+    if workers > 1 and not collect_only:
+        status, workers = run_parallel(
+            command, directory, environment, descriptor, workers, adaptive=jobs == "auto"
+        )
+    else:
+        workers = 1
+        completed = subprocess.run(
+            command,
+            cwd=directory,
+            env=environment,
+            check=False,
+            pass_fds=() if descriptor is None else (descriptor,),
+            stdout=None if descriptor is None else sys.stderr,
+        )
+        status = completed.returncode if completed.returncode >= 0 else 130
     report = {
         "status": "collected"
         if status == 0 and collect_only
@@ -92,9 +108,14 @@ def run_suite(
         "exit_code": status,
         "suite": str(directory),
         "seed": seed,
+        "workers": workers,
+        "jobs": jobs,
         "match": match,
         "collect_only": collect_only,
         "junit": str(directory / "junit.xml"),
+        "concurrency": str(directory / "concurrency.json")
+        if (directory / "concurrency.json").is_file()
+        else None,
     }
     (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n")
     return status
