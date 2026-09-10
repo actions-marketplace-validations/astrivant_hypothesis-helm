@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "replicas",
+    "image"
+  ],
+  "properties": {
+    "replicas": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "description": "Replica count"
+    },
+    "image": {
+      "type": "object",
+      "description": "Container image",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "tag"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "enum": [
+            "nginx",
+            "busybox"
+          ],
+          "description": "Image repository"
+        },
+        "tag": {
+          "type": "string",
+          "enum": [
+            "stable",
+            "latest"
+          ],
+          "description": "Image tag"
+        }
+      }
+    }
+  }
+}

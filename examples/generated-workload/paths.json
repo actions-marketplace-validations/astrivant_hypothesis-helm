@@ -1,0 +1,84 @@
+{
+  "paths": [
+    {
+      "path": [
+        "replicas"
+      ],
+      "schema": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 5,
+        "description": "Replica count"
+      },
+      "origin": "schema",
+      "strategy": "st.integers(min_value=0, max_value=5)"
+    },
+    {
+      "path": [
+        "image"
+      ],
+      "schema": {
+        "type": "object",
+        "description": "Container image",
+        "additionalProperties": false,
+        "required": [
+          "repository",
+          "tag"
+        ],
+        "properties": {
+          "repository": {
+            "type": "string",
+            "enum": [
+              "nginx",
+              "busybox"
+            ],
+            "description": "Image repository"
+          },
+          "tag": {
+            "type": "string",
+            "enum": [
+              "stable",
+              "latest"
+            ],
+            "description": "Image tag"
+          }
+        }
+      },
+      "origin": "schema",
+      "strategy": "from_schema({'type': 'object', 'description': 'Container image', 'additionalProperties': False, 'required': ['repository', 'tag'], 'properties': {'repository': {'type': 'string', 'enum': ['nginx', 'busybox'], 'description': 'Image repository'}, 'tag': {'type': 'string', 'enum': ['stable', 'latest'], 'description': 'Image tag'}}})"
+    },
+    {
+      "path": [
+        "image",
+        "repository"
+      ],
+      "schema": {
+        "type": "string",
+        "enum": [
+          "nginx",
+          "busybox"
+        ],
+        "description": "Image repository"
+      },
+      "origin": "schema",
+      "strategy": "st.sampled_from(['nginx', 'busybox'])"
+    },
+    {
+      "path": [
+        "image",
+        "tag"
+      ],
+      "schema": {
+        "type": "string",
+        "enum": [
+          "stable",
+          "latest"
+        ],
+        "description": "Image tag"
+      },
+      "origin": "schema",
+      "strategy": "st.sampled_from(['stable', 'latest'])"
+    }
+  ],
+  "diagnostics": []
+}

@@ -1,15 +1,33 @@
-"""Command-line and Helm plugin entry point."""
+"""
+Command-line and Helm plugin entry point.
+"""
 
 import argparse
 import json
 from pathlib import Path
 
+from .generate import generate_tests
 from .runner import Chart, audit, check_chart
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
+    """
+    Dispatch chart auditing, generation, and property checks.
+
+    Args:
+        argv (list[str] | None): Command-line arguments, or the process arguments when omitted.
+
+    Returns:
+        int: Process exit status, zero on success.
+    """
     parser = argparse.ArgumentParser(description="Audit and property-test Helm chart values.")
     commands = parser.add_subparsers(dest="command", required=True)
+    generate = commands.add_parser(
+        "generate", help="generate one typed Python property test per values path"
+    )
+    generate.add_argument("chart", type=Path)
+    generate.add_argument("--output", type=Path, default=Path("generated-tests"))
+    generate.add_argument("--max-examples", type=int, default=100)
     inspect = commands.add_parser("audit", help="discover value references and schema gaps")
     inspect.add_argument("chart", type=Path)
     inspect.add_argument(
@@ -31,7 +49,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         chart = Chart.load(args.chart)
-        if args.command == "audit":
+        if args.command == "generate":
+            report = generate_tests(chart, args.output, max_examples=args.max_examples)
+            status = 0
+        elif args.command == "audit":
             report = audit(chart)
             status = 1 if args.strict and (report["findings"] or report["unresolved"]) else 0
         else:

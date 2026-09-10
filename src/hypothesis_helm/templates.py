@@ -1,4 +1,5 @@
-"""Small Go-template action AST and conservative, scope-aware value discovery.
+"""
+Small Go-template action AST and conservative, scope-aware value discovery.
 
 This is an analyzer, not a Go-template interpreter. Helm remains the renderer.
 Unknown contexts are represented by None, never silently treated as the root.
@@ -15,6 +16,17 @@ from attrs import define, field
 
 @define
 class Action:
+    """
+    Represent a parsed template action and its nested branches.
+
+    Attributes:
+        text (str): Original template action text.
+        line (int): One-based source line number.
+        tokens (list[str]): Lexed action tokens.
+        children (list[Action]): Actions in the primary branch.
+        otherwise (list[Action]): Actions in the alternative branch.
+    """
+
     text: str
     line: int
     tokens: list[str]
@@ -24,6 +36,16 @@ class Action:
 
 @define(frozen=True)
 class Reference:
+    """
+    Record a resolved value path and its template source location.
+
+    Attributes:
+        path (tuple[str, ...]): Resolved value path or chart location.
+        file (str): Chart-relative template filename.
+        line (int): One-based source line number.
+        fallback (bool): Whether the action contains a fallback expression.
+    """
+
     path: tuple[str, ...]
     file: str
     line: int
@@ -32,6 +54,15 @@ class Reference:
 
 @define(frozen=True)
 class Diagnostic:
+    """
+    Describe a template construct requiring manual review.
+
+    Attributes:
+        file (str): Chart-relative template filename.
+        line (int): One-based source line number.
+        message (str): Human-readable diagnostic detail.
+    """
+
     file: str
     line: int
     message: str
@@ -41,7 +72,15 @@ TOKEN = re.compile(r'"(?:\\.|[^"\\])*"|`[^`]*`|\x27(?:\\.|[^\x27\\])*\x27|:=|[()
 
 
 def parse(source: str) -> list[Action]:
-    """Parse actions and block nesting, respecting quoted delimiters and comments."""
+    """
+    Parse actions and block nesting, respecting quoted delimiters and comments.
+
+    Args:
+        source (str): Source chart location or template text.
+
+    Returns:
+        list[Action]: Result of the documented operation.
+    """
     root: list[Action] = []
     current = root
     stack: list[tuple[Action, list[Action]]] = []
@@ -112,7 +151,15 @@ def parse(source: str) -> list[Action]:
 
 
 def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
-    """Resolve direct fields, aliases, with/range scopes, and literal key access."""
+    """
+    Resolve direct fields, aliases, with/range scopes, and literal key access.
+
+    Args:
+        path (Path): Value path or chart location to inspect.
+
+    Returns:
+        tuple[list[Reference], list[Diagnostic]]: Result of the documented operation.
+    """
     refs: list[Reference] = []
     diagnostics: list[Diagnostic] = []
     for file in sorted((path / "templates").rglob("*")):
@@ -125,16 +172,55 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
             diagnostics.append(Diagnostic(name, 1, str(exc)))
             continue
 
-        def walk(nodes, dot, env):
+        def walk(
+            nodes: list[Action],
+            dot: tuple[str, ...] | None,
+            env: dict[str, tuple[str, ...] | None],
+            source_name: str = name,
+        ) -> None:
+            """
+            Resolve value references in the current lexical scope.
+
+            Args:
+                nodes (list[Action]): Template actions to inspect in lexical order.
+                dot (tuple[str, ...] | None): Current template dot context, or an unresolved
+                    context.
+                env (dict[str, tuple[str, ...] | None]): Variable aliases available in the current
+                    lexical scope.
+                source_name (str): Filename captured for this traversal.
+
+            Returns:
+                None: None. The operation completes through its documented side effects.
+            """
             env = dict(env)
             for node in nodes:
                 tokens = node.tokens
                 fallback = any(t in ("default", "coalesce", "dig") for t in tokens)
 
-                def warn(message):
-                    diagnostics.append(Diagnostic(name, node.line, message))
+                def warn(message: str, filename: str = source_name, line: int = node.line) -> None:
+                    """
+                    Record an unresolved construct at its template source location.
 
-                def resolve(token):
+                    Args:
+                        message (str): Diagnostic detail for the current source location.
+                        filename (str): Filename used by this operation.
+                        line (int): Line used by this operation.
+
+                    Returns:
+                        None: None. The operation completes through its documented side effects.
+                    """
+                    diagnostics.append(Diagnostic(filename, line, message))
+
+                def resolve(token: str) -> tuple[str, ...] | None:
+                    """
+                    Resolve a field token against dot and variable aliases.
+
+                    Args:
+                        token (str): Template token to resolve.
+
+                    Returns:
+                        tuple[str, ...] | None: Result of the documented operation.
+                    """
                     if token == ".":
                         return dot
                     if token.startswith("."):
@@ -148,21 +234,59 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
                         return None
                     return base + tuple(suffix.split(".")) if suffix else base
 
-                def emit(value):
-                    if value and value[0] == "Values":
-                        refs.append(Reference(value[1:], name, node.line, fallback))
+                def emit(
+                    value: tuple[str, ...] | None,
+                    filename: str = source_name,
+                    line: int = node.line,
+                    has_fallback: bool = fallback,
+                ) -> None:
+                    """
+                    Record a resolved reference rooted in chart values.
 
-                def literal(token):
+                    Args:
+                        value (tuple[str, ...] | None): Candidate value supplied by the property
+                            strategy.
+                        filename (str): Filename used by this operation.
+                        line (int): Line used by this operation.
+                        has_fallback (bool): Has fallback used by this operation.
+
+                    Returns:
+                        None: None. The operation completes through its documented side effects.
+                    """
+                    if value and value[0] == "Values":
+                        refs.append(Reference(value[1:], filename, line, has_fallback))
+
+                def literal(token: str) -> str | None:
+                    """
+                    Decode a literal map key or recognize an array index.
+
+                    Args:
+                        token (str): Template token to resolve.
+
+                    Returns:
+                        str | None: Result of the documented operation.
+                    """
                     if token.startswith('"'):
-                        return json.loads(token)
+                        return str(json.loads(token))
                     if token.startswith("`"):
                         return token[1:-1]
                     if token.isdigit():
                         return "*"
                     return None
 
-                def expression(ts):
-                    # Remove a wrapping pair only; support (index ...).field below.
+                def expression(
+                    ts: list[str], action_text: str = node.text
+                ) -> tuple[str, ...] | None:
+                    """
+                    Resolve literal lookups and simple template expressions.
+
+                    Args:
+                        ts (list[str]): Tokens forming a template expression.
+                        action_text (str): Action text used by this operation.
+
+                    Returns:
+                        tuple[str, ...] | None: Result of the documented operation.
+                    """
                     if not ts:
                         return None
                     if ts[0] == "(":
@@ -182,7 +306,7 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
                     if ts[0] in ("index", "get") and len(ts) >= 3:
                         base = resolve(ts[1])
                         if base is None:
-                            warn("unresolved lookup target: " + node.text)
+                            warn("unresolved lookup target: " + action_text)
                             return None
                         keys = []
                         for t in ts[2:]:
@@ -190,17 +314,18 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
                                 break
                             key = literal(t)
                             if key is None:
-                                warn("dynamic key requires manual review: " + node.text)
+                                warn("dynamic key requires manual review: " + action_text)
                                 keys.append("*")
                             else:
                                 keys.append(key)
                         return base + tuple(keys)
                     if ts[0] == "dig" and len(ts) >= 4:
+                        ts = ts[: next((i for i, t in enumerate(ts) if t in ("|", ")")), len(ts))]
                         base = resolve(ts[-1])
-                        keys = [literal(t) for t in ts[1:-2]]
-                        if base is not None and all(k is not None for k in keys):
-                            return base + tuple(keys)
-                        warn("unresolved dig: " + node.text)
+                        dig_keys = [literal(t) for t in ts[1:-2]]
+                        if base is not None and all(k is not None for k in dig_keys):
+                            return base + tuple(k for k in dig_keys if k is not None)
+                        warn("unresolved dig: " + action_text)
                         return None
                     if len(ts) == 1:
                         return resolve(ts[0])
@@ -234,12 +359,17 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
                 assignment = next((j for j, t in enumerate(rhs) if t in (":=", "=")), None)
                 names = []
                 if assignment is not None:
+                    if rhs[assignment] == "=":
+                        warn("variable reassignment requires review: " + node.text)
                     names = [t for t in rhs[:assignment] if t.startswith("$")]
                     rhs = rhs[assignment + 1 :]
                 value = expression(rhs)
                 emit(value)
                 child_env = dict(env)
-                for variable in names:
+                for position, variable in enumerate(names):
+                    if head == "range" and len(names) == 2 and position == 0:
+                        child_env[variable] = None
+                        continue
                     child_env[variable] = (
                         value + ("*",) if value is not None and head == "range" else value
                     )
@@ -254,7 +384,11 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
                     child_dot, child_env = None, {"$": None}
                     warn("named template context is resolved only at runtime")
                 walk(node.children, child_dot, child_env)
-                walk(node.otherwise, dot, env)
+                if node.otherwise and node.otherwise[0].tokens[0] in ("if", "with"):
+                    warn("chained else context requires review")
+                    walk(node.otherwise, None, env)
+                else:
+                    walk(node.otherwise, dot, env)
 
         walk(nodes, (), {"$": ()})
     return list(dict.fromkeys(refs)), list(dict.fromkeys(diagnostics))

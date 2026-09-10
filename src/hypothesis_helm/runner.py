@@ -1,4 +1,6 @@
-"""Schema generation, bounded rendering, and extensible manifest properties."""
+"""
+Schema generation, bounded rendering, and extensible manifest properties.
+"""
 
 from __future__ import annotations
 
@@ -6,29 +8,49 @@ import copy
 import json
 import subprocess
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
-import yaml
 from attrs import define
 from hypothesis import HealthCheck, Phase, given, seed, settings
-from hypothesis_jsonschema import from_schema
+from hypothesis.strategies import SearchStrategy
 from jsonschema import validators
+from ruamel.yaml.error import YAMLError
 
+from . import yamlio
+from .contracts import json_value, mapping, schema_strategy, sequence
 from .finite import enumerate_values
 from .templates import discover
 
 
 @define
 class Chart:
+    """
+    Hold the chart location, documented schema, and round-trip defaults.
+
+    Attributes:
+        path (Path): Resolved value path or chart location.
+        schema (dict[str, object]): Schema describing accepted values.
+        defaults (dict[str, object]): Values loaded from the source chart.
+    """
+
     path: Path
-    schema: dict
-    defaults: dict
+    schema: dict[str, object]
+    defaults: dict[str, object]
 
     @classmethod
     def load(cls, path: str | Path) -> Chart:
+        """
+        Check load.
+
+        Args:
+            path (str | Path): Value path or chart location to inspect.
+
+        Returns:
+            Chart: Result of the documented operation.
+        """
         path = Path(path).resolve()
-        metadata = yaml.safe_load((path / "Chart.yaml").read_text())
+        metadata = yamlio.load((path / "Chart.yaml").read_text())
         if not isinstance(metadata, dict) or not metadata.get("name"):
             raise ValueError("Chart.yaml must contain a chart name")
         schema = json.loads((path / "values.schema.json").read_text())
@@ -36,7 +58,16 @@ class Chart:
             raise ValueError("values.schema.json must declare type: object")
 
         # Do not allow implicit network resolution or files outside the chart.
-        def refs(node):
+        def refs(node: object) -> None:
+            """
+            Reject external schema references before strategy construction.
+
+            Args:
+                node (object): Current schema or template node.
+
+            Returns:
+                None: None. The operation completes through its documented side effects.
+            """
             if isinstance(node, dict):
                 if "$ref" in node and not node["$ref"].startswith("#"):
                     raise ValueError("only local JSON Pointer schema references are supported")
@@ -48,33 +79,65 @@ class Chart:
 
         refs(schema)
         validators.validator_for(schema).check_schema(schema)
-        defaults = yaml.safe_load((path / "values.yaml").read_text()) or {}
+        defaults = yamlio.load((path / "values.yaml").read_text()) or {}
         if not isinstance(defaults, dict):
             raise ValueError("values.yaml must contain an object")
         return cls(path, schema, defaults)
 
-    def strategy(self):
-        """Generate schema-valid overrides; Helm still merges chart defaults."""
-        return from_schema(self.schema)
+    def strategy(self) -> SearchStrategy[dict[str, object]]:
+        """
+        Generate schema-valid overrides; Helm still merges chart defaults.
+
+        Returns:
+            SearchStrategy[dict[str, object]]: Result of the documented operation.
+        """
+        return schema_strategy(self.schema).map(mapping)
 
 
-def merge_values(defaults, overrides):
-    """Model ordinary Helm map merging and null deletion for schema preflight.
+def merge_values(defaults: dict[str, object], overrides: dict[str, object]) -> dict[str, object]:
+    """
+    Model ordinary Helm map merging and null deletion for schema preflight.
 
     Helm is authoritative, especially for dependency coalescing and globals.
+
+    Args:
+        defaults (dict[str, object]): Existing chart defaults that take precedence during
+            coalescing.
+        overrides (dict[str, object]): Incoming Helm overrides, including null deletion markers.
+
+    Returns:
+        dict[str, object]: Resulting schema, values mapping, or structured report.
     """
     result = copy.deepcopy(defaults)
     for key, value in overrides.items():
         if value is None:
             result.pop(key, None)
         elif isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = merge_values(result[key], value)
+            result[key] = merge_values(mapping(result[key]), value)
         else:
             result[key] = copy.deepcopy(value)
     return result
 
 
-def _schema_nodes(schema, path, root, seen=frozenset()):
+def _schema_nodes(
+    schema: object,
+    path: tuple[str, ...],
+    root: dict[str, object],
+    seen: frozenset[tuple[int, tuple[str, ...]]] = frozenset(),
+) -> list[dict[str, object]]:
+    """
+    Check  schema nodes.
+
+    Args:
+        schema (object): JSON Schema defining the accepted value domain.
+        path (tuple[str, ...]): Value path or chart location to inspect.
+        root (dict[str, object]): Root schema used to resolve local references.
+        seen (frozenset[tuple[int, tuple[str, ...]]]): References already visited while resolving
+            this schema.
+
+    Returns:
+        list[dict[str, object]]: Result of the documented operation.
+    """
     if not isinstance(schema, dict):
         return []
     marker = (id(schema), path)
@@ -87,7 +150,7 @@ def _schema_nodes(schema, path, root, seen=frozenset()):
         for part in schema["$ref"].removeprefix("#/").split("/"):
             if schema["$ref"] == "#":
                 break
-            target = target[part.replace("~1", "/").replace("~0", "~")]
+            target = mapping(target[part.replace("~1", "/").replace("~0", "~")])
         found += _schema_nodes(target, path, root, seen)
     for keyword in ("allOf", "anyOf", "oneOf"):
         for branch in schema.get(keyword, []):
@@ -110,7 +173,17 @@ def _schema_nodes(schema, path, root, seen=frozenset()):
     return found
 
 
-def _default_paths(value, prefix=()):
+def _default_paths(value: object, prefix: tuple[str, ...] = ()) -> Iterator[tuple[str, ...]]:
+    """
+    Check  default paths.
+
+    Args:
+        value (object): Candidate value supplied by the property strategy.
+        prefix (tuple[str, ...]): Resolved parent path for the current value.
+
+    Yields:
+        tuple[str, ...]: Next value path in the document.
+    """
     if isinstance(value, dict):
         for key, child in value.items():
             path = prefix + (str(key),)
@@ -121,8 +194,16 @@ def _default_paths(value, prefix=()):
             yield from _default_paths(child, prefix + ("*",))
 
 
-def audit(chart: Chart) -> dict:
-    """Inventory referenced/default paths and documentation gaps without rendering."""
+def audit(chart: Chart) -> dict[str, object]:
+    """
+    Inventory referenced/default paths and documentation gaps without rendering.
+
+    Args:
+        chart (Chart): Loaded chart and its schema and defaults.
+
+    Returns:
+        dict[str, object]: Resulting schema, values mapping, or structured report.
+    """
     from attrs import asdict
 
     references, diagnostics = discover(chart.path)
@@ -151,11 +232,21 @@ def audit(chart: Chart) -> dict:
 
 
 class RenderFailure(AssertionError):
-    """A reproducible values input failed the rendering contract."""
+    """
+    A reproducible values input failed the rendering contract.
+    """
 
 
-def validate_resources(resources: list[dict]) -> None:
-    """Check resource envelopes; callers can add Kubernetes or domain validation."""
+def validate_resources(resources: Sequence[object]) -> None:
+    """
+    Check resource envelopes; callers can add Kubernetes or domain validation.
+
+    Args:
+        resources (Sequence[object]): Rendered Kubernetes resource documents.
+
+    Returns:
+        None: None. The operation completes through its documented side effects.
+    """
     identities = set()
     for resource in resources:
         if not isinstance(resource, dict):
@@ -166,7 +257,7 @@ def validate_resources(resources: list[dict]) -> None:
         if resource["kind"] == "List":
             if not isinstance(resource.get("items"), list):
                 raise RenderFailure("List resource has no items array")
-            validate_resources(resource["items"])
+            validate_resources(sequence(resource["items"]))
             continue
         metadata = resource.get("metadata")
         if (
@@ -188,15 +279,29 @@ def validate_resources(resources: list[dict]) -> None:
 
 def render(
     chart: Chart,
-    values: dict,
+    values: dict[str, object],
     *,
-    helm="helm",
-    timeout=30.0,
-    release="hypothesis",
-    namespace="default",
-    kube_version=None,
-) -> list[dict]:
-    """Render locally with Helm schema checks enabled and a subprocess deadline."""
+    helm: str = "helm",
+    timeout: float = 30.0,
+    release: str = "hypothesis",
+    namespace: str = "default",
+    kube_version: str | None = None,
+) -> list[dict[str, object]]:
+    """
+    Render locally with Helm schema checks enabled and a subprocess deadline.
+
+    Args:
+        chart (Chart): Loaded chart and its schema and defaults.
+        values (dict[str, object]): Values document used as the rendering baseline.
+        helm (str): Helm executable used to render the chart.
+        timeout (float): Maximum seconds allowed for each Helm invocation.
+        release (str): Release name supplied to Helm.
+        namespace (str): Release namespace supplied to Helm.
+        kube_version (str | None): Optional Kubernetes capability version supplied to Helm.
+
+    Returns:
+        list[dict[str, object]]: Result of the documented operation.
+    """
     with tempfile.TemporaryDirectory(prefix="hypothesis-helm-") as directory:
         value_file = Path(directory) / "values.json"
         value_file.write_text(json.dumps(values, ensure_ascii=True))
@@ -219,33 +324,53 @@ def render(
         if process.returncode:
             raise RenderFailure(process.stderr.strip() or f"helm exited {process.returncode}")
         try:
-            resources = [item for item in yaml.safe_load_all(process.stdout) if item is not None]
-        except yaml.YAMLError as exc:
+            resources = [item for item in yamlio.load_all(process.stdout) if item is not None]
+        except YAMLError as exc:
             raise RenderFailure(f"invalid rendered YAML: {exc}") from exc
     validate_resources(resources)
-    return resources
+    return [mapping(resource) for resource in resources]
 
 
 def check_chart(
     chart: Chart | str | Path,
     *,
-    max_examples=100,
-    random_seed=0,
-    timeout=30.0,
-    helm="helm",
-    release="hypothesis",
-    namespace="default",
-    kube_version=None,
-    allow_empty=False,
+    max_examples: int = 100,
+    random_seed: int = 0,
+    timeout: float = 30.0,
+    helm: str = "helm",
+    release: str = "hypothesis",
+    namespace: str = "default",
+    kube_version: str | None = None,
+    allow_empty: bool = False,
     artifact_dir: Path | None = None,
-    exhaustive=False,
-    max_cases=1000,
-    properties: tuple[Callable[[list[dict]], None], ...] = (),
-) -> dict:
-    """Check defaults then generated overrides, shrinking failing inputs.
+    exhaustive: bool = False,
+    max_cases: int = 1000,
+    properties: tuple[Callable[[list[dict[str, object]]], None], ...] = (),
+) -> dict[str, object]:
+    """
+    Check defaults then generated overrides, shrinking failing inputs.
 
     Custom properties receive rendered resources and should raise AssertionError on
     failure. The report is evidence from a bounded sample, never a proof of totality.
+
+    Args:
+        chart (Chart | str | Path): Loaded chart and its schema and defaults.
+        max_examples (int): Maximum number of generated examples per property.
+        random_seed (int): Seed for reproducible property generation.
+        timeout (float): Maximum seconds allowed for each Helm invocation.
+        helm (str): Helm executable used to render the chart.
+        release (str): Release name supplied to Helm.
+        namespace (str): Release namespace supplied to Helm.
+        kube_version (str | None): Optional Kubernetes capability version supplied to Helm.
+        allow_empty (bool): Whether a render with no resource documents is accepted.
+        artifact_dir (Path | None): Optional destination for failing values and report artifacts.
+        exhaustive (bool): Whether to enumerate the entire supported finite input domain.
+        max_cases (int): Maximum finite-domain size allowed before enumeration is refused.
+        properties (tuple[Callable[[list[dict[str, object]]], None], ...]): Additional assertions
+            over rendered resources.
+
+    Returns:
+        dict[str, object]: Resulting schema, values mapping, or structured report.
     """
     if not isinstance(chart, Chart):
         chart = Chart.load(chart)
@@ -255,12 +380,21 @@ def check_chart(
     count = 0
     last_failure = None
 
-    def check(values):
+    def check(values: dict[str, object]) -> None:
+        """
+        Render one candidate and retain failure details for replay.
+
+        Args:
+            values (dict[str, object]): Values document used as the rendering baseline.
+
+        Returns:
+            None: None. The operation completes through its documented side effects.
+        """
         nonlocal count, last_failure
         count += 1
         try:
             effective = merge_values(chart.defaults, values)
-            validators.validator_for(chart.schema)(chart.schema).validate(effective)
+            validators.validator_for(chart.schema)(chart.schema).validate(json_value(effective))
             resources = render(
                 chart,
                 values,
@@ -278,7 +412,16 @@ def check_chart(
             last_failure = (values, str(exc))
             raise
 
-    def save_failure(exc):
+    def save_failure(exc: Exception) -> dict[str, object]:
+        """
+        Persist the final counterexample and construct its failure report.
+
+        Args:
+            exc (Exception): Failure raised while checking or generating a chart input.
+
+        Returns:
+            dict[str, object]: Resulting schema, values mapping, or structured report.
+        """
         values, message = last_failure or ({}, str(exc))
         result = {
             "status": "failed",
@@ -326,7 +469,16 @@ def check_chart(
         suppress_health_check=(HealthCheck.too_slow,),
     )
     @given(chart.strategy())
-    def property_test(values):
+    def property_test(values: dict[str, object]) -> None:
+        """
+        Exercise a schema-generated candidate through the render contract.
+
+        Args:
+            values (dict[str, object]): Values document used as the rendering baseline.
+
+        Returns:
+            None: None. The operation completes through its documented side effects.
+        """
         check(values)
 
     try:

@@ -1,0 +1,34 @@
+default_language_version:
+  python: python3.13
+repos:
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args: [--config=pyproject.toml]
+        files: ^(src|scripts)/.*\.py$
+  - repo: https://github.com/jsh9/pydoclint
+    rev: 0.6.6
+    hooks:
+      - id: pydoclint
+        args: [--config=pyproject.toml]
+        files: ^(src|scripts)/.*\.py$
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint
+        entry: bash scripts/project-python.sh -m ruff check
+        language: system
+        types: [python]
+      - id: ruff-format
+        name: Ruff format
+        entry: bash scripts/project-python.sh -m ruff format --check
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: bash scripts/project-python.sh -m mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true

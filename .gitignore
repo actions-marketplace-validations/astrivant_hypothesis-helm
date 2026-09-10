@@ -7,3 +7,8 @@ __pycache__/
 dist/
 *.egg-info/
 reports/
+generated-tests/
+
+.cache/
+.mypy_cache/
+.env

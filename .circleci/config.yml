@@ -1,0 +1,34 @@
+version: 2.1
+
+jobs:
+  test-python:
+    docker:
+      - image: cimg/python:3.13
+    steps:
+      - checkout
+      - run: pip install poetry==2.1.3 pre-commit==4.6.0
+      - run: poetry install
+      - run:
+          name: Install Helm for chart integration tests
+          command: |
+            curl -fsSL https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz -o /tmp/helm.tar.gz
+            tar -xzf /tmp/helm.tar.gz -C /tmp
+            sudo install /tmp/linux-amd64/helm /usr/local/bin/helm
+      - run: bash scripts/check.sh --junitxml=reports/pytest.xml
+      - run: poetry run pytest examples/generated-workload
+      - run: poetry build
+      - run:
+          name: Verify Helm plugin installation and generation
+          command: |
+            helm plugin install .
+            helm hypothesis generate examples/workload --output /tmp/generated-workload --max-examples 5
+            poetry run pytest /tmp/generated-workload
+      - store_test_results:
+          path: reports
+      - store_artifacts:
+          path: dist
+
+workflows:
+  verify-all:
+    jobs:
+      - test-python
