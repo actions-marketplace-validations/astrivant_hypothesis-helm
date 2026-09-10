@@ -18,12 +18,13 @@ from hypothesis.strategies import SearchStrategy
 from jsonschema import validators
 from ruamel.yaml.error import YAMLError
 
-from . import yamlio
-from .contracts import json_value, mapping, schema_strategy, sequence
-from .finite import enumerate_values
-from .output import emit_manifest
-from .progress import format_path
-from .templates import discover
+from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.templates import discover
+from hypothesis_helm.reporting.output import emit_manifest
+from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.schemas.conformity import validate
+from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
+from hypothesis_helm.schemas.finite import enumerate_values
 
 LOGGER = logging.getLogger(__name__)
 
@@ -336,6 +337,10 @@ def render(
     for resource in resources:
         emit_manifest(resource)
     validate_resources(resources)
+    try:
+        validate(process.stdout, timeout)
+    except AssertionError as exc:
+        raise RenderFailure(str(exc)) from exc
     return [mapping(resource) for resource in resources]
 
 

@@ -11,11 +11,13 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 from typing import Literal
 
-from .generate import generate_tests
-from .generated import RenderOptions
-from .output import MANIFEST_FD
-from .runner import Chart, audit, check_chart
-from .suite import run_suite
+from hypothesis_helm.charts.generate import generate_tests
+from hypothesis_helm.charts.generated import RenderOptions
+from hypothesis_helm.charts.runner import Chart, audit, check_chart
+from hypothesis_helm.execution.suite import run_suite
+from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
+from hypothesis_helm.reporting.output import MANIFEST_FD
+from hypothesis_helm.schemas.conformity import ENVIRONMENT, prepare
 
 
 def parse_jobs(value: str) -> int | Literal["auto"]:
@@ -67,6 +69,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--seed", type=int, default=0)
     run.add_argument("--match", help="select tests by value-path keyword")
     run.add_argument("--collect-only", action="store_true")
+    run.add_argument("--artifact-dir", type=Path, help="report directory for a saved suite")
     test = commands.add_parser("test", help="generate and run a Hypothesis test per values path")
     test.add_argument(
         "chart",
@@ -94,6 +97,37 @@ def main(argv: list[str] | None = None) -> int:
     test.add_argument("--artifact-dir", type=Path, default=Path("reports/hypothesis-helm"))
     for command in (test, run):
         command.add_argument(
+            "--kubeconform", action="store_true", help="validate Kubernetes API schemas"
+        )
+        command.add_argument(
+            "--schema-version", default="latest", help="Kubernetes schema version: latest or X.Y.Z"
+        )
+        command.add_argument(
+            "--schema-cache-dir", type=Path, default=Path(".cache/hypothesis-helm/schemas")
+        )
+        command.add_argument(
+            "--schema-offline",
+            action="store_true",
+            help="reuse cached schemas without network access",
+        )
+        command.add_argument("--kubeconform-binary", default="kubeconform")
+        command.add_argument(
+            "--cache-dir", type=Path, help="persistent path-result cache directory"
+        )
+        command.add_argument("--no-cache", action="store_true", help="disable path-result caching")
+        command.add_argument(
+            "--rerun",
+            choices=("auto", "all", "failed"),
+            default="auto",
+            help="auto: rerun failures locally; run all paths in CI",
+        )
+        command.add_argument(
+            "--shard",
+            type=parse_shard_option,
+            default="auto",
+            help="auto (default): detect CI node; INDEX/TOTAL: explicit shard; none: disable",
+        )
+        command.add_argument(
             "--jobs",
             "-j",
             type=parse_jobs,
@@ -120,7 +154,24 @@ def main(argv: list[str] | None = None) -> int:
         descriptor = os.dup(sys.stdout.fileno())
         token = MANIFEST_FD.set(descriptor)
         stack.enter_context(redirect_stdout(sys.stderr))
+    previous_conformity = os.environ.pop(ENVIRONMENT, None)
     try:
+        if args.command in ("test", "run"):
+            if args.kubeconform and not args.collect_only:
+                os.environ[ENVIRONMENT] = prepare(
+                    args.schema_cache_dir,
+                    args.schema_version,
+                    args.kubeconform_binary,
+                    args.schema_offline,
+                )
+            args.shard, shard_source = resolve_shard(args.shard, os.environ)
+            if args.shard is not None:
+                logger.info(
+                    "Shard %s/%s selected from %s",
+                    args.shard.index,
+                    args.shard.total,
+                    shard_source,
+                )
         if args.command == "run":
             return run_suite(
                 args.suite,
@@ -128,6 +179,11 @@ def main(argv: list[str] | None = None) -> int:
                 match=args.match,
                 collect_only=args.collect_only,
                 jobs=args.jobs,
+                shard=args.shard,
+                cache_dir=args.cache_dir,
+                cache=not args.no_cache,
+                rerun=args.rerun,
+                artifact_dir=args.artifact_dir,
             )
         chart = Chart.load(args.chart)
         if args.command == "generate":
@@ -139,9 +195,12 @@ def main(argv: list[str] | None = None) -> int:
         elif not args.whole_chart and not args.exhaustive:
             if args.timeout <= 0:
                 raise ValueError("timeout must be positive")
+            generated = args.artifact_dir
+            if args.shard is not None:
+                generated = generated / "shards" / args.shard.name
             report = generate_tests(
                 chart,
-                args.artifact_dir,
+                generated,
                 max_examples=args.max_examples,
                 options=RenderOptions(
                     timeout=args.timeout,
@@ -152,20 +211,25 @@ def main(argv: list[str] | None = None) -> int:
                     allow_empty=args.allow_empty,
                 ),
             )
-            print(
-                f"Generated {report['tests']} value-path tests in {args.artifact_dir}", flush=True
-            )
+            print(f"Generated {report['tests']} value-path tests in {generated}", flush=True)
             diagnostics = report["diagnostics"]
             if diagnostics:
                 print("Review paths.json for unresolved or inferred template values.", flush=True)
             return run_suite(
-                args.artifact_dir,
+                generated,
                 seed=args.seed,
                 match=args.match,
                 collect_only=args.collect_only,
                 jobs=args.jobs,
+                shard=args.shard,
+                cache_dir=args.cache_dir,
+                cache=not args.no_cache,
+                rerun=args.rerun,
+                artifact_dir=args.artifact_dir,
             )
         else:
+            if args.shard is not None:
+                raise ValueError("--shard applies to per-path suites only")
             if args.jobs not in ("auto", 1):
                 raise ValueError("--jobs applies to per-path suites; whole-chart modes are serial")
             if args.match is not None or args.collect_only:
@@ -194,6 +258,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "error", "error": str(exc), "type": type(exc).__name__}))
         return 2
     finally:
+        os.environ.pop(ENVIRONMENT, None)
+        if previous_conformity is not None:
+            os.environ[ENVIRONMENT] = previous_conformity
         stack.close()
         if token is not None:
             MANIFEST_FD.reset(token)

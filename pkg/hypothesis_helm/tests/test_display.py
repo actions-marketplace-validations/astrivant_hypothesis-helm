@@ -4,7 +4,7 @@ Verify progress output preserves the manifest channel.
 
 import pytest
 
-from hypothesis_helm.display import start_progress
+from hypothesis_helm.reporting.display import start_progress
 
 
 def test_progress_summary_uses_stderr(capsys: pytest.CaptureFixture[str]) -> None:

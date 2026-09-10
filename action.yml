@@ -1,0 +1,146 @@
+name: Hypothesis Helm
+description: Property-test Helm chart values with CI sharding and adaptive parallel workers.
+author: Emma Doyle
+branding:
+  icon: check-circle
+  color: purple
+inputs:
+  chart:
+    description: Chart directory relative to the workspace.
+    default: .
+  python-version:
+    description: Python version (3.13 or newer).
+    default: '3.13'
+  helm-version:
+    description: Helm 3 version to install.
+    default: v3.19.0
+  shard:
+    description: 'auto detects CI coordinates; INDEX/TOTAL overrides; none disables sharding.'
+    default: auto
+  job-index:
+    description: 'Zero-based GitHub strategy.job-index; pass this from a matrix workflow.'
+    default: ''
+  job-total:
+    description: 'GitHub strategy.job-total; pass this from a matrix workflow.'
+    default: ''
+  jobs:
+    description: 'auto tunes worker concurrency per runner; a positive integer fixes the limit.'
+    default: auto
+  max-examples:
+    description: Maximum Hypothesis examples per property.
+    default: '100'
+  seed:
+    description: Shared Hypothesis seed for reproducible runs.
+    default: '0'
+  timeout:
+    description: Timeout in seconds per Helm render.
+    default: '30'
+  match:
+    description: Optional pytest keyword expression applied before sharding.
+    default: ''
+  kubeconform:
+    description: Enable strict API validation (requires kubeconform on the runner).
+    default: 'false'
+  schema-version:
+    description: Kubernetes schema version, latest stable or exact X.Y.Z.
+    default: latest
+  schema-cache-dir:
+    description: Sparse schema checkout and immutable snapshot cache.
+    default: .cache/hypothesis-helm/schemas
+  schema-offline:
+    description: Use restored schemas without fetching upstream.
+    default: 'false'
+  kubeconform-binary:
+    description: Path or name of a preinstalled kubeconform executable.
+    default: kubeconform
+  cache-dir:
+    description: Optional persistent path-result cache directory to restore with your CI cache.
+    default: ''
+  cache:
+    description: Enable disk caching of successful and failed paths.
+    default: 'true'
+  rerun:
+    description: 'auto runs all paths in CI; failed retries cached failures; all forces a full run.'
+    default: auto
+  artifact-dir:
+    description: Artifact root; sharded runs append shards/INDEX-of-TOTAL.
+    default: reports/hypothesis-helm
+  upload-artifacts:
+    description: Upload the generated suite, reports, and JSON manifests, including on failure.
+    default: 'true'
+  artifact-name:
+    description: Artifact name prefix; job name and shard identifier are appended.
+    default: hypothesis-helm
+outputs:
+  report-dir:
+    description: Absolute path to this shard's artifact directory.
+    value: ${{ steps.test.outputs.report-dir }}
+  junit-path:
+    description: Absolute path to the JUnit report.
+    value: ${{ steps.test.outputs.junit-path }}
+  manifest-path:
+    description: Absolute path to the JSON Lines manifest stream.
+    value: ${{ steps.test.outputs.manifest-path }}
+  shard:
+    description: Resolved one-based shard coordinates, or none.
+    value: ${{ steps.test.outputs.shard }}
+  exit-code:
+    description: Helm test exit code.
+    value: ${{ steps.test.outputs.exit-code }}
+runs:
+  using: composite
+  steps:
+    - name: Check runner support
+      shell: bash
+      run: |
+        if [[ "$RUNNER_OS" != "Linux" && "$RUNNER_OS" != "macOS" ]]; then
+          echo "::error::Hypothesis Helm requires a Linux or macOS runner."
+          exit 1
+        fi
+    - uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+    - uses: azure/setup-helm@v5
+      with:
+        version: ${{ inputs.helm-version }}
+    - name: Install this action's Helm plugin
+      id: install
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        plugin_root="$(mktemp -d "$RUNNER_TEMP/hypothesis-helm.XXXXXX")"
+        HELM_PLUGINS="$plugin_root" PYTHON=python helm plugin install "$ACTION_PATH"
+        echo "plugins=$plugin_root" >> "$GITHUB_OUTPUT"
+    - name: Test chart values
+      id: test
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        HELM_PLUGINS: ${{ steps.install.outputs.plugins }}
+        HYPOTHESIS_HELM_JOB_INDEX: ${{ inputs.job-index }}
+        HYPOTHESIS_HELM_JOB_TOTAL: ${{ inputs.job-total }}
+        HH_CHART: ${{ inputs.chart }}
+        HH_SHARD: ${{ inputs.shard }}
+        HH_JOBS: ${{ inputs.jobs }}
+        HH_MAX_EXAMPLES: ${{ inputs.max-examples }}
+        HH_SEED: ${{ inputs.seed }}
+        HH_TIMEOUT: ${{ inputs.timeout }}
+        HH_MATCH: ${{ inputs.match }}
+        HH_KUBECONFORM: ${{ inputs.kubeconform }}
+        HH_SCHEMA_VERSION: ${{ inputs.schema-version }}
+        HH_SCHEMA_CACHE_DIR: ${{ inputs.schema-cache-dir }}
+        HH_SCHEMA_OFFLINE: ${{ inputs.schema-offline }}
+        HH_KUBECONFORM_BINARY: ${{ inputs.kubeconform-binary }}
+        HH_CACHE_DIR: ${{ inputs.cache-dir }}
+        HH_CACHE: ${{ inputs.cache }}
+        HH_RERUN: ${{ inputs.rerun }}
+        HH_ARTIFACT_DIR: ${{ inputs.artifact-dir }}
+      run: '"$ACTION_PATH/.plugin-venv/bin/python" -m hypothesis_helm.integrations.github_action'
+    - name: Upload this shard's results
+      if: ${{ always() && inputs.upload-artifacts == 'true' && steps.test.outputs.report-dir != '' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}-${{ github.job }}-${{ steps.test.outputs.shard-id }}
+        path: ${{ steps.test.outputs.report-dir }}
+        if-no-files-found: warn

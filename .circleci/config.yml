@@ -1,5 +1,102 @@
 version: 2.1
 
+# Reference only: this inline orb is intentionally absent from all workflows.
+orbs:
+  hypothesis-helm:
+    commands:
+      test:
+        description: Test chart values with an installed Helm plugin and automatic CI sharding.
+        parameters:
+          chart:
+            type: string
+            default: examples/workload
+          jobs:
+            type: string
+            default: auto
+          max-examples:
+            type: integer
+            default: 100
+          seed:
+            type: integer
+            default: 0
+          artifact-dir:
+            type: string
+            default: reports/hypothesis-helm
+        steps:
+          - run:
+              name: Test Helm chart values
+              environment:
+                HH_CHART: << parameters.chart >>
+                HH_JOBS: << parameters.jobs >>
+                HH_MAX_EXAMPLES: << parameters.max-examples >>
+                HH_SEED: << parameters.seed >>
+                HH_ARTIFACT_DIR: << parameters.artifact-dir >>
+              command: |
+                mkdir -p "$HH_ARTIFACT_DIR"
+                helm hypothesis test "$HH_CHART" \
+                  --jobs "$HH_JOBS" \
+                  --max-examples "$HH_MAX_EXAMPLES" \
+                  --seed "$HH_SEED" \
+                  --shard auto \
+                  --rerun all \
+                  --artifact-dir "$HH_ARTIFACT_DIR" \
+                  --output json > "$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl"
+    jobs:
+      test-chart:
+        description: Install the local plugin and test a chart; reference job, not scheduled.
+        parameters:
+          chart:
+            type: string
+            default: examples/workload
+          plugin-path:
+            type: string
+            default: .
+          helm-version:
+            type: string
+            default: v3.19.0
+          parallelism:
+            type: integer
+            default: 1
+          jobs:
+            type: string
+            default: auto
+          max-examples:
+            type: integer
+            default: 100
+          seed:
+            type: integer
+            default: 0
+          artifact-dir:
+            type: string
+            default: reports/hypothesis-helm
+        docker:
+          - image: cimg/python:3.13
+        parallelism: << parameters.parallelism >>
+        steps:
+          - checkout
+          - run:
+              name: Install Helm and the local Hypothesis plugin
+              environment:
+                HH_HELM_VERSION: << parameters.helm-version >>
+                HH_PLUGIN_PATH: << parameters.plugin-path >>
+              command: |
+                install_dir="$(mktemp -d)"
+                curl -fsSL "https://get.helm.sh/helm-${HH_HELM_VERSION}-linux-amd64.tar.gz" \
+                  -o "$install_dir/helm.tar.gz"
+                tar -xzf "$install_dir/helm.tar.gz" -C "$install_dir"
+                sudo install "$install_dir/linux-amd64/helm" /usr/local/bin/helm
+                PYTHON=python3.13 helm plugin install "$HH_PLUGIN_PATH"
+          - test:
+              chart: << parameters.chart >>
+              jobs: << parameters.jobs >>
+              max-examples: << parameters.max-examples >>
+              seed: << parameters.seed >>
+              artifact-dir: << parameters.artifact-dir >>
+          - store_test_results:
+              path: << parameters.artifact-dir >>
+          - store_artifacts:
+              path: << parameters.artifact-dir >>
+
 jobs:
   test-python:
     docker:

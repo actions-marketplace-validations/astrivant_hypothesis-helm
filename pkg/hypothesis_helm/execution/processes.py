@@ -19,6 +19,7 @@ class Processes:
     Track child process groups with a shutdown barrier around process creation.
     """
 
+    _interrupt_grace: float = 2.0
     _lock: threading.Lock = field(factory=threading.Lock)
     _stopping: threading.Event = field(factory=threading.Event)
     _children: set[subprocess.Popen[str]] = field(factory=set)
@@ -91,7 +92,11 @@ class Processes:
             with self._lock:
                 self._stopping.set()
                 children = list(self._children)
-            for sig, grace in ((signal.SIGINT, 2.0), (signal.SIGTERM, 1.0), (signal.SIGKILL, 0.0)):
+            for sig, grace in (
+                (signal.SIGINT, self._interrupt_grace),
+                (signal.SIGTERM, 1.0),
+                (signal.SIGKILL, 0.0),
+            ):
                 for child in children:
                     try:
                         os.killpg(child.pid, sig)

@@ -11,7 +11,8 @@ from typing import cast
 import pytest
 from rich.progress import Progress, TaskID
 
-from .display import start_progress
+from hypothesis_helm.integrations.sharding import parse_shard
+from hypothesis_helm.reporting.display import start_progress
 
 LOGGER = logging.getLogger(__name__)
 DISPLAY: tuple[Progress, TaskID] | None = None
@@ -127,3 +128,42 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             progress.update(task, description="Interrupted", workers=0)
         progress.stop()
         DISPLAY = None
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """
+    Partition the keyword-selected properties before execution or inventory export.
+
+    Args:
+        config (pytest.Config): Active pytest configuration.
+        items (list[pytest.Item]): Collected properties after ordinary keyword filtering.
+
+    Returns:
+        None: Only this shard's properties remain selected.
+    """
+    selector = os.environ.get("HYPOTHESIS_HELM_SHARD")
+    if selector is None:
+        return
+    shard = parse_shard(selector)
+    before = len(items)
+    selected = [item for item in items if shard.includes(item.nodeid)]
+    deselected = [item for item in items if not shard.includes(item.nodeid)]
+    items[:] = selected
+    config.hook.pytest_deselected(items=deselected)
+    destination = os.environ.get("HYPOTHESIS_HELM_SHARD_REPORT")
+    if destination is not None:
+        Path(destination).write_text(
+            json.dumps(
+                {
+                    "index": shard.index,
+                    "total": shard.total,
+                    "algorithm": "sha256-nodeid-v1",
+                    "matched": before,
+                    "selected": len(selected),
+                    "tests": [item.nodeid for item in selected],
+                },
+                indent=2,
+            )
+            + "\n"
+        )

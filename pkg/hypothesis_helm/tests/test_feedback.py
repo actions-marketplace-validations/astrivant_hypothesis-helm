@@ -4,7 +4,7 @@ Verify adaptive throughput control against deterministic capacity curves.
 
 import pytest
 
-from hypothesis_helm.feedback import PID, ThroughputController
+from hypothesis_helm.execution.feedback import PID, ThroughputController
 
 
 @pytest.mark.parametrize("initial", [1, 12])

@@ -9,10 +9,9 @@ import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.strategies import DataObject
-from hypothesis_jsonschema import from_schema
-
 from hypothesis_helm import Chart
-from hypothesis_helm.generated import RenderOptions, check_path, prepared_chart
+from hypothesis_helm.charts.generated import RenderOptions, check_path, prepared_chart
+from hypothesis_jsonschema import from_schema
 
 HERE = Path(__file__).resolve().parent
 OPTIONS = RenderOptions(

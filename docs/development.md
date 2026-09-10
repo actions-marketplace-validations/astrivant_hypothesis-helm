@@ -92,3 +92,23 @@ checkout's manifest. Chart or vendored dependency changes trigger the hook.
 A failing property blocks the commit; the generated suite and results are saved
 under `reports/hypothesis-helm`. Ten examples per property keeps the default
 sampling budget modest; this does not guarantee complete branch coverage.
+
+## Package organization
+
+The package root contains the CLI and the lazy public API (`Chart`, `check_chart`,
+`coalesce`, and `generate_tests`). Related implementation modules live together:
+
+| Subpackage | Responsibility |
+| --- | --- |
+| `charts/` | Template discovery, YAML handling, property generation, and chart rendering. |
+| `schemas/` | Value contracts, finite schema enumeration, and Kubernetes API conformity. |
+| `execution/` | Suite execution, worker scheduling, PID feedback, process cleanup, and result caching. |
+| `reporting/` | Progress display, path logging, and JSON manifest streaming. |
+| `integrations/` | CI provider configuration, shard detection, and the GitHub Action adapter. |
+| `tests/` | Package-local unit and integration tests. |
+
+Generated suites import runtime helpers from `hypothesis_helm.charts.generated`.
+Regenerate previously saved suites with `helm hypothesis generate` after upgrading
+from the flat module layout, or update that import in a manually maintained suite.
+Helm commands and the public package exports retain their existing names. Result
+cache fingerprints cover implementation modules recursively across all subpackages.

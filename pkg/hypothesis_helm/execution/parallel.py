@@ -12,9 +12,9 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from .display import start_progress
-from .feedback import ThroughputController
-from .processes import Processes
+from hypothesis_helm.execution.feedback import ThroughputController
+from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.reporting.display import start_progress
 
 LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ def run_parallel(
     descriptor: int | None,
     jobs: int,
     adaptive: bool = False,
+    artifact_dir: Path | None = None,
 ) -> tuple[int, int]:
     """
     Collect selected tests, schedule them individually, and combine JUnit results.
@@ -37,11 +38,13 @@ def run_parallel(
         descriptor (int | None): Inherited manifest output descriptor.
         jobs (int): Maximum number of concurrent worker threads.
         adaptive (bool): Whether throughput feedback adjusts the active worker count.
+        artifact_dir (Path | None): Destination for reports, separate from the suite root.
 
     Returns:
         tuple[int, int]: Aggregate exit status and number of workers used.
     """
-    with tempfile.TemporaryDirectory(prefix="workers-", dir=directory) as temporary:
+    results = artifact_dir or directory
+    with tempfile.TemporaryDirectory(prefix="workers-", dir=results) as temporary:
         workspace = Path(temporary)
         collected = workspace / "collected.json"
         collection_environment = dict(environment, HYPOTHESIS_HELM_COLLECT=str(collected))
@@ -55,6 +58,13 @@ def run_parallel(
             text=True,
             check=False,
         )
+        if collection.returncode == 5:
+            destination = environment.get("HYPOTHESIS_HELM_SHARD_REPORT")
+            if destination is not None and Path(destination).is_file():
+                assignment = json.loads(Path(destination).read_text())
+                if assignment["matched"] > 0 and assignment["selected"] == 0:
+                    LOGGER.info("Shard has no assigned tests")
+                    return 0, 0
         if collection.returncode:
             print(collection.stdout, end="", file=sys.stderr)
             print(collection.stderr, end="", file=sys.stderr)
@@ -78,6 +88,7 @@ def run_parallel(
         lock = workspace / "manifests.lock"
         lock.touch()
         worker_environment = dict(environment, HYPOTHESIS_HELM_MANIFEST_LOCK=str(lock))
+        worker_environment.pop("HYPOTHESIS_HELM_SHARD_REPORT", None)
         report_index = command.index("--junitxml") + 1
         reports = [workspace / f"junit-{index}.xml" for index in range(len(nodes))]
 
@@ -175,7 +186,7 @@ def run_parallel(
                         "throughput": controller.throughput,
                     }
                 )
-        (directory / "concurrency.json").write_text(
+        (results / "concurrency.json").write_text(
             json.dumps(
                 {
                     "mode": "auto" if adaptive else "fixed",
@@ -212,5 +223,5 @@ def run_parallel(
                 merged.extend(suite)
         merged.attrib.update({key: str(value) for key, value in totals.items()})
         merged.set("time", str(elapsed))
-        ET.ElementTree(root).write(directory / "junit.xml", encoding="utf-8", xml_declaration=True)
+        ET.ElementTree(root).write(results / "junit.xml", encoding="utf-8", xml_declaration=True)
         return (130 if interrupted else max(statuses)), peak

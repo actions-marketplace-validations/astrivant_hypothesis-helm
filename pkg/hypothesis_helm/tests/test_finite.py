@@ -4,8 +4,8 @@ Verify finite.
 
 import pytest
 
-from hypothesis_helm.finite import NonFiniteSchema, enumerate_values
-from hypothesis_helm.runner import Chart
+from hypothesis_helm.charts.runner import Chart
+from hypothesis_helm.schemas.finite import NonFiniteSchema, enumerate_values
 
 
 def test_workload_domain() -> None:

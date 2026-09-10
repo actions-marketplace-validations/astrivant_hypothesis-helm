@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from hypothesis_helm.charts.generate import generate_tests
 from hypothesis_helm.cli import main
-from hypothesis_helm.generate import generate_tests
-from hypothesis_helm.processes import Processes
-from hypothesis_helm.suite import run_suite
+from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.suite import run_suite
 
 
 @pytest.mark.integration
@@ -264,7 +264,7 @@ def test_parallel_workers_and_large_manifest_stream(
 import time
 from pathlib import Path
 import pytest
-from hypothesis_helm.output import emit_manifest
+from hypothesis_helm.reporting.output import emit_manifest
 
 @pytest.mark.parametrize("index", [0, 1])
 def test_concurrent(index):

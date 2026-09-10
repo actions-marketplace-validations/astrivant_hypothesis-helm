@@ -298,3 +298,141 @@ command exits with status 130. Generated-suite runs retain the partial JUnit and
 run reports; unfinished parallel tests are marked skipped, and concurrency
 history records the interruption. The bar keeps its partial completion count.
 JSON stdout remains reserved for manifests emitted before shutdown.
+
+## Distributed sharding
+
+Both `test` and `run` default to `--shard auto`, detecting CI node coordinates.
+Use `--shard none` to disable detection or `--shard INDEX/TOTAL` to choose a
+one-based partition explicitly. See [CI integration](ci.md) for provider mappings
+and the GitHub Action.
+Each independently launched instance executes only its assigned properties,
+with its own fixed or PID-controlled worker pool:
+
+```sh
+# Separate runners, using the same chart revision and command options:
+helm hypothesis test ./chart --shard 1/3 --jobs auto --seed 42
+helm hypothesis test ./chart --shard 2/3 --jobs auto --seed 42
+helm hypothesis test ./chart --shard 3/3 --jobs auto --seed 42
+
+# Inspect one partition without rendering:
+helm hypothesis test ./chart --shard 1/3 --match image --collect-only
+
+# Partition an existing suite, with reports in a separate location:
+helm hypothesis run generated-tests --shard 1/3 --artifact-dir reports/distributed
+```
+
+The partition algorithm (`sha256-nodeid-v1`) hashes the UTF-8 pytest node ID
+relative to the suite root, then takes the result modulo TOTAL. It is independent
+of absolute checkout location, Python hash randomization, collection order, and
+worker scheduling. It runs after keyword selection. Different totals repartition
+the suite; identical totals and node IDs preserve ownership when unrelated tests
+are added. Hash partitioning does not promise equal counts or equal execution
+time, and a long property is not split across shards.
+
+Run every index from 1 through TOTAL using the same chart/suite revision, plugin
+version, `--match`, generation options, and seed. Each property then belongs to
+exactly one instance, without a coordinator or shared queue. Repeating a shard
+intentionally repeats its properties; no distributed deduplication service is
+involved. A partition with no assigned properties succeeds with zero workers.
+An empty overall selection, including a mistyped `--match`, still exits with
+pytest's no-tests status (5). Sharding is unavailable in the explicit
+`--whole-chart` and `--exhaustive` modes.
+
+`test` writes its generated suite and reports beneath
+`ARTIFACT_DIR/shards/INDEX-of-TOTAL/`. `run` reads the saved suite in place and
+writes reports beneath `SUITE/shards/INDEX-of-TOTAL/`, or under the supplied
+`--artifact-dir`. Each directory includes `shard.json` with the algorithm,
+matched count, assigned count, and exact node IDs, plus the usual JUnit and run
+reports and, when workers execute, concurrency history. Distinct shards do not
+overwrite one another's artifacts. Do not run the same shard twice concurrently
+against the same artifact directory.
+
+Progress bars, stdout manifest streams, exit statuses, and Ctrl-C shutdown are
+local to each instance. Keep each shard's JSON stream separate; independent
+instances do not share the manifest-write lock. Collect the shard JUnit files in
+CI and require every instance to succeed. Cancelling one instance does not stop
+the others; the CI orchestrator controls cancellation across runners.
+
+Auto concurrency uses each instance's available CPU count. Separate machines or
+CPU-limited containers provide independent resource budgets. On a shared host,
+set `--jobs N` per instance to avoid multiplying the automatic CPU budget.
+Custom fixtures must also avoid mutating shared files or external resources.
+
+## Persistent path results
+
+`helm hypothesis test` and `helm hypothesis run` cache completed path outcomes under
+`<artifact-dir>/cache/` (inside the shard directory when sharding). With a valid
+cache, local runs retry failed, skipped, and incomplete paths; previously passing
+paths are deselected. If every selected path already passed, the command succeeds
+without rendering new manifests. First runs and changed inputs run the full selection.
+`--collect-only` lists the full selection and leaves the result cache unchanged.
+
+```bash
+helm hypothesis test ./chart                         # local failed-path rerun
+helm hypothesis test ./chart --rerun all             # force every selected path
+helm hypothesis test ./chart --cache-dir .cache/helm # choose a persistent cache
+helm hypothesis test ./chart --no-cache              # neither read nor write results
+CI=true helm hypothesis test ./chart --rerun failed  # explicitly retry in CI
+```
+
+`--rerun auto` is the default. CI runs execute every selected path while recording
+results. `$CI` is case-insensitive: empty, `0`, `false`, `no`, and `off` mean local;
+other nonempty values mean CI. If `$CI` is absent, `GITHUB_ACTIONS`, `GITLAB_CI`, and
+`CIRCLECI` provide fallback detection. An explicit `$CI` takes precedence.
+
+Cache keys include the suite source, coalesced values, schema, original chart files
+(including dependencies), framework source, Python version, seed, keyword selection,
+and shard. Changes invalidate prior results. Shards have independent cache entries;
+thread workers record separate outcome files, which the parent merges atomically.
+Interrupted runs retain completed results; incomplete paths remain eligible for retry.
+Malformed cache files are treated as cold caches. Cache entries record pytest node IDs
+and outcomes, not rendered manifests or Hypothesis examples. Use `--rerun all` after
+changing external tools or environment-dependent behavior, or to resample passing paths.
+
+## Kubernetes API conformity
+
+Enable strict [kubeconform](https://github.com/yannh/kubeconform) validation for each
+rendered YAML stream. Install Git and kubeconform first (`brew install git kubeconform`
+on macOS), then use the Helm command:
+
+```bash
+helm hypothesis test ./chart --kubeconform
+helm hypothesis test ./chart --kubeconform --schema-version 1.35.0
+helm hypothesis run ./generated-tests --kubeconform --schema-version 1.35.0
+```
+
+`--schema-version latest` is the default: it selects the highest stable `X.Y.Z`
+version published in [Kubernetes JSON Schema](https://github.com/yannh/kubernetes-json-schema),
+not Kubernetes development HEAD. Pin an exact version for reproducible CI runs.
+`--kube-version` remains the separate Helm capabilities option; set both options to
+the same version when testing a specific cluster target.
+
+The tool fetches Git metadata with `--depth=1 --filter=blob:none` and sparsely checks
+out only the selected `vX.Y.Z-standalone-strict` directory. The cache defaults to
+`.cache/hypothesis-helm/schemas`; override it with `--schema-cache-dir PATH`. A file
+lock serializes checkout updates, and immutable snapshots let threads and shards
+validate against the same schema content even while another run updates the checkout.
+Online runs refresh the catalog. To use only previously downloaded schemas:
+
+```bash
+helm hypothesis test ./chart --kubeconform --schema-version 1.35.0 \
+  --schema-cache-dir .cache/hypothesis-helm/schemas --schema-offline
+```
+
+Offline mode fails clearly if the requested schemas are absent. Restore/save the
+entire schema cache directory in CI, including its Git metadata. This cache is
+separate from path-result caching; `--no-cache` disables cached test outcomes, while
+schema caching remains active. `--collect-only` does not fetch schemas or run the validator.
+
+Validation uses local schema files, strict mode, and one kubeconform worker per
+property worker to avoid nested concurrency. Invalid resources, unsupported API
+versions, and missing schemas fail the property and participate in Hypothesis shrinking.
+Custom resources require schemas beyond the upstream Kubernetes catalog and currently
+fail as missing schemas. This checks API structure, not admission policies or live
+cluster behavior. Manifests still stream through `--output json` before validation,
+including failing examples. Use `--kubeconform-binary PATH` for a specific executable.
+
+Path-result cache keys include the schema content identity, resolved Kubernetes
+version, and validator binary digest. Enabling validation or changing any of these
+requires a fresh property run. Use `--rerun all` to validate fresh manifests again
+when an unchanged local suite previously passed.

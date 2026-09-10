@@ -16,9 +16,9 @@ from hypothesis import assume, note
 from hypothesis.strategies import DataObject
 from jsonschema import validators
 
-from . import yamlio
-from .contracts import json_value, mapping, schema_strategy, sequence
-from .runner import Chart, RenderFailure, merge_values, render
+from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.runner import Chart, RenderFailure, merge_values, render
+from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
 
 
 @frozen
@@ -100,7 +100,7 @@ def _replace(
             object: Parsed or generated value at the requested boundary.
         """
         if data is not None and schema is not None:
-            from .runner import _schema_nodes
+            from hypothesis_helm.charts.runner import _schema_nodes
 
             symbolic = tuple("*" if isinstance(p, int) else p for p in prefix)
             nodes = _schema_nodes(schema, symbolic, schema)
@@ -163,7 +163,7 @@ def _concrete_path(
     """
     from hypothesis import strategies as st
 
-    from .runner import _schema_nodes
+    from hypothesis_helm.charts.runner import _schema_nodes
 
     concrete: list[str | int] = []
     current: object = defaults

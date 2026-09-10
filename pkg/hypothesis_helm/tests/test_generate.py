@@ -15,9 +15,15 @@ from hypothesis import strategies as st
 from hypothesis_jsonschema import from_schema
 from jsonschema import validate
 
-from hypothesis_helm import Chart, yamlio
-from hypothesis_helm.contracts import mapping, number, schema_strategy, sequence
-from hypothesis_helm.generate import coalesce, enumerate_paths, generate_tests, strategy_source
+from hypothesis_helm import Chart
+from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.generate import (
+    coalesce,
+    enumerate_paths,
+    generate_tests,
+    strategy_source,
+)
+from hypothesis_helm.schemas.contracts import mapping, number, schema_strategy, sequence
 
 
 def test_coalesce_fallbacks_in_memory() -> None:

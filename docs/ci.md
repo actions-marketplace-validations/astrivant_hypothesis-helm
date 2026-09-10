@@ -1,0 +1,192 @@
+# CI integration
+
+`helm hypothesis test` and `helm hypothesis run` default to `--shard auto`.
+Parallel pipeline jobs automatically select a deterministic partition, while
+each runner keeps its own `--jobs auto` worker controller.
+
+## Provider detection
+
+| Provider | Coordinates | Index convention |
+| --- | --- | --- |
+| CircleCI | `CIRCLE_NODE_INDEX`, `CIRCLE_NODE_TOTAL` | Zero-based index, converted to one-based |
+| GitLab CI | `CI_NODE_INDEX`, `CI_NODE_TOTAL` | One-based index |
+| GitHub Actions | `HYPOTHESIS_HELM_JOB_INDEX`, `HYPOTHESIS_HELM_JOB_TOTAL`, supplied by the action inputs | Zero-based index, converted to one-based |
+
+CircleCI exposes its [parallel node coordinates](https://circleci.com/docs/reference/variables/).
+GitLab exposes [parallel job coordinates](https://docs.gitlab.com/ci/variables/predefined_variables/);
+outside a parallel job, its total may be 1 with no index. These single-job cases
+run the complete suite without adding a shard directory.
+
+GitHub exposes matrix position through
+[`strategy.job-index` and `strategy.job-total`](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#strategy-context),
+not built-in environment variables. Pass these context values to the action's
+`job-index` and `job-total` inputs. The action exports the two
+`HYPOTHESIS_HELM_JOB_*` variables for the shared detector. Without the action,
+bridge them in the workflow yourself:
+
+```yaml
+- run: helm hypothesis test ./chart
+  env:
+    HYPOTHESIS_HELM_JOB_INDEX: ${{ strategy.job-index }}
+    HYPOTHESIS_HELM_JOB_TOTAL: ${{ strategy.job-total }}
+```
+
+The default `auto` mode runs the full suite locally when no coordinates exist.
+`--shard 2/4` overrides detection; `--shard none` disables it, including in
+parallel CI jobs. Incomplete, invalid, or conflicting provider coordinates fail
+with a setup error rather than silently running the wrong partition. Use
+`--shard none` for whole-chart or exhaustive modes in parallel CI jobs.
+
+All shards must use the same revision, selection, shard total, and seed. Keep
+`--jobs` budgets appropriate for each runner. CI must require every shard to
+succeed; empty partitions are successful, but an empty overall selection remains
+an error. See [sharding details](usage.md#distributed-sharding).
+
+## GitHub Action
+
+The repository-root [action.yml](../action.yml) is a composite action for Linux
+and macOS runners. It installs Python, Helm, and the plugin from the action's own
+checkout, so the tested plugin version follows the action reference. It executes
+`helm hypothesis test`, saves the JSON manifest stream, and uploads generated
+tests and reports by default, including after a test failure. Failures still fail
+the action. Chart dependencies must already be available; add a dependency-build
+step for charts that require one.
+
+After publishing a release tag, callers can use:
+
+```yaml
+name: Helm properties
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astrivant/hypothesis-helm@v0.1.0 # Publish this tag before using it.
+        id: hypothesis
+        with:
+          chart: helm/my-chart
+          job-index: ${{ strategy.job-index }}
+          job-total: ${{ strategy.job-total }}
+          jobs: auto
+          max-examples: '50'
+          seed: '42'
+```
+
+No shard calculation is required in shell. The matrix values create four jobs;
+the strategy context identifies which partition belongs to each job. For a
+non-matrix job, omit `job-index` and `job-total`.
+
+Strategy coordinates cover the entire matrix. If you also vary operating systems
+or versions and want full coverage for each combination, pass an explicit
+`shard: ${{ matrix.shard }}/4` and include those other dimensions in
+`artifact-name` to keep uploads unique.
+
+### Inputs
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `chart` | `.` | Chart path relative to the workspace |
+| `shard` | `auto` | CI detection, explicit `INDEX/TOTAL`, or `none` |
+| `job-index`, `job-total` | Empty | GitHub strategy coordinates |
+| `jobs` | `auto` | PID tuning or a fixed worker count |
+| `max-examples` | `100` | Example budget per property |
+| `seed` | `0` | Hypothesis seed |
+| `timeout` | `30` | Seconds per Helm render |
+| `match` | Empty | Keyword selection before partitioning |
+| `artifact-dir` | `reports/hypothesis-helm` | Root for generated tests and reports |
+| `upload-artifacts` | `true` | Upload the resulting directory |
+| `artifact-name` | `hypothesis-helm` | Upload prefix; job and shard IDs are appended |
+| `python-version` | `3.13` | Python version, at least 3.13 |
+| `helm-version` | `v3.19.0` | Helm 3 version |
+
+Outputs are `report-dir`, `junit-path`, `manifest-path`, `shard`, and
+`exit-code`. Files may be incomplete after cancellation or setup failure.
+Sharded output uses `ARTIFACT_DIR/shards/INDEX-of-TOTAL/`; unsharded output uses
+the artifact root. Each directory includes `manifests.jsonl` for downstream
+validation. Set `upload-artifacts: 'false'` to handle outputs in your workflow.
+Give repeated action invocations distinct artifact roots and name prefixes.
+
+The checked-in [action workflow](../.github/workflows/action.yml) exercises the
+local action with a three-job matrix. It uses `uses: ./`, so it can run before
+any release is published.
+
+### Publishing
+
+1. Commit the action, package changes, documentation, and smoke workflow.
+2. Let the GitHub action workflow pass using the local action.
+3. Create a release tag such as `v0.1.0` and a GitHub release from that commit.
+4. Reference that tag or commit from consuming repositories. Marketplace listing
+   can be added when creating the release; the root metadata already includes
+   the action name, description, author, and branding.
+
+No release or tag is created by the action itself.
+
+## CircleCI
+
+Once Helm and the plugin are installed, set job parallelism and run the ordinary
+command. CircleCI supplies the coordinates; no arithmetic or manual shard flag
+is needed:
+
+```yaml
+parallelism: 4
+steps:
+  # Checkout and install Helm plus the plugin first.
+  - run: helm hypothesis test ./chart --seed 42
+  - store_test_results:
+      path: reports/hypothesis-helm
+  - store_artifacts:
+      path: reports/hypothesis-helm
+```
+
+## GitLab CI
+
+Use a runner image with Helm and the plugin installed:
+
+```yaml
+helm-properties:
+  parallel: 4
+  script:
+    - helm hypothesis test ./chart --seed 42
+  artifacts:
+    when: always
+    paths:
+      - reports/hypothesis-helm/
+    reports:
+      junit: reports/hypothesis-helm/shards/*/junit.xml
+```
+
+GitLab's one-based node index maps directly to the shard index.
+
+## Persisting path outcomes
+
+The action accepts `cache-dir`, `cache` (default `true`), and `rerun` (default `auto`).
+Set `cache-dir: .cache/hypothesis-helm` and restore/save that directory using your CI
+provider's cache facility. Save it even when tests fail so failed path results survive.
+Use a distinct outer cache key per runner environment and shard; the framework uses
+content-derived keys inside that directory. Restore a previous run's directory to
+reuse its results. Local cache entries are also included in uploaded report artifacts
+when using the default cache location.
+
+CI still tests the full selection by default. Set `rerun: failed` explicitly to retry
+only failed or incomplete paths from a compatible cache. Previously passing paths
+produce no new JSON manifests on a cached retry; use `rerun: all` when downstream
+validators require a fresh manifest stream for every path. Neither action publication
+nor remote cache provisioning is required for the local disk cache.
+
+## Kubernetes API schema validation
+
+The action exposes `kubeconform: 'true'`, `schema-version: 'latest'`,
+`schema-cache-dir`, `schema-offline: 'false'`, and `kubeconform-binary` inputs.
+Provision Git and kubeconform on the runner before invoking the action; the binary
+input can point to a preinstalled executable. Pin `schema-version` for reproducibility.
+Restore/save the entire schema cache directory (default
+`.cache/hypothesis-helm/schemas`) with your provider's cache facility. Set
+`schema-offline: 'true'` only after those schemas have been cached. Each matrix shard
+then validates locally, without downloading schemas for individual test cases.

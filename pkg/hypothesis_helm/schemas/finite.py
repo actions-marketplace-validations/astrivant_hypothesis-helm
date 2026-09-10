@@ -9,7 +9,7 @@ import math
 
 from jsonschema import validators
 
-from .contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 
 
 class NonFiniteSchema(ValueError):

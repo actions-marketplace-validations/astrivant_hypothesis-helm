@@ -4,7 +4,7 @@ Verify templates.
 
 from pathlib import Path
 
-from hypothesis_helm.templates import Diagnostic, Reference, discover, parse
+from hypothesis_helm.charts.templates import Diagnostic, Reference, discover, parse
 
 
 def scan(tmp_path: Path, text: str) -> tuple[list[Reference], list[Diagnostic]]:

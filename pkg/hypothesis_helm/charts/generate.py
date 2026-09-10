@@ -16,12 +16,12 @@ from pathlib import Path
 from attrs import asdict, define
 from ruamel.yaml.comments import CommentedMap
 
-from . import yamlio
-from .contracts import mapping, number, sequence, text
-from .generated import RenderOptions
-from .progress import format_path
-from .runner import Chart, _schema_nodes
-from .templates import Action, Reference, discover, parse
+from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.generated import RenderOptions
+from hypothesis_helm.charts.runner import Chart, _schema_nodes
+from hypothesis_helm.charts.templates import Action, Reference, discover, parse
+from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.schemas.contracts import mapping, number, sequence, text
 
 LOGGER = logging.getLogger(__name__)
 
@@ -614,6 +614,7 @@ def generate_tests(
     }
     (output / "paths.json").write_text(json.dumps(inventory, indent=2) + "\n")
     relative = os.path.relpath(chart.path, output)
+    (output / "chart-source.json").write_text(json.dumps({"chart": relative}) + "\n")
     lines = [
         '"""\nVerify generated chart value paths against their inferred contracts.\n"""',
         "from collections.abc import Iterator",
@@ -624,7 +625,7 @@ def generate_tests(
         "from hypothesis.strategies import DataObject",
         "from hypothesis_jsonschema import from_schema",
         "from hypothesis_helm import Chart",
-        "from hypothesis_helm.generated import RenderOptions, check_path, prepared_chart",
+        "from hypothesis_helm.charts.generated import RenderOptions, check_path, prepared_chart",
         "",
         "HERE = Path(__file__).resolve().parent",
         f"OPTIONS = RenderOptions(**{asdict(options or RenderOptions())!r})",
