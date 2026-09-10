@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import logging
 import math
 import os
 import re
@@ -17,8 +18,12 @@ from ruamel.yaml.comments import CommentedMap
 
 from . import yamlio
 from .contracts import mapping, number, sequence, text
+from .generated import RenderOptions
+from .progress import format_path
 from .runner import Chart, _schema_nodes
 from .templates import Action, Reference, discover, parse
+
+LOGGER = logging.getLogger(__name__)
 
 
 @define
@@ -409,6 +414,7 @@ def coalesce(chart: Chart) -> Model:
     fallbacks = _fallbacks(chart, references)
     inferred_paths = set()
     for path in sorted({r.path for r in references if r.path}, key=lambda p: (len(p), p)):
+        LOGGER.info("Coalescing path %s", format_path(path))
         if "*" in path:
             diagnostics.append(
                 {
@@ -575,7 +581,11 @@ def strategy_source(schema: dict[str, object]) -> str:
 
 
 def generate_tests(
-    chart: Chart | str | Path, output: Path, *, max_examples: int = 100
+    chart: Chart | str | Path,
+    output: Path,
+    *,
+    max_examples: int = 100,
+    options: RenderOptions | None = None,
 ) -> dict[str, object]:
     """
     Write a reviewable pytest module, coalesced YAML, schema and path inventory.
@@ -584,6 +594,7 @@ def generate_tests(
         chart (Chart | str | Path): Loaded chart and its schema and defaults.
         output (Path): Directory receiving the generated test artifacts.
         max_examples (int): Maximum number of generated examples per property.
+        options (RenderOptions | None): Helm rendering settings embedded in the generated suite.
 
     Returns:
         dict[str, object]: Resulting schema, values mapping, or structured report.
@@ -613,9 +624,10 @@ def generate_tests(
         "from hypothesis.strategies import DataObject",
         "from hypothesis_jsonschema import from_schema",
         "from hypothesis_helm import Chart",
-        "from hypothesis_helm.generated import check_path, prepared_chart",
+        "from hypothesis_helm.generated import RenderOptions, check_path, prepared_chart",
         "",
         "HERE = Path(__file__).resolve().parent",
+        f"OPTIONS = RenderOptions(**{asdict(options or RenderOptions())!r})",
         "",
         '@pytest.fixture(scope="module")',
         "def chart() -> Iterator[Chart]:",
@@ -630,11 +642,13 @@ def generate_tests(
         "",
     ]
     for entry in model.paths:
+        LOGGER.info("Generating test for path %s (%s)", format_path(entry.path), entry.origin)
         label = "_".join(str(p) for p in entry.path)
         name = re.sub(r"[^a-zA-Z0-9_]", "_", label)[:80]
         digest = hashlib.sha256(repr(entry.path).encode()).hexdigest()[:10]
         lines += [
             f"# Path: {entry.path!r}; contract: {entry.origin}",
+            f"@pytest.mark.hypothesis_helm_path({entry.path!r})",
             f"@settings(max_examples={max_examples}, deadline=None, "
             "suppress_health_check=[HealthCheck.too_slow])",
             f"@given(value={strategy_source(entry.schema)}, data=st.data())",
@@ -650,7 +664,7 @@ def generate_tests(
             "    Returns:",
             "        None: Rendered resources satisfy the configured contract.",
             '    """',
-            f"    check_path(chart, {entry.path!r}, value, data)",
+            f"    check_path(chart, {entry.path!r}, value, data, options=OPTIONS)",
             "",
         ]
     (output / "test_chart_values.py").write_text("\n".join(lines) + "\n")

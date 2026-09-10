@@ -15,26 +15,29 @@ schema paths, and selects Hypothesis strategies from their types and constraints
 
 ## Quick start
 
-Requires Python 3.13+, Poetry, and Helm 3.
+Requires Helm 3 and Python 3.13+. The plugin installs its Python dependencies,
+including the test runner, automatically.
 
 ```sh
-git clone https://github.com/astrivant/hypothesis-helm.git
-cd hypothesis-helm
-python3.13 -m venv .venv
-env -u VIRTUAL_ENV -u PYENV_VERSION -u PYENV_VIRTUAL_ENV poetry install
-
-bash scripts/project-python.sh -m hypothesis_helm.cli generate examples/workload \
-  --output generated-tests/workload --max-examples 50
-bash scripts/project-python.sh -m pytest generated-tests/workload
+PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm
+helm hypothesis test ./path/to/chart
 ```
 
-For the Helm command, install the plugin from this checkout:
+From a local checkout, use `helm plugin install .`. Chart testing, auditing,
+generation, and rerunning saved tests are all Helm commands:
 
 ```sh
-PYTHON=python3.13 helm plugin install .
-helm hypothesis generate examples/workload --output generated-tests/workload
-bash scripts/project-python.sh -m pytest generated-tests/workload
+helm hypothesis audit ./path/to/chart
+helm hypothesis test ./path/to/chart --max-examples 50 --seed 42
+helm hypothesis test ./path/to/chart --match replicas
+helm hypothesis generate ./path/to/chart --output generated-tests
+helm hypothesis run generated-tests
 ```
+
+`test` generates a Python property per values path, executes the suite inside the
+plugin environment, and returns its exit status. Generated source, values,
+schemas, JUnit results and a run report stay in `reports/hypothesis-helm` by default.
+Use `--artifact-dir` to choose a different location.
 
 Each generated suite includes Python tests, coalesced YAML, an inferred schema,
 and a path/strategy inventory. Source charts remain unchanged. Inferred contracts
@@ -76,19 +79,15 @@ strict mypy, Ruff with a 100-column Google-docstring convention, pydocstyle,
 pydoclint, pre-commit and CircleCI. Tests live beside the package and use pytest
 for Hypothesis integration and generated suites.
 
-```sh
-bash scripts/project-python.sh -m pre_commit install
-bash scripts/check.sh
-```
-
-The interpreter wrapper ignores unrelated activated environments. CircleCI runs
-the same validation command, exercises generated tests and plugin installation,
-and builds the wheel and source distribution. Publishing is not configured.
+Contributor setup and repository checks are documented in
+[Development](docs/development.md). End users only need the Helm commands above.
+CircleCI exercises the same chart-testing workflow and builds the package.
 
 ## Documentation
 
-- [Development and CLI reference](docs/development.md): setup, coalescing, strategy
-  selection, generated tests, rendering contracts and Astrivant integration.
+- [Helm command reference](docs/usage.md): chart testing, saved suites, coalescing,
+  strategy selection, rendering contracts and Astrivant integration.
+- [Development](docs/development.md): contributor setup and repository tooling.
 - [Generated workload suite](examples/generated-workload/test_chart_values.py):
   a concrete example of emitted Python properties.
 - [Astrivant observation](examples/astrivant-observation.md): a previously found

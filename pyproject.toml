@@ -15,9 +15,9 @@ hypothesis-jsonschema = "^0.23"
 jsonschema = "^4.23"
 "ruamel.yaml" = "^0.18"
 attrs = "^25.3"
+pytest = "^8.3"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.3"
 ruff = "^0.15"
 mypy = "^1.15"
 pydoclint = "0.6.6"
@@ -34,7 +34,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["src/hypothesis_helm/tests"]
-markers = ["integration: requires Helm", "astrivant: optional neighboring Astrivant chart"]
+markers = ["integration: requires Helm", "astrivant: optional neighboring Astrivant chart", "hypothesis_helm_path(path): schema path exercised by a generated test"]
 
 [tool.ruff]
 line-length = 100

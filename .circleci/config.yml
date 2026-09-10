@@ -15,14 +15,15 @@ jobs:
             tar -xzf /tmp/helm.tar.gz -C /tmp
             sudo install /tmp/linux-amd64/helm /usr/local/bin/helm
       - run: bash scripts/check.sh --junitxml=reports/pytest.xml
-      - run: poetry run pytest examples/generated-workload
       - run: poetry build
       - run:
-          name: Verify Helm plugin installation and generation
+          name: Verify end-user Helm testing commands
           command: |
-            helm plugin install .
+            PYTHON=python3.13 helm plugin install .
+            helm hypothesis test examples/workload --max-examples 5
+            helm hypothesis run examples/generated-workload
             helm hypothesis generate examples/workload --output /tmp/generated-workload --max-examples 5
-            poetry run pytest /tmp/generated-workload
+            helm hypothesis run /tmp/generated-workload
       - store_test_results:
           path: reports
       - store_artifacts:

@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from attrs import frozen
 from hypothesis import assume, note
 from hypothesis.strategies import DataObject
 from jsonschema import validators
@@ -18,6 +19,28 @@ from jsonschema import validators
 from . import yamlio
 from .contracts import json_value, mapping, schema_strategy, sequence
 from .runner import Chart, RenderFailure, merge_values, render
+
+
+@frozen
+class RenderOptions:
+    """
+    Configure Helm rendering for every property in a generated suite.
+
+    Attributes:
+        timeout (float): Maximum seconds allowed for each Helm invocation.
+        helm (str): Helm executable used for rendering.
+        release (str): Release name supplied to Helm.
+        namespace (str): Release namespace supplied to Helm.
+        kube_version (str | None): Optional Kubernetes capability version.
+        allow_empty (bool): Whether empty rendered output satisfies the contract.
+    """
+
+    timeout: float = 30
+    helm: str = "helm"
+    release: str = "hypothesis"
+    namespace: str = "default"
+    kube_version: str | None = None
+    allow_empty: bool = False
 
 
 @contextmanager
@@ -200,6 +223,7 @@ def check_path(
     *,
     timeout: float = 30,
     allow_empty: bool = False,
+    options: RenderOptions | None = None,
 ) -> list[dict[str, object]]:
     """
     Exercise a path value in baseline context, or draw a valid dependent context.
@@ -215,6 +239,7 @@ def check_path(
         data (DataObject): Hypothesis draw context for dependent values and parent containers.
         timeout (float): Maximum seconds allowed for each Helm invocation.
         allow_empty (bool): Whether a render with no resource documents is accepted.
+        options (RenderOptions | None): Suite options overriding the individual defaults.
 
     Returns:
         list[dict[str, object]]: Result of the documented operation.
@@ -234,7 +259,16 @@ def check_path(
     assume(validator.is_valid(json_value(effective)))
     note(f"value path: {path!r}")
     note("values override:\n" + yamlio.dump(values))
-    resources = render(chart, values, timeout=timeout)
-    if not resources and not allow_empty:
+    selected = options or RenderOptions(timeout=timeout, allow_empty=allow_empty)
+    resources = render(
+        chart,
+        values,
+        timeout=selected.timeout,
+        helm=selected.helm,
+        release=selected.release,
+        namespace=selected.namespace,
+        kube_version=selected.kube_version,
+    )
+    if not resources and not selected.allow_empty:
         raise RenderFailure("chart rendered no resources")
     return resources

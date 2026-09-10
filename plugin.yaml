@@ -1,6 +1,6 @@
 name: hypothesis
 version: "0.1.0"
-usage: "Audit and property-test chart values"
+usage: "Generate and run chart value tests with Helm"
 description: "Schema-driven Hypothesis tests and template value discovery for Helm charts"
 ignoreFlags: false
 platformCommand:
