@@ -6,14 +6,17 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
 from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Literal
 
 from hypothesis_helm.charts.generate import generate_tests
 from hypothesis_helm.charts.generated import RenderOptions
 from hypothesis_helm.charts.runner import Chart, audit, check_chart
+from hypothesis_helm.execution.estimate import estimate_suite
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.output import MANIFEST_FD
@@ -104,6 +107,11 @@ def main(argv: list[str] | None = None) -> int:
     schemas.add_argument("--kubeconform-binary", default="kubeconform")
     for command in (test, run):
         command.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="estimate work from cache state without running properties",
+        )
+        command.add_argument(
             "--kubeconform", action="store_true", help="validate Kubernetes API schemas"
         )
         command.add_argument(
@@ -157,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
     stack = ExitStack()
     descriptor = None
     token = None
-    if getattr(args, "output", None) == "json":
+    if getattr(args, "output", None) == "json" and not getattr(args, "dry_run", False):
         descriptor = os.dup(sys.stdout.fileno())
         token = MANIFEST_FD.set(descriptor)
         stack.enter_context(redirect_stdout(sys.stderr))
@@ -174,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.command in ("test", "run"):
-            if args.kubeconform and not args.collect_only:
+            if args.kubeconform and not args.collect_only and not args.dry_run:
                 os.environ[ENVIRONMENT] = prepare(
                     args.schema_cache_dir,
                     args.schema_version,
@@ -189,6 +197,90 @@ def main(argv: list[str] | None = None) -> int:
                     args.shard.total,
                     shard_source,
                 )
+        if args.command in ("test", "run") and args.dry_run:
+            if (
+                args.collect_only
+                or getattr(args, "whole_chart", False)
+                or getattr(args, "exhaustive", False)
+            ):
+                raise ValueError(
+                    "--dry-run applies to per-path suites and cannot combine with --collect-only"
+                )
+            schema_state = None
+            if args.kubeconform:
+                schema_state = {
+                    "status": "unavailable",
+                    "requested_version": args.schema_version,
+                    "cache_dir": str(args.schema_cache_dir.resolve()),
+                    "refresh_required": not args.schema_offline,
+                }
+                try:
+                    if not (args.schema_cache_dir.expanduser() / "repository" / ".git").exists():
+                        raise ValueError("schema checkout is not cached")
+                    configuration = prepare(
+                        args.schema_cache_dir,
+                        args.schema_version,
+                        args.kubeconform_binary,
+                        True,
+                        read_only=True,
+                    )
+                    os.environ[ENVIRONMENT] = configuration
+                    schema_state.update(
+                        status="cached", resolved_version=json.loads(configuration)["version"]
+                    )
+                except (ValueError, OSError) as exc:
+                    schema_state["reason"] = str(exc)
+                if not args.schema_offline:
+                    schema_state["note"] = (
+                        "Estimate uses cached schemas; an online refresh "
+                        "may invalidate prior successes."
+                    )
+            logical = args.suite if args.command == "run" else args.artifact_dir
+            if args.command == "test" and args.shard:
+                logical = logical / "shards" / args.shard.name
+            logical = logical.resolve()
+            with TemporaryDirectory(prefix="hypothesis-helm-plan-") as temporary:
+                source = logical
+                if args.command == "test":
+                    source = Path(temporary)
+                    if logical.exists():
+                        shutil.copytree(
+                            logical,
+                            source,
+                            dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(
+                                "cache", "__pycache__", ".pytest_cache", ".hypothesis"
+                            ),
+                        )
+                    generate_tests(
+                        args.chart,
+                        source,
+                        max_examples=args.max_examples,
+                        suite_location=logical,
+                        options=RenderOptions(
+                            timeout=args.timeout,
+                            helm=args.helm,
+                            release=args.release,
+                            namespace=args.namespace,
+                            kube_version=args.kube_version,
+                            allow_empty=args.allow_empty,
+                        ),
+                    )
+                estimate = estimate_suite(
+                    source,
+                    suite_location=logical,
+                    seed=args.seed,
+                    match=args.match,
+                    jobs=args.jobs,
+                    shard=args.shard,
+                    artifact_dir=args.artifact_dir,
+                    cache_dir=args.cache_dir,
+                    cache=not args.no_cache,
+                    rerun=args.rerun,
+                    schema_state=schema_state,
+                )
+            print(json.dumps(estimate, indent=2))
+            return 0
         if args.command == "run":
             return run_suite(
                 args.suite,

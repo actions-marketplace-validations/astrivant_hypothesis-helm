@@ -183,6 +183,23 @@ whole-chart and exhaustive modes remain serial.
 
 ### Runtime estimates
 
+Use `--dry-run` to estimate work from the current cache before executing tests:
+
+```sh
+helm hypothesis test examples/workload --match replicas --max-examples 6 \
+  --seed 0 --shard none --dry-run
+```
+
+The JSON plan lists selected, scheduled, and reused properties, plus the total
+successful-example budget. With a cold cache, this selection schedules one
+property with a budget of six. With a compatible cached success, a local rerun
+schedules zero; `--rerun all` or CI defaults schedule it again. Match the original
+run's artifact directory, validation options, seed, and budget when inspecting its
+cache. `--kubeconform` also reports schema-cache availability without fetching
+schemas; an online refresh may change the predicted result-cache hit. See
+[cache-aware dry runs](docs/usage.md#cache-aware-dry-runs) for details.
+
+
 The progress bar shows a live ETA based on completed properties. It starts unknown
 and updates as measurements arrive; JUnit reports record each property's duration.
 Schema types alone cannot predict runtime: Helm branches and resource counts,

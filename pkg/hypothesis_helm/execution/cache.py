@@ -41,6 +41,8 @@ def fingerprint(
     match: str | None,
     shard: str,
     excluded: tuple[Path, ...] = (),
+    *,
+    suite_location: Path | None = None,
 ) -> str:
     """
     Hash suite, chart, implementation, and selection inputs for safe reuse.
@@ -51,6 +53,7 @@ def fingerprint(
         match (str | None): Keyword selection.
         shard (str): Shard identifier.
         excluded (tuple[Path, ...]): Artifact and cache directories to exclude from the chart.
+        suite_location (Path | None): Logical suite location when sources are staged temporarily.
 
     Returns:
         str: Content-addressed cache key, independent of absolute checkout paths.
@@ -79,7 +82,7 @@ def fingerprint(
         digest.update(f"{package}={version(package)}".encode())
     source = directory / "chart-source.json"
     if source.exists():
-        chart = (directory / json.loads(source.read_text())["chart"]).resolve()
+        chart = ((suite_location or directory) / json.loads(source.read_text())["chart"]).resolve()
         # Include dependency archives and files read with Helm's .Files as well as templates.
         for file in sorted(chart.rglob("*")):
             if file.is_file() and not any(root in file.parents for root in (directory, *excluded)):

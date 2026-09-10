@@ -52,6 +52,10 @@ def test_sparse_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     old = json.loads(conformity.prepare(cache, "1.30.0", "/usr/bin/true"))
     assert Path(configuration["schemas"]).is_dir()
     assert Path(old["schemas"]).is_dir()
+    files_before = {p: p.read_bytes() for p in cache.rglob("*") if p.is_file()}
+    inspected = json.loads(conformity.prepare(cache, "1.30.0", "/usr/bin/true", read_only=True))
+    assert inspected == old
+    assert files_before == {p: p.read_bytes() for p in cache.rglob("*") if p.is_file()}
     newer = upstream / "v1.32.0-standalone-strict"
     newer.mkdir()
     (newer / "configmap-v1.json").write_text('{"type":"object","title":"new"}')

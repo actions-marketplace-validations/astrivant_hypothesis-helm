@@ -586,6 +586,7 @@ def generate_tests(
     *,
     max_examples: int = 100,
     options: RenderOptions | None = None,
+    suite_location: Path | None = None,
 ) -> dict[str, object]:
     """
     Write a reviewable pytest module, coalesced YAML, schema and path inventory.
@@ -595,6 +596,7 @@ def generate_tests(
         output (Path): Directory receiving the generated test artifacts.
         max_examples (int): Maximum number of generated examples per property.
         options (RenderOptions | None): Helm rendering settings embedded in the generated suite.
+        suite_location (Path | None): Logical output location for temporarily staged dry runs.
 
     Returns:
         dict[str, object]: Resulting schema, values mapping, or structured report.
@@ -613,7 +615,7 @@ def generate_tests(
         "diagnostics": model.diagnostics,
     }
     (output / "paths.json").write_text(json.dumps(inventory, indent=2) + "\n")
-    relative = os.path.relpath(chart.path, output)
+    relative = os.path.relpath(chart.path, suite_location or output)
     (output / "chart-source.json").write_text(json.dumps({"chart": relative}) + "\n")
     lines = [
         '"""\nVerify generated chart value paths against their inferred contracts.\n"""',

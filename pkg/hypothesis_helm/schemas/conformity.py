@@ -35,7 +35,14 @@ def git(directory: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
-def prepare(cache: Path, version: str, executable: str, offline: bool = False) -> str:
+def prepare(
+    cache: Path,
+    version: str,
+    executable: str,
+    offline: bool = False,
+    *,
+    read_only: bool = False,
+) -> str:
     """
     Resolve a stable release and materialize strict schemas through sparse checkout.
 
@@ -44,6 +51,7 @@ def prepare(cache: Path, version: str, executable: str, offline: bool = False) -
         version (str): Exact Kubernetes version or latest stable published schema version.
         executable (str): Kubeconform executable name or path.
         offline (bool): Reuse the cached repository without fetching upstream changes.
+        read_only (bool): Inspect existing cache files without creating or changing them.
 
     Returns:
         str: Serialized validator configuration inherited by all property workers.
@@ -56,9 +64,12 @@ def prepare(cache: Path, version: str, executable: str, offline: bool = False) -
             f"kubeconform executable not found: {executable}; install kubeconform first"
         )
     cache = cache.expanduser().resolve()
-    cache.mkdir(parents=True, exist_ok=True)
-    with (cache / "checkout.lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+    if read_only:
+        offline = True
+    else:
+        cache.mkdir(parents=True, exist_ok=True)
+    with (cache / "checkout.lock").open("r" if read_only else "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_SH if read_only else fcntl.LOCK_EX)
         repository = cache / "repository"
         if not (repository / ".git").exists():
             if offline:

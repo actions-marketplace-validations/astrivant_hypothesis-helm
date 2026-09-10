@@ -454,3 +454,43 @@ including generation, rendering, validation, and shrinking. Neither is a reliabl
 prediction based solely on schema types: input rejection, branch-dependent output,
 shrinking, and changing parallelism affect elapsed time. The ETA excludes schema
 preparation and collection, which happen before the progress bar starts.
+
+## Cache-aware dry runs
+
+Preview work without executing property examples, rendering charts, validating
+manifests, or downloading schemas:
+
+```bash
+helm hypothesis test ./chart --dry-run
+helm hypothesis test ./chart --dry-run --rerun all --kubeconform \
+  --schema-version latest --schema-cache-dir .cache/hypothesis-helm/schemas
+helm hypothesis run generated-tests --dry-run --match replicas
+```
+
+The command emits a JSON plan to stdout (`-o json` also works). It applies the
+same keyword filter, shard, seed, cache fingerprint, and local/CI rerun policy as
+execution. `selected_properties` counts properties after filtering and sharding;
+`scheduled_properties` counts those that need to run; `reused_properties` counts
+cached successes omitted by the rerun policy. Each property includes its prior
+outcome, planned action, and literal `max_examples` setting when known.
+
+`successful_example_budget` sums those settings for scheduled properties. It is
+not an exact render count or an exhaustive count of the value domain: Hypothesis
+may stop early or do additional work for rejection, replay, and shrinking. If a
+hand-edited test has an unknown budget, the aggregate is `null`. All cached
+successes produce zero scheduled properties and a zero budget locally; CI or
+`--rerun all` still schedules the full selected suite. Cache files do not contain
+reliable timing histories, so `estimated_seconds` remains `null` when work exists.
+
+With `--kubeconform`, the dry run inspects locally available schemas using offline
+preparation. Missing schemas or a missing validator are reported without downloading
+anything, and cached successes are not reused when validation identity cannot be
+established. An online execution can refresh schema content and invalidate the
+estimated cache hit; `schema_cache.note` makes this uncertainty explicit. Use
+`--schema-offline` to plan against the cached schema snapshot alone.
+
+Chart tests are generated in temporary storage at their intended logical location,
+so their fingerprint matches a real run. Existing generated files, reports, and
+result caches are preserved. Pytest collection imports suite modules and conftest
+files, so custom import-time side effects still apply. `--dry-run` is for per-path
+suites and cannot be combined with `--collect-only`, `--whole-chart`, or `--exhaustive`.
