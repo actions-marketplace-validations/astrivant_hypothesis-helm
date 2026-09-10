@@ -186,3 +186,55 @@ def test_missing_suite_is_an_error(tmp_path: Path) -> None:
         None: The Helm command reports a setup error.
     """
     assert main(["run", str(tmp_path)]) == 2
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not shutil.which("helm"), reason="Helm is required")
+@pytest.mark.parametrize("mode", ["paths", "whole-chart", "exhaustive"])
+def test_json_manifest_stream(tmp_path: Path, capfd: pytest.CaptureFixture[str], mode: str) -> None:
+    """
+    Keep rendered resources on stdout and all test diagnostics on stderr.
+
+    Args:
+        tmp_path (Path): Directory receiving generated suite artifacts.
+        capfd (pytest.CaptureFixture[str]): Captured process and child output.
+        mode (str): Rendering mode exercised through the Helm entry point.
+
+    Returns:
+        None: Every output line is a resource and saved suites can stream too.
+    """
+    arguments = [
+        "test",
+        "examples/workload",
+        "-o",
+        "json",
+        "--max-examples",
+        "2",
+        "--artifact-dir",
+        str(tmp_path),
+    ]
+    if mode == "exhaustive":
+        chart = tmp_path / "finite"
+        shutil.copytree("examples/configmap", chart)
+        schema_path = chart / "values.schema.json"
+        schema = json.loads(schema_path.read_text())
+        schema["properties"]["message"]["enum"] = ["hello", "world"]
+        schema_path.write_text(json.dumps(schema))
+        arguments[1] = str(chart)
+        arguments.append("--exhaustive")
+    elif mode == "whole-chart":
+        arguments.append("--whole-chart")
+    assert main(arguments) == 0
+    output = capfd.readouterr()
+    resources = [json.loads(line) for line in output.out.splitlines()]
+    assert resources
+    assert all("apiVersion" in item and "kind" in item for item in resources)
+    if mode == "paths":
+        assert "Testing path $.replicas" in output.err
+        assert "passed" in output.err
+        assert main(["run", str(tmp_path), "--output", "json", "--match", "replicas"]) == 0
+        replay = capfd.readouterr()
+        assert replay.out
+        assert all(json.loads(line)["kind"] for line in replay.out.splitlines())
+        assert main(["run", str(tmp_path), "-o", "json", "--collect-only"]) == 0
+        assert capfd.readouterr().out == ""

@@ -39,6 +39,11 @@ plugin environment, and returns its exit status. Generated source, values,
 schemas, JUnit results and a run report stay in `reports/hypothesis-helm` by default.
 Use `--artifact-dir` to choose a different location.
 
+Add `--output json` (or `-o json`) to `test` or `run` to stream rendered
+manifests as JSON Lines, with progress and test reports on stderr. See
+[streaming to Kubeconform and Kubesec](docs/usage.md#stream-rendered-manifests)
+for a pipeline that validates each resource as it arrives.
+
 Each generated suite includes Python tests, coalesced YAML, an inferred schema,
 and a path/strategy inventory. Source charts remain unchanged. Inferred contracts
 and unresolved template constructs need review; sampled tests do not prove

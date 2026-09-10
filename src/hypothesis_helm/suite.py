@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .output import MANIFEST_FD
+
 
 def run_suite(
     directory: Path,
@@ -68,7 +70,18 @@ def run_suite(
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     environment.pop("PYTEST_ADDOPTS", None)
     environment.pop("PYTEST_PLUGINS", None)
-    completed = subprocess.run(command, cwd=directory, env=environment, check=False)
+    descriptor = MANIFEST_FD.get()
+    environment.pop("HYPOTHESIS_HELM_MANIFEST_FD", None)
+    if descriptor is not None:
+        environment["HYPOTHESIS_HELM_MANIFEST_FD"] = str(descriptor)
+    completed = subprocess.run(
+        command,
+        cwd=directory,
+        env=environment,
+        check=False,
+        pass_fds=() if descriptor is None else (descriptor,),
+        stdout=None if descriptor is None else sys.stderr,
+    )
     status = completed.returncode if completed.returncode >= 0 else 130
     report = {
         "status": "collected"

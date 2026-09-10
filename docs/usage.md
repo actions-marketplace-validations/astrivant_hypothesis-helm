@@ -191,3 +191,43 @@ helm hypothesis run reports/astrivant --match networkPolicy
 The broken chart intentionally fails on `replicas: 0`. The hidden-lever chart
 exercises recovered template fallbacks. Astrivant has incomplete schema entries
 and dynamic references; its generated tests may expose real chart failures.
+
+## Stream rendered manifests
+
+Use `helm hypothesis test ./chart --output json` (or `-o json`) to emit
+newline-delimited JSON: one compact Kubernetes resource per line, flushed as
+each Helm render completes. The same flag works with `helm hypothesis run
+reports/hypothesis-helm`, `--whole-chart`, and `--exhaustive`. Progress,
+pytest output, reports, and errors go to stderr; stdout contains only manifests.
+Collection-only runs emit no manifests.
+
+Every rendered example is included, including repeated examples during shrinking.
+Documents are emitted before resource-envelope checks, so a JSON-serializable
+resource that fails those checks still reaches the validator. Failed Helm
+invocations and unparseable YAML cannot produce JSON manifests. Empty renders
+emit no lines. This is a JSON Lines stream, not one JSON array.
+
+To validate each manifest with both tools as it arrives, use this Bash pipeline.
+Each validator receives the original resource separately, and either failure
+makes the pipeline fail:
+
+```bash
+set -o pipefail
+helm hypothesis test ./chart -o json |
+  (
+    status=0
+    while IFS= read -r manifest; do
+      printf '%s\n' "$manifest" | kubeconform -strict || status=1
+      printf '%s\n' "$manifest" | kubesec scan /dev/stdin || status=1
+    done
+    exit "$status"
+  )
+```
+
+The per-line loop avoids requiring validators to understand JSON Lines.
+[Kubeconform](https://github.com/yannh/kubeconform) validates Kubernetes resource
+schemas; [Kubesec](https://github.com/controlplaneio/kubesec) analyzes security
+configuration. Their exit statuses determine pipeline success; external validator
+findings are not fed back into Hypothesis for shrinking or recorded as pytest
+assertions. Configure any score threshold separately from Kubesec's scan exit
+status. In `generate`, `--output` continues to specify the suite directory.

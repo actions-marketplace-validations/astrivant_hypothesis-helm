@@ -21,6 +21,7 @@ from ruamel.yaml.error import YAMLError
 from . import yamlio
 from .contracts import json_value, mapping, schema_strategy, sequence
 from .finite import enumerate_values
+from .output import emit_manifest
 from .progress import format_path
 from .templates import discover
 
@@ -332,6 +333,8 @@ def render(
             resources = [item for item in yamlio.load_all(process.stdout) if item is not None]
         except YAMLError as exc:
             raise RenderFailure(f"invalid rendered YAML: {exc}") from exc
+    for resource in resources:
+        emit_manifest(resource)
     validate_resources(resources)
     return [mapping(resource) for resource in resources]
 

@@ -54,3 +54,41 @@ interpreter, with unrelated pytest configuration and auto-loaded plugins disable
 The saved suite's own code and conftest remain editable.
 
 Publishing and remote repository-setting changes are not automated by local checks.
+
+## Pre-commit hook
+
+The repository publishes `helm-hypothesis` in `.pre-commit-hooks.yaml`. It runs
+`helm hypothesis test` with `language: system`, so Helm and the Hypothesis Helm
+plugin must already be installed. Set `args` to the chart directory; filenames
+are not passed to the command, and execution is serial.
+
+For a neighboring checkout such as Astrivant, install the plugin from that
+checkout and use a local hook (no remote revision or committed plugin changes
+are required):
+
+```sh
+# From the Astrivant repository:
+helm plugin install ../hypothesis-helm
+# After changing Python code in the plugin checkout:
+helm plugin update hypothesis
+pre-commit run helm-hypothesis --all-files
+```
+
+```yaml
+- repo: local
+  hooks:
+    - id: helm-hypothesis
+      name: Test Astrivant Helm values with Hypothesis
+      entry: helm hypothesis test
+      language: system
+      args: [helm/astrivant, --max-examples, '10', --seed, '0']
+      files: ^(helm/astrivant/|helm/vendor/|\.pre-commit-config\.yaml$)
+      pass_filenames: false
+      require_serial: true
+```
+
+Pre-commit local hooks repeat the manifest fields rather than importing another
+checkout's manifest. Chart or vendored dependency changes trigger the hook.
+A failing property blocks the commit; the generated suite and results are saved
+under `reports/hypothesis-helm`. Ten examples per property keeps the default
+sampling budget modest; this does not guarantee complete branch coverage.

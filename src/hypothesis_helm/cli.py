@@ -5,10 +5,14 @@ Command-line and Helm plugin entry point.
 import argparse
 import json
 import logging
+import os
+import sys
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 
 from .generate import generate_tests
 from .generated import RenderOptions
+from .output import MANIFEST_FD
 from .runner import Chart, audit, check_chart
 from .suite import run_suite
 
@@ -66,6 +70,13 @@ def main(argv: list[str] | None = None) -> int:
     test.add_argument("--kube-version")
     test.add_argument("--allow-empty", action="store_true")
     test.add_argument("--artifact-dir", type=Path, default=Path("reports/hypothesis-helm"))
+    for command in (test, run):
+        command.add_argument(
+            "--output",
+            "-o",
+            choices=("json",),
+            help="stream one rendered manifest per JSON line on stdout; reports go to stderr",
+        )
     args = parser.parse_args(argv)
     logger = logging.getLogger("hypothesis_helm")
     handler = logging.StreamHandler()
@@ -73,6 +84,13 @@ def main(argv: list[str] | None = None) -> int:
     previous_level = logger.level
     logger.setLevel(logging.INFO)
     logger.addHandler(handler)
+    stack = ExitStack()
+    descriptor = None
+    token = None
+    if getattr(args, "output", None) == "json":
+        descriptor = os.dup(sys.stdout.fileno())
+        token = MANIFEST_FD.set(descriptor)
+        stack.enter_context(redirect_stdout(sys.stderr))
     try:
         if args.command == "run":
             return run_suite(
@@ -134,6 +152,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "error", "error": str(exc), "type": type(exc).__name__}))
         return 2
     finally:
+        stack.close()
+        if token is not None:
+            MANIFEST_FD.reset(token)
+        if descriptor is not None:
+            os.close(descriptor)
         logger.removeHandler(handler)
         logger.setLevel(previous_level)
 

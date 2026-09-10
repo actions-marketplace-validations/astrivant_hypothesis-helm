@@ -1,0 +1,8 @@
+- id: helm-hypothesis
+  name: Test Helm chart values with Hypothesis
+  description: Generate and run property tests for Helm chart values using the installed hypothesis plugin.
+  entry: helm hypothesis test
+  language: system
+  pass_filenames: false
+  require_serial: true
+  files: (^|/)(Chart\.yaml|values[^/]*\.ya?ml|values\.schema\.json|templates/.*|charts/.*)$
