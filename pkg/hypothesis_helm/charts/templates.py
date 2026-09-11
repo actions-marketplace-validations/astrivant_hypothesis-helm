@@ -13,6 +13,8 @@ from pathlib import Path
 
 from attrs import define, field
 
+from hypothesis_helm.charts import tpl, yamlio
+
 
 @define
 class Action:
@@ -160,6 +162,9 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
     Returns:
         tuple[list[Reference], list[Diagnostic]]: Result of the documented operation.
     """
+    values_file = path / "values.yaml"
+    defaults = yamlio.load(values_file.read_text()) if values_file.is_file() else {}
+    active_tpl: set[tuple[str, tuple[str, ...] | None]] = set()
     refs: list[Reference] = []
     diagnostics: list[Diagnostic] = []
     for file in sorted((path / "templates").rglob("*")):
@@ -343,8 +348,32 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
                         emit(expression(tokens[j:]))
                     if t == "(":
                         emit(expression(tokens[j:]))
+                    if t == "tpl":
+                        try:
+                            args = tpl.arguments(tokens[j + 1 :])
+                            if len(args) != 2 or (j > 0 and tokens[j - 1] == "|"):
+                                raise ValueError("tpl requires a resolvable string and context")
+                            content = tpl.source_text(args[0], path, defaults, expression)
+                            context = expression(args[1])
+                            if context is None:
+                                raise ValueError("tpl context is dynamic or unsupported")
+                            identity = (content, context)
+                            if identity in active_tpl or len(active_tpl) >= 32:
+                                raise ValueError("recursive tpl expansion requires review")
+                            nested = parse(content)
+                            active_tpl.add(identity)
+                            try:
+                                walk(
+                                    nested,
+                                    context,
+                                    {"$": context},
+                                    f"{source_name}:{node.line} (tpl)",
+                                )
+                            finally:
+                                active_tpl.remove(identity)
+                        except ValueError as exc:
+                            warn(str(exc))
                     if t in (
-                        "tpl",
                         "include",
                         "template",
                         "block",
@@ -383,12 +412,12 @@ def discover(path: Path) -> tuple[list[Reference], list[Diagnostic]]:
                 if head in ("define", "block"):
                     child_dot, child_env = None, {"$": None}
                     warn("named template context is resolved only at runtime")
-                walk(node.children, child_dot, child_env)
+                walk(node.children, child_dot, child_env, source_name)
                 if node.otherwise and node.otherwise[0].tokens[0] in ("if", "with"):
                     warn("chained else context requires review")
-                    walk(node.otherwise, None, env)
+                    walk(node.otherwise, None, env, source_name)
                 else:
-                    walk(node.otherwise, dot, env)
+                    walk(node.otherwise, dot, env, source_name)
 
         walk(nodes, (), {"$": ()})
     return list(dict.fromkeys(refs)), list(dict.fromkeys(diagnostics))

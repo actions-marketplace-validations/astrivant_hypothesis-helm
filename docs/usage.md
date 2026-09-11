@@ -145,9 +145,23 @@ helm hypothesis audit ./chart --strict
 ```
 
 The template AST resolves direct values, root access, simple aliases, lexical
-scopes, and literal lookups. Computed keys, named-template caller contexts,
-`tpl`, mutations and unresolved aliases produce diagnostics. Dependency templates
-and `.Files` content are not recursively audited; inspect subcharts separately.
+scopes, and literal lookups. It also parses nested `tpl` strings supplied as
+literals, values references (including aliases and literal lookups),
+`toYaml`/`toJson` of values, and `(.Files.Get "chart-relative-file")`. References
+inside those strings use the supplied `tpl` context, including its `$` root, and
+enter the same coalescing and property-generation process as direct references.
+For example, `tpl .Values.content .` discovers `hidden` when `content` contains
+`{{ .Values.hidden | default "fallback" }}`. Helm evaluates the string again for
+each generated override during rendering, following its
+[`tpl` semantics](https://helm.sh/docs/v3/howto/charts_tips_and_tricks/#using-the-tpl-function).
+
+Discovery inspects template text available in the original defaults; it cannot
+predict new template syntax introduced by generated string values. Dynamic string
+construction, computed contexts, absent/non-string sources, and recursive `tpl`
+expansion produce diagnostics. Expansion is limited to 32 nested calls. Computed
+keys, named-template caller contexts, mutations, and unresolved aliases also
+require review. Dependency templates and files not explicitly supplied to a
+resolvable `tpl` call are not recursively audited; inspect subcharts separately.
 Recursive schema paths are rejected instead of reported as covered.
 
 Rendered YAML must contain resource envelopes with nonempty `apiVersion`, `kind`
