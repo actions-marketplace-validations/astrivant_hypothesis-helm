@@ -129,6 +129,11 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument(
             "--cache-dir", type=Path, help="persistent path-result cache directory"
         )
+        command.add_argument(
+            "--disable-schema-caching",
+            action="store_true",
+            help="compare values structure against the cached baseline without updating it",
+        )
         command.add_argument("--no-cache", action="store_true", help="disable path-result caching")
         command.add_argument(
             "--rerun",
@@ -316,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
                 shard=args.shard,
                 cache_dir=args.cache_dir,
                 cache=not args.no_cache,
+                disable_schema_caching=args.disable_schema_caching,
                 rerun=args.rerun,
                 artifact_dir=args.artifact_dir,
             )
@@ -358,6 +364,7 @@ def main(argv: list[str] | None = None) -> int:
                 shard=args.shard,
                 cache_dir=args.cache_dir,
                 cache=not args.no_cache,
+                disable_schema_caching=args.disable_schema_caching,
                 rerun=args.rerun,
                 artifact_dir=args.artifact_dir,
             )

@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from typing import Literal
 
 from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes, seed_key
+from hypothesis_helm.execution.structure import inspect_structure
 from hypothesis_helm.integrations.sharding import Shard
 
 
@@ -146,6 +147,9 @@ def estimate_suite(
             + ".json"
         )
     )
+    marker = (
+        inspect_structure(directory, cache_root, seed, suite_location=logical) if cache else None
+    )
     outcomes = read_outcomes(cache_file) if cache and compatible else {}
     examples = budgets(module)
     properties = []
@@ -167,6 +171,7 @@ def estimate_suite(
     return {
         "status": "dry-run",
         "suite": str(logical),
+        "values_structure": marker.report() if marker is not None else None,
         "schema_cache": schema_state,
         "result_cache": str(cache_file) if cache and compatible else None,
         "cache_hit": bool(outcomes),

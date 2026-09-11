@@ -78,6 +78,8 @@ def main() -> int:
         cache_dir = os.environ.get("HH_CACHE_DIR")
         if cache_dir:
             command += ["--cache-dir", cache_dir]
+        if os.environ.get("HH_DISABLE_SCHEMA_CACHING", "false").lower() == "true":
+            command.append("--disable-schema-caching")
         if os.environ.get("HH_CACHE", "true").lower() == "false":
             command.append("--no-cache")
         if os.environ.get("HH_KUBECONFORM", "true").lower() == "true":

@@ -190,6 +190,19 @@ whole-chart and exhaustive modes remain serial.
 
 ### Runtime estimates
 
+**Expect the first execution to take substantially longer than a cached local
+rerun.** The tool traverses the complete schema and discovered values-path tree to
+generate properties, then executes every selected property because no successful
+results are cached yet. Without filters or sharding, that means the full generated
+suite, with repeated Helm renders and optional kubeconform validation for each
+property's examples. A cold schema cache also requires the initial Git fetch and
+sparse checkout.
+
+Later `test` invocations still discover paths and generate the suite; the main
+saving comes from skipping compatible cached successes. CI defaults, `--rerun all`,
+and changes that invalidate the cache execute the full selection again. Traversing
+all paths does not mean exhaustively testing every possible values combination.
+
 Use `--dry-run` to estimate work from the current cache before executing tests:
 
 ```sh
@@ -226,6 +239,20 @@ omitted):
 execution. After a compatible passing run, the local plan instead reports
 `cache_hit: true`, `scheduled_properties: 0`, `reused_properties: 1`, and
 `successful_example_budget: 0`; the property's action becomes `reuse`.
+
+Each cached run also records a base64-encoded values structure, retaining keys and
+array positions while replacing scalar leaves with `null`. Reports and `--dry-run`
+expose `values_structure` with the comparison status and added or removed paths.
+Scalar changes still invalidate cached test results independently of this marker.
+
+For PR/MR comparisons, restore the main branch's path cache and pass
+`--disable-schema-caching --cache-dir .cache/hypothesis-helm/results`. This reads
+its structure baseline without replacing it; only main-branch jobs should publish
+updates to that shared baseline. The GitHub Action exposes the same option as
+`disable-schema-caching: 'true'`. This flag controls the values structure marker;
+kubeconform's downloaded Kubernetes schemas retain their existing cache behavior.
+See [structure baselines](docs/usage.md#values-structure-baselines) for cache layout
+and CI requirements.
 
 Result caches are grouped under `<cache-dir>/<sha256(seed)>/`, with a separate
 suite fingerprint per entry. `--dry-run` looks up the same seed-specific entries

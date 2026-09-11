@@ -120,6 +120,7 @@ def test_action_preserves_arguments_outputs_and_status(
     monkeypatch.setenv("HH_MATCH", "replicas or image")
     monkeypatch.setenv("HH_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("HH_RERUN", "failed")
+    monkeypatch.setenv("HH_DISABLE_SCHEMA_CACHING", "true")
     monkeypatch.setenv("HH_CACHE", "false")
     monkeypatch.setenv("HH_KUBECONFORM", "true")
     monkeypatch.setenv("HH_SCHEMA_VERSION", "1.35.0")
@@ -156,6 +157,7 @@ def test_action_preserves_arguments_outputs_and_status(
     assert command[command.index("--match") + 1] == "replicas or image"
     assert command[command.index("--cache-dir") + 1] == str(tmp_path / "cache")
     assert command[command.index("--rerun") + 1] == "failed"
+    assert "--disable-schema-caching" in command
     assert "--no-cache" in command
     assert "--kubeconform" in command and "--schema-offline" in command
     assert command[command.index("--schema-version") + 1] == "1.35.0"

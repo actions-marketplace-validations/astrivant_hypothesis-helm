@@ -358,6 +358,44 @@ CPU-limited containers provide independent resource budgets. On a shared host,
 set `--jobs N` per instance to avoid multiplying the automatic CPU budget.
 Custom fixtures must also avoid mutating shared files or external resources.
 
+## Values structure baselines
+
+Cached test runs store the original `values.yaml` tree as canonical JSON encoded
+in base64 at `<cache-dir>/<sha256(seed)>/structures/<source-key>.b64`. Mapping
+keys, container kinds, array lengths, and indices remain; scalar contents and
+scalar types become `null`. Mapping order is ignored. Custom saved suites without
+source metadata use `values.coalesced.yaml` instead.
+
+The source key hashes the values-file path relative to the generated suite.
+Keep that relative layout and seed consistent between branches and runners; the
+absolute checkout directory can differ. Use distinct cache roots for unrelated
+projects. The marker survives changes to the full test-result fingerprint, so
+`report.json` and `--dry-run` can report `new`, `unchanged`, `changed`, or
+`invalid-cache`, with `added_paths` and `removed_paths`. Container-kind changes can
+report `changed` even when the named paths remain identical. A missing or invalid
+baseline treats current paths as added. Scalar changes still invalidate test
+outcomes through the full fingerprint.
+
+For PR/MR jobs, restore the main branch's cache into the same `--cache-dir`, then:
+
+```sh
+helm hypothesis test ./chart --seed 0 \
+  --cache-dir .cache/hypothesis-helm/results \
+  --disable-schema-caching
+```
+
+`--disable-schema-caching` reads and compares the baseline but never replaces it,
+even if tests fail. It does not select a branch or retrieve a remote cache; configure
+CI to restore the main branch's cache and reserve publication of that baseline for
+main-branch jobs. Result outcomes can still be written, so PR/MR jobs must not save
+their entire cache over the main branch's cache. The GitHub Action accepts
+`disable-schema-caching: 'true'` and `cache-dir` for this workflow.
+
+Without the flag, completed or interrupted test runs save their starting structure.
+Collection errors leave the baseline intact. `--dry-run` and `--collect-only` never
+update it; `--no-cache` disables both marker reads and writes. The flag does not
+change kubeconform schema downloads or `--schema-cache-dir`.
+
 ## Persistent path results
 
 Result entries use `<cache-dir>/<sha256(seed)>/<suite-fingerprint>.json`. The seed
@@ -374,6 +412,15 @@ cache, local runs retry failed, skipped, and incomplete paths; previously passin
 paths are deselected. If every selected path already passed, the command succeeds
 without rendering new manifests. First runs and changed inputs run the full selection.
 `--collect-only` lists the full selection and leaves the result cache unchanged.
+
+Expect an initial run to take substantially longer than a cached local retry: it
+traverses the schema and discovered values-path tree, generates the suite, and
+executes every selected property with its rendering and validation work. An empty
+schema cache adds the initial fetch and sparse checkout. Path discovery and suite
+generation still occur on subsequent `test` invocations; cached successes save
+property execution time. Filters and shards reduce the executed selection, while
+CI defaults and `--rerun all` continue to execute it in full. This path traversal
+is not exhaustive enumeration of every possible values combination.
 
 ```bash
 helm hypothesis test ./chart                         # local failed-path rerun

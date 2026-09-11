@@ -16,6 +16,7 @@ from rich.console import Console
 from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes, seed_key
 from hypothesis_helm.execution.parallel import run_parallel
 from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.structure import inspect_structure
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.output import MANIFEST_FD
 
@@ -31,6 +32,7 @@ def run_suite(
     artifact_dir: Path | None = None,
     cache_dir: Path | None = None,
     cache: bool = True,
+    disable_schema_caching: bool = False,
     rerun: str = "auto",
 ) -> int:
     """
@@ -50,6 +52,7 @@ def run_suite(
         artifact_dir (Path | None): Report root, defaulting to the suite directory.
         cache_dir (Path | None): Persistent cache root, defaulting to reports/cache.
         cache (bool): Whether to read and write cached path outcomes.
+        disable_schema_caching (bool): Read the values structure baseline without replacing it.
         rerun (str): Auto, all, or failed; auto retries failures outside CI.
 
     Returns:
@@ -107,11 +110,20 @@ def run_suite(
     cache_workspace = TemporaryDirectory(prefix="path-results-", dir=results)
     cache_results = Path(cache_workspace.name)
     cache_file = None
+    marker = None
     cached: dict[str, str] = {}
     retry = rerun == "failed" or (rerun == "auto" and not in_ci(environment))
     if cache and not collect_only:
         cache_root = (cache_dir or results / "cache").resolve()
         cache_root.mkdir(parents=True, exist_ok=True)
+        marker = inspect_structure(directory, cache_root, seed)
+        if marker is not None:
+            logging.getLogger(__name__).info(
+                "Values structure %s: %s added paths, %s removed paths",
+                marker.status,
+                len(marker.added),
+                len(marker.removed),
+            )
         cache_file = (
             cache_root
             / seed_key(seed)
@@ -188,6 +200,8 @@ def run_suite(
         temporary = cache_file.with_suffix(f".{uuid4().hex}.tmp")
         temporary.write_text(json.dumps(cached, indent=2) + "\n")
         temporary.replace(cache_file)
+    if marker is not None and not disable_schema_caching and status in (0, 1, 130):
+        marker.save()
     cache_workspace.cleanup()
     assignment = None
     if shard is not None and (results / "shard.json").is_file():
@@ -213,6 +227,7 @@ def run_suite(
         else "failed",
         "exit_code": status,
         "suite": str(directory),
+        "values_structure": marker.report() if marker is not None else None,
         "conformity": json.loads(environment["HYPOTHESIS_HELM_CONFORMITY"])
         if "HYPOTHESIS_HELM_CONFORMITY" in environment
         else None,
