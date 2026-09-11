@@ -2,6 +2,8 @@
 Verify progress output preserves the manifest channel.
 """
 
+from pathlib import Path
+
 import pytest
 
 from hypothesis_helm.reporting.display import start_progress
@@ -57,3 +59,47 @@ def test_eta_uses_measured_completions(monkeypatch: pytest.MonkeyPatch) -> None:
         assert progress.tasks[task].time_remaining == 10
     finally:
         progress.stop()
+
+
+@pytest.mark.parametrize("jobs", ["1", "2"])
+def test_explicit_progress_on_redirected_stderr(
+    tmp_path: Path,
+    capfd: pytest.CaptureFixture[str],
+    jobs: str,
+) -> None:
+    """
+    Force a live bar through the CLI in serial and parallel execution.
+
+    Args:
+        tmp_path (Path): Saved suite directory.
+        capfd (pytest.CaptureFixture[str]): Parent and subprocess output capture.
+        jobs (str): Worker count passed to the CLI.
+
+    Returns:
+        None: Live updates reach stderr and leave stdout free of terminal escapes.
+    """
+    from hypothesis_helm.cli import main
+
+    (tmp_path / "test_chart_values.py").write_text("def test_one(): pass\ndef test_two(): pass\n")
+    assert (
+        main(
+            [
+                "run",
+                str(tmp_path),
+                "--jobs",
+                jobs,
+                "--progress",
+                "--no-cache",
+                "--shard",
+                "none",
+                "--artifact-dir",
+                str(tmp_path / "reports"),
+            ]
+        )
+        == 0
+    )
+    output = capfd.readouterr()
+    assert "\x1b[" in output.err
+    assert "2/2" in output.err
+    assert "workers=" in output.err
+    assert "\x1b[" not in output.out

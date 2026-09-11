@@ -33,6 +33,7 @@ def run_suite(
     cache_dir: Path | None = None,
     cache: bool = True,
     disable_schema_caching: bool = False,
+    progress: bool = False,
     rerun: str = "auto",
 ) -> int:
     """
@@ -53,6 +54,7 @@ def run_suite(
         cache_dir (Path | None): Persistent cache root, defaulting to reports/cache.
         cache (bool): Whether to read and write cached path outcomes.
         disable_schema_caching (bool): Read the values structure baseline without replacing it.
+        progress (bool): Force live progress even when stderr is redirected.
         rerun (str): Auto, all, or failed; auto retries failures outside CI.
 
     Returns:
@@ -154,6 +156,9 @@ def run_suite(
     environment.pop("PYTEST_PLUGINS", None)
     environment.pop("HYPOTHESIS_HELM_COLLECT", None)
     environment.pop("HYPOTHESIS_HELM_PROGRESS", None)
+    environment.pop("HYPOTHESIS_HELM_FORCE_PROGRESS", None)
+    if progress:
+        environment["HYPOTHESIS_HELM_FORCE_PROGRESS"] = "1"
     environment.pop("HYPOTHESIS_HELM_MANIFEST_LOCK", None)
     environment.pop("HYPOTHESIS_HELM_SHARD", None)
     environment.pop("HYPOTHESIS_HELM_SHARD_REPORT", None)
@@ -174,6 +179,7 @@ def run_suite(
                 descriptor,
                 workers,
                 adaptive=jobs == "auto",
+                force_progress=progress,
                 artifact_dir=results,
             )
         else:

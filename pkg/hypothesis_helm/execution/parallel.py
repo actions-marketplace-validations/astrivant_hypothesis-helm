@@ -27,6 +27,8 @@ def run_parallel(
     jobs: int,
     adaptive: bool = False,
     artifact_dir: Path | None = None,
+    *,
+    force_progress: bool = False,
 ) -> tuple[int, int]:
     """
     Collect selected tests, schedule them individually, and combine JUnit results.
@@ -39,6 +41,7 @@ def run_parallel(
         jobs (int): Maximum number of concurrent worker threads.
         adaptive (bool): Whether throughput feedback adjusts the active worker count.
         artifact_dir (Path | None): Destination for reports, separate from the suite root.
+        force_progress (bool): Force a live bar even when stderr is redirected.
 
     Returns:
         tuple[int, int]: Aggregate exit status and number of workers used.
@@ -121,7 +124,7 @@ def run_parallel(
         next_index = 0
         peak = 0
         interrupted = False
-        progress, task = start_progress(len(nodes), workers)
+        progress, task = start_progress(len(nodes), workers, force=force_progress)
         pool = ThreadPoolExecutor(max_workers=maximum, thread_name_prefix="helm-hypothesis")
         try:
             while next_index < len(nodes) or pending:

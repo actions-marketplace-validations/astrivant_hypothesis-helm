@@ -14,13 +14,14 @@ from rich.progress import (
 )
 
 
-def start_progress(total: int, workers: int) -> tuple[Progress, TaskID]:
+def start_progress(total: int, workers: int, *, force: bool = False) -> tuple[Progress, TaskID]:
     """
     Start a terminal progress bar, or a final-only summary for redirected output.
 
     Args:
         total (int): Number of selected properties.
         workers (int): Initial worker target.
+        force (bool): Render live terminal updates even on redirected stderr.
 
     Returns:
         tuple[Progress, TaskID]: Live display and its test task identifier.
@@ -33,7 +34,7 @@ def start_progress(total: int, workers: int) -> tuple[Progress, TaskID]:
         TimeElapsedColumn(),
         TextColumn("ETA"),
         TimeRemainingColumn(),
-        console=Console(stderr=True),
+        console=Console(stderr=True, force_terminal=True if force else None),
         auto_refresh=False,
         redirect_stdout=False,
         redirect_stderr=False,

@@ -88,7 +88,11 @@ def pytest_collection_finish(session: pytest.Session) -> None:
     """
     global DISPLAY
     if os.environ.get("HYPOTHESIS_HELM_PROGRESS") == "1" and not session.config.option.collectonly:
-        DISPLAY = start_progress(len(session.items), 1)
+        DISPLAY = start_progress(
+            len(session.items),
+            1,
+            force=os.environ.get("HYPOTHESIS_HELM_FORCE_PROGRESS") == "1",
+        )
     destination = os.environ.get("HYPOTHESIS_HELM_COLLECT")
     if destination is not None:
         Path(destination).write_text(json.dumps([item.nodeid for item in session.items]))

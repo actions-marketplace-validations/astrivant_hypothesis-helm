@@ -268,6 +268,10 @@ schemas; an online refresh may change the predicted result-cache hit. See
 [cache-aware dry runs](docs/usage.md#cache-aware-dry-runs) for details.
 
 
+`helm hypothesis test ./chart --progress` explicitly enables a live progress bar
+on stderr, including when output is redirected. It also works with
+`helm hypothesis run`; JSON manifests remain on stdout.
+
 The progress bar shows a live ETA based on completed properties. It starts unknown
 and updates as measurements arrive; JUnit reports record each property's duration.
 Schema types alone cannot predict runtime: Helm branches and resource counts,

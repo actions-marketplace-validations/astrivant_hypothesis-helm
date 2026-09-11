@@ -302,7 +302,9 @@ The pre-commit hook inherits `--jobs auto` without configuration changes.
 
 A Rich progress bar shows completed/selected tests, the worker target, and elapsed
 time on stderr. It updates after each property finishes; redirected output keeps
-a final summary without terminal animations. Serial runs show the same progress
+a final summary without terminal animations. Pass `--progress` to `test` or `run`
+to force a live bar on stderr even when redirected (this includes terminal escape
+sequences). `--dry-run` and `--collect-only` do not display an execution bar. Serial runs show the same progress
 through the bundled pytest plugin. Collection-only runs do not show a test bar.
 
 Press Ctrl-C to stop submitting tests and interrupt active pytest process groups,
