@@ -23,6 +23,7 @@ def trim_topology(
     *,
     random_steps: int = 0,
     fixed_names: bool = True,
+    memberships: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, object]], dict[str, object]]:
     """
     Thin repeated symbolic regions while preserving representatives and unknown cases.
@@ -36,10 +37,13 @@ def trim_topology(
         seed (int): Reproducible selection seed shared across depths.
         random_steps (int): Additional random thinning within regions, preserving their floor.
         fixed_names (bool): Whether renderer names meet the compiler contract.
+        memberships (dict[str, str] | None): Optional override-to-region output mapping.
 
     Returns:
         tuple[list[dict[str, object]], dict[str, object]]: Selected overrides and topology evidence.
     """
+    if memberships is not None:
+        memberships.clear()
     trim_values([], steps, seed)
     trim_values([], random_steps, seed)
     model = ValuesModel.from_schema(mapping(json.loads((chart / "values.schema.json").read_text())))
@@ -69,6 +73,8 @@ def trim_topology(
                     configuration_key({"projection": projections}).encode()
                 ).hexdigest()
                 groups.setdefault(identity, []).append(overrides)
+                if memberships is not None:
+                    memberships[configuration_key(overrides)] = identity
                 evidence[identity] = {"region": identity, "connections": connections}
                 continue
         protected.append(overrides)
@@ -83,6 +89,8 @@ def trim_topology(
     if not compiler.unchanged():
         fallback = "chart changed during topology analysis"
         selected = values
+        if memberships is not None:
+            memberships.clear()
     identities = {configuration_key(item) for item in selected}
     result = [item for item in values if configuration_key(item) in identities]
     return result, {

@@ -234,3 +234,23 @@ indices. Topology adds case membership and per-region projection metadata. Plann
 can dominate: exhaustive space grows as the product of factor domain sizes, while
 strength-t coverage targets grow with the number of t-way assignments. Configured
 planning limits still apply before trimming.
+
+### Expanding observed failures
+
+`--expand-failures` is opt-in for finite permutation runs. After a check fails,
+it schedules omitted inputs in the same supported symbolic region, executes each
+at most once, and continues within the existing `--time-limit`. Added inputs are
+rendered even when `--prune-equivalent` is enabled. The original failure still
+fails the run; reports retain individual failures and additional-work counts.
+The initial selection continues after failures when expansion is enabled;
+without the flag, ordinary execution still stops at the first failure.
+
+This measures how widely a failure applies. In the seeded PCA fixture, 47 tested
+erroneous inputs represented all 51 erroneous inputs' output regions: four regions
+contained a second, output-equivalent input. Expansion can exercise those four
+without discovering a different erroneous output. It does not infer failures for
+unexecuted inputs, and cannot recover an entirely missed failure region.
+Unsupported regions have no automatic expansion membership.
+
+See the [paired failure-expansion matrix](../benchmarks/expansion/README.md).
+Dry runs report a bound on additional work; the actual count depends on failures.

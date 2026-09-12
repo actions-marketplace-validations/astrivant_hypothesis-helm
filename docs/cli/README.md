@@ -144,8 +144,9 @@ options:
 usage: helm hypothesis test [-h] [--max-examples MAX_EXAMPLES] [--time-limit DURATION]
                             [--paths | --exhaustive | --whole-chart |
                             --permutations N] [--trim-random N] [--trim-topology N]
-                            [--prune-equivalent] [--match MATCH] [--collect-only]
-                            [--max-cases MAX_CASES] [--max-candidates MAX_CANDIDATES]
+                            [--expand-failures] [--prune-equivalent] [--match MATCH]
+                            [--collect-only] [--max-cases MAX_CASES]
+                            [--max-candidates MAX_CANDIDATES]
                             [--exhaustive-threshold EXHAUSTIVE_THRESHOLD]
                             [--exhaustive-group PATH,PATH] [--no-infer-groups]
                             [--max-group-cases MAX_GROUP_CASES] [--seed SEED]
@@ -178,6 +179,8 @@ options:
                         default: 0
   --trim-topology N     thin symbolic output/branch regions; retain representatives
                         and unknowns; combines with --trim-random
+  --expand-failures     test omitted members of failed symbolic regions within the
+                        execution budget
   --prune-equivalent    skip Helm only for proved output equivalence to a successful
                         render
   --match MATCH         select generated tests by value-path keyword

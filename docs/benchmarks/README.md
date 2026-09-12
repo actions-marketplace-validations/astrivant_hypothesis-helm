@@ -147,3 +147,15 @@ bash scripts/project-python.sh -m scripts.benchmark_pca \
   --input-complexity 10 --error-percent 5 --trim-level 2 \
   --time-limit 9m --output reports/pca
 ```
+
+## Failure expansion
+
+[Compare each strategy with and without `--expand-failures`](expansion/README.md).
+The paired matrix separates distinct erroneous outputs from erroneous inputs
+exercised, and records the additional physical renders.
+
+```sh
+bash scripts/project-python.sh -m scripts.benchmark_expansion \
+  --input-complexity 10 --error-percent 5 --trim-level 2 \
+  --time-limit 9m --output reports/expansion
+```

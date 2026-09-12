@@ -122,6 +122,11 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         "combines with --trim-random",
     )
     test.add_argument(
+        "--expand-failures",
+        action="store_true",
+        help="test omitted members of failed symbolic regions within the execution budget",
+    )
+    test.add_argument(
         "--prune-equivalent",
         action="store_true",
         help="skip Helm only for proved output equivalence to a successful render",
@@ -316,7 +321,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "test":
             if args.trim < 0 or args.trim_topology < 0:
                 raise ValueError("--trim must be nonnegative")
-            if args.trim or args.trim_topology:
+            if args.expand_failures and (
+                args.paths
+                or args.whole_chart
+                or args.exhaustive
+                or args.match is not None
+                or args.collect_only
+            ):
+                raise ValueError("--expand-failures requires finite permutation testing")
+            if args.trim or args.trim_topology or args.expand_failures:
                 if args.paths or args.whole_chart or args.exhaustive:
                     raise ValueError("--trim applies to finite --permutations planning only")
                 if args.permutations is None:
@@ -544,6 +557,7 @@ def main(argv: list[str] | None = None) -> int:
                 permutations=args.permutations,
                 trim=args.trim,
                 trim_topology=args.trim_topology,
+                expand_failures=args.expand_failures,
                 max_candidates=args.max_candidates,
                 exhaustive_threshold=args.exhaustive_threshold,
                 exhaustive_groups=tuple(args.exhaustive_group),

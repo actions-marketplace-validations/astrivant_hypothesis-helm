@@ -24,6 +24,7 @@ from ruamel.yaml.error import YAMLError
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.presence import has_path
 from hypothesis_helm.charts.templates import discover
+from hypothesis_helm.compiler.expansion import FailureExpansion
 from hypothesis_helm.compiler.pruning import Pruner
 from hypothesis_helm.compiler.topology import trim_topology as topology_trim
 from hypothesis_helm.execution.render_hashes import RenderHashes, process_hashes
@@ -414,6 +415,7 @@ def check_chart(
     permutations: int | None = None,
     trim: int = 0,
     trim_topology: int = 0,
+    expand_failures: bool = False,
     max_candidates: int = 100000,
     exhaustive_threshold: int = 10000,
     exhaustive_groups: tuple[ExhaustiveGroup, ...] = (),
@@ -446,6 +448,7 @@ def check_chart(
         permutations (int | None): Required finite interaction strength when supplied.
         trim (int): Seeded quarter-retention steps applied after finite permutation planning.
         trim_topology (int): Quarter-retention steps within symbolic topology regions.
+        expand_failures (bool): Execute omitted members of failed regions within the same budget.
         max_candidates (int): Maximum interaction planning inventory and search work.
         exhaustive_threshold (int): Enumerate smaller Cartesian spaces automatically.
         exhaustive_groups (tuple[ExhaustiveGroup, ...]): Explicitly required local groups.
@@ -466,6 +469,8 @@ def check_chart(
         raise ValueError("max_examples and timeout must be positive")
     if permutations is not None and exhaustive:
         raise ValueError("permutations and exhaustive are mutually exclusive")
+    if expand_failures and permutations is None:
+        raise ValueError("expand_failures requires finite permutation planning")
     if dry_run and permutations is None:
         raise ValueError("whole-chart dry runs require permutations")
     if not math.isfinite(time_limit) or time_limit <= 0:
@@ -564,10 +569,33 @@ def check_chart(
             return selected
         return trim_values(values, trim, random_seed)
 
+    expansion_values = [{}, *(finite_values or [])] if expand_failures else []
     untrimmed_cases = len(finite_values) if finite_values is not None else 0
     if interaction_plan is not None:
         interaction_plan.values = select_cases(interaction_plan.values)
     trimmed_cases = untrimmed_cases - len(interaction_plan.values) if interaction_plan else 0
+    expansion = None
+    expansion_positions = {
+        configuration_key(value): index for index, value in enumerate(expansion_values)
+    }
+    if expand_failures and interaction_plan is not None:
+        expansion = FailureExpansion.build(
+            chart.path,
+            chart.defaults,
+            expansion_values,
+            [merge_values(chart.defaults, value) for value in expansion_values],
+            [
+                0,
+                *(
+                    expansion_positions[configuration_key(value)]
+                    for value in interaction_plan.values
+                ),
+            ],
+            fixed_names=bool(release and namespace),
+        )
+    expansion_failures: list[dict[str, object]] = []
+    expansion_checked = 0
+    expansion_executed = 0
     coverage: dict[str, object] = {}
     statistics = None
     if interaction_plan is not None:
@@ -577,6 +605,7 @@ def check_chart(
             "trim": trim,
             "trim_random": trim,
             "trim_topology": trim_topology,
+            "expand_failures": expand_failures,
             "topology": topology,
             "trim_seed": random_seed,
             "untrimmed_iterations": untrimmed_cases + 1,
@@ -609,6 +638,7 @@ def check_chart(
             {
                 "trim": trim,
                 "trim_topology": trim_topology,
+                "expand_failures": expand_failures,
                 "trim_seed": random_seed,
                 "helm": helm,
                 "release": release,
@@ -676,6 +706,11 @@ def check_chart(
                 time_limit=time_limit,
             )
             return {
+                "failure_expansion": {
+                    "enabled": expand_failures,
+                    "maximum_additional_iterations": trimmed_cases,
+                    "actual_additions": "depend on observed failures",
+                },
                 "progressive_estimate": progression,
                 **coverage,
                 **statistics.snapshot(),
@@ -705,6 +740,39 @@ def check_chart(
         if remaining <= 0:
             raise TimeLimitReached()
         return remaining
+
+    def expansion_report(result: dict[str, object]) -> None:
+        """
+        Report observed failures and scheduled work separately from inference.
+
+        Args:
+            result (dict[str, object]): Report receiving expansion accounting.
+
+        Returns:
+            None: In-place additions preserve successful and failed execution counts separately.
+        """
+        if expansion is None:
+            return
+        total = len(finite_values or []) + 1
+        result.update(
+            {
+                "failure_expansion": {
+                    "enabled": True,
+                    "additional_scheduled": len(expansion.added),
+                    "additional_executed": expansion_executed,
+                    "additional_remaining": len(expansion.added) - expansion_executed,
+                    "unclassified_inputs": len(expansion_values) - len(expansion.membership),
+                    "failures": expansion_failures,
+                    "inferred_failures": 0,
+                },
+                "completed_iterations": expansion_checked,
+                "successful_iterations": completed_count,
+                "failed_iterations": len(expansion_failures),
+                "planned_iterations": total,
+                "remaining_iterations": total - expansion_checked,
+                "unattempted_iterations": total - count,
+            }
+        )
 
     def stopped_report() -> dict[str, object]:
         """
@@ -738,17 +806,19 @@ def check_chart(
         hashes.log_summary()
         if statistics is not None:
             result.update(statistics.finish("time-limit", message))
+        expansion_report(result)
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
             (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
         return result
 
-    def check(values: dict[str, object]) -> None:
+    def check(values: dict[str, object], *, force_render: bool = False) -> None:
         """
         Render one candidate and retain failure details for replay.
 
         Args:
             values (dict[str, object]): Values document used as the rendering baseline.
+            force_render (bool): Execute Helm for an explicitly expanded input.
 
         Returns:
             None: None. The operation completes through its documented side effects.
@@ -779,7 +849,7 @@ def check_chart(
                         }
                     )
                     witness = pruner.candidate(values, effective, context)
-                    resources = pruner.lookup(witness, count)
+                    resources = pruner.lookup(None if force_render else witness, count)
                 if resources is None:
                     render_started = time.perf_counter()
                     rendered = True
@@ -856,14 +926,49 @@ def check_chart(
         }
         if statistics is not None:
             result.update(statistics.finish(str(result["status"]), message))
+        expansion_report(result)
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
             (artifact_dir / "values.json").write_text(json.dumps(values, indent=2) + "\n")
             (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
         return result
 
+    if expansion is not None:
+        assert finite_values is not None
+        work = [{}, *finite_values]
+        first_error: Exception | None = None
+        first_failure = None
+        initial_count = len(work)
+        for position, values in enumerate(work):
+            try:
+                check(values, force_render=position >= initial_count)
+            except TimeLimitReached:
+                return stopped_report()
+            except KeyboardInterrupt as exc:
+                save_failure(exc)
+                raise
+            except Exception as exc:
+                if first_error is None:
+                    first_error, first_failure = exc, last_failure
+                expansion_failures.append({"values": values, "error": str(exc)})
+                added = expansion.failed(expansion_positions[configuration_key(values)])
+                work.extend(expansion_values[index] for index in added)
+                finite_values.extend(expansion_values[index] for index in added)
+                LOGGER.info(
+                    "Failure expansion: %d additional cases scheduled; %d remain",
+                    len(added),
+                    len(work) - position - 1,
+                )
+            expansion_checked += 1
+            expansion_executed += int(position >= initial_count)
+        if first_error is not None:
+            last_failure = first_failure
+            return save_failure(first_error)
+        # Successful opt-in runs share the usual finite report below, without repeating checks.
+
     try:
-        check({})
+        if expansion is None:
+            check({})
     except TimeLimitReached:
         return stopped_report()
     except KeyboardInterrupt as exc:
@@ -875,8 +980,9 @@ def check_chart(
 
     if finite_values is not None:
         try:
-            for values in finite_values:
-                check(values)
+            if expansion is None:
+                for values in finite_values:
+                    check(values)
         except TimeLimitReached:
             return stopped_report()
         except KeyboardInterrupt as exc:
@@ -916,6 +1022,7 @@ def check_chart(
         }
         if statistics is not None:
             result.update(statistics.finish("passed"))
+        expansion_report(result)
         if artifact_dir is not None and (statistics is not None or pruner is not None):
             artifact_dir.mkdir(parents=True, exist_ok=True)
             (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
