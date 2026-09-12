@@ -35,13 +35,15 @@ def test_scopes_aliases_and_lookups(tmp_path: Path) -> None:
     """
     refs, warnings = scan(
         tmp_path,
-        """{{ $root := . }}{{ $v := .Values }}
+        """
+{{ $root := . }}{{ $v := .Values }}
 {{ with .Values.image }}{{ .tag }}{{ $root.Values.enabled }}{{ end }}
 {{ range $item := .Values.items }}{{ .name }}{{ $item.port }}{{ end }}
 {{ $v.hidden | default "fallback" }}
 {{ index .Values "hyphen-key" "child" }}
 {{ (index .Values "other").nested }}
-{{ dig "nested" "key" "default" .Values }}""",
+{{ dig "nested" "key" "default" .Values }}
+""".removeprefix("\n").removesuffix("\n"),
     )
     paths = {r.path for r in refs}
     assert {
@@ -251,13 +253,14 @@ def test_tpl_coalescing_and_helm_render(tmp_path: Path) -> None:
     )
     scan(
         tmp_path,
-        """apiVersion: v1
+        """
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: tpl-example
 data:
   result: {{ tpl .Values.content . | quote }}
-""",
+""".removeprefix("\n"),
     )
     chart = Chart.load(tmp_path)
     model = coalesce(chart)

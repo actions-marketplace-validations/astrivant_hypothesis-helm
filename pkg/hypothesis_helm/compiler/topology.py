@@ -1,4 +1,6 @@
-"""Select sparse cases within statically projected output and control-flow regions."""
+"""
+Select sparse cases within statically projected output and control-flow regions.
+"""
 
 import hashlib
 import json

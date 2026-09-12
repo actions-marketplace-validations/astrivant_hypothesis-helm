@@ -1,4 +1,6 @@
-"""Verify persistent outcomes across serial, threaded, and CI runs."""
+"""
+Verify persistent outcomes across serial, threaded, and CI runs.
+"""
 
 import json
 from pathlib import Path

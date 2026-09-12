@@ -1,4 +1,6 @@
-"""Verify sparse schema caching and per-render conformity failures."""
+"""
+Verify sparse schema caching and per-render conformity failures.
+"""
 
 import json
 import shutil

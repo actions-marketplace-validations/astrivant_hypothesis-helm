@@ -1,4 +1,6 @@
-"""Verify dry-run work estimates agree with cache-aware execution."""
+"""
+Verify dry-run work estimates agree with cache-aware execution.
+"""
 
 import json
 from pathlib import Path

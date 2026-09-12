@@ -1,4 +1,6 @@
-"""Estimate selected property work without executing fixtures or property examples."""
+"""
+Estimate selected property work without executing fixtures or property examples.
+"""
 
 import ast
 import json

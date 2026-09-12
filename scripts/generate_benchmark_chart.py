@@ -8,8 +8,10 @@ import math
 import re
 from pathlib import Path
 from statistics import NormalDist, mean, pstdev
+from textwrap import dedent
 
 from scripts.benchmarking.faults import select_faults, write_faults
+from scripts.benchmarking.structures import STRUCTURES, write_structure
 from scripts.benchmarking.topology import write_topology
 
 
@@ -27,6 +29,7 @@ def generate(
     bug_orders: tuple[int, ...] | None = None,
     bug_seed: int = 2026,
     max_bugs: int = 1000,
+    structure: str | None = None,
     topology: bool = False,
     topology_opaque: bool = False,
     force: bool = False,
@@ -50,6 +53,7 @@ def generate(
         bug_orders (tuple[int, ...] | None): Trigger orders; defaults to two through six.
         bug_seed (int): Reproducible seed for fault placement.
         max_bugs (int): Maximum injected fault population to materialize.
+        structure (str | None): Isolated structural profile for the strategy matrix.
         topology (bool): Generate six additional live Boolean roles and resource projections.
         topology_opaque (bool): Add a loop to exercise conservative unknown-region handling.
         force (bool): Explicitly allow replacing generated files in an existing directory.
@@ -77,6 +81,16 @@ def generate(
     active = output_bins.bit_length() - 1
     if active > input_complexity or not 0 <= precision <= 12:
         raise ValueError("quantile bits must fit input complexity; precision must be 0..12")
+    if structure is not None and (
+        structure not in STRUCTURES
+        or active + 4 > input_complexity
+        or topology
+        or topology_opaque
+        or bug_percent
+    ):
+        raise ValueError(
+            "structure requires four spare inputs and cannot combine with topology or bugs"
+        )
     if (topology or topology_opaque) and active + 6 > input_complexity:
         raise ValueError("topology requires six inputs beyond the quantile selector bits")
     if any(value is not None and not math.isfinite(value) for value in (lower, upper)):
@@ -151,8 +165,14 @@ def generate(
     (output / "templates").mkdir(parents=True, exist_ok=True)
     name = re.sub("[^a-z0-9-]", "-", output.name.lower()).strip("-") or "benchmark"
     (output / "Chart.yaml").write_text(
-        f"apiVersion: v2\nname: {name}\nversion: 0.1.0\n"
-        "description: Generated finite normal-quantile permutation benchmark\n"
+        dedent(
+            f"""
+            apiVersion: v2
+            name: {name}
+            version: 0.1.0
+            description: Generated finite normal-quantile permutation benchmark
+            """
+        ).removeprefix("\n")
     )
     fields = [f"input{index:03d}" for index in range(input_complexity)]
     (output / "values.yaml").write_text("".join(f"{name}: false\n" for name in fields))
@@ -169,11 +189,36 @@ def generate(
         + "\n"
     )
     (output / "templates/configmap.yaml").write_text(
-        "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ .Release.Name }}\ndata:\n"
-        + '  value: "'
-        + branch(0, 0)
-        + '"\n'
+        dedent(
+            f"""
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: {{{{ .Release.Name }}}}
+            data:
+              value: "{branch(0, 0)}"
+            """
+        ).removeprefix("\n")
     )
+    if structure is not None:
+        spec["structure"] = write_structure(output, structure, active)
+        spec["possible_inputs"] = str(
+            (3 if structure == "boundaries" else 2) * 2 ** (input_complexity - 1)
+        )
+        spec["unused_inputs"] = (
+            input_complexity
+            - active
+            - {
+                "constraints": 2,
+                "control-flow": 2,
+                "dependencies": 1,
+                "interactions": 4,
+                "equivalence": 0,
+                "boundaries": 1,
+            }[structure]
+        )
+    elif force:
+        (output / "templates/structure.yaml").unlink(missing_ok=True)
     if topology or topology_opaque:
         spec["topology"] = write_topology(output, active, topology_opaque)
         spec["unused_inputs"] = input_complexity - active - 6
@@ -233,6 +278,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also add an unsupported loop for fallback measurements",
     )
+    parser.add_argument(
+        "--structure", choices=STRUCTURES, help="generate an isolated structural matrix case"
+    )
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
     spec = generate(
@@ -250,6 +298,7 @@ def main(argv: list[str] | None = None) -> int:
         else None,
         bug_seed=args.bug_seed,
         max_bugs=args.max_bugs,
+        structure=args.structure,
         topology=args.topology,
         topology_opaque=args.topology_opaque,
         force=args.force,

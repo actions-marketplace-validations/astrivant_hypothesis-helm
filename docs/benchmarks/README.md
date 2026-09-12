@@ -117,3 +117,33 @@ bash scripts/project-python.sh -m scripts.benchmark_sparsity \
 Raw results include `topology_counts` and `topology_quality` (categorical outcome
 coverage and total variation), alongside scalar-distribution statistics. No CDF
 error is assigned to unordered topology outcomes.
+
+## Strategy matrix
+
+[Compare strategies across six structural cases](matrix/README.md).
+The matrix uses fully enumerable fixtures to measure exact outcome coverage,
+with a nine-minute execution ceiling for each independent run.
+
+```sh
+bash scripts/project-python.sh -m scripts.benchmark_matrix \
+  --input-complexity 10 --trim-level 2 --seed 2026 --time-limit 9m \
+  --output reports/strategy-matrix
+```
+
+Use `--structure constraints|control-flow|dependencies|interactions|equivalence|boundaries`
+with the chart generator to create an individual case. Boundary profiles include
+an integer input; the matrix harness enumerates their declared domains rather
+than assuming every parameter is Boolean.
+
+## Output-space PCA
+
+[Before and after trimming, with 5% seeded errors](pca/README.md).
+Compare random trimming, topology trimming, and both across the six structural
+cases. Each category keeps fixed PCA axes and reports exact error recall and
+output coverage alongside the projection.
+
+```sh
+bash scripts/project-python.sh -m scripts.benchmark_pca \
+  --input-complexity 10 --error-percent 5 --trim-level 2 \
+  --time-limit 9m --output reports/pca
+```

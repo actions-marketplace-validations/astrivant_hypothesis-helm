@@ -1,4 +1,6 @@
-"""Persist value-free YAML structure markers separately from property outcomes."""
+"""
+Persist value-free YAML structure markers separately from property outcomes.
+"""
 
 import base64
 import hashlib

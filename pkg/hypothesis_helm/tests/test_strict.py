@@ -1,4 +1,6 @@
-"""Require configurable fields in original values rather than inferred defaults."""
+"""
+Require configurable fields in original values rather than inferred defaults.
+"""
 
 import json
 from pathlib import Path

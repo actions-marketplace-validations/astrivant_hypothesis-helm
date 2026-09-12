@@ -1,6 +1,9 @@
-"""Generate and independently check a fixture with known downstream topology."""
+"""
+Generate and independently check a fixture with known downstream topology.
+"""
 
 from pathlib import Path
+from textwrap import dedent
 
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -29,34 +32,77 @@ def write_topology(chart: Path, offset: int, opaque: bool = False) -> dict[str, 
     port = "{{ if .Values." + roles["alternate_port"] + " }}8080{{ else }}80{{ end }}"
     replicas = "{{ if .Values." + roles["replicas"] + " }}3{{ else }}1{{ end }}"
     rare = "{{ if .Values." + roles["rare_a"] + " }}{{ if .Values." + roles["rare_b"] + " }}"
-    template = (
-        gate + "\napiVersion: v1\nkind: Service\nmetadata:\n  name: topology-service\nspec:\n"
-        "  selector:\n    app: topology\n  ports:\n    - port: "
-        + port
-        + "\n      targetPort: "
-        + port
-        + "\n"
-        + ingress
-        + "\n---\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n"
-        "  name: topology-ingress\nspec:\n  defaultBackend:\n    service:\n"
-        "      name: topology-service\n"
-        "      port:\n        number: " + port + "\n{{ end }}\n{{ end }}\n---\n"
-        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: topology-workload\nspec:\n"
-        "  replicas: " + replicas + "\n  selector:\n    matchLabels:\n      app: topology\n"
-        "  template:\n    metadata:\n      labels:\n        app: topology\n    spec:\n"
-        "      containers:\n        - name: app\n          image: nginx:1.27\n"
-        + gate
-        + "\n"
-        + ingress
-        + rare
-        + "\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n"
-        "  name: topology-rare\ndata:\n  signal: rare\n{{ end }}{{ end }}{{ end }}{{ end }}\n"
-    )
+    template = dedent(
+        f"""
+        {gate}
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: topology-service
+        spec:
+          selector:
+            app: topology
+          ports:
+            - port: {port}
+              targetPort: {port}
+        {ingress}
+        ---
+        apiVersion: networking.k8s.io/v1
+        kind: Ingress
+        metadata:
+          name: topology-ingress
+        spec:
+          defaultBackend:
+            service:
+              name: topology-service
+              port:
+                number: {port}
+        {{{{ end }}}}
+        {{{{ end }}}}
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: topology-workload
+        spec:
+          replicas: {replicas}
+          selector:
+            matchLabels:
+              app: topology
+          template:
+            metadata:
+              labels:
+                app: topology
+            spec:
+              containers:
+                - name: app
+                  image: nginx:1.27
+        {gate}
+        {ingress}{rare}
+        ---
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: topology-rare
+        data:
+          signal: rare
+        {{{{ end }}}}{{{{ end }}}}{{{{ end }}}}{{{{ end }}}}
+        """
+    ).removeprefix("\n")
     if opaque:
-        template += (
-            "{{ range until 1 }}\n---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n"
-            "  name: topology-opaque\ndata:\n  signal: loop\n{{ end }}\n"
-        )
+        template += dedent(
+            """
+            {{ range until 1 }}
+            ---
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: topology-opaque
+            data:
+              signal: loop
+            {{ end }}
+            """
+        ).removeprefix("\n")
     (chart / "templates/topology.yaml").write_text(template)
     return {
         "roles": roles,

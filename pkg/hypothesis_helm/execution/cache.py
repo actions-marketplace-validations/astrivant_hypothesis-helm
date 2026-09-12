@@ -1,4 +1,6 @@
-"""Persist completed property outcomes and select local retries."""
+"""
+Persist completed property outcomes and select local retries.
+"""
 
 import hashlib
 import json

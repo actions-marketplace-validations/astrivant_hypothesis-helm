@@ -1,4 +1,6 @@
-"""Cache upstream Kubernetes schemas and validate each rendered manifest stream."""
+"""
+Cache upstream Kubernetes schemas and validate each rendered manifest stream.
+"""
 
 import fcntl
 import hashlib

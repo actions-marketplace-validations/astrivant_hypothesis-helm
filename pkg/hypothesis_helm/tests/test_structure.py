@@ -1,4 +1,6 @@
-"""Verify value-free structure markers survive runs without replacing result fingerprints."""
+"""
+Verify value-free structure markers survive runs without replacing result fingerprints.
+"""
 
 import base64
 import json

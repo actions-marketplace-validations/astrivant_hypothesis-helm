@@ -1,1 +1,3 @@
-"""Display progress and stream rendered manifests."""
+"""
+Display progress and stream rendered manifests.
+"""

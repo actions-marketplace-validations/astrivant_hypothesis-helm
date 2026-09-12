@@ -1842,4 +1842,4 @@ python-discovery = ">=1.6"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.13,<4.0"
-content-hash = "d4c81bf969ed9ebe0854bb782ff9a2b9f536d0b793a6c16954b1356f29b5a200"
+content-hash = "fced4c63b7cc352108e5963c7a94618e38ef9d61ee2b42791871c2f6e8ac833c"

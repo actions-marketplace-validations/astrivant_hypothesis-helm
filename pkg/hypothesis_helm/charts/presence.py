@@ -1,4 +1,6 @@
-"""Check whether configurable paths are explicitly represented in source values."""
+"""
+Check whether configurable paths are explicitly represented in source values.
+"""
 
 
 def has_path(value: object, path: tuple[str | int, ...]) -> bool:

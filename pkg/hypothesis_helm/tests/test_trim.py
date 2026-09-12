@@ -1,4 +1,6 @@
-"""Verify reproducible finite-plan thinning without false coverage claims."""
+"""
+Verify reproducible finite-plan thinning without false coverage claims.
+"""
 
 from pathlib import Path
 

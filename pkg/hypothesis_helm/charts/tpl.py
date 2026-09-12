@@ -1,4 +1,6 @@
-"""Resolve statically available inputs to Helm's tpl function for discovery."""
+"""
+Resolve statically available inputs to Helm's tpl function for discovery.
+"""
 
 import json
 from collections.abc import Callable
