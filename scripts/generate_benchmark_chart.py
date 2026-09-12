@@ -10,6 +10,7 @@ from pathlib import Path
 from statistics import NormalDist, mean, pstdev
 
 from scripts.benchmarking.faults import select_faults, write_faults
+from scripts.benchmarking.topology import write_topology
 
 
 def generate(
@@ -26,6 +27,8 @@ def generate(
     bug_orders: tuple[int, ...] | None = None,
     bug_seed: int = 2026,
     max_bugs: int = 1000,
+    topology: bool = False,
+    topology_opaque: bool = False,
     force: bool = False,
 ) -> dict[str, object]:
     """
@@ -47,6 +50,8 @@ def generate(
         bug_orders (tuple[int, ...] | None): Trigger orders; defaults to two through six.
         bug_seed (int): Reproducible seed for fault placement.
         max_bugs (int): Maximum injected fault population to materialize.
+        topology (bool): Generate six additional live Boolean roles and resource projections.
+        topology_opaque (bool): Add a loop to exercise conservative unknown-region handling.
         force (bool): Explicitly allow replacing generated files in an existing directory.
 
     Returns:
@@ -72,6 +77,8 @@ def generate(
     active = output_bins.bit_length() - 1
     if active > input_complexity or not 0 <= precision <= 12:
         raise ValueError("quantile bits must fit input complexity; precision must be 0..12")
+    if (topology or topology_opaque) and active + 6 > input_complexity:
+        raise ValueError("topology requires six inputs beyond the quantile selector bits")
     if any(value is not None and not math.isfinite(value) for value in (lower, upper)):
         raise ValueError("truncation bounds must be finite")
     if lower is not None and upper is not None and lower >= upper:
@@ -167,6 +174,12 @@ def generate(
         + branch(0, 0)
         + '"\n'
     )
+    if topology or topology_opaque:
+        spec["topology"] = write_topology(output, active, topology_opaque)
+        spec["unused_inputs"] = input_complexity - active - 6
+        spec["topology_inputs"] = 6
+    elif force:
+        (output / "templates/topology.yaml").unlink(missing_ok=True)
     if bug_percent:
         spec["bugs"] = bug_spec
     if defects:
@@ -210,6 +223,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--bug-orders", help="comma-separated trigger orders; default: 2 through 6")
     parser.add_argument("--bug-seed", type=int, default=2026)
     parser.add_argument("--max-bugs", type=int, default=1000)
+    parser.add_argument(
+        "--topology",
+        action="store_true",
+        help="add gated resources and interacting downstream projections",
+    )
+    parser.add_argument(
+        "--topology-opaque",
+        action="store_true",
+        help="also add an unsupported loop for fallback measurements",
+    )
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
     spec = generate(
@@ -227,6 +250,8 @@ def main(argv: list[str] | None = None) -> int:
         else None,
         bug_seed=args.bug_seed,
         max_bugs=args.max_bugs,
+        topology=args.topology,
+        topology_opaque=args.topology_opaque,
         force=args.force,
     )
     print(

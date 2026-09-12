@@ -19,7 +19,7 @@ This is one seeded trajectory; distribution errors can fluctuate.
 
 ![Received distributions as case counts decrease](sparsity-distributions.png)
 
-The application exposes this tradeoff through `--trim N` (default `0`): each step
+The application exposes this tradeoff through `--trim-random N` (default `0`): each step
 retains 25% of non-default planned cases, rounded upward. See [trimming](../../execution/README.md#optional-trimming).
 This fixture's distribution coverage does not establish a generally safe trim
 level for bug discovery; rare faults can be lost when cases are omitted.

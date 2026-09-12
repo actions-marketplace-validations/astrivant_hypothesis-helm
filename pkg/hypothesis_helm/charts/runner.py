@@ -25,6 +25,7 @@ from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.presence import has_path
 from hypothesis_helm.charts.templates import discover
 from hypothesis_helm.compiler.pruning import Pruner
+from hypothesis_helm.compiler.topology import trim_topology as topology_trim
 from hypothesis_helm.execution.render_hashes import RenderHashes, process_hashes
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
 from hypothesis_helm.reporting.output import emit_manifest
@@ -412,6 +413,7 @@ def check_chart(
     max_cases: int = 10000,
     permutations: int | None = None,
     trim: int = 0,
+    trim_topology: int = 0,
     max_candidates: int = 100000,
     exhaustive_threshold: int = 10000,
     exhaustive_groups: tuple[ExhaustiveGroup, ...] = (),
@@ -443,6 +445,7 @@ def check_chart(
         max_cases (int): Maximum exhaustive domain or interaction suite and factor size.
         permutations (int | None): Required finite interaction strength when supplied.
         trim (int): Seeded quarter-retention steps applied after finite permutation planning.
+        trim_topology (int): Quarter-retention steps within symbolic topology regions.
         max_candidates (int): Maximum interaction planning inventory and search work.
         exhaustive_threshold (int): Enumerate smaller Cartesian spaces automatically.
         exhaustive_groups (tuple[ExhaustiveGroup, ...]): Explicitly required local groups.
@@ -467,7 +470,13 @@ def check_chart(
         raise ValueError("whole-chart dry runs require permutations")
     if not math.isfinite(time_limit) or time_limit <= 0:
         raise ValueError("time_limit must be positive and finite")
-    if type(trim) is not int or trim < 0 or (trim and permutations is None):
+    if (
+        type(trim) is not int
+        or trim < 0
+        or type(trim_topology) is not int
+        or trim_topology < 0
+        or ((trim or trim_topology) and permutations is None)
+    ):
         raise ValueError("trim must be nonnegative and requires finite permutation planning")
     planning_started = time.perf_counter()
     hashes = RenderHashes(scope="run-local")
@@ -528,9 +537,36 @@ def check_chart(
         if interaction_plan is not None:
             interaction_plan.values = distinct
             interaction_plan.duplicate_cases_removed = duplicate_cases_removed
+    topology: dict[str, object] = {}
+
+    def select_cases(values: list[dict[str, object]]) -> list[dict[str, object]]:
+        """
+        Apply composable sampling controls with topology representatives protected.
+
+        Args:
+            values (list[dict[str, object]]): Distinct non-default planned overrides.
+
+        Returns:
+            list[dict[str, object]]: Selected overrides in original order.
+        """
+        nonlocal topology
+        if trim_topology:
+            selected, topology = topology_trim(
+                chart.path,
+                chart.defaults,
+                values,
+                [merge_values(chart.defaults, item) for item in values],
+                trim_topology,
+                random_seed,
+                random_steps=trim,
+                fixed_names=bool(release and namespace),
+            )
+            return selected
+        return trim_values(values, trim, random_seed)
+
     untrimmed_cases = len(finite_values) if finite_values is not None else 0
     if interaction_plan is not None:
-        interaction_plan.values = trim_values(interaction_plan.values, trim, random_seed)
+        interaction_plan.values = select_cases(interaction_plan.values)
     trimmed_cases = untrimmed_cases - len(interaction_plan.values) if interaction_plan else 0
     coverage: dict[str, object] = {}
     statistics = None
@@ -539,6 +575,9 @@ def check_chart(
         coverage = {
             "mode": "permutations",
             "trim": trim,
+            "trim_random": trim,
+            "trim_topology": trim_topology,
+            "topology": topology,
             "trim_seed": random_seed,
             "untrimmed_iterations": untrimmed_cases + 1,
             "trimmed_iterations": trimmed_cases,
@@ -569,6 +608,7 @@ def check_chart(
             time.perf_counter() - planning_started,
             {
                 "trim": trim,
+                "trim_topology": trim_topology,
                 "trim_seed": random_seed,
                 "helm": helm,
                 "release": release,
@@ -582,11 +622,13 @@ def check_chart(
             },
         )
         LOGGER.info("Coverage strategy: %s", coverage["coverage_strategy"])
-        if trim:
+        if trim or trim_topology:
             LOGGER.info(
-                "Trim %d: %d non-default cases retained, %d omitted; defaults retained; "
+                "Trim random=%d, topology=%d: %d non-default cases retained, %d omitted; "
+                "defaults retained; "
                 "interaction and group coverage are not guaranteed when cases are omitted",
                 trim,
+                trim_topology,
                 len(interaction_plan.values),
                 trimmed_cases,
             )
@@ -626,6 +668,8 @@ def check_chart(
                 history=statistics.previous
                 if statistics.previous.get("context") == statistics.context and not properties
                 else {},
+                selector=select_cases,
+                trim_topology=trim_topology,
                 trim=trim,
                 random_seed=random_seed,
                 fixed_names=bool(release and namespace),

@@ -105,11 +105,21 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         "--permutations", type=int, metavar="N", help="cover every valid N-way finite interaction"
     )
     test.add_argument(
+        "--trim-random",
         "--trim",
+        dest="trim",
         type=int,
         default=0,
         metavar="N",
         help="retain a seeded quarter of finite permutation cases per step; default: 0",
+    )
+    test.add_argument(
+        "--trim-topology",
+        type=int,
+        default=0,
+        metavar="N",
+        help="thin symbolic output/branch regions; retain representatives and unknowns; "
+        "combines with --trim-random",
     )
     test.add_argument(
         "--prune-equivalent",
@@ -304,9 +314,9 @@ def main(argv: list[str] | None = None) -> int:
                     shard_source,
                 )
         if args.command == "test":
-            if args.trim < 0:
+            if args.trim < 0 or args.trim_topology < 0:
                 raise ValueError("--trim must be nonnegative")
-            if args.trim:
+            if args.trim or args.trim_topology:
                 if args.paths or args.whole_chart or args.exhaustive:
                     raise ValueError("--trim applies to finite --permutations planning only")
                 if args.permutations is None:
@@ -533,6 +543,7 @@ def main(argv: list[str] | None = None) -> int:
                 max_cases=args.max_cases,
                 permutations=args.permutations,
                 trim=args.trim,
+                trim_topology=args.trim_topology,
                 max_candidates=args.max_candidates,
                 exhaustive_threshold=args.exhaustive_threshold,
                 exhaustive_groups=tuple(args.exhaustive_group),

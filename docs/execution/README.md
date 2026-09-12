@@ -186,15 +186,51 @@ an in-flight custom callback in those cases must return before execution can sto
 
 ## Optional trimming
 
-`helm hypothesis test CHART --permutations 2 --trim 1 --seed 2026` retains a
-seeded subset of the finite plan. `--trim 0` is the default and removes nothing.
-Each step retains one quarter of non-default cases, rounded upward: levels 1–3
-retain roughly 25%, 6.25%, and 1.56%. Defaults always run, and at least one
-non-default case remains when available. The same seed produces nested subsets.
+Both controls default to zero and can be combined:
 
-Trimming happens after planning and deduplication; it does not reduce planning
-limits or cost. Reports and dry runs show retained and omitted counts. A passing
-trimmed run means its selected checks passed, without a complete interaction or
-exhaustive-group coverage guarantee. Exact-equivalence pruning remains separate.
-Trimming applies to finite permutation plans, including automatic enumeration;
-per-path, random whole-chart, and explicit exhaustive modes do not accept it.
+```sh
+helm hypothesis test CHART --permutations 2 --trim-random 1 --trim-topology 1 --seed 2026
+```
+
+- `--trim-random N`: seeded uniform thinning, retaining one quarter per step.
+  `--trim` remains an alias. Levels 1–3 retain about 25%, 6.25%, and 1.56%.
+- `--trim-topology N`: thin within matching symbolic output **and branch** regions,
+  keeping at least one representative per region and every unclassified case.
+- Together: apply both depths within regions, preserving those same floors. The
+  resulting case count can exceed a global random sampling target.
+
+Defaults always run. Counts round upward and fixed seeds produce nested subsets.
+Topology regions describe static projections, not previously successful tests;
+unsupported expressions or uncertain renderer context retain cases. Reports include
+template-to-input influences, branch decisions, region counts, and omitted cases.
+Topology sampling prioritizes outcome diversity; retained frequencies need not
+represent the original input distribution.
+
+Trimming follows planning and deduplication. It reduces execution work, not planning
+limits or cost. Passing means the retained checks passed; interaction and exhaustive
+group coverage are not guaranteed after cases are omitted. Exact-equivalence pruning
+remains a separate control. These options apply to finite permutation plans, including
+automatic enumeration, rather than per-path, random whole-chart or explicit exhaustive modes.
+
+### Computational cost
+
+| Mode | Approximate time | Annotation |
+|---|---|---|
+| Default | `P + N·R` | Execute the full finite plan. |
+| `--trim-random` | `P + N + K log K + K·R` | Shuffle once; restore retained cases to execution order. |
+| `--trim-topology` | `P + A + N·C + Σ(Kᵢ log Kᵢ) + K·R` | Classify every candidate; sample within regions. |
+| Both | Same form as topology | Both depths apply inside each region; protected cases remain. |
+
+`P`: planning cost; `N`: planned non-default cases; `K`: retained cases;
+`Kᵢ`: retained cases in region i; `R`: render and validation cost;
+`A`: chart analysis and IR construction; `C`: per-case symbolic evaluation, value
+normalization and projection construction.
+The single defaults check is omitted from these expressions. They describe execution
+without optional equivalence pruning, with bounded-size values; larger values add
+serialization and copying costs.
+
+All modes materialize the plan (`O(N)` case storage). Random trimming adds `O(N)`
+indices. Topology adds case membership and per-region projection metadata. Planning
+can dominate: exhaustive space grows as the product of factor domain sizes, while
+strength-t coverage targets grow with the number of t-way assignments. Configured
+planning limits still apply before trimming.

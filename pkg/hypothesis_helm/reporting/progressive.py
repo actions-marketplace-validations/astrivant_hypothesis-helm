@@ -68,6 +68,8 @@ def estimate_progression(
     max_cases: int,
     max_candidates: int,
     history: dict[str, object],
+    selector: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None = None,
+    trim_topology: int = 0,
     trim: int = 0,
     random_seed: int = 0,
     fixed_names: bool = True,
@@ -90,6 +92,9 @@ def estimate_progression(
         max_cases (int): Configured per-plan case limit.
         max_candidates (int): Configured planning work limit.
         history (dict[str, object]): Compatible measured costs; no successes are restored.
+        selector (Callable[[list[dict[str, object]]], list[dict[str, object]]] | None):
+            Configured sampling policy for preview plans.
+        trim_topology (int): Topology sampling depth for report provenance.
         trim (int): Quarter-retention steps for preview plans; selected is already trimmed.
         random_seed (int): Seed matching the configured execution subset.
         fixed_names (bool): Whether release and namespace satisfy the fixed-context contract.
@@ -125,7 +130,9 @@ def estimate_progression(
             distinct.setdefault(configuration_key(merge(values)), values)
         candidates = list(distinct.values())[1:]
         if plan is not selected:
-            candidates = trim_values(candidates, trim, random_seed)
+            candidates = (
+                selector(candidates) if selector else trim_values(candidates, trim, random_seed)
+            )
         for overrides in [{}, *candidates]:
             effective = merge(overrides)
             key = configuration_key(effective)
@@ -166,6 +173,7 @@ def estimate_progression(
             "status": "planned",
             "strength": plan.strength,
             "trim": trim,
+            "trim_topology": trim_topology,
             "strategy": plan.strategy,
             "candidate_inputs": len(inputs),
             "filter_forecast_renders": len(outputs),
@@ -292,6 +300,7 @@ def estimate_progression(
         },
         "mode": "static-progressive-forecast",
         "trim": trim,
+        "trim_topology": trim_topology,
         "trim_seed": random_seed,
         "stages": rows,
         "configured_run": configured,

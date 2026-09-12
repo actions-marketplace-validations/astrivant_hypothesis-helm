@@ -24,6 +24,7 @@ from hypothesis_helm.schemas.contracts import configuration_key, json_value, map
 from hypothesis_helm.schemas.model import ValuesModel
 from jsonschema import validators
 
+from scripts.benchmarking.topology import expected_topology, validate_topology
 from scripts.benchmarking.workload import (
     expected_output,
     load_inputs,
@@ -74,7 +75,7 @@ def execute_worker(job: Job) -> dict[str, object]:
     """
     started = time.perf_counter()
     attempted = render_invocations = 0
-    ledger: list[tuple[bool, int | None, float | None, float]] = []
+    ledger: list[tuple[bool, int | None, float | None, float, str | None]] = []
     hashes = RenderHashes(scope="benchmark-replica-local")
     input_histogram = [0] * 32
     render_histogram = [0] * 32
@@ -137,6 +138,7 @@ def execute_worker(job: Job) -> dict[str, object]:
                 pristine = copy.deepcopy(resources)
                 bucket = None
                 if spec is not None:
+                    validate_topology(resources, effective, spec)
                     expected = expected_output(effective, spec)
                     data = mapping(resources[0]["data"])
                     if data["value"] != expected:
@@ -149,18 +151,26 @@ def execute_worker(job: Job) -> dict[str, object]:
                     compiler.remember(witness, attempted, pristine)
                 received = float(str(mapping(resources[0]["data"])["value"])) if spec else None
                 # Commit once so an alarm cannot expose partially updated success counters.
-                ledger.append((reused, bucket, received, time.perf_counter()))
+                projection = (
+                    configuration_key(expected_topology(effective, spec))
+                    if spec is not None and "topology" in spec
+                    else None
+                )
+                ledger.append((reused, bucket, received, time.perf_counter(), projection))
     except TimeLimitReached:
         status = "time-limit"
     except Exception as exc:
         status, error = "failed", f"{type(exc).__name__}: {exc}"
     completed = len(ledger)
-    rendered = sum(not reused for reused, _, _, _ in ledger)
+    rendered = sum(not reused for reused, _, _, _, _ in ledger)
     pruned = completed - rendered
     render_prefix = [0]
     oracle_prefix = [0]
     received_counts: dict[str, int] = {}
-    for reused, bucket, received, _ in ledger:
+    topology_counts: dict[str, int] = {}
+    for reused, bucket, received, _, projection in ledger:
+        if projection is not None:
+            topology_counts[projection] = topology_counts.get(projection, 0) + 1
         render_prefix.append(render_prefix[-1] + int(not reused))
         oracle_prefix.append(oracle_prefix[-1] + int(bucket is not None))
         if bucket is not None and received is not None:
@@ -198,6 +208,7 @@ def execute_worker(job: Job) -> dict[str, object]:
         "compiler_fallback": compiler.disabled if compiler else None,
         "input_histogram": input_histogram,
         "received_counts": received_counts,
+        "topology_counts": topology_counts,
         "render_histogram": render_histogram,
     }
 

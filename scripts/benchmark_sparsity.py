@@ -13,21 +13,25 @@ from collections import Counter
 from pathlib import Path
 
 from hypothesis_helm.reporting.budget import parse_time_limit
-from hypothesis_helm.schemas.contracts import mapping
+from hypothesis_helm.schemas.contracts import configuration_key, mapping
 
 from scripts.benchmark_helm import ROOT, code_digest
 from scripts.benchmarking.plots import finish
 from scripts.benchmarking.runner import Job, execute_worker
+from scripts.benchmarking.topology import expected_topology
 from scripts.benchmarking.workload import expected_output, source_digest
 
 
-def quality(observed: dict[str, int], reference: dict[str, int]) -> dict[str, float]:
+def quality(
+    observed: dict[str, int], reference: dict[str, int], *, ordered: bool = True
+) -> dict[str, float]:
     """
     Compare discrete frequencies against the exact rounded chart distribution.
 
     Args:
         observed (dict[str, int]): Received scalar counts from completed assertions.
         reference (dict[str, int]): Exact multiplicities across all quantile selectors.
+        ordered (bool): Compute a CDF error only for numerically ordered scalar outcomes.
 
     Returns:
         dict[str, float]: Support coverage, total variation and maximum CDF error.
@@ -39,7 +43,7 @@ def quality(observed: dict[str, int], reference: dict[str, int]) -> dict[str, fl
         or any(n < 0 for n in (*observed.values(), *reference.values()))
     ):
         raise ValueError("distributions require nonnegative counts and positive totals")
-    keys = sorted(set(observed) | set(reference), key=float)
+    keys = sorted(set(observed) | set(reference), key=float if ordered else str)
     differences = [
         observed.get(key, 0) / total - reference.get(key, 0) / population for key in keys
     ]
@@ -51,7 +55,7 @@ def quality(observed: dict[str, int], reference: dict[str, int]) -> dict[str, fl
     return {
         "coverage": sum(observed.get(key, 0) > 0 for key in reference) / len(reference),
         "total_variation": sum(abs(value) for value in differences) / 2,
-        "cdf_error": maximum,
+        **({"cdf_error": maximum} if ordered else {}),
     }
 
 
@@ -197,6 +201,14 @@ def run() -> int:
         )
         for index in range(bins)
     )
+    topology_reference: Counter[str] = Counter()
+    if "topology" in spec:
+        roles = list(mapping(mapping(spec["topology"])["roles"]).values())
+        for assignment in range(2 ** len(roles)):
+            values: dict[str, object] = {
+                str(path): bool(assignment & (1 << bit)) for bit, path in enumerate(roles)
+            }
+            topology_reference[configuration_key(expected_topology(values, spec))] += 1
     helm = shutil.which("helm")
     if helm is None:
         parser.error("Helm is required")
@@ -213,6 +225,7 @@ def run() -> int:
             "code_sha256": code_digest(),
             "platform": platform.platform(),
             "reference": dict(reference),
+            "topology_reference": dict(topology_reference),
             "method": "nested uniform thinning of input prefix; fresh caches; discrete reference",
         },
         "runs": rows,
@@ -243,6 +256,15 @@ def run() -> int:
             ):
                 raise AssertionError("incomplete output assertion ledger")
             result["quality"] = quality(counts, dict(reference))
+            if topology_reference:
+                result["topology_quality"] = quality(
+                    {
+                        key: int(str(value))
+                        for key, value in mapping(result["topology_counts"]).items()
+                    },
+                    dict(topology_reference),
+                    ordered=False,
+                )
         temporary = args.output / "results.tmp"
         temporary.write_text(json.dumps(document, indent=2) + "\n")
         temporary.replace(args.output / "results.json")

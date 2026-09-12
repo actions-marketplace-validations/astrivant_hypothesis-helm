@@ -89,3 +89,31 @@ and strength five found all 261.
 
 The separate [Sparsity and Stochasticity study](sparsity/README.md) measures distribution
 coverage as the number of cases falls.
+
+## Topology fixture
+
+Generate the normal-quantile chart with downstream interactions:
+
+```sh
+bash scripts/project-python.sh -m scripts.generate_benchmark_chart \
+  --output .cache/topology-chart --input-complexity 100 --topology
+```
+
+`--topology` uses six additional input bits for resource gates, shared Service/Ingress
+ports, replica thresholds, and a nested rare branch. `--topology-opaque` adds a loop
+to test conservative fallback. Both retain the normal quantile projection; the
+benchmark runner checks the added projections against an independent oracle.
+Fault injection (`--bug-percent`, `--bug-orders`, `--bug-seed`) remains available.
+
+The [small fixture](../../examples/topology-benchmark) has 1,024 possible inputs for
+complete comparisons. See [sampling controls and complexity](../execution/README.md#optional-trimming).
+
+```sh
+bash scripts/project-python.sh -m scripts.benchmark_sparsity \
+  --chart examples/topology-benchmark --count 1024 --levels 5 \
+  --output reports/topology-sparsity
+```
+
+Raw results include `topology_counts` and `topology_quality` (categorical outcome
+coverage and total variation), alongside scalar-distribution statistics. No CDF
+error is assigned to unordered topology outcomes.
