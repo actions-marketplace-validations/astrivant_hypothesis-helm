@@ -172,6 +172,70 @@ all template guards were activated or every execution branch was reached.
 
 ## Whole-chart modes
 
+### Interaction coverage
+
+Choose the interaction strength with `--permutations`:
+
+```sh
+helm hypothesis test ./chart --permutations 2
+helm hypothesis test ./chart --permutations 3 --max-cases 5000 --max-candidates 1000000
+```
+
+`2` covers every schema-valid pair of factor values in at least one complete
+configuration; `3` covers every valid triple. Increasing the strength increases
+the coverage requirement. A strength at least as large as the number of factors
+enumerates every feasible combination. This is a coverage requirement, not a
+random-example budget. `--max-examples` does not control this mode.
+
+Factors come from the original values schema. Required closed objects are
+expanded into nested leaf factors, so `ingress.enabled` can interact with
+`service.type`. Optional objects and bounded arrays are atomic factors with all
+their supported finite values; optional fields also include omission. Strings
+need `enum` or `const`, integers need bounds, and objects must be closed with
+`additionalProperties: false`. Unsupported or oversized factor domains fail
+with a diagnostic identifying the path; this mode does not silently substitute
+sampled values for an unbounded domain.
+
+Planning validates complete configurations against the schema and checks that
+their merge with chart defaults is schema-valid. Cross-field constraints on
+closed object schemas restrict which interactions are feasible. An interaction
+is excluded only after its possible completions have been checked. Leaf domains
+retain the finite enumerator's restrictions on references and compositions.
+Coverage concerns override assignments: omission and an explicit default can
+produce the same effective Helm configuration.
+
+The planner fills uncovered interactions deterministically without materializing
+the entire Cartesian product. It does not promise a minimum-size suite, and
+restrictive constraints can still require a large completion search. Two limits
+bound work before Helm is invoked:
+
+- `--max-cases` defaults to `1000`, limiting both planned configurations and each
+  factor's candidate domain.
+- `--max-candidates` defaults to `100000`, independently limiting the interaction
+  inventory and the number of complete assignments examined during planning.
+
+If either limit is exceeded, the command fails before rendering instead of
+claiming partial coverage. Increase the limits or reduce the interaction strength.
+The limits bound counts, not bytes or elapsed time.
+
+The JSON report includes requested and effective strength, factor paths and
+domains, valid interaction count, planned cases, planning candidates, and
+`coverage_complete`. Coverage is complete only after every planned case passes.
+Defaults are checked separately, so successful `attempts` equals `planned_cases`
+plus one. Failures stop execution and save the failing values and report for
+replay; this deterministic mode does not shrink counterexamples.
+
+`--permutations`, `--whole-chart`, and `--exhaustive` are mutually exclusive.
+Interaction suites execute serially and use the original chart schema. Like
+the other whole-chart modes, they do not support per-path filtering, collection,
+cache estimates, or distributed sharding. `--seed` does not change the
+deterministic coverage plan. Use `--shard none` when CI would otherwise enable
+automatic sharding. Kubernetes validation and manifest streaming remain available.
+Complete interaction coverage does not prove template branch coverage or correct
+application behavior.
+
+### Sampling and full enumeration
+
 ```sh
 helm hypothesis test ./chart --whole-chart --max-examples 100 --seed 42
 helm hypothesis test examples/workload --exhaustive --max-cases 1000

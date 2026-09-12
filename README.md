@@ -56,6 +56,7 @@ Audit values, configure test generation, or rerun a saved suite:
 helm hypothesis audit ./path/to/chart
 helm hypothesis test ./path/to/chart --strict
 helm hypothesis test ./path/to/chart --max-examples 50 --seed 42
+helm hypothesis test ./path/to/chart --permutations 2
 helm hypothesis test ./path/to/chart --match replicas
 helm hypothesis generate ./path/to/chart --output generated-tests
 helm hypothesis run generated-tests
@@ -82,6 +83,13 @@ Each generated suite includes Python tests, coalesced YAML, an inferred schema,
 and a path/strategy inventory. Source charts remain unchanged. Inferred contracts
 and unresolved template constructs need review; sampled tests do not prove
 complete template branch coverage or totality.
+
+Use `--permutations N` to cover every valid combination of any `N` finite
+schema factors: `2` covers pairs, `3` covers triples. This mode varies settings
+together across the chart. It requires enumerable domains (such as booleans,
+enums and bounded integers) and refuses incomplete coverage when planning limits
+are exceeded. See [interaction coverage](docs/usage.md#interaction-coverage)
+for factor definitions, limits and reports.
 
 ## Architecture
 

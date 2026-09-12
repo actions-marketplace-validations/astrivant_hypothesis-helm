@@ -87,9 +87,20 @@ def main(argv: list[str] | None = None) -> int:
         "--exhaustive", action="store_true", help="enumerate finite whole-chart inputs"
     )
     modes.add_argument("--whole-chart", action="store_true", help="sample whole-chart inputs")
+    modes.add_argument(
+        "--permutations", type=int, metavar="N", help="cover every valid N-way finite interaction"
+    )
     test.add_argument("--match", help="select generated tests by value-path keyword")
     test.add_argument("--collect-only", action="store_true", help="generate and list tests")
-    test.add_argument("--max-cases", type=int, default=1000)
+    test.add_argument(
+        "--max-cases",
+        type=int,
+        default=1000,
+        help="bound exhaustive domains or permutation suites and factor domains",
+    )
+    test.add_argument(
+        "--max-candidates", type=int, default=100000, help="bound permutation planning work"
+    )
     test.add_argument("--seed", type=int, default=0)
     test.add_argument("--timeout", type=float, default=30)
     test.add_argument("--helm", default="helm")
@@ -235,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.collect_only
                 or getattr(args, "whole_chart", False)
                 or getattr(args, "exhaustive", False)
+                or getattr(args, "permutations", None) is not None
             ):
                 raise ValueError(
                     "--dry-run applies to per-path suites and cannot combine with --collect-only"
@@ -338,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "audit":
             report = audit(chart)
             status = 1 if args.strict and (report["findings"] or report["unresolved"]) else 0
-        elif not args.whole_chart and not args.exhaustive:
+        elif not args.whole_chart and not args.exhaustive and args.permutations is None:
             if args.timeout <= 0:
                 raise ValueError("timeout must be positive")
             generated = args.artifact_dir
@@ -395,6 +407,8 @@ def main(argv: list[str] | None = None) -> int:
                 artifact_dir=args.artifact_dir,
                 exhaustive=args.exhaustive,
                 max_cases=args.max_cases,
+                permutations=args.permutations,
+                max_candidates=args.max_candidates,
             )
             status = 0 if report["status"] == "passed" else 1
         print(json.dumps(report, indent=2))

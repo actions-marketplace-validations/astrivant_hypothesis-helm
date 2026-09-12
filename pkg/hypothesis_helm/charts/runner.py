@@ -23,6 +23,7 @@ from hypothesis_helm.charts.presence import has_path
 from hypothesis_helm.charts.templates import discover
 from hypothesis_helm.reporting.output import emit_manifest
 from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.conformity import validate
 from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
 from hypothesis_helm.schemas.finite import enumerate_values
@@ -371,6 +372,8 @@ def check_chart(
     artifact_dir: Path | None = None,
     exhaustive: bool = False,
     max_cases: int = 1000,
+    permutations: int | None = None,
+    max_candidates: int = 100000,
     properties: tuple[Callable[[list[dict[str, object]]], None], ...] = (),
 ) -> dict[str, object]:
     """
@@ -391,7 +394,9 @@ def check_chart(
         allow_empty (bool): Whether a render with no resource documents is accepted.
         artifact_dir (Path | None): Optional destination for failing values and report artifacts.
         exhaustive (bool): Whether to enumerate the entire supported finite input domain.
-        max_cases (int): Maximum finite-domain size allowed before enumeration is refused.
+        max_cases (int): Maximum exhaustive domain or interaction suite and factor size.
+        permutations (int | None): Required finite interaction strength when supplied.
+        max_candidates (int): Maximum interaction planning inventory and search work.
         properties (tuple[Callable[[list[dict[str, object]]], None], ...]): Additional assertions
             over rendered resources.
 
@@ -402,7 +407,37 @@ def check_chart(
         chart = Chart.load(chart)
     if max_examples < 1 or timeout <= 0:
         raise ValueError("max_examples and timeout must be positive")
+    if permutations is not None and exhaustive:
+        raise ValueError("permutations and exhaustive are mutually exclusive")
+    interaction_plan = None
+    if permutations is not None:
+        validator = validators.validator_for(chart.schema)(chart.schema)
+        interaction_plan = plan_interactions(
+            chart.schema,
+            permutations,
+            max_cases=max_cases,
+            max_candidates=max_candidates,
+            accept=lambda values: validator.is_valid(
+                json_value(merge_values(chart.defaults, values))
+            ),
+        )
     finite_values = enumerate_values(chart.schema, max_cases) if exhaustive else None
+    coverage: dict[str, object] = {}
+    if interaction_plan is not None:
+        finite_values = interaction_plan.values
+        coverage = {
+            "mode": "permutations",
+            "requested_strength": permutations,
+            "effective_strength": interaction_plan.strength,
+            "factors": [list(path) for path in interaction_plan.factors],
+            "factor_domains": interaction_plan.domains,
+            "planned_cases": len(interaction_plan.values),
+            "valid_interactions": interaction_plan.interactions,
+            "planning_candidates": interaction_plan.candidates,
+            "coverage_complete": False,
+            "proof_of_totality": False,
+            "scope": "schema-valid finite factor interactions with schema-valid merged values",
+        }
     count = 0
     last_failure = None
 
@@ -450,6 +485,7 @@ def check_chart(
         """
         values, message = last_failure or ({}, str(exc))
         result = {
+            **coverage,
             "status": "failed",
             "chart": str(chart.path),
             "seed": random_seed,
@@ -480,9 +516,11 @@ def check_chart(
             "chart": str(chart.path),
             "attempts": count,
             "mode": "exhaustive",
-            "domain_size": len(finite_values),
+            **({"domain_size": len(finite_values)} if exhaustive else {}),
             "scope": "all schema-valid overrides in this finite domain, current Helm environment",
             "proof_of_totality": False,
+            **coverage,
+            **({"coverage_complete": True} if interaction_plan is not None else {}),
         }
 
     @seed(random_seed)
