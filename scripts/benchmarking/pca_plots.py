@@ -207,8 +207,9 @@ def plot(output: Path, document: dict[str, object]) -> None:
         "",
         "![PCA before and after trimming](output-pca.png)",
         "",
-        "**Errors found / all erroneous inputs** (several erroneous "
-        "inputs can produce the same output):",
+        "**Errors found / all erroneous inputs (percentage missed)**. "
+        "Several erroneous inputs can produce the same output. "
+        "Percentages are exact miss rates within this seeded fixture.",
         "",
         "| Structure | Before | Random | Topology | Both |",
         "|---|---:|---:|---:|---:|",
@@ -216,7 +217,13 @@ def plot(output: Path, document: dict[str, object]) -> None:
     for row in rows:
         stats = mapping(row["strategies"])
         errors = len(sequence(row["faulty_indices"]))
-        cells = [f"{mapping(stats[strategy])['errors_detected']}/{errors}" for strategy in LABELS]
+        cells = []
+        for strategy in LABELS:
+            result = mapping(stats[strategy])
+            missed = (
+                f"{100 * number(result['errors_missed']) / errors:.1f}% missed" if errors else "N/A"
+            )
+            cells.append(f"{result['errors_detected']}/{errors} ({missed})")
         lines.append(
             f"| [{row['structure']}]({row['structure']}.png) | " + " | ".join(cells) + " |"
         )

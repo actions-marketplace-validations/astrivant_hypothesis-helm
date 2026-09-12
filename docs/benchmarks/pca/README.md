@@ -8,16 +8,16 @@ Faults emit an incorrect status in an added ConfigMap. They are present before t
 
 ![PCA before and after trimming](output-pca.png)
 
-**Errors found / all erroneous inputs** (several erroneous inputs can produce the same output):
+**Errors found / all erroneous inputs (percentage missed)**. Several erroneous inputs can produce the same output. Percentages are exact miss rates within this seeded fixture.
 
 | Structure | Before | Random | Topology | Both |
 |---|---:|---:|---:|---:|
-| [constraints](constraints.png) | 25/25 | 2/25 | 25/25 | 25/25 |
-| [control-flow](control-flow.png) | 51/51 | 5/51 | 51/51 | 51/51 |
-| [dependencies](dependencies.png) | 51/51 | 5/51 | 47/51 | 47/51 |
-| [interactions](interactions.png) | 51/51 | 5/51 | 47/51 | 47/51 |
-| [equivalence](equivalence.png) | 51/51 | 5/51 | 47/51 | 47/51 |
-| [boundaries](boundaries.png) | 76/76 | 2/76 | 76/76 | 76/76 |
+| [constraints](constraints.png) | 25/25 (0.0% missed) | 2/25 (92.0% missed) | 25/25 (0.0% missed) | 25/25 (0.0% missed) |
+| [control-flow](control-flow.png) | 51/51 (0.0% missed) | 5/51 (90.2% missed) | 51/51 (0.0% missed) | 51/51 (0.0% missed) |
+| [dependencies](dependencies.png) | 51/51 (0.0% missed) | 5/51 (90.2% missed) | 47/51 (7.8% missed) | 47/51 (7.8% missed) |
+| [interactions](interactions.png) | 51/51 (0.0% missed) | 5/51 (90.2% missed) | 47/51 (7.8% missed) | 47/51 (7.8% missed) |
+| [equivalence](equivalence.png) | 51/51 (0.0% missed) | 5/51 (90.2% missed) | 47/51 (7.8% missed) | 47/51 (7.8% missed) |
+| [boundaries](boundaries.png) | 76/76 (0.0% missed) | 2/76 (97.4% missed) | 76/76 (0.0% missed) | 76/76 (0.0% missed) |
 
 PCA is fitted once per category to every valid input's output, including repeated outputs. Resource presence, numeric leaves and typed categorical leaves become standardized features; numeric strings remain categorical. Constant features are removed. Both axes and marker-size scale stay fixed after trimming. Axes are not comparable across categories.
 
