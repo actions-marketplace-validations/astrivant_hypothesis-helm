@@ -31,7 +31,7 @@ from hypothesis_helm.reporting.output import emit_manifest
 from hypothesis_helm.reporting.permutations import PermutationStatistics
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.reporting.progressive import estimate_progression
-from hypothesis_helm.schemas.combinations import plan_interactions
+from hypothesis_helm.schemas.combinations import plan_interactions, trim_values
 from hypothesis_helm.schemas.conformity import ENVIRONMENT, validate
 from hypothesis_helm.schemas.contracts import (
     configuration_key,
@@ -411,6 +411,7 @@ def check_chart(
     exhaustive: bool = False,
     max_cases: int = 10000,
     permutations: int | None = None,
+    trim: int = 0,
     max_candidates: int = 100000,
     exhaustive_threshold: int = 10000,
     exhaustive_groups: tuple[ExhaustiveGroup, ...] = (),
@@ -441,6 +442,7 @@ def check_chart(
         exhaustive (bool): Whether to enumerate the entire supported finite input domain.
         max_cases (int): Maximum exhaustive domain or interaction suite and factor size.
         permutations (int | None): Required finite interaction strength when supplied.
+        trim (int): Seeded quarter-retention steps applied after finite permutation planning.
         max_candidates (int): Maximum interaction planning inventory and search work.
         exhaustive_threshold (int): Enumerate smaller Cartesian spaces automatically.
         exhaustive_groups (tuple[ExhaustiveGroup, ...]): Explicitly required local groups.
@@ -465,6 +467,8 @@ def check_chart(
         raise ValueError("whole-chart dry runs require permutations")
     if not math.isfinite(time_limit) or time_limit <= 0:
         raise ValueError("time_limit must be positive and finite")
+    if type(trim) is not int or trim < 0 or (trim and permutations is None):
+        raise ValueError("trim must be nonnegative and requires finite permutation planning")
     planning_started = time.perf_counter()
     hashes = RenderHashes(scope="run-local")
     model = (
@@ -524,13 +528,27 @@ def check_chart(
         if interaction_plan is not None:
             interaction_plan.values = distinct
             interaction_plan.duplicate_cases_removed = duplicate_cases_removed
+    untrimmed_cases = len(finite_values) if finite_values is not None else 0
+    if interaction_plan is not None:
+        interaction_plan.values = trim_values(interaction_plan.values, trim, random_seed)
+    trimmed_cases = untrimmed_cases - len(interaction_plan.values) if interaction_plan else 0
     coverage: dict[str, object] = {}
     statistics = None
     if interaction_plan is not None:
         finite_values = interaction_plan.values
         coverage = {
             "mode": "permutations",
-            "coverage_strategy": interaction_plan.strategy,
+            "trim": trim,
+            "trim_seed": random_seed,
+            "untrimmed_iterations": untrimmed_cases + 1,
+            "trimmed_iterations": trimmed_cases,
+            "retained_fraction": (len(interaction_plan.values) / untrimmed_cases)
+            if untrimmed_cases
+            else 1.0,
+            "coverage_guaranteed_by_plan": not bool(trimmed_cases),
+            "coverage_strategy": "trimmed" if trimmed_cases else interaction_plan.strategy,
+            "untrimmed_coverage_strategy": interaction_plan.strategy,
+            "exhaustive_groups_scope": "untrimmed plan",
             "requested_strength": permutations,
             "effective_strength": interaction_plan.strength,
             "factors": [list(path) for path in interaction_plan.factors],
@@ -550,6 +568,8 @@ def check_chart(
             artifact_dir,
             time.perf_counter() - planning_started,
             {
+                "trim": trim,
+                "trim_seed": random_seed,
                 "helm": helm,
                 "release": release,
                 "namespace": namespace,
@@ -561,10 +581,18 @@ def check_chart(
                 "prune_equivalent": prune_equivalent,
             },
         )
-        LOGGER.info("Coverage strategy: %s", interaction_plan.strategy)
+        LOGGER.info("Coverage strategy: %s", coverage["coverage_strategy"])
+        if trim:
+            LOGGER.info(
+                "Trim %d: %d non-default cases retained, %d omitted; defaults retained; "
+                "interaction and group coverage are not guaranteed when cases are omitted",
+                trim,
+                len(interaction_plan.values),
+                trimmed_cases,
+            )
         for group in interaction_plan.group_reports:
             LOGGER.info(
-                "Exhaustive group %s: %s (%s candidate assignments)%s",
+                "Planned exhaustive group %s: %s (%s candidate assignments)%s",
                 group["source"],
                 group["status"],
                 group["candidate_assignments"],
@@ -598,6 +626,8 @@ def check_chart(
                 history=statistics.previous
                 if statistics.previous.get("context") == statistics.context and not properties
                 else {},
+                trim=trim,
+                random_seed=random_seed,
                 fixed_names=bool(release and namespace),
                 time_limit=time_limit,
             )
@@ -834,7 +864,11 @@ def check_chart(
             "scope": "all schema-valid overrides in this finite domain, current Helm environment",
             "proof_of_totality": False,
             **coverage,
-            **({"coverage_complete": True} if interaction_plan is not None else {}),
+            **(
+                {"coverage_complete": not bool(trimmed_cases)}
+                if interaction_plan is not None
+                else {}
+            ),
         }
         if statistics is not None:
             result.update(statistics.finish("passed"))

@@ -14,7 +14,7 @@ from rich.console import Console
 
 from hypothesis_helm.compiler.ir import specialize
 from hypothesis_helm.compiler.pruning import Pruner, safe_values
-from hypothesis_helm.schemas.combinations import InteractionPlan
+from hypothesis_helm.schemas.combinations import InteractionPlan, trim_values
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 from hypothesis_helm.schemas.finite import NonFiniteSchema
 from hypothesis_helm.schemas.model import ValuesModel
@@ -68,6 +68,8 @@ def estimate_progression(
     max_cases: int,
     max_candidates: int,
     history: dict[str, object],
+    trim: int = 0,
+    random_seed: int = 0,
     fixed_names: bool = True,
     time_limit: float = 180.0,
 ) -> dict[str, object]:
@@ -88,6 +90,8 @@ def estimate_progression(
         max_cases (int): Configured per-plan case limit.
         max_candidates (int): Configured planning work limit.
         history (dict[str, object]): Compatible measured costs; no successes are restored.
+        trim (int): Quarter-retention steps for preview plans; selected is already trimmed.
+        random_seed (int): Seed matching the configured execution subset.
         fixed_names (bool): Whether release and namespace satisfy the fixed-context contract.
         time_limit (float): Execution budget used for advisory strength recommendations.
 
@@ -116,7 +120,13 @@ def estimate_progression(
             dict[str, tuple[str, str]]: Distinct inputs mapped to conditional render classes.
         """
         inputs: dict[str, tuple[str, str]] = {}
-        for overrides in [{}, *plan.values]:
+        distinct: dict[str, dict[str, object]] = {configuration_key(merge({})): {}}
+        for values in plan.values:
+            distinct.setdefault(configuration_key(merge(values)), values)
+        candidates = list(distinct.values())[1:]
+        if plan is not selected:
+            candidates = trim_values(candidates, trim, random_seed)
+        for overrides in [{}, *candidates]:
             effective = merge(overrides)
             key = configuration_key(effective)
             if key in inputs:
@@ -155,6 +165,7 @@ def estimate_progression(
             "label": label,
             "status": "planned",
             "strength": plan.strength,
+            "trim": trim,
             "strategy": plan.strategy,
             "candidate_inputs": len(inputs),
             "filter_forecast_renders": len(outputs),
@@ -280,6 +291,8 @@ def estimate_progression(
             "advisory": True,
         },
         "mode": "static-progressive-forecast",
+        "trim": trim,
+        "trim_seed": random_seed,
         "stages": rows,
         "configured_run": configured,
         "full_run": full,
@@ -296,8 +309,9 @@ def estimate_progression(
         "actual_renders": 0,
         "pruning_certificates": [],
         "notes": [
-            "Strength previews disable exhaustive promotion but retain exhaustive groups.",
+            "Strength previews plan groups before applying the configured seeded trim.",
             "The configured run retains its actual promotion and pruning settings.",
+            "Trimmed forecasts describe sampled plans, not guaranteed interaction coverage.",
             "Stages need not be nested: incremental counts use set unions, not summed stage sizes.",
             "Static filtering forecasts do not certify successful renders or authorize pruning.",
             "Opaque inputs require rendering; higher strengths can change filtering rates.",

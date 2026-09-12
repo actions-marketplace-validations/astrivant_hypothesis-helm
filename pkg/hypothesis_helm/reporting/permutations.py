@@ -82,7 +82,7 @@ class PermutationStatistics:
         LOGGER.info(
             "Permutation plan: %d distinct configurations including defaults = %d iterations; "
             "%d duplicate cases removed; "
-            "%d valid coverage assignments (strength %d); "
+            "%d valid assignments in the untrimmed plan (strength %d); "
             "%d candidate assignments before constraints and deduplication; "
             "%d planning candidates in %.2fs",
             stats["unique_configurations"],

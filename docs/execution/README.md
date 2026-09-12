@@ -183,3 +183,18 @@ CLI execution interrupts active renders and assertions using a temporary timer.
 Library calls from a non-main thread, or applications that already own an alarm,
 instead stop between operations and cap Helm's timeout to the remaining budget;
 an in-flight custom callback in those cases must return before execution can stop.
+
+## Optional trimming
+
+`helm hypothesis test CHART --permutations 2 --trim 1 --seed 2026` retains a
+seeded subset of the finite plan. `--trim 0` is the default and removes nothing.
+Each step retains one quarter of non-default cases, rounded upward: levels 1–3
+retain roughly 25%, 6.25%, and 1.56%. Defaults always run, and at least one
+non-default case remains when available. The same seed produces nested subsets.
+
+Trimming happens after planning and deduplication; it does not reduce planning
+limits or cost. Reports and dry runs show retained and omitted counts. A passing
+trimmed run means its selected checks passed, without a complete interaction or
+exhaustive-group coverage guarantee. Exact-equivalence pruning remains separate.
+Trimming applies to finite permutation plans, including automatic enumeration;
+per-path, random whole-chart, and explicit exhaustive modes do not accept it.

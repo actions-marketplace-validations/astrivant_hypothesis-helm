@@ -143,8 +143,8 @@ options:
 ~~~text
 usage: helm hypothesis test [-h] [--max-examples MAX_EXAMPLES] [--time-limit DURATION]
                             [--paths | --exhaustive | --whole-chart |
-                            --permutations N] [--prune-equivalent] [--match MATCH]
-                            [--collect-only] [--max-cases MAX_CASES]
+                            --permutations N] [--trim N] [--prune-equivalent]
+                            [--match MATCH] [--collect-only] [--max-cases MAX_CASES]
                             [--max-candidates MAX_CANDIDATES]
                             [--exhaustive-threshold EXHAUSTIVE_THRESHOLD]
                             [--exhaustive-group PATH,PATH] [--no-infer-groups]
@@ -173,6 +173,8 @@ options:
   --exhaustive          enumerate finite whole-chart inputs
   --whole-chart         sample whole-chart inputs
   --permutations N      cover every valid N-way finite interaction
+  --trim N              retain a seeded quarter of finite permutation cases per step;
+                        default: 0
   --prune-equivalent    skip Helm only for proved output equivalence to a successful
                         render
   --match MATCH         select generated tests by value-path keyword

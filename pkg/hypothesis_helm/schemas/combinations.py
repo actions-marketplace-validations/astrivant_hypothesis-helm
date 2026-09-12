@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import itertools
 import math
+import random
 from collections.abc import Callable
 
 from attrs import define, field
@@ -218,3 +219,29 @@ def plan_interactions(
         group_reports,
         raw_cases=len(values),
     )
+
+
+def trim_values(values: list[dict[str, object]], steps: int, seed: int) -> list[dict[str, object]]:
+    """
+    Retain nested seeded subsets, keeping one quarter per step rounded upward.
+
+    Args:
+        values (list[dict[str, object]]): Distinct non-default planned configurations.
+        steps (int): Nonnegative thinning depth; zero preserves the original order.
+        seed (int): Seed shared across trim levels for reproducible nested subsets.
+
+    Returns:
+        list[dict[str, object]]: Retained configurations in their original execution order.
+    """
+    if type(steps) is not int or steps < 0:
+        raise ValueError("trim must be a nonnegative integer")
+    if not steps or not values:
+        return values
+    count = len(values)
+    for _ in range(steps):
+        count = (count + 3) // 4
+        if count == 1:
+            break
+    indices = list(range(len(values)))
+    random.Random(seed).shuffle(indices)
+    return [values[index] for index in sorted(indices[:count])]

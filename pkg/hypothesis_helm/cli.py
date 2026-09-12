@@ -105,6 +105,13 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         "--permutations", type=int, metavar="N", help="cover every valid N-way finite interaction"
     )
     test.add_argument(
+        "--trim",
+        type=int,
+        default=0,
+        metavar="N",
+        help="retain a seeded quarter of finite permutation cases per step; default: 0",
+    )
+    test.add_argument(
         "--prune-equivalent",
         action="store_true",
         help="skip Helm only for proved output equivalence to a successful render",
@@ -297,6 +304,13 @@ def main(argv: list[str] | None = None) -> int:
                     shard_source,
                 )
         if args.command == "test":
+            if args.trim < 0:
+                raise ValueError("--trim must be nonnegative")
+            if args.trim:
+                if args.paths or args.whole_chart or args.exhaustive:
+                    raise ValueError("--trim applies to finite --permutations planning only")
+                if args.permutations is None:
+                    args.permutations = 2
             if args.prune_equivalent:
                 if args.paths or args.match is not None or args.collect_only:
                     raise ValueError("--prune-equivalent applies to whole-chart testing only")
@@ -518,6 +532,7 @@ def main(argv: list[str] | None = None) -> int:
                 exhaustive=args.exhaustive,
                 max_cases=args.max_cases,
                 permutations=args.permutations,
+                trim=args.trim,
                 max_candidates=args.max_candidates,
                 exhaustive_threshold=args.exhaustive_threshold,
                 exhaustive_groups=tuple(args.exhaustive_group),
