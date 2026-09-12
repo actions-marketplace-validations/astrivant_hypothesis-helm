@@ -107,7 +107,7 @@ or versions and want full coverage for each combination, pass an explicit
 | `upload-artifacts` | `true` | Upload the resulting directory |
 | `artifact-name` | `hypothesis-helm` | Upload prefix; job and shard IDs are appended |
 | `python-version` | `3.13` | Python version, at least 3.13 |
-| `helm-version` | `v3.19.0` | Helm 3 version |
+| `helm-version` | `v4.3.0` | Helm 4 version |
 
 Outputs are `report-dir`, `junit-path`, `manifest-path`, `shard`, and
 `exit-code`. Files may be incomplete after cancellation or setup failure.

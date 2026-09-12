@@ -12,8 +12,8 @@ inputs:
     description: Python version (3.13 or newer).
     default: '3.13'
   helm-version:
-    description: Helm 3 version to install.
-    default: v3.19.0
+    description: Helm 4 version to install.
+    default: v4.3.0
   shard:
     description: 'auto detects CI coordinates; INDEX/TOTAL overrides; none disables sharding.'
     default: auto

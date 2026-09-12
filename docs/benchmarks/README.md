@@ -39,7 +39,8 @@ Use each script's `--help` for options.
 The figures below use local Python workers and the [standard chart](../../examples/benchmark).
 In one recorded run, pruning completed **164,285 checks with 256 renders**, compared
 with **11,682 checks** without pruning. [Raw measurements](results.json)
-and [CSV](results.csv) include the host and run details.
+and [CSV](results.csv) include the host and run details. These measurements predate
+the Helm 4 migration; recorded tool versions remain in the raw results.
 
 Progressive checkpoints share one execution. Dashed tails mark unfinished targets
 at the deadline.

@@ -4,7 +4,8 @@
 
 ## Install
 
-Requires Helm 3 and Python 3.13+. The plugin installs its Python dependencies,
+Requires Helm 4 and Python 3.13+. The plugin uses Helm 4’s
+[versioned CLI plugin format](https://helm.sh/docs/plugins/migrate/). The plugin installs its Python dependencies,
 including the test runner, automatically.
 
 ```sh

@@ -102,7 +102,7 @@ orbs:
             default: v0.7.0
           helm-version:
             type: string
-            default: v3.19.0
+            default: v4.3.0
           parallelism:
             type: integer
             default: 1
@@ -216,7 +216,7 @@ jobs:
       - run:
           name: Install Helm for chart integration tests
           command: |
-            curl -fsSL https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz -o /tmp/helm.tar.gz
+            curl -fsSL https://get.helm.sh/helm-v4.3.0-linux-amd64.tar.gz -o /tmp/helm.tar.gz
             tar -xzf /tmp/helm.tar.gz -C /tmp
             sudo install /tmp/linux-amd64/helm /usr/local/bin/helm
       - run: bash scripts/check.sh --junitxml=reports/pytest.xml

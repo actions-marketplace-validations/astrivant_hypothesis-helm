@@ -8,7 +8,7 @@ from combinations of Helm chart inputs to reproducible examples.
 
 ## Install
 
-Requires Helm 3 and Python 3.13+.
+Requires Helm 4 and Python 3.13+.
 
 ```sh
 PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm

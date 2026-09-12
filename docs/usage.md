@@ -1,6 +1,6 @@
 # Helm command reference
 
-Install with Helm 3 and Python 3.13+ available:
+Install with Helm 4 and Python 3.13+ available:
 
 ```sh
 PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm

@@ -58,7 +58,7 @@ workflows:
 ```
 
 `plugin-path` points to a checkout of this plugin. The job defaults to Python 3.13,
-Helm 3.19.0, one CircleCI node, automatic worker concurrency, and 100 examples per
+Helm 4.3.0, one CircleCI node, automatic worker concurrency, and 100 examples per
 property. With `parallelism: 3`, the tool reads `CIRCLE_NODE_INDEX` and
 `CIRCLE_NODE_TOTAL` to assign shards. The command uses `--rerun all` so every
 assigned path runs in CI. To reuse only the command in an existing job, call
@@ -84,7 +84,7 @@ helm-properties:
       - K8S_VERSION: ['1.34.0', '1.35.0']
         SHARD_INDEX: ['1', '2', '3']
   variables:
-    HELM_VERSION: v3.19.0
+    HELM_VERSION: v4.3.0
     HELM_CHART: ./chart
     KUBECONFORM_VERSION: v0.7.0
     KUBESEC_ENABLED: 'false' # opt in to security scanning
