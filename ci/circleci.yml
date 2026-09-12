@@ -1,0 +1,198 @@
+version: 2.1
+description: Test Helm charts with cached schemas and optional security scans.
+commands:
+  test:
+    description: Test chart values with an installed Helm plugin and automatic CI sharding.
+    parameters:
+      chart:
+        type: string
+        default: ./chart
+      jobs:
+        type: string
+        default: auto
+      max-examples:
+        type: integer
+        default: 100
+      seed:
+        type: integer
+        default: 0
+      schema-version:
+        type: string
+        default: latest
+      kubesec:
+        type: boolean
+        default: false
+      kubesec-jobs:
+        type: string
+        default: auto
+      schema-memory-dir:
+        type: string
+        default: ""
+      schema-cache-dir:
+        type: string
+        default: .cache/hypothesis-helm/schemas
+      artifact-dir:
+        type: string
+        default: reports/hypothesis-helm
+    steps:
+      - run:
+          name: Test Helm chart values
+          environment:
+            HH_KUBESEC: "<< parameters.kubesec >>"
+            HH_KUBESEC_JOBS: << parameters.kubesec-jobs >>
+            HH_CHART: << parameters.chart >>
+            HH_JOBS: << parameters.jobs >>
+            HH_MAX_EXAMPLES: << parameters.max-examples >>
+            HH_SEED: << parameters.seed >>
+            HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: << parameters.schema-memory-dir >>
+            HH_SCHEMA_VERSION: << parameters.schema-version >>
+            HH_SCHEMA_CACHE_DIR: << parameters.schema-cache-dir >>
+            HH_ARTIFACT_DIR: << parameters.artifact-dir >>
+          command: |
+            mkdir -p "$HH_ARTIFACT_DIR"
+            test_status=0
+            if [[ "$HH_KUBESEC" == "true" ]]; then
+              helm hypothesis test "$HH_CHART" \
+                --jobs "$HH_JOBS" --max-examples "$HH_MAX_EXAMPLES" --seed "$HH_SEED" \
+                --schema-version "$HH_SCHEMA_VERSION" --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
+                --schema-offline --shard auto --rerun all \
+                --artifact-dir "$HH_ARTIFACT_DIR" --output json \
+                > "$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl" || test_status=$?
+              plugin_python="$(helm env HELM_PLUGINS)/hypothesis/.plugin-venv/bin/python"
+              scan_status=0
+              "$plugin_python" -m hypothesis_helm.integrations.kubesec \
+                "$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl" \
+                --output "$HH_ARTIFACT_DIR/kubesec" --jobs "$HH_KUBESEC_JOBS" \
+                --shard auto --pre-sharded --validate-rest --schema-version "$HH_SCHEMA_VERSION" \
+                --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" --schema-offline || scan_status=$?
+              if ((test_status == 0)); then test_status=$scan_status; fi
+            else
+              helm hypothesis test "$HH_CHART" \
+                --jobs "$HH_JOBS" --max-examples "$HH_MAX_EXAMPLES" --seed "$HH_SEED" \
+                --schema-version "$HH_SCHEMA_VERSION" --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
+                --kubeconform --schema-offline --shard auto --rerun all \
+                --artifact-dir "$HH_ARTIFACT_DIR" --output json \
+                > "$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl" || test_status=$?
+            fi
+            exit "$test_status"
+jobs:
+  test-chart:
+    description: Install Hypothesis Helm and test a chart with automatic sharding.
+    parameters:
+      chart:
+        type: string
+        default: ./chart
+      plugin-path:
+        type: string
+        default: https://github.com/astrivant/hypothesis-helm
+      kubesec-version:
+        type: string
+        default: v2.14.2
+      kubeconform-version:
+        type: string
+        default: v0.7.0
+      helm-version:
+        type: string
+        default: v4.3.0
+      parallelism:
+        type: integer
+        default: 1
+      jobs:
+        type: string
+        default: auto
+      max-examples:
+        type: integer
+        default: 100
+      seed:
+        type: integer
+        default: 0
+      schema-version:
+        type: string
+        default: latest
+      kubesec:
+        type: boolean
+        default: false
+      kubesec-jobs:
+        type: string
+        default: auto
+      schema-memory-dir:
+        type: string
+        default: ""
+      schema-offline:
+        type: boolean
+        default: false
+      schema-cache-dir:
+        type: string
+        default: .cache/hypothesis-helm/schemas
+      artifact-dir:
+        type: string
+        default: reports/hypothesis-helm
+    docker:
+      - image: cimg/python:3.13
+    parallelism: << parameters.parallelism >>
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-
+      - run:
+          name: Install Helm and Hypothesis Helm
+          environment:
+            HH_KUBESEC: "<< parameters.kubesec >>"
+            HH_KUBESEC_VERSION: << parameters.kubesec-version >>
+            HH_KUBECONFORM_VERSION: << parameters.kubeconform-version >>
+            HH_HELM_VERSION: << parameters.helm-version >>
+            HH_PLUGIN_PATH: << parameters.plugin-path >>
+          command: |
+            install_dir="$(mktemp -d)"
+            curl -fsSL "https://get.helm.sh/helm-${HH_HELM_VERSION}-linux-amd64.tar.gz" \
+              -o "$install_dir/helm.tar.gz"
+            tar -xzf "$install_dir/helm.tar.gz" -C "$install_dir"
+            sudo install "$install_dir/linux-amd64/helm" /usr/local/bin/helm
+            curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${HH_KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+              -o "$install_dir/kubeconform.tar.gz"
+            tar -xzf "$install_dir/kubeconform.tar.gz" -C "$install_dir" kubeconform
+            sudo install "$install_dir/kubeconform" /usr/local/bin/kubeconform
+            if [[ "$HH_KUBESEC" == "true" ]]; then
+              sudo apt-get update
+              sudo apt-get install -y parallel
+              curl -fsSL "https://github.com/controlplaneio/kubesec/releases/download/${HH_KUBESEC_VERSION}/kubesec_linux_amd64.tar.gz" \
+                -o "$install_dir/kubesec.tar.gz"
+              tar -xzf "$install_dir/kubesec.tar.gz" -C "$install_dir" kubesec
+              sudo install "$install_dir/kubesec" /usr/local/bin/kubesec
+            fi
+            PYTHON=python3.13 helm plugin install "$HH_PLUGIN_PATH"
+      - run:
+          name: Prepare Kubernetes schemas before testing
+          environment:
+            HH_SCHEMA_OFFLINE: "<< parameters.schema-offline >>"
+            HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: << parameters.schema-memory-dir >>
+            HH_SCHEMA_VERSION: << parameters.schema-version >>
+            HH_SCHEMA_CACHE_DIR: << parameters.schema-cache-dir >>
+          command: |
+            if [[ "$HH_SCHEMA_OFFLINE" == "true" ]]; then
+              helm hypothesis schemas --schema-version "$HH_SCHEMA_VERSION" \
+                --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" --schema-offline
+            else
+              helm hypothesis schemas --schema-version "$HH_SCHEMA_VERSION" \
+                --schema-cache-dir "$HH_SCHEMA_CACHE_DIR"
+            fi
+      - save_cache:
+          key: helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-{{ epoch }}-{{ .Environment.CIRCLE_NODE_INDEX }}
+          paths:
+            - << parameters.schema-cache-dir >>
+      - test:
+          kubesec: << parameters.kubesec >>
+          kubesec-jobs: << parameters.kubesec-jobs >>
+          schema-memory-dir: << parameters.schema-memory-dir >>
+          schema-version: << parameters.schema-version >>
+          schema-cache-dir: << parameters.schema-cache-dir >>
+          chart: << parameters.chart >>
+          jobs: << parameters.jobs >>
+          max-examples: << parameters.max-examples >>
+          seed: << parameters.seed >>
+          artifact-dir: << parameters.artifact-dir >>
+      - store_test_results:
+          path: << parameters.artifact-dir >>
+      - store_artifacts:
+          path: << parameters.artifact-dir >>

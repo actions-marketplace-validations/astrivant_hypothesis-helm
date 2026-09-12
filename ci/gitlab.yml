@@ -1,0 +1,84 @@
+# Remote include: installs tools, tests every version/shard, and preserves reports.
+helm-properties:
+  image: python:3.13-slim
+  stage: test
+  parallel:
+    matrix:
+      - K8S_VERSION: ['1.34.0', '1.35.0']
+        SHARD_INDEX: ['1', '2', '3']
+  variables:
+    HELM_VERSION: v4.3.0
+    HELM_CHART: ./chart
+    SHARD_TOTAL: "3"
+    HYPOTHESIS_HELM_REF: main
+    KUBECONFORM_VERSION: v0.7.0
+    KUBESEC_ENABLED: 'false' # opt in to security scanning
+    KUBESEC_VERSION: v2.14.2
+    KUBESEC_JOBS: auto
+    HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: "" # Optional: /dev/shm/helm-schemas
+    SCHEMA_CACHE_DIR: .cache/hypothesis-helm/schemas
+  cache:
+    key: "helm-schemas-v1-linux-amd64-${K8S_VERSION}-${SHARD_INDEX}"
+    paths:
+      - .cache/hypothesis-helm/schemas/
+    policy: pull-push
+    when: always
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates curl git
+    - |
+      curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
+        -o /tmp/helm.tar.gz
+      tar -xzf /tmp/helm.tar.gz -C /tmp
+      install /tmp/linux-amd64/helm /usr/local/bin/helm
+      curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+        -o /tmp/kubeconform.tar.gz
+      tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
+      install /tmp/kubeconform /usr/local/bin/kubeconform
+      if [ "$KUBESEC_ENABLED" = "true" ]; then
+        apt-get install -y --no-install-recommends parallel
+        curl -fsSL "https://github.com/controlplaneio/kubesec/releases/download/${KUBESEC_VERSION}/kubesec_linux_amd64.tar.gz" \
+          -o /tmp/kubesec.tar.gz
+        tar -xzf /tmp/kubesec.tar.gz -C /tmp kubesec
+        install /tmp/kubesec /usr/local/bin/kubesec
+      fi
+    - PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm --version "$HYPOTHESIS_HELM_REF"
+    - helm hypothesis schemas --schema-version "$K8S_VERSION" --schema-cache-dir "$SCHEMA_CACHE_DIR"
+  script:
+    - mkdir -p reports/hypothesis-helm
+    - |
+      test_status=0
+      if [ "$KUBESEC_ENABLED" = "true" ]; then
+        helm hypothesis test "$HELM_CHART" \
+          --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun all \
+          --schema-version "$K8S_VERSION" \
+          --schema-cache-dir "$SCHEMA_CACHE_DIR" --schema-offline \
+          --artifact-dir reports/hypothesis-helm --output json \
+          > "reports/hypothesis-helm/manifests-${SHARD_INDEX}.jsonl" || test_status=$?
+      else
+        helm hypothesis test "$HELM_CHART" \
+          --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun all \
+          --kubeconform --schema-version "$K8S_VERSION" \
+          --schema-cache-dir "$SCHEMA_CACHE_DIR" --schema-offline \
+          --artifact-dir reports/hypothesis-helm --output json \
+          > "reports/hypothesis-helm/manifests-${SHARD_INDEX}.jsonl" || test_status=$?
+      fi
+      if [ "$KUBESEC_ENABLED" = "true" ]; then
+        plugin_python="$(helm env HELM_PLUGINS)/hypothesis/.plugin-venv/bin/python"
+        scan_status=0
+        "$plugin_python" -m hypothesis_helm.integrations.kubesec \
+          "reports/hypothesis-helm/manifests-${SHARD_INDEX}.jsonl" \
+          --output reports/hypothesis-helm/kubesec --jobs "$KUBESEC_JOBS" \
+          --shard "$SHARD_INDEX/$SHARD_TOTAL" --pre-sharded --validate-rest \
+          --schema-version "$K8S_VERSION" --schema-cache-dir "$SCHEMA_CACHE_DIR" \
+          --schema-offline || scan_status=$?
+        if [ "$test_status" -eq 0 ]; then test_status=$scan_status; fi
+      fi
+      exit "$test_status"
+  artifacts:
+    when: always
+    name: "helm-properties-${K8S_VERSION}-${SHARD_INDEX}"
+    paths:
+      - reports/hypothesis-helm/
+    reports:
+      junit: reports/hypothesis-helm/shards/*/junit.xml

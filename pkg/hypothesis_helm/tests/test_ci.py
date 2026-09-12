@@ -3,8 +3,11 @@ Verify CI index normalization, explicit overrides, and action invocation boundar
 """
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
+from textwrap import dedent
 from typing import TextIO
 
 import pytest
@@ -13,6 +16,7 @@ from hypothesis_helm.cli import main
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.integrations import github_action
 from hypothesis_helm.integrations.sharding import Shard, resolve_shard
+from hypothesis_helm.schemas.contracts import mapping
 
 
 @pytest.mark.parametrize(
@@ -113,7 +117,7 @@ def test_action_preserves_arguments_outputs_and_status(
         security (bool): Whether the optional scanner reports a security failure.
 
     Returns:
-        None: The action uses an argument vector, preserves status, and exports shard paths.
+        None: The Bash invocation preserves literal values, status and shard artifact paths.
     """
     output = tmp_path / "outputs"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
@@ -129,6 +133,24 @@ def test_action_preserves_arguments_outputs_and_status(
     monkeypatch.setenv("HH_SCHEMA_OFFLINE", "true")
     monkeypatch.setenv("HYPOTHESIS_HELM_JOB_INDEX", "1")
     monkeypatch.setenv("HYPOTHESIS_HELM_JOB_TOTAL", "3")
+    binary = tmp_path / "helm"
+    capture = tmp_path / "arguments.json"
+    binary.write_text(
+        dedent(
+            f"""
+            #!{sys.executable}
+            import json, os, sys
+            from pathlib import Path
+            Path(os.environ["CAPTURE_ARGS"]).write_text(json.dumps(["helm", *sys.argv[1:]]))
+            print(json.dumps(dict(kind="ConfigMap")))
+            sys.exit(int(os.environ["FAKE_HELM_STATUS"]))
+            """
+        ).removeprefix("\n")
+    )
+    binary.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setenv("CAPTURE_ARGS", str(capture))
+    monkeypatch.setenv("FAKE_HELM_STATUS", str(exit_code))
     calls: list[list[str]] = []
 
     def execute(
@@ -146,9 +168,15 @@ def test_action_preserves_arguments_outputs_and_status(
         Returns:
             subprocess.CompletedProcess[str]: Simulated Helm result.
         """
-        calls.append(command)
-        stdout.write('{"kind":"ConfigMap"}\n')
-        return subprocess.CompletedProcess(command, exit_code)
+        result = subprocess.run(
+            command,
+            env={key: str(value) for key, value in mapping(kwargs["env"]).items()},
+            stdout=stdout,
+            text=True,
+            check=False,
+        )
+        calls.append(json.loads(capture.read_text()))
+        return result
 
     monkeypatch.setattr(Processes, "run", execute)
     monkeypatch.setenv("HH_KUBESEC", str(security).lower())
@@ -196,3 +224,104 @@ def test_action_preserves_arguments_outputs_and_status(
     assert "shard<<" in values
     assert "\n2/3\n" in values
     assert "report-dir<<" in values
+
+
+@pytest.mark.parametrize("provider", ["gitlab", "circleci"])
+@pytest.mark.parametrize("security", [False, True])
+@pytest.mark.parametrize("helm_status", [0, 1])
+def test_remote_ci_commands(
+    tmp_path: Path, provider: str, security: bool, helm_status: int
+) -> None:
+    """
+    Exercise published job scripts with literal paths, shard routing and validator failures.
+
+    Args:
+        tmp_path (Path): Mock executable and report directory.
+        provider (str): Remote configuration to exercise.
+        security (bool): Whether workload security routing is enabled.
+        helm_status (int): Simulated Helm success or failure.
+
+    Returns:
+        None: Scripts select the right validators and retain Helm failure precedence.
+    """
+    from ruamel.yaml import YAML
+
+    from hypothesis_helm.schemas.contracts import sequence
+
+    root = Path(__file__).resolve().parents[3]
+    document = mapping(YAML(typ="safe").load((root / "ci" / f"{provider}.yml").read_text()))
+    if provider == "gitlab":
+        commands = sequence(mapping(document["helm-properties"])["script"])
+        script = "\n".join(str(command) for command in commands)
+    else:
+        steps = sequence(mapping(mapping(document["commands"])["test"])["steps"])
+        script = str(mapping(mapping(steps[0])["run"])["command"])
+    plugins = tmp_path / "plugin root"
+    scanner = plugins / "hypothesis/.plugin-venv/bin/python"
+    scanner.parent.mkdir(parents=True)
+    binary = tmp_path / "helm"
+    stub = dedent(
+        f"""
+        #!{sys.executable}
+        import json, os, sys
+        from pathlib import Path
+        if sys.argv[1:2] == ["env"]:
+            print(os.environ["FAKE_PLUGINS"])
+            sys.exit(0)
+        name = Path(sys.argv[0]).name
+        with Path(os.environ["CAPTURE_ARGS"]).open("a") as stream:
+            print(json.dumps([name, *sys.argv[1:]]), file=stream)
+        print(json.dumps(dict(kind="ConfigMap")))
+        sys.exit(int(os.environ["FAKE_HELM_STATUS"]) if name == "helm" else 2)
+        """
+    ).removeprefix("\n")
+    for executable in (binary, scanner):
+        executable.write_text(stub)
+        executable.chmod(0o755)
+    capture = tmp_path / "commands.jsonl"
+    chart = "$(touch unexpected); chart with spaces"
+    environment = {
+        **os.environ,
+        "PATH": str(tmp_path) + os.pathsep + os.environ["PATH"],
+        "FAKE_PLUGINS": str(plugins),
+        "FAKE_HELM_STATUS": str(helm_status),
+        "CAPTURE_ARGS": str(capture),
+        "HELM_CHART": chart,
+        "HH_CHART": chart,
+        "KUBESEC_ENABLED": str(security).lower(),
+        "HH_KUBESEC": str(security).lower(),
+        "KUBESEC_JOBS": "auto",
+        "HH_KUBESEC_JOBS": "auto",
+        "K8S_VERSION": "1.35.0",
+        "HH_SCHEMA_VERSION": "1.35.0",
+        "SCHEMA_CACHE_DIR": "schema cache",
+        "HH_SCHEMA_CACHE_DIR": "schema cache",
+        "SHARD_INDEX": "2",
+        "SHARD_TOTAL": "3",
+        "CIRCLE_NODE_INDEX": "1",
+        "CIRCLE_NODE_TOTAL": "3",
+        "HH_JOBS": "auto",
+        "HH_MAX_EXAMPLES": "50",
+        "HH_SEED": "0",
+        "HH_ARTIFACT_DIR": "reports/hypothesis-helm",
+    }
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == (helm_status or (2 if security else 0)), result.stderr
+    calls = [json.loads(line) for line in capture.read_text().splitlines()]
+    command = calls[0]
+    assert command[:4] == ["helm", "hypothesis", "test", chart]
+    assert ("--kubeconform" in command) is (not security)
+    assert "--schema-offline" in command
+    assert command[command.index("--shard") + 1] == ("2/3" if provider == "gitlab" else "auto")
+    assert len(calls) == (2 if security else 1)
+    if security:
+        assert "--pre-sharded" in calls[1] and "--validate-rest" in calls[1]
+        assert "--schema-offline" in calls[1]
+    assert not (tmp_path / "unexpected").exists()

@@ -52,7 +52,7 @@ tests and reports by default, including after a test failure. Failures still fai
 the action. Chart dependencies must already be available; add a dependency-build
 step for charts that require one.
 
-After publishing a release tag, callers can use:
+Callers can reference the remote action directly:
 
 ```yaml
 name: Helm properties
@@ -68,7 +68,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
-      - uses: astrivant/hypothesis-helm@v0.1.0 # Publish this tag before using it.
+      - uses: astrivant/hypothesis-helm@main # Use a published commit or tag to pin a version.
         id: hypothesis
         with:
           chart: helm/my-chart
@@ -131,41 +131,15 @@ any release is published.
 
 No release or tag is created by the action itself.
 
-## CircleCI
+## CircleCI and GitLab
 
-Once Helm and the plugin are installed, set job parallelism and run the ordinary
-command. CircleCI supplies the coordinates; no arithmetic or manual shard flag
-is needed:
+Use the [copyable remote examples](ci/README.md). CircleCI imports the
+[URL orb](../ci/circleci.yml); GitLab uses `include: remote` with the
+[shared job](../ci/gitlab.yml). Both install the plugin and validators, prepare
+cached schemas, and preserve per-shard artifacts.
 
-```yaml
-parallelism: 4
-steps:
-  # Checkout and install Helm plus the plugin first.
-  - run: helm hypothesis test ./chart --seed 42
-  - store_test_results:
-      path: reports/hypothesis-helm
-  - store_artifacts:
-      path: reports/hypothesis-helm
-```
-
-## GitLab CI
-
-Use a runner image with Helm and the plugin installed:
-
-```yaml
-helm-properties:
-  parallel: 4
-  script:
-    - helm hypothesis test ./chart --seed 42
-  artifacts:
-    when: always
-    paths:
-      - reports/hypothesis-helm/
-    reports:
-      junit: reports/hypothesis-helm/shards/*/junit.xml
-```
-
-GitLab's one-based node index maps directly to the shard index.
+CircleCI detects its node coordinates automatically. The GitLab version/shard
+matrix passes explicit indices so each Kubernetes version covers the whole suite.
 
 ## Persisting path outcomes
 
@@ -204,8 +178,8 @@ prefix restoration; this allows `latest` to refresh instead of freezing an immut
 CI cache entry forever. Set `schema-cache: 'false'` to opt out of remote persistence.
 The repository's own Action workflow explicitly uses validation and this cache.
 
-The CircleCI reference orb prepares and saves schemas before running properties.
-The GitLab README job uses `cache:when: always`. Neither requires putting schemas
+The CircleCI URL orb prepares and saves schemas before running properties.
+The GitLab shared job uses `cache:when: always`. Neither requires putting schemas
 inside the report directory. `helm hypothesis schemas --schema-version latest
 --schema-cache-dir .cache/hypothesis-helm/schemas` can prepare the cache independently
 without generating or running tests.

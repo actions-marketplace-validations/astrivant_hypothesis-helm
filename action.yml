@@ -200,11 +200,14 @@ runs:
         SCHEMA_OFFLINE: ${{ inputs.schema-offline }}
         KUBECONFORM_BINARY: ${{ inputs.kubeconform-binary }}
       run: |
-        options=()
-        if [[ "$SCHEMA_OFFLINE" == "true" ]]; then options+=(--schema-offline); fi
-        helm hypothesis schemas --schema-version "$SCHEMA_VERSION" \
-          --schema-cache-dir "$SCHEMA_CACHE_DIR" --kubeconform-binary "$KUBECONFORM_BINARY" \
-          "${options[@]}"
+        if [[ "$SCHEMA_OFFLINE" == "true" ]]; then
+          helm hypothesis schemas --schema-version "$SCHEMA_VERSION" \
+            --schema-cache-dir "$SCHEMA_CACHE_DIR" --kubeconform-binary "$KUBECONFORM_BINARY" \
+            --schema-offline
+        else
+          helm hypothesis schemas --schema-version "$SCHEMA_VERSION" \
+            --schema-cache-dir "$SCHEMA_CACHE_DIR" --kubeconform-binary "$KUBECONFORM_BINARY"
+        fi
     - name: Test chart values
       id: test
       shell: bash

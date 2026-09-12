@@ -33,7 +33,7 @@ def write_outputs(values: dict[str, str]) -> None:
 
 def main() -> int:
     """
-    Translate action inputs into a Helm invocation while preserving failure status.
+    Run the explicit Bash command while preserving shard outputs and failure status.
 
     Returns:
         int: Helm exit status, including 130 on interruption.
@@ -56,54 +56,31 @@ def main() -> int:
             "shard-id": shard.name if shard is not None else "unsharded",
             "shard-source": source,
         }
-        command = [
-            "helm",
-            "hypothesis",
-            "test",
-            str(Path(os.environ.get("HH_CHART", ".")).resolve()),
-            "--shard",
-            outputs["shard"],
-            "--jobs",
-            os.environ.get("HH_JOBS", "auto"),
-            "--max-examples",
-            os.environ.get("HH_MAX_EXAMPLES", "100"),
-            "--seed",
-            os.environ.get("HH_SEED", "0"),
-            "--timeout",
-            os.environ.get("HH_TIMEOUT", "30"),
-            "--artifact-dir",
-            str(root),
-            "--output",
-            "json",
-        ]
         security = os.environ.get("HH_KUBESEC", "false").lower() == "true"
-        command += ["--rerun", "all" if security else os.environ.get("HH_RERUN", "auto")]
-        cache_dir = os.environ.get("HH_CACHE_DIR")
-        if cache_dir:
-            command += ["--cache-dir", cache_dir]
-        if os.environ.get("HH_DISABLE_SCHEMA_CACHING", "false").lower() == "true":
-            command.append("--disable-schema-caching")
-        if os.environ.get("HH_CACHE", "true").lower() == "false":
-            command.append("--no-cache")
-        if not security and os.environ.get("HH_KUBECONFORM", "true").lower() == "true":
-            command += [
-                "--kubeconform",
-                "--schema-version",
-                os.environ.get("HH_SCHEMA_VERSION", "latest"),
-                "--schema-cache-dir",
-                os.environ.get("HH_SCHEMA_CACHE_DIR", ".cache/hypothesis-helm/schemas"),
-                "--kubeconform-binary",
-                os.environ.get("HH_KUBECONFORM_BINARY", "kubeconform"),
-            ]
-            if os.environ.get("HH_SCHEMA_OFFLINE", "false").lower() == "true":
-                command.append("--schema-offline")
-        match = os.environ.get("HH_MATCH")
-        if match:
-            command += ["--match", match]
         with manifests.open("w") as stream:
             # Give the Helm parent time to stop its own pytest process groups.
             result = Processes(interrupt_grace=5.0).run(
-                command, cwd=Path.cwd(), env=dict(os.environ), stdout=stream
+                ["bash", str(Path(__file__).with_suffix(".sh"))],
+                cwd=Path.cwd(),
+                env={
+                    **os.environ,
+                    **{
+                        key: value.lower()
+                        for key, value in os.environ.items()
+                        if key
+                        in {
+                            "HH_KUBESEC",
+                            "HH_KUBECONFORM",
+                            "HH_CACHE",
+                            "HH_SCHEMA_OFFLINE",
+                            "HH_DISABLE_SCHEMA_CACHING",
+                        }
+                    },
+                    "HH_ARTIFACT_DIR": str(root),
+                    "HH_RESULT_DIR": str(results),
+                    "HH_RESOLVED_SHARD": outputs["shard"],
+                },
+                stdout=stream,
             )
         status = result.returncode if result.returncode >= 0 else 130
         if security and status != 130:
