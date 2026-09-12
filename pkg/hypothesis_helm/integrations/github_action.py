@@ -8,7 +8,9 @@ import uuid
 from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.integrations.kubesec import scan
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
+from hypothesis_helm.schemas.conformity import prepare
 
 
 def write_outputs(values: dict[str, str]) -> None:
@@ -74,7 +76,8 @@ def main() -> int:
             "--output",
             "json",
         ]
-        command += ["--rerun", os.environ.get("HH_RERUN", "auto")]
+        security = os.environ.get("HH_KUBESEC", "false").lower() == "true"
+        command += ["--rerun", "all" if security else os.environ.get("HH_RERUN", "auto")]
         cache_dir = os.environ.get("HH_CACHE_DIR")
         if cache_dir:
             command += ["--cache-dir", cache_dir]
@@ -82,7 +85,7 @@ def main() -> int:
             command.append("--disable-schema-caching")
         if os.environ.get("HH_CACHE", "true").lower() == "false":
             command.append("--no-cache")
-        if os.environ.get("HH_KUBECONFORM", "true").lower() == "true":
+        if not security and os.environ.get("HH_KUBECONFORM", "true").lower() == "true":
             command += [
                 "--kubeconform",
                 "--schema-version",
@@ -103,11 +106,35 @@ def main() -> int:
                 command, cwd=Path.cwd(), env=dict(os.environ), stdout=stream
             )
         status = result.returncode if result.returncode >= 0 else 130
+        if security and status != 130:
+            configuration = prepare(
+                Path(os.environ.get("HH_SCHEMA_CACHE_DIR", ".cache/hypothesis-helm/schemas")),
+                os.environ.get("HH_SCHEMA_VERSION", "latest"),
+                os.environ.get("HH_KUBECONFORM_BINARY", "kubeconform"),
+                offline=True,
+            )
+            security_status = scan(
+                manifests,
+                root / "kubesec",
+                configuration,
+                jobs=os.environ.get("HH_KUBESEC_JOBS", "auto"),
+                executable=os.environ.get("HH_KUBESEC_BINARY", "kubesec"),
+                shard=shard,
+                pre_sharded=True,
+                validate_rest=True,
+            )
+            security_dir = root / "kubesec"
+            if shard:
+                security_dir = security_dir / "shards" / shard.name
+            outputs["kubesec-report-dir"] = str(security_dir)
+            outputs["kubesec-exit-code"] = str(security_status)
+            status = status or security_status
     except KeyboardInterrupt:
         print("Testing interrupted", file=sys.stderr)
         status = 130
     except Exception as exc:
         print(f"Action setup failed: {exc}", file=sys.stderr)
+        status = status or 2
     finally:
         outputs["exit-code"] = str(status)
         write_outputs(outputs)

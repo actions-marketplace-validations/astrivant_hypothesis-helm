@@ -72,6 +72,9 @@ jobs:
         id: hypothesis
         with:
           chart: helm/my-chart
+          schema-version: '1.35.0'
+          kubesec: 'false' # set true to install and run security scanning
+          kubesec-jobs: auto
           job-index: ${{ strategy.job-index }}
           job-total: ${{ strategy.job-total }}
           jobs: auto
@@ -206,3 +209,29 @@ The GitLab README job uses `cache:when: always`. Neither requires putting schema
 inside the report directory. `helm hypothesis schemas --schema-version latest
 --schema-cache-dir .cache/hypothesis-helm/schemas` can prepare the cache independently
 without generating or running tests.
+
+## Optional Kubesec scans
+
+Set `kubesec: 'true'` to install Kubesec v2.14.2 and GNU Parallel. `kubesec-jobs: auto`
+uses the logical CPUs available to the job; set a positive integer to override it.
+Scans consume the current shard's manifest stream and retain separate job logs,
+security reports, and resource counts for each validator. The action exposes `kubesec-report-dir`
+and `kubesec-exit-code`; either test or scanner failure fails the action.
+
+Kubesec and Kubeconform share the prepared local schema snapshot. Schema cache
+restore/save also runs when only Kubesec is enabled. Preparation refreshes the
+catalog once unless `schema-offline: 'true'`; validators then use local files.
+See [CI examples](ci/README.md) for installation and version/shard matrices.
+
+When adding a Kubernetes-version matrix, keep shard indices local to each version
+(e.g. `matrix.shard` and `job-total: '3'`). `strategy.job-total` counts both axes and
+would partition each version's tests incorrectly. Include the version in artifact
+names as well as schema-cache keys.
+
+For optional Linux RAM-backed schema staging, see [memory-backed schemas](ci/README.md#memory-backed-schemas).
+
+With `kubesec: true`, supported workloads receive schema and security validation
+through Kubesec; remaining resources go to Kubeconform. This routing also applies
+when the separate `kubeconform` input is false. Security runs force `--rerun all`
+to produce the manifests needed for validation. Validator failures fail the job
+and appear in scan artifacts rather than the Helm JUnit report.
