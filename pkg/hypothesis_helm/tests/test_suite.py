@@ -36,6 +36,7 @@ def test_helm_workflow_generates_and_runs(
             [
                 "test",
                 "examples/workload",
+                "--paths",
                 "--max-examples",
                 "3",
                 "--seed",
@@ -113,6 +114,7 @@ def test_render_flags_are_embedded(tmp_path: Path) -> None:
             [
                 "test",
                 "examples/workload",
+                "--paths",
                 "--collect-only",
                 "--timeout",
                 "7",
@@ -194,7 +196,7 @@ def test_missing_suite_is_an_error(tmp_path: Path) -> None:
 
 @pytest.mark.integration
 @pytest.mark.skipif(not shutil.which("helm"), reason="Helm is required")
-@pytest.mark.parametrize("mode", ["paths", "whole-chart", "exhaustive"])
+@pytest.mark.parametrize("mode", ["paths", "whole-chart", "exhaustive", "permutations"])
 def test_json_manifest_stream(tmp_path: Path, capfd: pytest.CaptureFixture[str], mode: str) -> None:
     """
     Keep rendered resources on stdout and all test diagnostics on stderr.
@@ -228,11 +230,18 @@ def test_json_manifest_stream(tmp_path: Path, capfd: pytest.CaptureFixture[str],
         arguments.append("--exhaustive")
     elif mode == "whole-chart":
         arguments.append("--whole-chart")
+    elif mode == "permutations":
+        arguments.extend(["--permutations", "2"])
+    else:
+        arguments.append("--paths")
     assert main(arguments) == 0
     output = capfd.readouterr()
     resources = [json.loads(line) for line in output.out.splitlines()]
     assert resources
     assert all("apiVersion" in item and "kind" in item for item in resources)
+    if mode == "permutations":
+        assert "Permutation progress:" in output.err
+        assert "0 remaining" in output.err
     if mode == "paths":
         assert "Testing path $.replicas" in output.err
         assert "passed" in output.err

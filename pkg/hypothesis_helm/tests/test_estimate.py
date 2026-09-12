@@ -67,6 +67,7 @@ def test_chart_dry_run_cache_identity(
     args = [
         "test",
         "examples/workload",
+        "--paths",
         "--artifact-dir",
         str(target),
         "--max-examples",

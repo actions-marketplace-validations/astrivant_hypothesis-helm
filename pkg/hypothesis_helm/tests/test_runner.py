@@ -270,4 +270,4 @@ def test_exhaustive_render() -> None:
     report = check_chart(ROOT / "examples/workload", exhaustive=True)
     assert report["status"] == "passed", report
     assert report["domain_size"] == 24
-    assert report["attempts"] == 25
+    assert report["attempts"] == 24

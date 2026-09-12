@@ -14,15 +14,26 @@ need neither Poetry nor a separately installed test runner. Helm 4 is unverified
 
 ```sh
 helm hypothesis test ./chart
-helm hypothesis test ./chart --max-examples 50 --seed 42
+helm hypothesis test ./chart --paths --max-examples 50 --seed 42
 helm hypothesis test ./chart --match replicas
 helm hypothesis test ./chart --collect-only
 ```
 
 Inside a chart directory, `helm hypothesis test` uses the current directory.
 
-`test` loads the chart, coalesces its undocumented template levers, generates one
-Python property per value path, and runs the resulting suite. `--max-examples`
+`test` selects coverage automatically for supported finite schemas. It enumerates
+the whole configuration space when the Cartesian count is **less than 10,000**
+and fits the case budget. Larger finite schemas receive pairwise coverage plus
+affordable exhaustive groups inferred from schema constraints and templates.
+Unbounded or unsupported domains fall back to generated per-path testing with a
+logged reason. See [interaction coverage](#interaction-coverage) for the policy,
+explicit groups and planning statistics.
+
+`--paths` explicitly selects the generated-suite workflow: it coalesces undocumented
+template levers, generates one Python property per value path, and executes the
+suite. Filters, collection, distributed sharding and fixed parallel worker counts
+greater than one also select this workflow unless a finite mode was explicitly
+requested. `--max-examples`
 is a budget **per property**, not a total across the chart. `--match` selects
 Python test names with a pytest keyword expression; path segments are included in
 those names. `--collect-only` generates and lists the tests without rendering.
@@ -179,13 +190,68 @@ Choose the interaction strength with `--permutations`:
 ```sh
 helm hypothesis test ./chart --permutations 2
 helm hypothesis test ./chart --permutations 3 --max-cases 5000 --max-candidates 1000000
+helm hypothesis test ./chart --permutations 2 --exhaustive-group ingress,service
+helm hypothesis test ./chart --dry-run
 ```
 
 `2` covers every schema-valid pair of factor values in at least one complete
 configuration; `3` covers every valid triple. Increasing the strength increases
 the coverage requirement. A strength at least as large as the number of factors
-enumerates every feasible combination. This is a coverage requirement, not a
-random-example budget. `--max-examples` does not control this mode.
+tests every distinct feasible configuration. This is a coverage requirement, not a
+random-example budget. `--max-examples` does not control this mode. The default
+automatic strength for larger finite spaces is `2`.
+
+Small spaces are promoted to full enumeration even with an explicit interaction
+strength. `--exhaustive-threshold 10000` is the default: the **unconstrained
+Cartesian product of factor domain sizes** must be strictly smaller than the
+threshold and fit `--max-cases`. This is a conservative affordability decision,
+not a count of schema-valid inputs. A heavily constrained larger space is not
+automatically classified as small. Set `--exhaustive-threshold 0` to disable
+promotion and retain the requested interaction strength. If the strength already
+includes every factor, full enumeration is required regardless of the threshold.
+
+#### Targeted exhaustive groups
+
+Repeat `--exhaustive-group` to require all distinct feasible assignments within selected
+groups, in addition to the global interaction coverage:
+
+```sh
+helm hypothesis test ./chart --permutations 2 \
+  --exhaustive-group ingress,service,tls \
+  --exhaustive-group persistence,storage
+```
+
+Selectors are dotted paths or JSON Pointer prefixes; `/a.b,/service` selects the
+literal key `a.b` and the `service` container. Containers expand to their finite
+factors. Each feasible group assignment appears in a full schema-valid chart
+configuration, with other factors chosen to satisfy constraints. It is unnecessary
+to cross every group with every unrelated setting. Unknown explicit selectors
+and required coverage exceeding the planning budgets fail the command.
+
+Automatic grouping uses local structural evidence:
+
+1. Each schema dependency forms a group of its trigger and referenced fields.
+   Conditional `if`/`then`/`else` constraints and composition expressions contribute
+   the paths they mention.
+2. Resolved references in one template expression form a candidate group. An
+   `if`, `with` or `range` block contributes its guard and subtree references,
+   including nested branches. Existing discovery resolves supported aliases and
+   scopes; references sharing a source line can conservatively be grouped together.
+3. The planner maps those references to finite factors and evaluates each candidate
+   separately. It **does not transitively merge overlapping groups** or infer
+   importance merely from similar names or shared YAML ancestry.
+
+Inferred groups default to at most **256 candidate assignments** each; adjust
+`--max-group-cases` or disable inference with `--no-infer-groups`. Oversized or
+unresolved inferred groups are recorded as skipped with their reason. Explicit
+groups are mandatory and are governed by the overall planning limits instead.
+Overlapping groups share rendering cases where possible. Full enumeration already
+covers every group, so it adds no redundant group cases.
+
+Reports preserve group factor paths, source locations, candidate sizes and
+accepted/skipped status. Dynamic includes, unresolved contexts and other discovery
+limitations are logged and recorded for review. This is a heuristic for finding
+useful groups, not proof that every semantically important interaction was found.
 
 Factors come from the original values schema. Required closed objects are
 expanded into nested leaf factors, so `ingress.enabled` can interact with
@@ -201,15 +267,21 @@ their merge with chart defaults is schema-valid. Cross-field constraints on
 closed object schemas restrict which interactions are feasible. An interaction
 is excluded only after its possible completions have been checked. Leaf domains
 retain the finite enumerator's restrictions on references and compositions.
-Coverage concerns override assignments: omission and an explicit default can
-produce the same effective Helm configuration.
+The coverage planner reasons about valid assignments, but finite execution tests
+each distinct normalized configuration only once. Overrides are normalized using
+the runner's existing defaults-merge and null-deletion rules. A canonical typed
+JSON identity ignores mapping order while preserving array order and scalar types.
+Omission and an explicit default can therefore share one test. The baseline is
+tested first and any equivalent planned assignments are removed. Deduplication
+uses input values, not rendered manifests: distinct configurations remain distinct
+tests even if the chart happens to produce identical resources.
 
 The planner fills uncovered interactions deterministically without materializing
 the entire Cartesian product. It does not promise a minimum-size suite, and
 restrictive constraints can still require a large completion search. Two limits
 bound work before Helm is invoked:
 
-- `--max-cases` defaults to `1000`, limiting both planned configurations and each
+- `--max-cases` defaults to `10000`, limiting both planned configurations and each
   factor's candidate domain.
 - `--max-candidates` defaults to `100000`, independently limiting the interaction
   inventory and the number of complete assignments examined during planning.
@@ -221,14 +293,62 @@ The limits bound counts, not bytes or elapsed time.
 The JSON report includes requested and effective strength, factor paths and
 domains, valid interaction count, planned cases, planning candidates, and
 `coverage_complete`. Coverage is complete only after every planned case passes.
-Defaults are checked separately, so successful `attempts` equals `planned_cases`
-plus one. Failures stop execution and save the failing values and report for
+`planned_cases` counts distinct additional configurations after deduplication;
+`unique_configurations` and `planned_iterations` include the defaults, counted once.
+Successful `attempts` therefore equals `planned_iterations`. Failures stop execution
+and save the failing values and report for
 replay; this deterministic mode does not shrink counterexamples.
 
-`--permutations`, `--whole-chart`, and `--exhaustive` are mutually exclusive.
+#### Counts, timing and previous-run comparisons
+
+Before rendering, stderr logs the selected strategy, distinct configuration count,
+duplicate cases removed, total iterations, candidate assignments, coverage targets
+and planning time. For example, after a 19-iteration run, a 24-iteration plan reports:
+
+```text
+Permutation comparison: 19 -> 24 iterations (+5 versus previous); all 24 iterations will run
+Permutation progress: 0/24 completed, 24 remaining (0 attempted); elapsed 0.00s; estimated total 48.00s; ETA 48.00s (previous_run)
+```
+
+These durations are illustrative. The initial estimate uses measured successful
+iteration timings from the previous run when execution settings match. Without
+compatible history it is `unknown`; completed iterations provide a current-run
+average and update the estimate. Planning duration is reported separately from
+execution elapsed time and ETA. Estimates are approximate: changing chart contents,
+resource counts or machine load can change iteration costs.
+
+Progress is logged after the first iteration, approximately once per second at
+iteration boundaries, and on completion or failure. JSON statistics include
+`planned_iterations`, `attempted_iterations`, `completed_iterations`,
+`remaining_iterations`, `unattempted_iterations`, `previous_planned_iterations`,
+`iteration_delta`, `additional_iterations`, `elapsed_seconds`,
+`seconds_per_iteration`, `estimated_total_seconds`, `estimated_remaining_seconds`
+and `estimate_source`. `unique_configurations` is the actual number of planned tests;
+`candidate_cases` includes the baseline and selected assignments before deduplication,
+and `duplicate_cases_removed` explains the difference. `candidate_assignments` is
+the conservative factor-domain count before cross-field constraints and effective-value
+deduplication. Iterations include the defaults once. Failed or
+interrupted iterations remain incomplete: remaining work includes those iterations
+as well as unattempted ones.
+
+Successful, failed and interrupted runs save `report.json` and a fresh `junit.xml`.
+The JUnit testcase represents the entire finite coverage plan; iteration counts
+are included as properties, and failures preserve the renderer diagnostic. A chart-specific
+baseline is stored atomically under `<artifact-dir>/permutation-history/`, keyed
+by the absolute chart path and shared across strengths and group selections.
+Reuse the artifact directory to compare runs; changing chart paths or directories
+starts a new baseline. History is diagnostic and does not reuse successful cases:
+all planned iterations execute again. Concurrent runs read the last completed
+baseline; the last writer supplies the next baseline.
+
+`--dry-run` performs finite planning, logs the comparison and returns the statistics
+without rendering, writing artifacts or replacing the baseline. For generated
+per-path cache estimates specifically, use `--paths --dry-run`.
+
+`--paths`, `--permutations`, `--whole-chart`, and `--exhaustive` are mutually exclusive.
 Interaction suites execute serially and use the original chart schema. Like
 the other whole-chart modes, they do not support per-path filtering, collection,
-cache estimates, or distributed sharding. `--seed` does not change the
+per-path cache estimates, or distributed sharding. `--seed` does not change the
 deterministic coverage plan. Use `--shard none` when CI would otherwise enable
 automatic sharding. Kubernetes validation and manifest streaming remain available.
 Complete interaction coverage does not prove template branch coverage or correct
@@ -500,7 +620,7 @@ schema cache adds the initial fetch and sparse checkout. Path discovery and suit
 generation still occur on subsequent `test` invocations; cached successes save
 property execution time. Filters and shards reduce the executed selection, while
 CI defaults and `--rerun all` continue to execute it in full. This path traversal
-is not exhaustive enumeration of every possible values combination.
+is not exhaustive testing of every distinct configuration.
 
 ```bash
 helm hypothesis test ./chart                         # local failed-path rerun
@@ -596,8 +716,8 @@ Preview work without executing property examples, rendering charts, validating
 manifests, or downloading schemas:
 
 ```bash
-helm hypothesis test ./chart --dry-run
-helm hypothesis test ./chart --dry-run --rerun all --kubeconform \
+helm hypothesis test ./chart --paths --dry-run
+helm hypothesis test ./chart --paths --dry-run --rerun all --kubeconform \
   --schema-version latest --schema-cache-dir .cache/hypothesis-helm/schemas
 helm hypothesis run generated-tests --dry-run --match replicas
 ```
@@ -627,8 +747,10 @@ estimated cache hit; `schema_cache.note` makes this uncertainty explicit. Use
 Chart tests are generated in temporary storage at their intended logical location,
 so their fingerprint matches a real run. Existing generated files, reports, and
 result caches are preserved. Pytest collection imports suite modules and conftest
-files, so custom import-time side effects still apply. `--dry-run` is for per-path
-suites and cannot be combined with `--collect-only`, `--whole-chart`, or `--exhaustive`.
+files, so custom import-time side effects still apply. Use `--paths --dry-run`
+for these per-path cache estimates; automatic finite plans have their own
+[iteration statistics](#counts-timing-and-previous-run-comparisons).
+Dry runs cannot combine with `--collect-only`, `--whole-chart`, or `--exhaustive`.
 
 ## Strict source values
 
@@ -661,3 +783,80 @@ fields. Fixed array positions must exist as well.
 Saved suites use `chart-source.json` to audit their original chart rather than the
 coalesced snapshot. Regenerate older suites without this metadata before using
 `run --strict`. Strict checks never modify the source `values.yaml`.
+
+### In-memory rendered-output comparison
+
+Each render is hashed with SHA-256 over the complete parsed manifest bundle.
+Canonical mapping keys ignore YAML formatting, comments and key order; resource
+order, array order, scalar types and resource contents remain significant.
+Digest-set membership is average O(1); parsing and hashing still process the output.
+Memory grows with the number of distinct output and validation-context digests.
+
+Repeated output reuses successful resource-envelope and kubeconform validation
+under the same validation configuration. Failed validation is never cached.
+Helm still runs for every selected input, manifest streaming is preserved, and
+custom assertions and the empty-output policy still execute for every input.
+This output cache is separate from distinct-input planning and does not change
+permutation coverage or its iteration count.
+
+`report.json` includes `render_hashes` counters for observed, unique and duplicate
+bundles and successful validation cache hits. Whole-chart checks start a fresh
+run-local index. Generated pytest suites use a process-local index reset each
+session. Parallel workers report summed local counts: `worker_unique_bundles`
+is not global uniqueness, so `global_unique_bundles` is null. Interrupted workers
+that cannot finish may not export counters. Only counters are written; hashes
+remain in memory.
+
+Independent CI jobs do not share this index. Processes on one host could use a
+shared service or multiprocessing manager; cross-job reuse needs an accessible
+external store. A future shared cache must identify the validator and schema as
+well as the render, and publish success only after validation completes.
+
+### Shared typed values model
+
+Permutation analysis compiles the supplied schema into a `ValuesModel`. Declared
+objects become dynamic attrs classes; scalar and array annotations come from
+schema types or explicit enum/const domains. Each attrs field carries its original
+values key and a shared `ValueNode` containing the schema, path and requiredness.
+The model exists independently of which optional fields appear in `values.yaml`.
+
+Factor extraction, schema relationship analysis and template group resolution
+reference these same nodes. The planner assigns finite choices into typed attrs
+instances and uses the model's cattrs converter to restore values mappings for
+JSON Schema validation and Helm. No model metadata enters the rendered values.
+
+```python
+from hypothesis_helm import Chart
+from hypothesis_helm.schemas.model import ValuesModel
+
+chart = Chart.load("./chart")
+model = ValuesModel.from_schema(chart.schema)
+values = model.structure(chart.defaults)
+service = model.reference(("service",)).target
+assert model.unstructure(values) == chart.defaults
+```
+
+Conversion preserves explicit null, omission, arrays, extra values and original
+keys, including keys requiring Python attribute aliases. Schema defaults are not
+inserted and scalars are not coerced. `structure(..., validate=False)` is reserved
+for partial candidates; normal conversion validates against the full schema.
+Untyped or opaque schema fragments remain lossless raw values, with their
+constraints enforced by JSON Schema. This does not broaden the supported finite
+domains or turn type declarations into evidence of cross-field interaction:
+template guards and schema constraints still supply that evidence. Unresolved
+references and inference limits retain their existing diagnostics.
+
+### Exact-equivalence pruning
+
+`--prune-equivalent` enables conservative pre-render pruning for whole-chart
+candidates. It skips Helm only when the proof compiler establishes the same
+output as an earlier successful render. Schema validation and custom assertions
+still run per candidate; unsupported behavior falls back to Helm.
+
+```sh
+helm hypothesis test ./chart --permutations 2 --prune-equivalent
+```
+
+Reports distinguish candidate checks, actual renders and equivalence certificates.
+See the [compiler stages, soundness contract and limitations](safe-pruning.md)
+before extending the supported template language or introducing another metric.

@@ -21,6 +21,9 @@ from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.output import MANIFEST_FD
 from hypothesis_helm.schemas.conformity import ENVIRONMENT, prepare
+from hypothesis_helm.schemas.factors import factor_space
+from hypothesis_helm.schemas.finite import NonFiniteSchema
+from hypothesis_helm.schemas.groups import parse_group
 
 
 def parse_jobs(value: str) -> int | Literal["auto"]:
@@ -73,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--match", help="select tests by value-path keyword")
     run.add_argument("--collect-only", action="store_true")
     run.add_argument("--artifact-dir", type=Path, help="report directory for a saved suite")
-    test = commands.add_parser("test", help="generate and run a Hypothesis test per values path")
+    test = commands.add_parser("test", help="select finite coverage or generate per-path tests")
     test.add_argument(
         "chart",
         type=Path,
@@ -83,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     test.add_argument("--max-examples", type=int, default=100)
     modes = test.add_mutually_exclusive_group()
+    modes.add_argument("--paths", action="store_true", help="force generated per-path testing")
     modes.add_argument(
         "--exhaustive", action="store_true", help="enumerate finite whole-chart inputs"
     )
@@ -90,16 +94,44 @@ def main(argv: list[str] | None = None) -> int:
     modes.add_argument(
         "--permutations", type=int, metavar="N", help="cover every valid N-way finite interaction"
     )
+    test.add_argument(
+        "--prune-equivalent",
+        action="store_true",
+        help="skip Helm only for proved output equivalence to a successful render",
+    )
     test.add_argument("--match", help="select generated tests by value-path keyword")
     test.add_argument("--collect-only", action="store_true", help="generate and list tests")
     test.add_argument(
         "--max-cases",
         type=int,
-        default=1000,
+        default=10000,
         help="bound exhaustive domains or permutation suites and factor domains",
     )
     test.add_argument(
         "--max-candidates", type=int, default=100000, help="bound permutation planning work"
+    )
+    test.add_argument(
+        "--exhaustive-threshold",
+        type=int,
+        default=10000,
+        help="enumerate finite spaces smaller than this count; 0 disables promotion",
+    )
+    test.add_argument(
+        "--exhaustive-group",
+        type=parse_group,
+        action="append",
+        default=[],
+        metavar="PATH,PATH",
+        help="require exhaustive coverage of a group of value paths or containers; repeatable",
+    )
+    test.add_argument(
+        "--no-infer-groups", action="store_true", help="disable inferred exhaustive groups"
+    )
+    test.add_argument(
+        "--max-group-cases",
+        type=int,
+        default=256,
+        help="bound automatically inferred group domains",
     )
     test.add_argument("--seed", type=int, default=0)
     test.add_argument("--timeout", type=float, default=30)
@@ -241,7 +273,53 @@ def main(argv: list[str] | None = None) -> int:
                     args.shard.total,
                     shard_source,
                 )
-        if args.command in ("test", "run") and args.dry_run:
+        if args.command == "test":
+            if args.prune_equivalent:
+                if args.paths or args.match is not None or args.collect_only:
+                    raise ValueError("--prune-equivalent applies to whole-chart testing only")
+                if not args.whole_chart and not args.exhaustive:
+                    if args.permutations is None:
+                        args.permutations = 2
+            if args.exhaustive_threshold < 0 or args.max_group_cases < 1:
+                raise ValueError(
+                    "exhaustive threshold must be nonnegative and group limit positive"
+                )
+            if args.exhaustive_group and (args.paths or args.whole_chart or args.exhaustive):
+                raise ValueError("--exhaustive-group requires automatic or permutation coverage")
+            if not (
+                args.paths or args.whole_chart or args.exhaustive or args.permutations is not None
+            ):
+                if args.exhaustive_group:
+                    args.permutations = 2
+                elif (
+                    args.match is None
+                    and not args.collect_only
+                    and args.shard is None
+                    and args.jobs in ("auto", 1)
+                ):
+                    try:
+                        factor_space(Chart.load(args.chart).schema, args.max_cases)
+                    except NonFiniteSchema as exc:
+                        logger.info(
+                            "Using per-path testing: finite automatic coverage unavailable: %s", exc
+                        )
+                    else:
+                        args.permutations = 2
+                        logger.info(
+                            "Automatic finite coverage: full enumeration below %d, "
+                            "otherwise pairs and groups",
+                            args.exhaustive_threshold,
+                        )
+                else:
+                    logger.info(
+                        "Using per-path testing for the requested filter, "
+                        "collection or parallel controls"
+                    )
+        if (
+            args.command in ("test", "run")
+            and args.dry_run
+            and getattr(args, "permutations", None) is None
+        ):
             if (
                 args.collect_only
                 or getattr(args, "whole_chart", False)
@@ -409,8 +487,14 @@ def main(argv: list[str] | None = None) -> int:
                 max_cases=args.max_cases,
                 permutations=args.permutations,
                 max_candidates=args.max_candidates,
+                exhaustive_threshold=args.exhaustive_threshold,
+                exhaustive_groups=tuple(args.exhaustive_group),
+                infer_exhaustive_groups=not args.no_infer_groups,
+                max_group_cases=args.max_group_cases,
+                dry_run=args.dry_run,
+                prune_equivalent=args.prune_equivalent,
             )
-            status = 0 if report["status"] == "passed" else 1
+            status = 0 if report["status"] in ("passed", "dry-run") else 1
         print(json.dumps(report, indent=2))
         return status
     except KeyboardInterrupt:

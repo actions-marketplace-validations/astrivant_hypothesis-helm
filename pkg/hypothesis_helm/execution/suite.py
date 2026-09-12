@@ -16,6 +16,10 @@ from rich.console import Console
 from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes, seed_key
 from hypothesis_helm.execution.parallel import run_parallel
 from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.render_hashes import (
+    STATISTICS_DIRECTORY,
+    summarize_process_statistics,
+)
 from hypothesis_helm.execution.structure import inspect_structure
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.output import MANIFEST_FD
@@ -111,6 +115,8 @@ def run_suite(
     environment.pop("HYPOTHESIS_HELM_CACHE_RESULTS", None)
     cache_workspace = TemporaryDirectory(prefix="path-results-", dir=results)
     cache_results = Path(cache_workspace.name)
+    hash_statistics = cache_results / "render-hashes"
+    environment[STATISTICS_DIRECTORY] = str(hash_statistics)
     cache_file = None
     marker = None
     cached: dict[str, str] = {}
@@ -208,6 +214,7 @@ def run_suite(
         temporary.replace(cache_file)
     if marker is not None and not disable_schema_caching and status in (0, 1, 130):
         marker.save()
+    render_statistics = summarize_process_statistics(hash_statistics)
     cache_workspace.cleanup()
     assignment = None
     if shard is not None and (results / "shard.json").is_file():
@@ -233,6 +240,7 @@ def run_suite(
         else "failed",
         "exit_code": status,
         "suite": str(directory),
+        "render_hashes": render_statistics,
         "values_structure": marker.report() if marker is not None else None,
         "conformity": json.loads(environment["HYPOTHESIS_HELM_CONFORMITY"])
         if "HYPOTHESIS_HELM_CONFORMITY" in environment

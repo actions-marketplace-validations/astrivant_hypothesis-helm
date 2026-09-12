@@ -11,6 +11,11 @@ from typing import cast
 import pytest
 from rich.progress import Progress, TaskID
 
+from hypothesis_helm.execution.render_hashes import (
+    STATISTICS_DIRECTORY,
+    reset_process_hashes,
+    save_process_statistics,
+)
 from hypothesis_helm.integrations.sharding import parse_shard
 from hypothesis_helm.reporting.display import start_progress
 
@@ -51,6 +56,7 @@ def pytest_configure(config: pytest.Config) -> None:
     Returns:
         None: Pytest recognizes generated path metadata without marker warnings.
     """
+    reset_process_hashes()
     config.addinivalue_line(
         "markers", "hypothesis_helm_path(path): schema path exercised by a test"
     )
@@ -126,6 +132,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         None: The terminal cursor is restored and the final count remains visible.
     """
     global DISPLAY
+    destination = os.environ.get(STATISTICS_DIRECTORY)
+    if destination is not None and not session.config.option.collectonly:
+        save_process_statistics(Path(destination))
     if DISPLAY is not None:
         progress, task = DISPLAY
         if exitstatus == 2:

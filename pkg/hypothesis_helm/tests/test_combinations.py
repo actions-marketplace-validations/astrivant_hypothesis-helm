@@ -55,7 +55,7 @@ def test_covers_every_feasible_interaction(strength: int) -> None:
         dict(zip(names, row, strict=True)) for row in itertools.product([False, True], repeat=4)
     ]
     valid = [row for row in universe if validator.is_valid(json_value(row))]
-    plan = plan_interactions(schema, strength)
+    plan = plan_interactions(schema, strength, exhaustive_threshold=0)
     assert all(validator.is_valid(json_value(row)) for row in plan.values)
     interactions = 0
     for group in itertools.combinations(names, min(strength, 4)):
@@ -64,7 +64,7 @@ def test_covers_every_feasible_interaction(strength: int) -> None:
         assert actual == expected
         interactions += len(expected)
     assert plan.interactions == interactions
-    assert plan.values == plan_interactions(schema, strength).values
+    assert plan.values == plan_interactions(schema, strength, exhaustive_threshold=0).values
 
 
 def test_large_product_stays_bounded() -> None:
@@ -148,12 +148,12 @@ def test_completion_limits_and_infeasible_schema() -> None:
     schema = boolean_schema(8)
     schema["not"] = {}
     with pytest.raises(NonFiniteSchema, match="completion search"):
-        plan_interactions(schema, 2, max_candidates=112)
+        plan_interactions(schema, 2, max_candidates=112, exhaustive_threshold=0)
     with pytest.raises(NonFiniteSchema, match="no feasible"):
         plan_interactions(schema, 2)
 
 
-@pytest.mark.parametrize("option", ["--dry-run", "--collect-only", "--match", "--jobs"])
+@pytest.mark.parametrize("option", ["--collect-only", "--match", "--jobs"])
 def test_cli_rejects_per_path_options(option: str, capsys: pytest.CaptureFixture[str]) -> None:
     """
     Prevent per-path controls from silently bypassing interaction execution.

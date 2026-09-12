@@ -2,12 +2,26 @@
 Typed boundaries for JSON schemas and round-trip YAML values.
 """
 
+import json
 from typing import cast
 
 from hypothesis.strategies import SearchStrategy
 from hypothesis_jsonschema import from_schema
 
 type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
+
+
+def configuration_key(values: dict[str, object]) -> str:
+    """
+    Identify a configuration independently of map order while preserving arrays and types.
+
+    Args:
+        values (dict[str, object]): Raw or normalized chart values.
+
+    Returns:
+        str: Canonical JSON identity retaining scalar types and ordered array contents.
+    """
+    return json.dumps(values, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def mapping(value: object) -> dict[str, object]:

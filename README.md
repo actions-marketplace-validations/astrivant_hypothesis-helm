@@ -55,15 +55,23 @@ Audit values, configure test generation, or rerun a saved suite:
 ```sh
 helm hypothesis audit ./path/to/chart
 helm hypothesis test ./path/to/chart --strict
-helm hypothesis test ./path/to/chart --max-examples 50 --seed 42
+helm hypothesis test ./path/to/chart --paths --max-examples 50 --seed 42
 helm hypothesis test ./path/to/chart --permutations 2
+helm hypothesis test ./path/to/chart --exhaustive-group ingress,service
+helm hypothesis test ./path/to/chart --dry-run
 helm hypothesis test ./path/to/chart --match replicas
 helm hypothesis generate ./path/to/chart --output generated-tests
 helm hypothesis run generated-tests
 ```
 
-`test` generates a Python property per values path, executes the suite inside the
-plugin environment, and returns its exit status. Generated source, values,
+`test` automatically enumerates supported finite configuration spaces with fewer
+than 10,000 candidate assignments when they fit the case budget. Larger finite spaces use
+pairwise coverage plus affordable exhaustive groups inferred from constraints and
+templates. Unbounded or unsupported schemas fall back to per-path properties with
+a logged reason. `--paths` explicitly selects generated per-path testing.
+
+The per-path workflow generates a Python property per values path, executes the suite
+inside the plugin environment, and returns its exit status. Generated source, values,
 schemas, JUnit results and a run report stay in `reports/hypothesis-helm` by default.
 Use `--artifact-dir` to choose a different location. Tests default to `--jobs auto`,
 which adjusts concurrency using PID throughput feedback. Set `--jobs N` for a fixed
@@ -84,9 +92,15 @@ and a path/strategy inventory. Source charts remain unchanged. Inferred contract
 and unresolved template constructs need review; sampled tests do not prove
 complete template branch coverage or totality.
 
-Use `--permutations N` to cover every valid combination of any `N` finite
-schema factors: `2` covers pairs, `3` covers triples. This mode varies settings
-together across the chart. It requires enumerable domains (such as booleans,
+Use `--permutations N` to cover every valid interaction among any `N` finite
+schema factors: `2` covers pairs, `3` covers triples. Small spaces still receive
+full enumeration; `--exhaustive-threshold 0` disables that promotion. Repeat
+`--exhaustive-group ingress,service` to require selected groups. Logs and reports
+show planned, completed and remaining iterations, timing estimates, and the count
+change from the previous run in the same artifact directory. Finite runs test each
+distinct normalized configuration once, including defaults; equivalent overrides
+are deduplicated before rendering. Array order remains significant. This mode requires
+enumerable domains (such as booleans,
 enums and bounded integers) and refuses incomplete coverage when planning limits
 are exceeded. See [interaction coverage](docs/usage.md#interaction-coverage)
 for factor definitions, limits and reports.
@@ -167,7 +181,7 @@ The amount of work is concrete:
 renders is the observed successful result for this example, not a general promise
 of `--max-examples 6`: rejected inputs, failure replay, and shrinking can change the
 work. Removing `--match` runs all four properties, each with its own example budget;
-it does not enumerate the `6 × 2 × 2 = 24` whole-chart combinations. Progress and
+it does not enumerate the `6 × 2 × 2 = 24` whole-chart configurations. Progress and
 ETA count completed properties, so this selected run finishes at **1/1**, not **6/6**.
 
 ## Parallel execution
@@ -209,7 +223,7 @@ sparse checkout.
 Later `test` invocations still discover paths and generate the suite; the main
 saving comes from skipping compatible cached successes. CI defaults, `--rerun all`,
 and changes that invalidate the cache execute the full selection again. Traversing
-all paths does not mean exhaustively testing every possible values combination.
+all paths does not mean exhaustively testing every distinct configuration.
 
 Use `--dry-run` to estimate work from the current cache before executing tests:
 
@@ -493,3 +507,18 @@ Enable optional Kubernetes API schema validation using
 The version defaults to the latest published stable schemas; strict schemas are
 cached through a sparse Git checkout for offline and parallel reuse.
 See [API conformity setup](docs/usage.md#kubernetes-api-conformity).
+
+Rendered bundles also use an in-memory SHA-256 index to reuse successful standard
+manifest validation for identical output. Helm and custom assertions still run
+for each input. Reports expose duplicate-output and validation-reuse counts;
+indexes are local to a whole-chart run or pytest worker, not shared across CI jobs.
+See [rendered-output comparison](docs/usage.md#in-memory-rendered-output-comparison).
+
+Permutation planning uses a shared [typed values model](docs/usage.md#shared-typed-values-model):
+dynamic attrs classes mirror declared values, cattrs preserves their mapping shape,
+and factors and inferred groups reference the same schema-derived field identities.
+
+Use `--prune-equivalent` for conservative pre-render pruning against successfully
+rendered representatives. Unknown behavior still renders, and custom assertions
+run for every input. The [proof compiler contract](docs/safe-pruning.md) describes
+its supported subset, exact-equivalence bounds and per-candidate certificates.

@@ -17,6 +17,7 @@ jsonschema = "^4.23"
 attrs = "^25.3"
 pytest = "^8.3"
 rich = ">=13,<15"
+cattrs = ">=25.3,<27"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15"

@@ -7,8 +7,10 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
@@ -21,12 +23,23 @@ from ruamel.yaml.error import YAMLError
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.presence import has_path
 from hypothesis_helm.charts.templates import discover
+from hypothesis_helm.compiler.pruning import Pruner
+from hypothesis_helm.execution.render_hashes import RenderHashes, process_hashes
 from hypothesis_helm.reporting.output import emit_manifest
+from hypothesis_helm.reporting.permutations import PermutationStatistics
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.schemas.combinations import plan_interactions
-from hypothesis_helm.schemas.conformity import validate
-from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
+from hypothesis_helm.schemas.conformity import ENVIRONMENT, validate
+from hypothesis_helm.schemas.contracts import (
+    configuration_key,
+    json_value,
+    mapping,
+    schema_strategy,
+    sequence,
+)
 from hypothesis_helm.schemas.finite import enumerate_values
+from hypothesis_helm.schemas.groups import ExhaustiveGroup, infer_groups
+from hypothesis_helm.schemas.model import ValuesModel
 
 LOGGER = logging.getLogger(__name__)
 
@@ -307,6 +320,7 @@ def render(
     release: str = "hypothesis",
     namespace: str = "default",
     kube_version: str | None = None,
+    hashes: RenderHashes | None = None,
 ) -> list[dict[str, object]]:
     """
     Render locally with Helm schema checks enabled and a subprocess deadline.
@@ -319,6 +333,8 @@ def render(
         release (str): Release name supplied to Helm.
         namespace (str): Release namespace supplied to Helm.
         kube_version (str | None): Optional Kubernetes capability version supplied to Helm.
+
+        hashes (RenderHashes | None): Run index, or the current process index by default.
 
     Returns:
         list[dict[str, object]]: Result of the documented operation.
@@ -350,11 +366,30 @@ def render(
             raise RenderFailure(f"invalid rendered YAML: {exc}") from exc
     for resource in resources:
         emit_manifest(resource)
-    validate_resources(resources)
+
+    def validate_bundle() -> None:
+        """
+        Validate the complete output before committing a successful cache entry.
+
+        Returns:
+            None: Manifest checks pass or their failure propagates.
+        """
+        validate_resources(resources)
+        try:
+            validate(process.stdout, timeout)
+        except AssertionError as exc:
+            raise RenderFailure(str(exc)) from exc
+
+    context = json.dumps(
+        {"resource_contract": 1, "conformity": os.environ.get(ENVIRONMENT), "timeout": timeout},
+        sort_keys=True,
+    )
     try:
-        validate(process.stdout, timeout)
-    except AssertionError as exc:
-        raise RenderFailure(str(exc)) from exc
+        (hashes if hashes is not None else process_hashes()).check(
+            resources, context, validate_bundle
+        )
+    except (TypeError, ValueError) as exc:
+        raise RenderFailure(f"invalid rendered manifest: {exc}") from exc
     return [mapping(resource) for resource in resources]
 
 
@@ -371,9 +406,15 @@ def check_chart(
     allow_empty: bool = False,
     artifact_dir: Path | None = None,
     exhaustive: bool = False,
-    max_cases: int = 1000,
+    max_cases: int = 10000,
     permutations: int | None = None,
     max_candidates: int = 100000,
+    exhaustive_threshold: int = 10000,
+    exhaustive_groups: tuple[ExhaustiveGroup, ...] = (),
+    infer_exhaustive_groups: bool = True,
+    max_group_cases: int = 256,
+    dry_run: bool = False,
+    prune_equivalent: bool = False,
     properties: tuple[Callable[[list[dict[str, object]]], None], ...] = (),
 ) -> dict[str, object]:
     """
@@ -397,6 +438,12 @@ def check_chart(
         max_cases (int): Maximum exhaustive domain or interaction suite and factor size.
         permutations (int | None): Required finite interaction strength when supplied.
         max_candidates (int): Maximum interaction planning inventory and search work.
+        exhaustive_threshold (int): Enumerate smaller Cartesian spaces automatically.
+        exhaustive_groups (tuple[ExhaustiveGroup, ...]): Explicitly required local groups.
+        infer_exhaustive_groups (bool): Infer additional groups from schema and templates.
+        max_group_cases (int): Maximum candidate size of an automatically inferred group.
+        dry_run (bool): Plan permutations without rendering or updating history.
+        prune_equivalent (bool): Skip Helm only with a successful exact-equivalence witness.
         properties (tuple[Callable[[list[dict[str, object]]], None], ...]): Additional assertions
             over rendered resources.
 
@@ -409,24 +456,74 @@ def check_chart(
         raise ValueError("max_examples and timeout must be positive")
     if permutations is not None and exhaustive:
         raise ValueError("permutations and exhaustive are mutually exclusive")
+    if dry_run and permutations is None:
+        raise ValueError("whole-chart dry runs require permutations")
+    planning_started = time.perf_counter()
+    hashes = RenderHashes(scope="run-local")
+    model = (
+        ValuesModel.from_schema(chart.schema)
+        if permutations is not None or prune_equivalent
+        else None
+    )
+    pruner = (
+        Pruner(chart.path, chart.defaults, model)
+        if prune_equivalent and model is not None
+        else None
+    )
+    if pruner is not None and (not release or not namespace):
+        pruner.disabled = "empty release or namespace is outside the fixed-context proof contract"
     interaction_plan = None
+    group_diagnostics: list[dict[str, object]] = []
     if permutations is not None:
+        LOGGER.info(
+            "Planning %d-way permutations (max cases %d, max candidates %d)",
+            permutations,
+            max_cases,
+            max_candidates,
+        )
         validator = validators.validator_for(chart.schema)(chart.schema)
+        assert model is not None
+        inferred: list[ExhaustiveGroup] = []
+        if infer_exhaustive_groups:
+            inferred, group_diagnostics = infer_groups(chart.path, model)
         interaction_plan = plan_interactions(
-            chart.schema,
+            model,
             permutations,
             max_cases=max_cases,
             max_candidates=max_candidates,
             accept=lambda values: validator.is_valid(
                 json_value(merge_values(chart.defaults, values))
             ),
+            exhaustive_threshold=exhaustive_threshold,
+            exhaustive_groups=(*exhaustive_groups, *inferred),
+            max_group_cases=max_group_cases,
         )
     finite_values = enumerate_values(chart.schema, max_cases) if exhaustive else None
+    finite_domain_size = len(finite_values) if finite_values is not None else None
+    duplicate_cases_removed = 0
+    if interaction_plan is not None:
+        finite_values = interaction_plan.values
+    if finite_values is not None:
+        seen = {configuration_key(chart.defaults)}
+        distinct: list[dict[str, object]] = []
+        for values in finite_values:
+            identity = configuration_key(merge_values(chart.defaults, values))
+            if identity in seen:
+                duplicate_cases_removed += 1
+            else:
+                seen.add(identity)
+                distinct.append(values)
+        finite_values = distinct
+        if interaction_plan is not None:
+            interaction_plan.values = distinct
+            interaction_plan.duplicate_cases_removed = duplicate_cases_removed
     coverage: dict[str, object] = {}
+    statistics = None
     if interaction_plan is not None:
         finite_values = interaction_plan.values
         coverage = {
             "mode": "permutations",
+            "coverage_strategy": interaction_plan.strategy,
             "requested_strength": permutations,
             "effective_strength": interaction_plan.strength,
             "factors": [list(path) for path in interaction_plan.factors],
@@ -434,10 +531,51 @@ def check_chart(
             "planned_cases": len(interaction_plan.values),
             "valid_interactions": interaction_plan.interactions,
             "planning_candidates": interaction_plan.candidates,
+            "exhaustive_groups": interaction_plan.group_reports,
+            "group_diagnostics": group_diagnostics,
             "coverage_complete": False,
             "proof_of_totality": False,
             "scope": "schema-valid finite factor interactions with schema-valid merged values",
         }
+        statistics = PermutationStatistics(
+            chart.path,
+            interaction_plan,
+            artifact_dir,
+            time.perf_counter() - planning_started,
+            {
+                "helm": helm,
+                "release": release,
+                "namespace": namespace,
+                "kube_version": kube_version,
+                "timeout": timeout,
+                "allow_empty": allow_empty,
+                "conformity": os.environ.get(ENVIRONMENT),
+                "custom_properties": bool(properties),
+                "prune_equivalent": prune_equivalent,
+            },
+        )
+        LOGGER.info("Coverage strategy: %s", interaction_plan.strategy)
+        for group in interaction_plan.group_reports:
+            LOGGER.info(
+                "Exhaustive group %s: %s (%s candidate assignments)%s",
+                group["source"],
+                group["status"],
+                group["candidate_assignments"],
+                f"; {group['reason']}" if group["reason"] else "",
+            )
+        for diagnostic in group_diagnostics:
+            LOGGER.info("Group inference needs review: %s", diagnostic)
+        if dry_run:
+            return {
+                **coverage,
+                **statistics.snapshot(),
+                "status": "dry-run",
+                "exit_code": 0,
+                "chart": str(chart.path),
+                "attempts": 0,
+                "render_hashes": hashes.snapshot(),
+                **({"pruning": pruner.report()} if pruner is not None else {}),
+            }
     count = 0
     last_failure = None
 
@@ -453,47 +591,88 @@ def check_chart(
         """
         nonlocal count, last_failure
         count += 1
+        iteration_started = time.perf_counter()
+        passed = False
         try:
             effective = merge_values(chart.defaults, values)
             validators.validator_for(chart.schema)(chart.schema).validate(json_value(effective))
-            resources = render(
-                chart,
-                values,
-                helm=helm,
-                timeout=timeout,
-                release=release,
-                namespace=namespace,
-                kube_version=kube_version,
-            )
+            witness = None
+            resources = None
+            if pruner is not None:
+                context = configuration_key(
+                    {
+                        "helm": helm,
+                        "release": release,
+                        "namespace": namespace,
+                        "kube_version": kube_version,
+                        "timeout": timeout,
+                        "allow_empty": allow_empty,
+                        "environment": dict(os.environ),
+                    }
+                )
+                witness = pruner.candidate(values, effective, context)
+                resources = pruner.lookup(witness, count)
+            if resources is None:
+                resources = render(
+                    chart,
+                    values,
+                    helm=helm,
+                    timeout=timeout,
+                    release=release,
+                    namespace=namespace,
+                    kube_version=kube_version,
+                    hashes=hashes,
+                )
+            else:
+                for resource in resources:
+                    emit_manifest(resource)
+            pristine = copy.deepcopy(resources) if pruner is not None else []
             if not resources and not allow_empty:
                 raise RenderFailure("chart rendered no resources (use allow_empty explicitly)")
             for prop in properties:
                 prop(resources)
-        except Exception as exc:
+            passed = True
+            if pruner is not None:
+                pruner.remember(witness, count, pristine)
+        except (Exception, KeyboardInterrupt) as exc:
             last_failure = (values, str(exc))
             raise
+        finally:
+            if statistics is not None:
+                statistics.advance(passed, time.perf_counter() - iteration_started)
 
-    def save_failure(exc: Exception) -> dict[str, object]:
+    def save_failure(exc: BaseException) -> dict[str, object]:
         """
         Persist the final counterexample and construct its failure report.
 
         Args:
-            exc (Exception): Failure raised while checking or generating a chart input.
+            exc (BaseException): Failure or interruption while checking a chart input.
 
         Returns:
             dict[str, object]: Resulting schema, values mapping, or structured report.
         """
+        hashes.log_summary()
+        if pruner is not None:
+            LOGGER.info(
+                "Exact-equivalence pruning: %d rendered, %d proved equivalent",
+                pruner.rendered,
+                len(pruner.certificates),
+            )
         values, message = last_failure or ({}, str(exc))
         result = {
             **coverage,
-            "status": "failed",
+            "status": "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
             "chart": str(chart.path),
             "seed": random_seed,
             "attempts": count,
             "error": message,
             "values": values,
             "failure_type": type(exc).__name__,
+            "render_hashes": hashes.snapshot(),
+            **({"pruning": pruner.report()} if pruner is not None else {}),
         }
+        if statistics is not None:
+            result.update(statistics.finish(str(result["status"]), message))
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
             (artifact_dir / "values.json").write_text(json.dumps(values, indent=2) + "\n")
@@ -502,6 +681,10 @@ def check_chart(
 
     try:
         check({})
+    except KeyboardInterrupt as exc:
+        if statistics is not None or pruner is not None:
+            save_failure(exc)
+        raise
     except Exception as exc:
         return save_failure(exc)
 
@@ -509,19 +692,41 @@ def check_chart(
         try:
             for values in finite_values:
                 check(values)
+        except KeyboardInterrupt as exc:
+            if statistics is not None or pruner is not None:
+                save_failure(exc)
+            raise
         except Exception as exc:
             return save_failure(exc)
-        return {
+        hashes.log_summary()
+        if pruner is not None:
+            LOGGER.info(
+                "Exact-equivalence pruning: %d rendered, %d proved equivalent",
+                pruner.rendered,
+                len(pruner.certificates),
+            )
+        result = {
+            "render_hashes": hashes.snapshot(),
+            **({"pruning": pruner.report()} if pruner is not None else {}),
             "status": "passed",
             "chart": str(chart.path),
+            "seed": random_seed,
             "attempts": count,
             "mode": "exhaustive",
-            **({"domain_size": len(finite_values)} if exhaustive else {}),
+            **({"domain_size": finite_domain_size} if exhaustive else {}),
+            "unique_configurations": len(finite_values) + 1,
+            "duplicate_cases_removed": duplicate_cases_removed,
             "scope": "all schema-valid overrides in this finite domain, current Helm environment",
             "proof_of_totality": False,
             **coverage,
             **({"coverage_complete": True} if interaction_plan is not None else {}),
         }
+        if statistics is not None:
+            result.update(statistics.finish("passed"))
+        if artifact_dir is not None and (statistics is not None or pruner is not None):
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
+        return result
 
     @seed(random_seed)
     @settings(
@@ -547,9 +752,22 @@ def check_chart(
 
     try:
         property_test()
+    except KeyboardInterrupt as exc:
+        if pruner is not None:
+            save_failure(exc)
+        raise
     except Exception as exc:
         return save_failure(exc)
-    return {
+    hashes.log_summary()
+    if pruner is not None:
+        LOGGER.info(
+            "Exact-equivalence pruning: %d rendered, %d proved equivalent",
+            pruner.rendered,
+            len(pruner.certificates),
+        )
+    result = {
+        "render_hashes": hashes.snapshot(),
+        **({"pruning": pruner.report()} if pruner is not None else {}),
         "status": "passed",
         "chart": str(chart.path),
         "seed": random_seed,
@@ -558,3 +776,8 @@ def check_chart(
         "mode": "sampled",
         "proof_of_totality": False,
     }
+
+    if pruner is not None and artifact_dir is not None:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
