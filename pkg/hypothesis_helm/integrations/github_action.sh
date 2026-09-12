@@ -24,7 +24,7 @@ exec helm hypothesis test "${HH_CHART:-.}" \
   --artifact-dir "$HH_ARTIFACT_DIR" \
   --output json \
   --rerun "${HH_RERUN:-auto}" \
-  --match "${HH_MATCH:-}" \
+  ${HH_MATCH:+--match "$HH_MATCH"} \
   --cache-dir "${HH_CACHE_DIR:-$HH_RESULT_DIR/cache}" \
   ${disable_schema_caching:+--disable-schema-caching} \
   ${disable_cache:+--no-cache} \

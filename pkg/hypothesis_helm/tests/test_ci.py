@@ -104,8 +104,9 @@ def test_cli_defaults_to_ci_detection(tmp_path: Path, monkeypatch: pytest.Monkey
 
 @pytest.mark.parametrize("exit_code", [0, 1])
 @pytest.mark.parametrize("security", [False, True])
+@pytest.mark.parametrize("keyword", ["", "replicas or image"])
 def test_action_preserves_arguments_outputs_and_status(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exit_code: int, security: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exit_code: int, security: bool, keyword: str
 ) -> None:
     """
     Pass untrusted-looking input literally and export artifacts even on test failure.
@@ -115,6 +116,7 @@ def test_action_preserves_arguments_outputs_and_status(
         monkeypatch (pytest.MonkeyPatch): Fixture replacing the Helm process boundary.
         exit_code (int): Simulated successful or failed Helm result.
         security (bool): Whether the optional scanner reports a security failure.
+        keyword (str): Optional pytest selection, omitted entirely when empty.
 
     Returns:
         None: The Bash invocation preserves literal values, status and shard artifact paths.
@@ -123,7 +125,7 @@ def test_action_preserves_arguments_outputs_and_status(
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
     monkeypatch.setenv("HH_ARTIFACT_DIR", str(tmp_path / "reports"))
     monkeypatch.setenv("HH_CHART", "$(touch unexpected); chart")
-    monkeypatch.setenv("HH_MATCH", "replicas or image")
+    monkeypatch.setenv("HH_MATCH", keyword)
     monkeypatch.setenv("HH_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.setenv("HH_RERUN", "failed")
     monkeypatch.setenv("HH_DISABLE_SCHEMA_CACHING", "true")
@@ -208,7 +210,10 @@ def test_action_preserves_arguments_outputs_and_status(
     assert command[:3] == ["helm", "hypothesis", "test"]
     assert "$(touch unexpected); chart" in command[3]
     assert command[command.index("--shard") + 1] == "2/3"
-    assert command[command.index("--match") + 1] == "replicas or image"
+    if keyword:
+        assert command[command.index("--match") + 1] == keyword
+    else:
+        assert "--match" not in command
     assert command[command.index("--cache-dir") + 1] == str(tmp_path / "cache")
     assert command[command.index("--rerun") + 1] == ("all" if security else "failed")
     assert "--disable-schema-caching" in command
