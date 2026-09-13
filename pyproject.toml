@@ -18,6 +18,12 @@ attrs = "^25.3"
 pytest = "^8.3"
 rich = ">=13,<15"
 cattrs = ">=25.3,<27"
+matplotlib = {version = ">=3.10,<4", optional = true}
+numpy = {version = ">=2,<3", optional = true}
+reportlab = ">=4,<5"
+
+[tool.poetry.extras]
+benchmarking = ["matplotlib", "numpy"]
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15"
@@ -32,6 +38,9 @@ numpy = ">=2,<3"
 
 [tool.poetry.scripts]
 hypothesis-helm = "hypothesis_helm.cli:main"
+hypothesis-helm-benchmark = "hypothesis_helm.benchmarking.cli:main"
+hypothesis-helm-kubesec = "hypothesis_helm.integrations.kubesec:main"
+hypothesis-helm-github-action = "hypothesis_helm.integrations.github_action:main"
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]
@@ -42,8 +51,9 @@ testpaths = ["pkg/hypothesis_helm/tests"]
 markers = ["integration: requires Helm", "astrivant: optional neighboring Astrivant chart", "hypothesis_helm_path(path): schema path exercised by a generated test"]
 
 [tool.ruff]
-line-length = 100
+line-length = 140
 target-version = "py313"
+extend-exclude = ["third_party"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "D"]
@@ -55,7 +65,7 @@ convention = "google"
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["pkg", "scripts"]
+files = ["pkg"]
 disallow_any_explicit = true
 disallow_any_unimported = true
 

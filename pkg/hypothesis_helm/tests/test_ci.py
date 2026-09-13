@@ -155,9 +155,7 @@ def test_action_preserves_arguments_outputs_and_status(
     monkeypatch.setenv("FAKE_HELM_STATUS", str(exit_code))
     calls: list[list[str]] = []
 
-    def execute(
-        self: Processes, command: list[str], *, stdout: TextIO, **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def execute(self: Processes, command: list[str], *, stdout: TextIO, **kwargs: object) -> subprocess.CompletedProcess[str]:
         """
         Capture a Helm invocation and emulate streaming a manifest.
 
@@ -234,9 +232,7 @@ def test_action_preserves_arguments_outputs_and_status(
 @pytest.mark.parametrize("provider", ["gitlab", "circleci"])
 @pytest.mark.parametrize("security", [False, True])
 @pytest.mark.parametrize("helm_status", [0, 1])
-def test_remote_ci_commands(
-    tmp_path: Path, provider: str, security: bool, helm_status: int
-) -> None:
+def test_remote_ci_commands(tmp_path: Path, provider: str, security: bool, helm_status: int) -> None:
     """
     Exercise published job scripts with literal paths, shard routing and validator failures.
 
@@ -262,7 +258,7 @@ def test_remote_ci_commands(
         steps = sequence(mapping(mapping(document["commands"])["test"])["steps"])
         script = str(mapping(mapping(steps[0])["run"])["command"])
     plugins = tmp_path / "plugin root"
-    scanner = plugins / "hypothesis/.plugin-venv/bin/python"
+    scanner = plugins / "hypothesis/.plugin-venv/bin/hypothesis-helm-kubesec"
     scanner.parent.mkdir(parents=True)
     binary = tmp_path / "helm"
     stub = dedent(

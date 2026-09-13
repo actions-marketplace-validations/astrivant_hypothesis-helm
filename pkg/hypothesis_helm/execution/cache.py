@@ -2,12 +2,13 @@
 Persist completed property outcomes and select local retries.
 """
 
+import fcntl
 import hashlib
 import json
 import logging
 import os
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from importlib.metadata import version
 from pathlib import Path
 from uuid import uuid4
@@ -81,17 +82,12 @@ def fingerprint(
             excluded = (*excluded, Path(settings["cache_root"]))
         digest.update(
             json.dumps(
-                {
-                    k: v
-                    for k, v in settings.items()
-                    if k not in {"schemas", "cache_root", "executable"}
-                },
+                {k: v for k, v in settings.items() if k not in {"schemas", "cache_root", "executable"}},
                 sort_keys=True,
             ).encode()
         )
     files = sorted(directory.glob("*.py")) + [
-        directory / name
-        for name in ("values.coalesced.yaml", "values.inferred.schema.json", "chart-source.json")
+        directory / name for name in ("values.coalesced.yaml", "values.inferred.schema.json", "chart-source.json")
     ]
     for package in ("hypothesis", "hypothesis-jsonschema", "jsonschema", "ruamel.yaml", "pytest"):
         digest.update(f"{package}={version(package)}".encode())
@@ -104,11 +100,7 @@ def fingerprint(
                 digest.update(file.relative_to(chart).as_posix().encode())
                 digest.update(hashlib.sha256(file.read_bytes()).digest())
     package_root = Path(__file__).resolve().parents[1]
-    files += sorted(
-        file
-        for file in package_root.rglob("*.py")
-        if "tests" not in file.relative_to(package_root).parts
-    )
+    files += sorted(file for file in package_root.rglob("*.py") if "tests" not in file.relative_to(package_root).parts)
     for file in files:
         if file.is_file():
             digest.update(file.name.encode())
@@ -129,8 +121,7 @@ def read_outcomes(path: Path) -> dict[str, str]:
     try:
         data = json.loads(path.read_text())
         if not isinstance(data, dict) or any(
-            not isinstance(key, str) or value not in ("passed", "failed", "skipped")
-            for key, value in data.items()
+            not isinstance(key, str) or value not in ("passed", "failed", "skipped") for key, value in data.items()
         ):
             raise ValueError("invalid outcomes")
         return dict(data)
@@ -138,7 +129,34 @@ def read_outcomes(path: Path) -> dict[str, str]:
         return {}
 
 
-def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+def merge_outcomes(path: Path, baseline: dict[str, str], updates: dict[str, str]) -> dict[str, str]:
+    """
+    Merge concurrent cache publications without dropping independent outcomes or failures.
+
+    Args:
+        path (Path): Shared cache entry.
+        baseline (dict[str, str]): Snapshot read before this run.
+        updates (dict[str, str]): Outcomes completed by this run's workers.
+
+    Returns:
+        dict[str, str]: Atomically published union; conflicting concurrent failures win.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.with_suffix(".lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        current = read_outcomes(path)
+        for node, outcome in updates.items():
+            if current.get(node) != baseline.get(node) and current.get(node) == "failed":
+                continue
+            current[node] = outcome
+        temporary = path.with_suffix(f".{uuid4().hex}.tmp")
+        temporary.write_text(json.dumps(current, indent=2) + "\n")
+        temporary.replace(path)
+        return current
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> Iterator[None]:
     """
     Exclude cached successes while retaining failures and unseen properties.
 
@@ -146,9 +164,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         config (pytest.Config): Active pytest configuration.
         items (list[pytest.Item]): Collected tests.
 
-    Returns:
-        None: Cached successes are deselected.
+    Yields:
+        None: Keyword selection and shard inventory finish before cached successes are removed.
     """
+    yield
     source = os.environ.get("HYPOTHESIS_HELM_CACHE_READ")
     if not source:
         return

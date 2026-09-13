@@ -25,9 +25,7 @@ def test_nested_trim() -> None:
     assert stages[0] is values
     for previous, current in zip(stages, stages[1:], strict=False):
         assert all(item in previous for item in current)
-        assert [item["value"] for item in current] == sorted(
-            int(str(item["value"])) for item in current
-        )
+        assert [item["value"] for item in current] == sorted(int(str(item["value"])) for item in current)
     assert stages[1] == trim_values(values, 1, 2026)
     assert stages[1] != trim_values(values, 1, 2027)
     assert trim_values([], 100, 0) == []
@@ -48,9 +46,7 @@ def test_trim_reports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     rendered: list[dict[str, object]] = []
 
-    def render(
-        chart: object, values: dict[str, object], **kwargs: object
-    ) -> list[dict[str, object]]:
+    def render(chart: object, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
         """
         Record planned cases without invoking Helm.
 
@@ -111,19 +107,17 @@ def test_topology_sampling(tmp_path: Path) -> None:
     Returns:
         None: Region floors, nesting, unknown fallback and CLI composition hold.
     """
+    from hypothesis_helm.benchmarking.generate_benchmark_chart import generate
     from hypothesis_helm.charts.runner import Chart
     from hypothesis_helm.cli import argument_parser
     from hypothesis_helm.compiler.topology import trim_topology
     from hypothesis_helm.schemas.finite import enumerate_values
-    from scripts.generate_benchmark_chart import generate
 
     generate(tmp_path, input_complexity=10, output_bins=4, topology=True)
     chart = Chart.load(tmp_path)
     values = enumerate_values(chart.schema, 2000)
     first, first_report = trim_topology(tmp_path, chart.defaults, values, values, 1, 2026)
-    combined, report = trim_topology(
-        tmp_path, chart.defaults, values, values, 1, 2026, random_steps=1
-    )
+    combined, report = trim_topology(tmp_path, chart.defaults, values, values, 1, 2026, random_steps=1)
     assert 0 < len(combined) < len(first) < len(values)
     assert all(item in first for item in combined)
     assert report["region_count"] == first_report["region_count"]
@@ -151,9 +145,9 @@ def test_topology_generator_oracle(tmp_path: Path) -> None:
     """
     import shutil
 
+    from hypothesis_helm.benchmarking.generate_benchmark_chart import generate
+    from hypothesis_helm.benchmarking.topology import validate_topology
     from hypothesis_helm.charts.runner import Chart, render
-    from scripts.benchmarking.topology import validate_topology
-    from scripts.generate_benchmark_chart import generate
 
     if not shutil.which("helm"):
         pytest.skip("Helm required")

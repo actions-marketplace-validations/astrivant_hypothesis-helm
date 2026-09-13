@@ -9,13 +9,13 @@ from textwrap import dedent
 
 import pytest
 
+from hypothesis_helm.benchmarking.benchmark_expansion import compare
+from hypothesis_helm.benchmarking.benchmark_matrix import bundle_key
+from hypothesis_helm.benchmarking.structures import configmap
 from hypothesis_helm.charts.runner import Chart, check_chart
 from hypothesis_helm.compiler.expansion import FailureExpansion
 from hypothesis_helm.reporting.budget import TimeLimitReached
-from hypothesis_helm.schemas.contracts import configuration_key, mapping
-from scripts.benchmark_expansion import compare
-from scripts.benchmark_matrix import bundle_key
-from scripts.benchmarking.structures import configmap
+from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
 
 @pytest.fixture
@@ -83,9 +83,7 @@ def error_output(values: dict[str, object]) -> list[dict[str, object]]:
     Returns:
         list[dict[str, object]]: Exact error-status manifest bundle.
     """
-    return [
-        configmap("benchmark-error", {"status": "incorrect" if values.get("a") else "expected"})
-    ]
+    return [configmap("benchmark-error", {"status": "incorrect" if values.get("a") else "expected"})]
 
 
 def reject_error(resources: list[dict[str, object]]) -> None:
@@ -99,6 +97,61 @@ def reject_error(resources: list[dict[str, object]]) -> None:
         None: The assertion succeeds only for the expected status.
     """
     assert mapping(resources[0]["data"])["status"] == "expected"
+
+
+@pytest.mark.parametrize("sampled", [False, True])
+def test_fail_fast_preserves_first_failure(expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sampled: bool) -> None:
+    """
+    Stop after one faulty render in both sampled and failure-expansion execution.
+
+    Args:
+        expansion_chart (Chart): Two-region chart fixture.
+        monkeypatch (pytest.MonkeyPatch): Replace Helm with the independent output oracle.
+        tmp_path (Path): Failure artifact destination.
+        sampled (bool): Use Hypothesis sampling instead of finite expansion.
+
+    Returns:
+        None: No confirmation, shrinking, or expansion renders follow the first failure.
+    """
+    from hypothesis import strategies as st
+
+    calls: list[dict[str, object]] = []
+
+    def render(chart: Chart, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
+        """
+        Record renders and produce the fixture's independent expected output.
+
+        Args:
+            chart (Chart): Chart under test.
+            values (dict[str, object]): Generated overrides.
+            **kwargs (object): Renderer options.
+
+        Returns:
+            list[dict[str, object]]: Oracle manifests.
+        """
+        calls.append(values)
+        return error_output(values)
+
+    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    report = check_chart(
+        expansion_chart,
+        permutations=None if sampled else 2,
+        trim_topology=0 if sampled else 2,
+        expand_failures=not sampled,
+        fail_fast=True,
+        input_strategy=st.just({"a": True, "b": False, "c": False}) if sampled else None,
+        properties=(reject_error,),
+        infer_exhaustive_groups=False,
+        artifact_dir=tmp_path / "reports",
+    )
+    assert report["status"] == "failed"
+    assert sum(bool(values.get("a")) for values in calls) == 1
+    assert calls[-1]["a"] is True
+    assert report["attempts"] == len(calls)
+    assert json.loads((tmp_path / "reports/values.json").read_text()) == calls[-1]
+    if not sampled:
+        assert report["failed_iterations"] == 1
+        assert mapping(report["failure_expansion"])["additional_scheduled"] == 0
 
 
 @pytest.mark.parametrize("limited", [False, True])
@@ -125,9 +178,7 @@ def test_expansion_execution(
     """
     calls: list[dict[str, object]] = []
 
-    def render(
-        chart: Chart, values: dict[str, object], **kwargs: object
-    ) -> list[dict[str, object]]:
+    def render(chart: Chart, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
         """
         Simulate Helm output or a deadline during an added render.
 
@@ -173,14 +224,10 @@ def test_expansion_execution(
         assert details["additional_executed"] == 3
         assert report["remaining_iterations"] == 0
         assert report["completed_iterations"] == report["attempts"]
-    assert json.loads((tmp_path / "reports/report.json").read_text()) == json.loads(
-        json.dumps(report)
-    )
+    assert json.loads((tmp_path / "reports/report.json").read_text()) == json.loads(json.dumps(report))
 
 
-def test_expansion_scheduler_and_benchmark(
-    expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_expansion_scheduler_and_benchmark(expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Expand only observed failures and preserve exact output coverage while increasing input recall.
 
@@ -191,13 +238,8 @@ def test_expansion_scheduler_and_benchmark(
     Returns:
         None: Duplicate triggers do not reschedule inputs and no oracle labels guide selection.
     """
-    values: list[dict[str, object]] = [
-        dict(zip(("a", "b", "c"), bits, strict=True))
-        for bits in itertools.product((False, True), repeat=3)
-    ]
-    scheduler = FailureExpansion.build(
-        expansion_chart.path, expansion_chart.defaults, values, values, [0, 4]
-    )
+    values: list[dict[str, object]] = [dict(zip(("a", "b", "c"), bits, strict=True)) for bits in itertools.product((False, True), repeat=3)]
+    scheduler = FailureExpansion.build(expansion_chart.path, expansion_chart.defaults, values, values, [0, 4])
     assert scheduler.failed(4) == [5, 6, 7]
     assert scheduler.failed(5) == []
     assert FailureExpansion({}, {}, {0}).failed(0) == []
@@ -218,13 +260,11 @@ def test_expansion_scheduler_and_benchmark(
         calls.append(value)
         return error_output(value)
 
-    monkeypatch.setattr("scripts.benchmark_expansion.render", render)
+    monkeypatch.setattr("hypothesis_helm.benchmarking.benchmark_expansion.render", render)
     reference: dict[str, object] = {
         "structure": "fixture",
         "values": values,
-        "outcomes": [
-            json.loads(bundle_key(error_output(value))) for value in (values[0], values[4])
-        ],
+        "outcomes": [json.loads(bundle_key(error_output(value))) for value in (values[0], values[4])],
         "outcome_indices": [0] * 4 + [1] * 4,
         "selected_indices": {"topology": [0, 4]},
         "faulty_indices": [],  # Intentionally wrong: scheduling must read observed outputs.
@@ -236,15 +276,30 @@ def test_expansion_scheduler_and_benchmark(
     assert after["additional_indices"] == [5, 6, 7]
     assert calls == values[5:]
     assert after["additional_executed"] == 3
+    restricted = {**reference, "candidate_indices": [0, 4, 5]}
+    _, limited = compare(expansion_chart, restricted, "helm", 30)
+    assert limited["additional_indices"] == [5]
+    assert limited["erroneous_inputs_found"] == 2
+    assert limited["erroneous_inputs_total"] == 4
 
 
-def test_expansion_cli_dry_run(expansion_chart: Chart, capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["--expand-failures", "--trim-topology", "2"],
+        ["--filter"],
+        ["--filter", "--trim", "1"],
+        ["--trim-random", "1", "--filter"],
+    ],
+)
+def test_expansion_cli_dry_run(expansion_chart: Chart, capsys: pytest.CaptureFixture[str], options: list[str]) -> None:
     """
     Expose the opt-in flag and bound failure-dependent work without executing chart tests.
 
     Args:
         expansion_chart (Chart): Finite chart for planning.
         capsys (pytest.CaptureFixture[str]): Captured CLI report.
+        options (list[str]): Individual controls or the combined preset.
 
     Returns:
         None: The dry run declares expansion without claiming observed failures.
@@ -256,9 +311,7 @@ def test_expansion_cli_dry_run(expansion_chart: Chart, capsys: pytest.CaptureFix
             [
                 "test",
                 str(expansion_chart.path),
-                "--expand-failures",
-                "--trim-topology",
-                "2",
+                *options,
                 "--dry-run",
                 "--artifact-dir",
                 str(expansion_chart.path / "reports"),
@@ -270,4 +323,86 @@ def test_expansion_cli_dry_run(expansion_chart: Chart, capsys: pytest.CaptureFix
     assert report["status"] == "dry-run"
     assert report["failure_expansion"]["enabled"] is True
     assert report["failure_expansion"]["maximum_additional_iterations"] > 0
+    if "--filter" in options:
+        assert report["trim_topology"] == 2
+        assert report["trim_random"] == (0 if options == ["--filter"] else 1)
     assert main(["test", str(expansion_chart.path), "--expand-failures", "--whole-chart"]) == 2
+
+
+@pytest.mark.parametrize(
+    "individual",
+    [["--trim-topology", "0"], ["--expand-failures"]],
+)
+@pytest.mark.parametrize("preset_first", [False, True])
+def test_filter_exclusivity(individual: list[str], preset_first: bool) -> None:
+    """
+    Reject preset mixing in either order while retaining individual composition.
+
+    Args:
+        individual (list[str]): Individual method, including an explicit zero level.
+        preset_first (bool): Whether the preset appears before the individual option.
+
+    Returns:
+        None: Parser errors occur before command execution.
+    """
+    from hypothesis_helm.cli import argument_parser
+
+    parser = argument_parser()
+    options = ["--filter", *individual] if preset_first else [*individual, "--filter"]
+    with pytest.raises(SystemExit) as error:
+        parser.parse_args(["test", *options])
+    assert error.value.code == 2
+    parsed = parser.parse_args(["test", "--trim-random", "1", "--trim-topology", "2", "--expand-failures"])
+    assert (parsed.trim, parsed.trim_topology, parsed.expand_failures) == (1, 2, True)
+
+
+def test_topology_depth_sweep(expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Keep depth comparisons matched and preserve pending expansion when the budget expires.
+
+    Args:
+        expansion_chart (Chart): Two-region fixture with a known failing region.
+        monkeypatch (pytest.MonkeyPatch): Substitute deterministic physical render observations.
+
+    Returns:
+        None: Coverage is observed, depths are isolated and censored work is explicit.
+    """
+    from itertools import product
+
+    from hypothesis_helm.benchmarking.benchmark_topology_depth import sweep
+
+    values: list[dict[str, object]] = [dict(zip(("a", "b", "c"), items, strict=True)) for items in product((False, True), repeat=3)]
+    reference: dict[str, object] = {
+        "structure": "fixture",
+        "values": values,
+        "outcomes": [json.loads(bundle_key(error_output(value))) for value in (values[0], values[4])],
+        "outcome_indices": [0] * 4 + [1] * 4,
+    }
+    calls: list[dict[str, object]] = []
+
+    def observed(chart: Chart, value: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
+        """
+        Record every physical expansion execution and return independent oracle resources.
+
+        Args:
+            chart (Chart): Fixed chart.
+            value (dict[str, object]): Executed input.
+            **kwargs (object): Fixed render context.
+
+        Returns:
+            list[dict[str, object]]: Observed manifest bundle.
+        """
+        calls.append(value)
+        return error_output(value)
+
+    monkeypatch.setattr("hypothesis_helm.benchmarking.benchmark_expansion.render", observed)
+    rows = sweep(expansion_chart, reference, [0, 1, 2, 3], 2026, "helm", 30)
+    assert rows[0]["initial_checks"] == 8
+    assert all(row["erroneous_inputs_found"] == 4 for row in rows)
+    assert all(row["trim_random"] == 0 and row["expand_failures"] for row in rows)
+    assert sum(int(str(row["additional_executed"])) for row in rows) == len(calls)
+    assert all(len(sequence(row["checked_indices"])) == len(set(sequence(row["checked_indices"]))) for row in rows)
+    stopped = sweep(expansion_chart, reference, [1, 2], 2026, "helm", 0)
+    assert len(stopped) == 1
+    assert stopped[0]["status"] == "time-limit"
+    assert stopped[0]["remaining"] == 3

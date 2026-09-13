@@ -25,6 +25,7 @@ from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.presence import has_path
 from hypothesis_helm.charts.templates import discover
 from hypothesis_helm.compiler.expansion import FailureExpansion
+from hypothesis_helm.compiler.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.pruning import Pruner
 from hypothesis_helm.compiler.topology import trim_topology as topology_trim
 from hypothesis_helm.execution.render_hashes import RenderHashes, process_hashes
@@ -234,7 +235,7 @@ def audit(chart: Chart) -> dict[str, object]:
 
     from hypothesis_helm.charts.generate import enumerate_paths
 
-    references, diagnostics = discover(chart.path)
+    references, diagnostics = discover(chart.path, prune_literals=True)
     defaults = set(_default_paths(chart.defaults))
     declared = {entry.path: entry.schema for entry in enumerate_paths(chart.schema)}
     paths = defaults | {r.path for r in references if r.path} | declared.keys()
@@ -250,9 +251,7 @@ def audit(chart: Chart) -> dict[str, object]:
         elif not any("type" in n or "enum" in n or "const" in n for n in nodes):
             findings.append({"path": list(path), "issue": "untyped", "references": locations})
         elif not any(n.get("description") for n in nodes):
-            findings.append(
-                {"path": list(path), "issue": "missing-description", "references": locations}
-            )
+            findings.append({"path": list(path), "issue": "missing-description", "references": locations})
         if not has_path(chart.defaults, path):
             findings.append(
                 {
@@ -267,6 +266,7 @@ def audit(chart: Chart) -> dict[str, object]:
         "references": [asdict(r) for r in references],
         "findings": findings,
         "unresolved": [asdict(d) for d in diagnostics],
+        "input_inventory": InputInventory.build(chart).report(),
     }
 
 
@@ -299,11 +299,7 @@ def validate_resources(resources: Sequence[object]) -> None:
             validate_resources(sequence(resource["items"]))
             continue
         metadata = resource.get("metadata")
-        if (
-            not isinstance(metadata, dict)
-            or not isinstance(metadata.get("name"), str)
-            or not metadata["name"]
-        ):
+        if not isinstance(metadata, dict) or not isinstance(metadata.get("name"), str) or not metadata["name"]:
             raise RenderFailure("resource has no metadata.name")
         identity = (
             resource["apiVersion"],
@@ -326,6 +322,7 @@ def render(
     namespace: str = "default",
     kube_version: str | None = None,
     hashes: RenderHashes | None = None,
+    stream: bool = True,
 ) -> list[dict[str, object]]:
     """
     Render locally with Helm schema checks enabled and a subprocess deadline.
@@ -340,13 +337,14 @@ def render(
         kube_version (str | None): Optional Kubernetes capability version supplied to Helm.
 
         hashes (RenderHashes | None): Run index, or the current process index by default.
+        stream (bool): Emit manifests to the configured output stream.
 
     Returns:
         list[dict[str, object]]: Result of the documented operation.
     """
     with tempfile.TemporaryDirectory(prefix="hypothesis-helm-") as directory:
         value_file = Path(directory) / "values.json"
-        value_file.write_text(json.dumps(values, ensure_ascii=True))
+        value_file.write_text(yamlio.json_for_helm(values), encoding="utf-8")
         command = [
             helm,
             "template",
@@ -369,8 +367,9 @@ def render(
             resources = [item for item in yamlio.load_all(process.stdout) if item is not None]
         except YAMLError as exc:
             raise RenderFailure(f"invalid rendered YAML: {exc}") from exc
-    for resource in resources:
-        emit_manifest(resource)
+    if stream:
+        for resource in resources:
+            emit_manifest(resource)
 
     def validate_bundle() -> None:
         """
@@ -390,9 +389,7 @@ def render(
         sort_keys=True,
     )
     try:
-        (hashes if hashes is not None else process_hashes()).check(
-            resources, context, validate_bundle
-        )
+        (hashes if hashes is not None else process_hashes()).check(resources, context, validate_bundle)
     except (TypeError, ValueError) as exc:
         raise RenderFailure(f"invalid rendered manifest: {exc}") from exc
     return [mapping(resource) for resource in resources]
@@ -416,6 +413,7 @@ def check_chart(
     trim: int = 0,
     trim_topology: int = 0,
     expand_failures: bool = False,
+    fail_fast: bool = False,
     max_candidates: int = 100000,
     exhaustive_threshold: int = 10000,
     exhaustive_groups: tuple[ExhaustiveGroup, ...] = (),
@@ -425,6 +423,8 @@ def check_chart(
     time_limit: float = 180.0,
     prune_equivalent: bool = False,
     properties: tuple[Callable[[list[dict[str, object]]], None], ...] = (),
+    input_strategy: SearchStrategy[dict[str, object]] | None = None,
+    input_inventory: InputInventory | None = None,
 ) -> dict[str, object]:
     """
     Check defaults then generated overrides, shrinking failing inputs.
@@ -449,6 +449,7 @@ def check_chart(
         trim (int): Seeded quarter-retention steps applied after finite permutation planning.
         trim_topology (int): Quarter-retention steps within symbolic topology regions.
         expand_failures (bool): Execute omitted members of failed regions within the same budget.
+        fail_fast (bool): Stop after the first failure without shrinking or region expansion.
         max_candidates (int): Maximum interaction planning inventory and search work.
         exhaustive_threshold (int): Enumerate smaller Cartesian spaces automatically.
         exhaustive_groups (tuple[ExhaustiveGroup, ...]): Explicitly required local groups.
@@ -460,9 +461,15 @@ def check_chart(
         properties (tuple[Callable[[list[dict[str, object]]], None], ...]): Additional assertions
             over rendered resources.
 
+        input_strategy (SearchStrategy[dict[str, object]] | None): Optional generation-only
+            preference; the original chart schema remains authoritative.
+        input_inventory (InputInventory | None): Shared compiler inventory for phase comparisons.
+
     Returns:
         dict[str, object]: Resulting schema, values mapping, or structured report.
     """
+    if input_strategy is not None and (permutations is not None or exhaustive):
+        raise ValueError("input_strategy applies to sampled testing only")
     if not isinstance(chart, Chart):
         chart = Chart.load(chart)
     if max_examples < 1 or timeout <= 0:
@@ -484,17 +491,12 @@ def check_chart(
     ):
         raise ValueError("trim must be nonnegative and requires finite permutation planning")
     planning_started = time.perf_counter()
+    inputs = input_inventory if input_inventory is not None else InputInventory.build(chart)
+    field_coverage = FieldCoverage(inputs, chart.defaults)
+    LOGGER.info("Compiler input baseline: %d statically named fields", len(inputs.known))
     hashes = RenderHashes(scope="run-local")
-    model = (
-        ValuesModel.from_schema(chart.schema)
-        if permutations is not None or prune_equivalent
-        else None
-    )
-    pruner = (
-        Pruner(chart.path, chart.defaults, model)
-        if prune_equivalent and model is not None
-        else None
-    )
+    model = ValuesModel.from_schema(chart.schema) if permutations is not None or prune_equivalent else None
+    pruner = Pruner(chart.path, chart.defaults, model) if prune_equivalent and model is not None else None
     if pruner is not None and (not release or not namespace):
         pruner.disabled = "empty release or namespace is outside the fixed-context proof contract"
     interaction_plan = None
@@ -516,9 +518,7 @@ def check_chart(
             permutations,
             max_cases=max_cases,
             max_candidates=max_candidates,
-            accept=lambda values: validator.is_valid(
-                json_value(merge_values(chart.defaults, values))
-            ),
+            accept=lambda values: validator.is_valid(json_value(merge_values(chart.defaults, values))),
             exhaustive_threshold=exhaustive_threshold,
             exhaustive_groups=(*exhaustive_groups, *inferred),
             max_group_cases=max_group_cases,
@@ -575,9 +575,7 @@ def check_chart(
         interaction_plan.values = select_cases(interaction_plan.values)
     trimmed_cases = untrimmed_cases - len(interaction_plan.values) if interaction_plan else 0
     expansion = None
-    expansion_positions = {
-        configuration_key(value): index for index, value in enumerate(expansion_values)
-    }
+    expansion_positions = {configuration_key(value): index for index, value in enumerate(expansion_values)}
     if expand_failures and interaction_plan is not None:
         expansion = FailureExpansion.build(
             chart.path,
@@ -586,21 +584,22 @@ def check_chart(
             [merge_values(chart.defaults, value) for value in expansion_values],
             [
                 0,
-                *(
-                    expansion_positions[configuration_key(value)]
-                    for value in interaction_plan.values
-                ),
+                *(expansion_positions[configuration_key(value)] for value in interaction_plan.values),
             ],
             fixed_names=bool(release and namespace),
         )
     expansion_failures: list[dict[str, object]] = []
     expansion_checked = 0
     expansion_executed = 0
-    coverage: dict[str, object] = {}
+    coverage: dict[str, object] = {
+        "input_inventory": inputs.report(),
+        "field_coverage": field_coverage.statistics,
+    }
     statistics = None
     if interaction_plan is not None:
         finite_values = interaction_plan.values
         coverage = {
+            **coverage,
             "mode": "permutations",
             "trim": trim,
             "trim_random": trim,
@@ -610,9 +609,7 @@ def check_chart(
             "trim_seed": random_seed,
             "untrimmed_iterations": untrimmed_cases + 1,
             "trimmed_iterations": trimmed_cases,
-            "retained_fraction": (len(interaction_plan.values) / untrimmed_cases)
-            if untrimmed_cases
-            else 1.0,
+            "retained_fraction": (len(interaction_plan.values) / untrimmed_cases) if untrimmed_cases else 1.0,
             "coverage_guaranteed_by_plan": not bool(trimmed_cases),
             "coverage_strategy": "trimmed" if trimmed_cases else interaction_plan.strategy,
             "untrimmed_coverage_strategy": interaction_plan.strategy,
@@ -684,9 +681,7 @@ def check_chart(
                     strength,
                     max_cases=max_cases,
                     max_candidates=max_candidates,
-                    accept=lambda values: validator.is_valid(
-                        json_value(merge_values(chart.defaults, values))
-                    ),
+                    accept=lambda values: validator.is_valid(json_value(merge_values(chart.defaults, values))),
                     exhaustive_threshold=0,
                     exhaustive_groups=(*exhaustive_groups, *inferred),
                     max_group_cases=max_group_cases,
@@ -695,9 +690,7 @@ def check_chart(
                 pruning=prune_equivalent,
                 max_cases=max_cases,
                 max_candidates=max_candidates,
-                history=statistics.previous
-                if statistics.previous.get("context") == statistics.context and not properties
-                else {},
+                history=statistics.previous if statistics.previous.get("context") == statistics.context and not properties else {},
                 selector=select_cases,
                 trim_topology=trim_topology,
                 trim=trim,
@@ -851,6 +844,7 @@ def check_chart(
                     witness = pruner.candidate(values, effective, context)
                     resources = pruner.lookup(None if force_render else witness, count)
                 if resources is None:
+                    field_coverage.observe(effective)
                     render_started = time.perf_counter()
                     rendered = True
                     resources = render(
@@ -929,7 +923,7 @@ def check_chart(
         expansion_report(result)
         if artifact_dir is not None:
             artifact_dir.mkdir(parents=True, exist_ok=True)
-            (artifact_dir / "values.json").write_text(json.dumps(values, indent=2) + "\n")
+            (artifact_dir / "values.json").write_text(yamlio.json_for_helm(values, indent=2) + "\n", encoding="utf-8")
             (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
         return result
 
@@ -948,9 +942,13 @@ def check_chart(
                 save_failure(exc)
                 raise
             except Exception as exc:
+                expansion_failures.append({"values": values, "error": str(exc)})
+                if fail_fast:
+                    expansion_checked += 1
+                    expansion_executed += int(position >= initial_count)
+                    return save_failure(exc)
                 if first_error is None:
                     first_error, first_failure = exc, last_failure
-                expansion_failures.append({"values": values, "error": str(exc)})
                 added = expansion.failed(expansion_positions[configuration_key(values)])
                 work.extend(expansion_values[index] for index in added)
                 finite_values.extend(expansion_values[index] for index in added)
@@ -1014,11 +1012,7 @@ def check_chart(
             "scope": "all schema-valid overrides in this finite domain, current Helm environment",
             "proof_of_totality": False,
             **coverage,
-            **(
-                {"coverage_complete": not bool(trimmed_cases)}
-                if interaction_plan is not None
-                else {}
-            ),
+            **({"coverage_complete": not bool(trimmed_cases)} if interaction_plan is not None else {}),
         }
         if statistics is not None:
             result.update(statistics.finish("passed"))
@@ -1028,16 +1022,18 @@ def check_chart(
             (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
         return result
 
+    first_sample_failure: Exception | None = None
+
     @seed(random_seed)
     @settings(
         max_examples=max_examples,
         deadline=None,
         database=None,
-        phases=(Phase.generate, Phase.shrink),
+        phases=(Phase.generate,) if fail_fast else (Phase.generate, Phase.shrink),
         report_multiple_bugs=False,
         suppress_health_check=(HealthCheck.too_slow,),
     )
-    @given(chart.strategy())
+    @given(input_strategy if input_strategy is not None else chart.strategy())
     def property_test(values: dict[str, object]) -> None:
         """
         Exercise a schema-generated candidate through the render contract.
@@ -1048,7 +1044,17 @@ def check_chart(
         Returns:
             None: None. The operation completes through its documented side effects.
         """
-        check(values)
+        nonlocal first_sample_failure
+        # Hypothesis confirms failures even without shrinking; retain the first
+        # counterexample without invoking Helm again in fail-fast mode.
+        if first_sample_failure is not None:
+            raise first_sample_failure
+        try:
+            check(values)
+        except Exception as exc:
+            if fail_fast:
+                first_sample_failure = exc
+            raise
 
     try:
         property_test()
@@ -1068,6 +1074,7 @@ def check_chart(
             len(pruner.certificates),
         )
     result = {
+        **coverage,
         "render_hashes": hashes.snapshot(),
         **({"pruning": pruner.report()} if pruner is not None else {}),
         "status": "passed",

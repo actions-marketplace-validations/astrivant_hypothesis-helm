@@ -6,16 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from hypothesis_helm.benchmarking.benchmark_matrix import STRATEGIES, measure, reference_space
+from hypothesis_helm.benchmarking.generate_benchmark_chart import generate
+from hypothesis_helm.benchmarking.structures import STRUCTURES, expected_manifests
 from hypothesis_helm.charts.runner import Chart
-from scripts.benchmark_matrix import STRATEGIES, measure, reference_space
-from scripts.benchmarking.structures import STRUCTURES, expected_manifests
-from scripts.generate_benchmark_chart import generate
 
 
 @pytest.mark.parametrize("structure", STRUCTURES)
-def test_matrix_strategy_contracts(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, structure: str
-) -> None:
+def test_matrix_strategy_contracts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, structure: str) -> None:
     """
     Preserve oracle outcomes or explicit fallback without silently changing the valid domain.
 
@@ -30,11 +28,9 @@ def test_matrix_strategy_contracts(
     spec = generate(tmp_path, input_complexity=6, output_bins=4, structure=structure)
     chart = Chart.load(tmp_path)
     truth = reference_space(chart, spec, 128)
-    assert len(truth[0]) == (
-        32 if structure == "constraints" else 96 if structure == "boundaries" else 64
-    )
+    assert len(truth[0]) == (32 if structure == "constraints" else 96 if structure == "boundaries" else 64)
     monkeypatch.setattr(
-        "scripts.benchmark_matrix.render",
+        "hypothesis_helm.benchmarking.benchmark_matrix.render",
         lambda chart, values, **kwargs: expected_manifests(values, spec),
     )
     reports = {
@@ -72,7 +68,7 @@ def test_matrix_strategy_contracts(
     assert stopped["status"] == "time-limit"
     assert stopped["remaining"] == stopped["selected"]
     assert stopped["distribution"] is None
-    monkeypatch.setattr("scripts.benchmark_matrix.render", lambda *args, **kwargs: [])
+    monkeypatch.setattr("hypothesis_helm.benchmarking.benchmark_matrix.render", lambda *args, **kwargs: [])
     failed = measure(
         chart,
         spec,
@@ -100,8 +96,8 @@ def test_numeric_boundary_helm(tmp_path: Path) -> None:
     """
     import shutil
 
+    from hypothesis_helm.benchmarking.benchmark_matrix import bundle_key
     from hypothesis_helm.charts.runner import render
-    from scripts.benchmark_matrix import bundle_key
 
     if not shutil.which("helm"):
         pytest.skip("Helm required")

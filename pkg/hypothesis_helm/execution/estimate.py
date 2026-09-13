@@ -104,9 +104,7 @@ def estimate_suite(
             environment["HYPOTHESIS_HELM_SHARD"] = f"{shard.index}/{shard.total}"
             environment["HYPOTHESIS_HELM_SHARD_REPORT"] = str(assignment)
         command = [
-            sys.executable,
-            "-m",
-            "pytest",
+            str(Path(sys.executable).with_name("pytest")),
             "-c",
             str(config),
             "--rootdir",
@@ -125,9 +123,7 @@ def estimate_suite(
         if match is not None:
             command += ["-k", match]
         command.append(str(module))
-        completed = subprocess.run(
-            command, cwd=directory, env=environment, capture_output=True, text=True, check=False
-        )
+        completed = subprocess.run(command, cwd=directory, env=environment, capture_output=True, text=True, check=False)
         if completed.returncode not in (0, 5):
             raise ValueError(f"dry-run collection failed:\n{completed.stdout}{completed.stderr}")
         nodes: list[str] = json.loads(inventory.read_text()) if inventory.exists() else []
@@ -149,9 +145,7 @@ def estimate_suite(
             + ".json"
         )
     )
-    marker = (
-        inspect_structure(directory, cache_root, seed, suite_location=logical) if cache else None
-    )
+    marker = inspect_structure(directory, cache_root, seed, suite_location=logical) if cache else None
     outcomes = read_outcomes(cache_file) if cache and compatible else {}
     examples = budgets(module)
     properties = []
