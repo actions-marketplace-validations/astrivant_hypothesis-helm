@@ -6,15 +6,13 @@ Property-based testing for Helm charts. Hypothesis generates typed inputs from
 values schemas and template references, renders your chart, and reduces failures
 from combinations of Helm chart inputs to reproducible examples.
 
-- Audit template references, values schemas, and missing defaults.
-- Inspect conservative minimal values and measure variation across identified input fields.
-- Generate typed property tests and shrink failures to reproducible inputs.
+- Audit templates, values schemas, and missing defaults.
+- Generate a minimal values schema.
 - Choose permutation coverage, with exhaustive testing for small finite spaces.
 - Skip provably equivalent renders or opt into sampling to reduce test volume.
 - Preview coverage and runtime estimates; set execution budgets and shard tests across workers.
 - Scan local, Git, and authenticated Helm repositories; build dependencies and export Markdown/PDF reports.
-- Integrate Kubernetes schema validation and optional security checks into CI.
-- Generate benchmark charts and compare coverage, bug discovery, and scaling with plots.
+- Integrate Kubernetes schema validation and optional security checks into CI with [kubesec](https://github.com/controlplaneio/kubesec) and [kubeconform](https://github.com/yannh/kubeconform).
 
 We recommend a **manual CI check on trunk before tagging a service release**, to
 exercise the sprint's accumulated changes. Run fresh tests, review the report,
@@ -22,14 +20,16 @@ and tag the tested commit. See the [release-check workflow and cache retention](
 
 ## Table of contents
 
-- [Install](#install)
-- [Audit, test, or scan?](#audit-test-or-scan)
-- [Quick start](#quick-start)
-- [Guides](#guides)
-- [Test case: Bitnami charts](#test-case-bitnami-charts)
-- [Test case: Prometheus Community charts](#test-case-prometheus-community-charts)
-- [Development](#development)
-- [License](#license)
+- [Hypothesis](#hypothesis)
+  - [Table of contents](#table-of-contents)
+  - [Install](#install)
+  - [Audit, test, or scan?](#audit-test-or-scan)
+    - [Quick start](#quick-start)
+  - [Guides](#guides)
+  - [Test case: Bitnami charts](#test-case-bitnami-charts)
+  - [Test case: Prometheus Community charts](#test-case-prometheus-community-charts)
+  - [Development](#development)
+  - [License](#license)
 
 ## Install
 
