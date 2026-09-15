@@ -1,9 +1,6 @@
 # Hypothesis
 
-## Table of contents
-
 - [Hypothesis](#hypothesis)
-  - [Table of contents](#table-of-contents)
   - [Install](#install)
   - [Examples: failures hidden by defaults](#examples-failures-hidden-by-defaults)
   - [Audit, test, or scan?](#audit-test-or-scan)
