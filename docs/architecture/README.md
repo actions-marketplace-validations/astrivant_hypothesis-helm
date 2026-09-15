@@ -77,3 +77,11 @@ has already passed validation.
 See [execution and coverage](../execution/README.md), the
 [pruning contract](../safe-pruning.md), and the
 [introductory examples](../../README.md#examples-failures-hidden-by-defaults).
+
+## Cooperative workload balancing
+
+[The preserved local scheduler](../../pkg/workbalance/README.md) builds on workload contracts to update runtime estimates,
+reorder ready work, and request checkpoint/resume at safe boundaries. It logs graph mutations and scheduling decisions and
+can export Mermaid snapshots. Existing subprocess operations remain non-preemptible unless adapted to the cooperative contract.
+
+The separate [Reflow project](https://github.com/astrivant/reflow) evolves independently; refresh still uses the local scheduler.

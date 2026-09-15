@@ -44,6 +44,7 @@ hashes = {}
 sources = [
     *Path("pkg/hypothesis_helm").rglob("*.py"),
     *Path("pkg/workgraph").rglob("*.py"),
+    *Path("pkg/workbalance").rglob("*.py"),
     Path("pkg/hypothesis_helm/execution/calibration.json"),
     Path("pkg/hypothesis_helm/reporting/assets/logo.png"),
 ]

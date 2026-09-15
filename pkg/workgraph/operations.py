@@ -10,10 +10,12 @@ import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Protocol, TextIO
+
+from workgraph.workloads import Statistics
 
 
 class ProcessOwner(Protocol):
@@ -69,6 +71,7 @@ class Operation:
         exclusive (bool): Reserve the whole queue while this operation measures or publishes.
         allow_failure (bool): Retain nonzero exits for a required downstream verification operation.
         timeout (float | None): Optional command deadline, excluding owned-process cleanup.
+        statistics (Statistics): Declared progress and cost estimates; unknown by default.
     """
 
     name: str
@@ -77,6 +80,7 @@ class Operation:
     exclusive: bool = False
     allow_failure: bool = False
     timeout: float | None = None
+    statistics: Statistics = field(default_factory=Statistics)
 
 
 class OperationQueue:

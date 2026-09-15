@@ -245,10 +245,9 @@ including six path workers per chart in the repository tests.
 
 The [operation inventory](../pkg/hypothesis_helm/benchmarking/refresh/plan.py) declares
 all 15 studies, fresh profiling captures, diagrams, verification gates, repository
-reports, and documentation updates. [Workgraph](../pkg/workgraph/) is the
-reusable scheduler in a sibling Python package; the Helm-specific inventory and
-Bash commands stay in this project. Both import packages use the root Poetry
-configuration and ship in the same wheel.
+reports, and documentation updates. The preserved local [Workgraph](../pkg/workgraph/) scheduler runs this inventory.
+The Helm-specific inventory and Bash commands stay here. The separate [Reflow](https://github.com/astrivant/reflow) project
+continues scheduler development independently; existing benchmark runs retain the local implementation.
 
 Refresh workspaces live under `.cache/refresh/refresh-<epoch>/`. Each run keeps its
 `operations.json` journal, verification records, source snapshots and operation logs there.

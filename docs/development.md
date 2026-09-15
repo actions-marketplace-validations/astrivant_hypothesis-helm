@@ -190,3 +190,16 @@ cache fingerprints cover implementation modules recursively across all subpackag
 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Python checks, Helm integration and package build verification. |
 | [`.github/settings.yml`](../.github/settings.yml) | Declarative repository settings. |
 | [`docs/`](.) | Development setup, CLI behavior and testing limitations. |
+
+
+## Preserved scheduler and separate Reflow project
+
+The local `pkg/workgraph` and `pkg/workbalance` packages retain the pre-extraction implementation for existing benchmark runs.
+Hypothesis Helm's refresh code continues to import these local packages. Their tests and graph documentation remain here.
+
+The independent [Reflow project](https://github.com/astrivant/reflow) lives at `../reflow`, with its own `reflow.graph` and
+`reflow.balance` packages. Development there does not change the local benchmark scheduler. Hypothesis Helm currently does
+not depend on that sibling project; switching refresh to Reflow should be a deliberate migration after the existing runs finish.
+
+Existing refresh workspaces retain their frozen sources, source hashes, logs and journals under `.cache/refresh/`.
+Restoring the local packages does not alter those snapshots or restart a running process.

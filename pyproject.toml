@@ -25,6 +25,7 @@ classifiers = [
 packages = [
     {include = "hypothesis_helm", from = "pkg"},
     {include = "workgraph", from = "pkg"},
+    {include = "workbalance", from = "pkg"},
 ]
 include = [{path = "plugin.yaml", format = ["sdist"]}, {path = "scripts", format = ["sdist"]}]
 
@@ -67,6 +68,7 @@ numpy = ">=2,<3"
 pytest-xdist = ">=3.8,<4"
 
 [tool.poetry.scripts]
+workbalance-example = "workbalance.example:main"
 hypothesis-helm-path-worker = "hypothesis_helm.execution.path_queue:main"
 hypothesis-helm = "hypothesis_helm.cli:main"
 hypothesis-helm-complexity = "hypothesis_helm.compiler.passes.complexity:main"
