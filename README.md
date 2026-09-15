@@ -1,6 +1,19 @@
 # Hypothesis
 
-<img src="img/logos/logo-transparent.png" alt="Astrivant logo" width="25%" />
+## Table of contents
+
+- [Hypothesis](#hypothesis)
+  - [Table of contents](#table-of-contents)
+  - [Install](#install)
+  - [Examples: failures hidden by defaults](#examples-failures-hidden-by-defaults)
+  - [Audit, test, or scan?](#audit-test-or-scan)
+    - [Quick start](#quick-start)
+  - [Guides](#guides)
+  - [Test case: Bitnami charts](#test-case-bitnami-charts)
+  - [Test case: Prometheus Community charts](#test-case-prometheus-community-charts)
+  - [Development](#development)
+  - [License](#license)
+  - [Citation](#citation)
 
 Test Helm charts with automatically generated `values.yaml` inputs. Built on Python's
 Hypothesis<sup>[\[1\]](https://github.com/HypothesisWorks/hypothesis/)</sup> testing framework, this tool
@@ -45,21 +58,6 @@ distributed shards apply to the separate generated-suite workflow.<sup>[\[3\]](d
 Run the pre-tag check manually on the release commit and review its coverage report before tagging.
 Exhaustive coverage requires a finite domain and a completed run; time-limited runs remain incomplete.
 See the [CI workflow and release-check requirements](docs/ci/README.md#recommended-workflow).
-
-## Table of contents
-
-- [Hypothesis](#hypothesis)
-  - [Table of contents](#table-of-contents)
-  - [Install](#install)
-  - [Examples: failures hidden by defaults](#examples-failures-hidden-by-defaults)
-  - [Audit, test, or scan?](#audit-test-or-scan)
-    - [Quick start](#quick-start)
-  - [Guides](#guides)
-  - [Test case: Bitnami charts](#test-case-bitnami-charts)
-  - [Test case: Prometheus Community charts](#test-case-prometheus-community-charts)
-  - [Development](#development)
-  - [License](#license)
-  - [Citation](#citation)
 
 ## Install
 
