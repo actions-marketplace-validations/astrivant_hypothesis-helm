@@ -251,4 +251,8 @@ def plot(output: Path, document: dict[str, object]) -> None:
     lines.extend(["[Fitted response surfaces: measurements, quadratic predictions and residuals](quadratic-fits.md)", ""])
     if (output / "symbolic" / "README.md").is_file():
         lines.extend(["[Symbolic equations versus quadratics on held-out data](symbolic/README.md)", ""])
+    from hypothesis_helm.benchmarking.reporting.error_highlight import plot as plot_highlight
+
+    if plot_highlight(output, document):
+        lines.extend(["![Failing inputs found, Helm renders and total runtime](errors-found-fast.png)", ""])
     (output / "README.md").write_text("\n".join(lines))

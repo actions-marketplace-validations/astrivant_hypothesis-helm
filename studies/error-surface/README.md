@@ -62,3 +62,5 @@ The CSV includes sample SD and observed ranges. These describe seed variation, n
 [Fitted response surfaces: measurements, quadratic predictions and residuals](quadratic-fits.md)
 
 [Symbolic equations versus quadratics on held-out data](symbolic/README.md)
+
+![Failing inputs found, Helm renders and total runtime](errors-found-fast.png)
