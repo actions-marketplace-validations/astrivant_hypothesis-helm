@@ -43,6 +43,9 @@ case "$study" in
   sampling)
     hypothesis-helm-benchmark sampling --time-limit 9m --output "$root/outputs/sampling"
     ;;
+  sensitivity)
+    hypothesis-helm-benchmark sensitivity --inputs 48 --components 64 --time-limit 9m --output "$root/outputs/sensitivity"
+    ;;
   calibration-variation)
     hypothesis-helm-benchmark calibration --inputs 6 --depths 1 3 5 --breadths 1 4 8 --output-depths 0 1 2 --time-limit 9m --output "$root/outputs/calibration-variation"
     ;;

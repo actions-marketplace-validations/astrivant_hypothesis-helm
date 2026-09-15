@@ -246,7 +246,7 @@ and plot preparation can overlap. Nested workers retain their own settings,
 including six path workers per chart in the repository tests.
 
 The [operation inventory](../pkg/hypothesis_helm/benchmarking/refresh/plan.py) declares
-all 15 studies, fresh profiling captures, diagrams, verification gates, repository
+all declared studies, fresh profiling captures, diagrams, verification gates, repository
 reports, and documentation updates. The preserved local [Workgraph](../pkg/workgraph/) scheduler runs this inventory.
 The Helm-specific inventory and Bash commands stay here. The separate [Reflow](https://github.com/astrivant/reflow) project
 continues scheduler development independently; existing benchmark runs retain the local implementation.
@@ -531,3 +531,5 @@ bash scripts/project-run.sh hypothesis-helm-benchmark calibration --plot-only --
 [Quadratic versus quartic comparison](../studies/error-surface-quartic/polynomial-comparison/README.md)
 uses identical training data and reports errors on reserved settings and repeats.
 See [how to compare a completed surface](../docs/benchmarking/response-surface.md#quadratic-versus-quartic-comparison).
+
+The refresh also runs the [mutation sensitivity diagnostic](../studies/sensitivity/README.md), retaining its inputs, measurements and plots.

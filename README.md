@@ -5,6 +5,7 @@
   - [Examples: failures hidden by defaults](#examples-failures-hidden-by-defaults)
   - [Audit, test, or scan?](#audit-test-or-scan)
     - [Quick start](#quick-start)
+  - [Which settings change the chart most?](#which-settings-change-the-chart-most)
   - [Guides](#guides)
   - [Test case: Bitnami charts](#test-case-bitnami-charts)
   - [Test case: Prometheus Community charts](#test-case-prometheus-community-charts)
@@ -159,6 +160,24 @@ helm hypothesis scan prometheus-community --filter --report
 ```
 
 See [Repository scanning](docs/scanning/README.md) for authentication, public indexes, version selection, and dependency handling.
+
+## Which settings change the chart most?
+
+[![Single-setting effects, pair interactions, and accumulated manifest changes](studies/sensitivity/sensitivity.png)](studies/sensitivity/README.md)
+
+The left panel shows how much each setting changes the rendered manifests. The middle shows which pairs have effects
+that their separate changes do not explain. The right compares accumulated changes with the difference from the starting output.
+These measure manifest changes, not bugs or proof that inputs can be skipped.
+
+Read the [sensitivity study and measurements](studies/sensitivity/README.md) or the
+[guide to the distance metric and mutation IDs](docs/compiler/sensitivity.md#what-the-measurements-mean).
+To regenerate the study from this checkout:
+
+```sh
+bash scripts/project-run.sh hypothesis-helm-benchmark sensitivity --inputs 48 --components 64 --time-limit 9m
+```
+
+Successful runs update this plot automatically. Incomplete runs preserve the previous published results.
 
 ## Guides
 

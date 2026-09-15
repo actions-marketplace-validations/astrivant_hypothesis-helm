@@ -2,7 +2,7 @@
 
 [Benchmarking](../benchmarks/README.md)
 
-Each directory contains one study's recorded inputs, results and available plots. New local runs stay in `../benchmarks/runs/`.
+Each directory contains one study's recorded inputs, results and available plots. Benchmark runs stay in `../benchmarks/runs/`; sensitivity benchmarks update `sensitivity/` automatically and retain each run in `sensitivity/runs/`.
 
 | Study | Results |
 | --- | --- |
@@ -20,6 +20,7 @@ Each directory contains one study's recorded inputs, results and available plots
 | performance | [Browse](performance/README.md) |
 | resource-sizing (preliminary observations) | [Browse](resource-sizing/README.md) |
 | sampling | [Browse](sampling/README.md) |
+| sensitivity | [Browse](sensitivity/README.md) |
 | sparsity | [Browse](sparsity/README.md) |
 | structure-depth | [Browse](structure-depth/README.md) |
 | structure-mixtures | [Browse](structure-mixtures/README.md) |

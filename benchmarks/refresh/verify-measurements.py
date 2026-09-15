@@ -38,6 +38,14 @@ for study in STUDIES:
         study,
         statuses,
     )
+    if study == "sensitivity":
+        assert result["status"] == "complete" and result["pruning_authorized"] is False
+        assert result["mutations"] and result["interactions"] and result["sequence"]
+        assert all(row["status"] == "rendered" and row["distance"] >= 0 for row in result["mutations"])
+        assert all(row["status"] == "rendered" and row["mixed_difference_l1"] >= 0 for row in result["interactions"])
+        assert all(row["cumulative_path_length"] >= row["endpoint_displacement"] >= 0 for row in result["sequence"])
+        for filename in ("sensitivity.png", "sensitivity.svg", "mutations.json", "chart-inputs.json"):
+            assert (directory / filename).is_file(), filename
     if study == "matrix":
         expected_rows = {(structure, strategy) for structure in STRUCTURES for strategy in STRATEGIES}
         assert len(rows) == len(expected_rows) and {(row["structure"], row["strategy"]) for row in rows} == expected_rows

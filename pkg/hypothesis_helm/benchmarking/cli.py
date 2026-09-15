@@ -28,6 +28,7 @@ COMMANDS = {
     "nesting": "studies.nesting",
     "stress": "studies.stress",
     "sampling": "studies.sampling",
+    "sensitivity": "studies.sensitivity",
     "calibration": "studies.calibration",
     "filtering": "studies.filtering",
     "error-surface": "studies.error_surface",

@@ -80,3 +80,8 @@ options and report fields.
 
 These modules analyze Helm; they do not implement its full rendering language.
 Each result states its supported scope and any unresolved behavior.
+
+## Measured output sensitivity
+
+[Mutation sensitivity](sensitivity.md) measures individual changes, pairwise interactions and cumulative output displacement
+with Helm. This is an optional runtime diagnostic; it does not weaken the compiler equivalence requirements for pruning.

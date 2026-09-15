@@ -1,0 +1,25 @@
+parameters:
+  input_complexity: 48
+  mean_value: 0.0
+  stddev: 1.0
+  output_bins: 16
+  precision: 6
+  lower:
+  upper:
+  bug_percent: 0.0
+  bug_orders:
+  bug_seed: 2026
+  max_bugs: 1000
+  structure:
+  topology_components: 64
+  topology_weights:
+    control-flow: 1.0
+    dependencies: 1.0
+    interactions: 1.0
+    equivalence: 1.0
+  topology_seed: 2026
+  topology_depth_weights:
+  topology: false
+  topology_opaque: false
+  stress:
+  readable_inputs: true

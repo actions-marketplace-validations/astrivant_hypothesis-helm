@@ -132,7 +132,7 @@ ledger = {
     str(path.relative_to(published)): hashlib.sha256(path.read_bytes()).hexdigest()
     for study in (*STUDIES, "chart-topologies", "flamegraphs")
     for path in sorted((published / "studies" / study).rglob("*"))
-    if path.is_file() and path.name != "verification.json"
+    if path.is_file() and path.name != "verification.json" and not path.is_relative_to(Path("studies/sensitivity/runs"))
 }
 (root / "previous-artifact-inventory.json").write_text(json.dumps(list(ledger), indent=2) + "\n")
 retained = {}

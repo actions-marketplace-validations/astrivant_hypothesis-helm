@@ -21,6 +21,7 @@ STUDIES = (
     "nesting",
     "stress",
     "sampling",
+    "sensitivity",
     "calibration-variation",
     "filtering",
     "error-surface",

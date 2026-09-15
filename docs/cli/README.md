@@ -555,3 +555,8 @@ options:
 </details>
 
 <!-- [[[end]]] -->
+
+## Mutation sensitivity diagnostic
+
+The separate hypothesis-helm-sensitivity command measures output changes for an explicit list of values mutations.
+See [usage, input format and metric definitions](../compiler/sensitivity.md).

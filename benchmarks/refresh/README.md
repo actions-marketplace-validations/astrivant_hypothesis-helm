@@ -15,7 +15,7 @@ Repository scan reports remain under `docs/reports/`.
 ## Parallel refresh on GitHub Actions
 
 Run the **Benchmarks** workflow manually with **full-refresh** enabled. Preparation checks the project and snapshots its
-inputs once. GitHub then runs each of the 16 studies on a separate runner, using the same source snapshot and parameters.
+inputs once. GitHub then runs each declared study on a separate runner, using the same source snapshot and parameters.
 The matrix comes from the Python study inventory, so adding a study also adds its CI job.
 There is no `max-parallel` setting: GitHub schedules as many jobs as the account's capacity and runner availability permit.
 See [GitHub's matrix concurrency documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstrategymax-parallel).
@@ -34,3 +34,9 @@ gh workflow run benchmarks.yml -f full-refresh=true
 Local `bash benchmarks/refresh.sh` still runs timing studies sequentially on one machine to avoid CPU contention affecting
 measurements. Its `--workers` option controls independent operations within that machine; the GitHub matrix supplies separate
 machines for concurrent studies. Each GitHub study job has a six-hour execution limit.
+
+Sensitivity measures 48 input changes and all 1,128 pairs on the shared benchmark chart, with 64 structural components and a nine-minute budget.
+It retains the chart sources and mutation inputs, before publication and repository scans.
+Publication updates studies/sensitivity/ while preserving personal runs in studies/sensitivity/runs/.
+The standalone `hypothesis-helm-benchmark sensitivity` command also updates that study automatically after a successful run.
+Supplying `--output` keeps its results separate; refresh uses this option and publishes after verification.

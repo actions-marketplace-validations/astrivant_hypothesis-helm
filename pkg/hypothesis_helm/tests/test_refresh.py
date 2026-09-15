@@ -122,6 +122,8 @@ def test_refresh_repository_recipe(tmp_path: Path) -> None:
         "plot",
         "sampling-reference",
         "sampling-inventory",
+        "sensitivity-incomplete",
+        "sensitivity-pruning",
         "calibration-count",
         "calibration-trials",
         "calibration-reference",
@@ -166,6 +168,7 @@ def test_refresh_requires_complete_stress_matrix(tmp_path: Path, damage: str | N
         "nesting",
         "stress",
         "sampling",
+        "sensitivity",
         "calibration-variation",
         "filtering",
         "error-surface",
@@ -210,7 +213,7 @@ def test_refresh_requires_complete_stress_matrix(tmp_path: Path, damage: str | N
             elif damage == "censored":
                 for row in rows:
                     row.update(status="time-limit", completed=1, remaining=3)
-        document = {
+        document: dict[str, object] = {
             "metadata": {
                 "code_sha256": "test-source",
                 "helm": "v4.3.0",
@@ -220,6 +223,16 @@ def test_refresh_requires_complete_stress_matrix(tmp_path: Path, damage: str | N
             },
             "rows": rows,
         }
+        if study == "sensitivity":
+            document.update(
+                status="time-limit" if damage == "sensitivity-incomplete" else "complete",
+                pruning_authorized=damage == "sensitivity-pruning",
+                mutations=[{"name": "change-message", "status": "rendered", "distance": 2}],
+                interactions=[{"status": "rendered", "mixed_difference_l1": 0}],
+                sequence=[{"status": "rendered", "cumulative_path_length": 2, "endpoint_displacement": 2}],
+            )
+            for filename in ("sensitivity.png", "sensitivity.svg", "mutations.json", "chart-inputs.json"):
+                (directory / filename).write_bytes(b"x" * 1001)
         if study == "structural-sparsity":
             mapping(document["metadata"]).update(
                 status="complete", breadths=[4], depths=[1], placements=["near"], methods=["default"], repeats=1
@@ -487,6 +500,7 @@ def test_publish_groups_studies(tmp_path: Path) -> None:
         "nesting",
         "stress",
         "sampling",
+        "sensitivity",
         "calibration-variation",
         "filtering",
         "error-surface",
