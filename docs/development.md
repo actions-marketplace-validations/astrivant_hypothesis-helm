@@ -89,7 +89,8 @@ Publishing and remote repository-setting changes are not automated by local chec
 
 ## Publishing to PyPI
 
-Add your PyPI API token as the GitHub repository secret `PYPI_API_TOKEN`.
+Create the GitHub environment `pypi` and add your PyPI API token as its `PYPI_API_TOKEN` secret.
+The publishing job uses this environment and follows its configured protection rules.
 Set the version with `poetry version 0.1.0` and commit the updated `pyproject.toml` before tagging that commit:
 
 ```sh

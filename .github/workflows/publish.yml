@@ -21,6 +21,7 @@ jobs:
 
   publish:
     needs: verify
+    environment: pypi
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -47,7 +48,7 @@ jobs:
           PACKAGE_VERSION: ${{ steps.package-version.outputs.version }}
         run: |
           if [[ -z "$POETRY_PYPI_TOKEN_PYPI" ]]; then
-            echo '::error::Set the PYPI_API_TOKEN repository secret before publishing'
+            echo '::error::Set PYPI_API_TOKEN in the pypi environment before publishing'
             exit 1
           fi
           echo "Publishing hypothesis-helm $PACKAGE_VERSION to PyPI"
