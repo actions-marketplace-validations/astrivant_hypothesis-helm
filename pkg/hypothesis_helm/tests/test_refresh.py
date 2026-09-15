@@ -693,3 +693,65 @@ def test_refresh_summaries_replace_numbers_and_preserve_prose(tmp_path: Path, mo
     with pytest.raises(ValueError, match="summary markers"):
         runpy.run_path(str(script), run_name="__main__")
     assert benchmark.read_text() == benchmark_before
+
+
+@pytest.mark.parametrize("symbolic", ["false", "true"])
+def test_refresh_dispatches_all_studies(tmp_path: Path, symbolic: str) -> None:
+    """
+    Exercise every study recipe through the operation dispatcher without running measurements.
+
+    Args:
+        tmp_path (Path): Isolated recipes and recording executable.
+        symbolic (str): Optional symbolic fitting switch.
+
+    Returns:
+        None: Every declared study uses an installed command and its own output directory.
+    """
+    from textwrap import dedent
+
+    from hypothesis_helm.benchmarking.cli import COMMANDS
+    from hypothesis_helm.benchmarking.refresh.plan import STUDIES
+
+    project = Path(__file__).resolve().parents[3]
+    root = tmp_path / "refresh"
+    root.mkdir()
+    shutil.copy2(project / "benchmarks/refresh/studies.sh", root / "studies.sh")
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    recorder = binary / "hypothesis-helm-benchmark"
+    recorder.write_text(
+        f"#!{sys.executable}\n"
+        + dedent(
+            """
+            import json
+            import os
+            import sys
+            from pathlib import Path
+            with Path(os.environ["RECORDED_COMMANDS"]).open("a") as output:
+                output.write(json.dumps(sys.argv[1:]) + "\\n")
+            """
+        )
+    )
+    recorder.chmod(0o755)
+    commands = tmp_path / "commands.jsonl"
+    environment = {
+        **os.environ,
+        "PATH": f"{binary}{os.pathsep}{os.environ['PATH']}",
+        "RECORDED_COMMANDS": str(commands),
+        "BENCHMARK_SYMBOLIC_FIT": symbolic,
+    }
+    for study in STUDIES:
+        subprocess.run(
+            ["bash", str(project / "benchmarks/refresh/operations.sh"), study, str(root)],
+            env=environment,
+            check=True,
+            capture_output=True,
+        )
+    calls = [json.loads(line) for line in commands.read_text().splitlines()]
+    assert len(calls) == len(STUDIES)
+    for study, arguments in zip(STUDIES, calls, strict=True):
+        command_index = 2 if arguments[0] == "--parameters" else 0
+        assert arguments[command_index] in COMMANDS
+        assert arguments[arguments.index("--output") + 1] == str(root / "outputs" / study)
+    assert ("--symbolic-fit" in calls[-1]) == (symbolic == "true")
+    assert (root / "status.tsv").read_text().splitlines() == [f"{study}\t0" for study in STUDIES]

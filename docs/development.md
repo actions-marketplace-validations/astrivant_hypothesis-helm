@@ -99,7 +99,19 @@ git push origin v0.1.0
 
 Only a pushed version tag triggers the [publishing workflow](../.github/workflows/publish.yml).
 Branch pushes, pull requests, and publishing a GitHub release do not upload to PyPI.
-CI rejects a tag that does not exactly match `v` followed by the package version, before building.
+CI checks that the tag matches the package version before building. Prerelease names normalize to Python's version format:
+
+| Git tag | Package version (`poetry version ...`) |
+| --- | --- |
+| `v1.3.0-alpha` | `1.3.0a0` |
+| `v1.3.0-alpha.1` | `1.3.0a1` |
+| `v1.3.0-beta.2` | `1.3.0b2` |
+| `v1.3.0-rc.1` | `1.3.0rc1` |
+| `v1.3.0` | `1.3.0` |
+
+Canonical tags such as `v1.3.0rc1` also work. An omitted prerelease number means zero.
+Set and commit the matching package version before pushing its tag; prerelease and final versions remain distinct.
+
 Poetry embeds that version in the wheel and source distribution. CI names the artifact
 `python-distributions-<version>`; the publishing job checks the version again and uploads that exact artifact
 with `poetry publish`. Full CI must pass before publication.
