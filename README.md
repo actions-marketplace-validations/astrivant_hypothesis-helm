@@ -15,7 +15,6 @@ time budget.
 
 In this synthetic load test, `--filter` reduced average runtime from roughly 25-28 seconds to 2-7 seconds
 at 512 valid input configurations. [See the measurements and methodology](studies/filtering/README.md).
-The plot uses the earlier name `filter-aggressive` for `--filter-adaptive`.
 
 - Audit templates, values schemas, and missing defaults.
 - Generate a minimal values schema.
