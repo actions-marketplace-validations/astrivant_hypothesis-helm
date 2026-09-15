@@ -9,11 +9,11 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.benchmarking.benchmark_expansion import compare
-from hypothesis_helm.benchmarking.benchmark_matrix import bundle_key
-from hypothesis_helm.benchmarking.structures import configmap
+from hypothesis_helm.benchmarking.charts.structures import configmap
+from hypothesis_helm.benchmarking.studies.expansion import compare
+from hypothesis_helm.benchmarking.studies.matrix import bundle_key
 from hypothesis_helm.charts.runner import Chart, check_chart
-from hypothesis_helm.compiler.expansion import FailureExpansion
+from hypothesis_helm.compiler.passes.expansion import FailureExpansion
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
@@ -260,7 +260,7 @@ def test_expansion_scheduler_and_benchmark(expansion_chart: Chart, monkeypatch: 
         calls.append(value)
         return error_output(value)
 
-    monkeypatch.setattr("hypothesis_helm.benchmarking.benchmark_expansion.render", render)
+    monkeypatch.setattr("hypothesis_helm.benchmarking.studies.expansion.render", render)
     reference: dict[str, object] = {
         "structure": "fixture",
         "values": values,
@@ -329,6 +329,66 @@ def test_expansion_cli_dry_run(expansion_chart: Chart, capsys: pytest.CaptureFix
     assert main(["test", str(expansion_chart.path), "--expand-failures", "--whole-chart"]) == 2
 
 
+@pytest.mark.parametrize("traversal", ["random", "linear"])
+def test_filter_cli_expands_observed_failures(
+    expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], traversal: str
+) -> None:
+    """
+    Enable actual failure expansion through the preset before either traversal order.
+
+    Args:
+        expansion_chart (Chart): Finite chart with four members per output region.
+        monkeypatch (pytest.MonkeyPatch): Substitute a renderer rejecting the faulty region.
+        capsys (pytest.CaptureFixture[str]): Capture the CLI execution report.
+        traversal (str): Requested order of the initially filtered configurations.
+
+    Returns:
+        None: The preset executes all omitted faulty members without duplicate renders.
+    """
+    from hypothesis_helm.cli import main
+
+    calls: list[dict[str, object]] = []
+
+    def render(chart: Chart, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
+        """
+        Record execution and fail each member of the fixture's faulty output region.
+
+        Args:
+            chart (Chart): Chart under test.
+            values (dict[str, object]): Selected overrides.
+            **kwargs (object): Renderer settings.
+
+        Returns:
+            list[dict[str, object]]: Successful baseline or nonfaulty manifest output.
+        """
+        calls.append(values)
+        if values.get("a"):
+            raise ValueError("faulty output region")
+        return error_output(values)
+
+    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    assert (
+        main(
+            [
+                "test",
+                str(expansion_chart.path),
+                "--filter",
+                "--no-infer-groups",
+                "--traversal-strategy",
+                traversal,
+                "--artifact-dir",
+                str(expansion_chart.path / "reports"),
+            ]
+        )
+        == 1
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["failure_expansion"]["enabled"] is True
+    assert report["failure_expansion"]["additional_executed"] == 3
+    assert report["failed_iterations"] == 4
+    assert len({configuration_key(value) for value in calls}) == len(calls)
+
+
 @pytest.mark.parametrize(
     "individual",
     [["--trim-topology", "0"], ["--expand-failures"]],
@@ -356,7 +416,7 @@ def test_filter_exclusivity(individual: list[str], preset_first: bool) -> None:
     assert (parsed.trim, parsed.trim_topology, parsed.expand_failures) == (1, 2, True)
 
 
-def test_topology_depth_sweep(expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_structure_depth_sweep(expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Keep depth comparisons matched and preserve pending expansion when the budget expires.
 
@@ -369,7 +429,7 @@ def test_topology_depth_sweep(expansion_chart: Chart, monkeypatch: pytest.Monkey
     """
     from itertools import product
 
-    from hypothesis_helm.benchmarking.benchmark_topology_depth import sweep
+    from hypothesis_helm.benchmarking.studies.structure_depth import sweep
 
     values: list[dict[str, object]] = [dict(zip(("a", "b", "c"), items, strict=True)) for items in product((False, True), repeat=3)]
     reference: dict[str, object] = {
@@ -395,7 +455,7 @@ def test_topology_depth_sweep(expansion_chart: Chart, monkeypatch: pytest.Monkey
         calls.append(value)
         return error_output(value)
 
-    monkeypatch.setattr("hypothesis_helm.benchmarking.benchmark_expansion.render", observed)
+    monkeypatch.setattr("hypothesis_helm.benchmarking.studies.expansion.render", observed)
     rows = sweep(expansion_chart, reference, [0, 1, 2, 3], 2026, "helm", 30)
     assert rows[0]["initial_checks"] == 8
     assert all(row["erroneous_inputs_found"] == 4 for row in rows)
@@ -406,3 +466,28 @@ def test_topology_depth_sweep(expansion_chart: Chart, monkeypatch: pytest.Monkey
     assert len(stopped) == 1
     assert stopped[0]["status"] == "time-limit"
     assert stopped[0]["remaining"] == 3
+
+
+def test_pca_presets_expand_only_observed_failures(expansion_chart: Chart) -> None:
+    """
+    Include default preset expansion in PCA without consulting injected fault identities.
+
+    Args:
+        expansion_chart (Chart): Two-region chart with one independently observed failing output.
+
+    Returns:
+        None: Correct observations do not expand; observed failures add each region member once.
+    """
+    from itertools import product
+
+    from hypothesis_helm.benchmarking.analysis.selection import PRESETS
+    from hypothesis_helm.benchmarking.studies.pca import expand_selections
+
+    values: list[dict[str, object]] = [dict(zip(("a", "b", "c"), items, strict=True)) for items in product((False, True), repeat=3)]
+    selected = {strategy: [0, 4] for strategy in PRESETS}
+    added = expand_selections(expansion_chart, values, selected, [error_output(values[0])] * len(values))
+    assert all(count == 0 for count in added.values())
+    assert all(indices == [0, 4] for indices in selected.values())
+    added = expand_selections(expansion_chart, values, selected, [error_output(value) for value in values])
+    assert all(count == 3 for count in added.values())
+    assert all(set(indices) == {0, 4, 5, 6, 7} and len(indices) == 5 for indices in selected.values())

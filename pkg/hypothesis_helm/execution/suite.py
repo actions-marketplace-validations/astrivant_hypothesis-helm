@@ -18,18 +18,22 @@ from rich.console import Console
 
 from hypothesis_helm.execution.cache import (
     fingerprint,
-    in_ci,
     merge_outcomes,
     read_outcomes,
     seed_key,
 )
-from hypothesis_helm.execution.parallel import run_parallel
+from hypothesis_helm.execution.environment import in_ci
+from hypothesis_helm.execution.parallel import run_parallel, worker_limit
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.render_hashes import (
     STATISTICS_DIRECTORY,
     summarize_process_statistics,
 )
+from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
+from hypothesis_helm.execution.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
+from hypothesis_helm.execution.sampling import REPORT as SAMPLING_REPORT
 from hypothesis_helm.execution.structure import inspect_structure
+from hypothesis_helm.execution.traversal import ALGORITHM, validate_strategy
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.output import MANIFEST_FD
 
@@ -38,6 +42,8 @@ def run_suite(
     directory: Path,
     *,
     seed: int = 0,
+    traversal_strategy: str = "random",
+    sampling: Sampling = DEFAULT_SAMPLING,
     match: str | None = None,
     collect_only: bool = False,
     jobs: int | Literal["auto"] = "auto",
@@ -60,6 +66,8 @@ def run_suite(
     Args:
         directory (Path): Directory containing the generated test module.
         seed (int): Hypothesis seed applied to every property in this invocation.
+        traversal_strategy (str): Seeded random, original linear, root-first, or leaf-first path order.
+        sampling (Sampling): Optional retained percentage and minimum sample after filtering.
         match (str | None): Optional pytest keyword expression selecting value paths.
         collect_only (bool): Whether to list tests without invoking Helm rendering.
         jobs (int | Literal["auto"]): Fixed worker count or automatic PID throughput tuning.
@@ -75,11 +83,10 @@ def run_suite(
     Returns:
         int: Pytest exit status, or 130 when the child is interrupted.
     """
+    traversal_strategy = validate_strategy(traversal_strategy)
     if rerun not in {"auto", "all", "failed"}:
         raise ValueError("rerun must be auto, all, or failed")
-    if isinstance(jobs, int) and jobs < 1:
-        raise ValueError("jobs must be positive")
-    workers = jobs if isinstance(jobs, int) else 4 * (os.process_cpu_count() or 1)
+    workers = worker_limit(jobs)
     directory = directory.resolve()
     module = directory / "test_chart_values.py"
     if not module.is_file():
@@ -136,6 +143,11 @@ def run_suite(
             command.append("--collect-only")
         command.append(str(module))
         environment = dict(os.environ)
+        environment["HYPOTHESIS_HELM_TRAVERSAL_STRATEGY"] = traversal_strategy
+        environment["HYPOTHESIS_HELM_TRAVERSAL_SEED"] = str(seed)
+        environment[SAMPLING_ENVIRONMENT] = json.dumps({"percent": sampling.percent, "minimum": sampling.minimum})
+        environment[SAMPLING_REPORT] = str(results / "sampling.json")
+        (results / "sampling.json").unlink(missing_ok=True)
         environment.pop("HYPOTHESIS_HELM_CACHE_READ", None)
         environment.pop("HYPOTHESIS_HELM_CACHE_RESULTS", None)
         cache_workspace = TemporaryDirectory(prefix="path-results-", dir=results)
@@ -184,6 +196,7 @@ def run_suite(
         environment.pop("PYTEST_ADDOPTS", None)
         environment.pop("PYTEST_PLUGINS", None)
         environment.pop("HYPOTHESIS_HELM_COLLECT", None)
+        environment.pop("HYPOTHESIS_HELM_COLLECT_DEPTHS", None)
         environment.pop("HYPOTHESIS_HELM_PROGRESS", None)
         environment.pop("HYPOTHESIS_HELM_FORCE_PROGRESS", None)
         if progress:
@@ -214,7 +227,7 @@ def run_suite(
             else:
                 workers = 1
                 environment["HYPOTHESIS_HELM_PROGRESS"] = "1"
-                completed = Processes().run(
+                completed = Processes(interrupt_grace=5.0).run(
                     command,
                     cwd=directory,
                     env=environment,
@@ -269,12 +282,16 @@ def run_suite(
             "exit_code": status,
             "suite": str(directory),
             "render_hashes": render_statistics,
+            "ignored_rules": json.loads(environment.get("HYPOTHESIS_HELM_IGNORED_RULES", "[]")),
             "values_structure": marker.report() if marker is not None else None,
             "conformity": json.loads(environment["HYPOTHESIS_HELM_CONFORMITY"]) if "HYPOTHESIS_HELM_CONFORMITY" in environment else None,
             "shard": assignment,
             "cache": str(cache_file) if cache_file else None,
             "rerun": "failed" if retry else "all",
             "seed": seed,
+            "sampling": json.loads((results / "sampling.json").read_text()) if (results / "sampling.json").exists() else None,
+            "traversal_strategy": traversal_strategy,
+            "traversal_algorithm": ALGORITHM,
             "workers": workers,
             "jobs": jobs,
             "match": match,

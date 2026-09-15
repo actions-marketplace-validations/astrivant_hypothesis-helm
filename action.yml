@@ -23,6 +23,9 @@ inputs:
   python-version:
     description: Python version (3.13 or newer).
     default: '3.13'
+  binary-cache:
+    description: Restore and save versioned Helm and validator binaries between workflow runs.
+    default: 'true'
   helm-version:
     description: Helm 4 version to install.
     default: v4.3.0
@@ -44,6 +47,12 @@ inputs:
   max-examples:
     description: Maximum Hypothesis examples per property.
     default: '100'
+  sample-random:
+    description: Percentage of eligible path properties to retain; 100 disables sampling.
+    default: '100'
+  sample-min-cases:
+    description: Minimum retained sample; smaller suites run in full.
+    default: '128'
   seed:
     description: Shared Hypothesis seed for reproducible runs.
     default: '0'
@@ -148,9 +157,40 @@ runs:
     - uses: actions/setup-python@v7
       with:
         python-version: ${{ inputs.python-version }}
-    - uses: azure/setup-helm@v5
+    - name: Restore Helm binary
+      id: helm-cache
+      if: ${{ inputs.binary-cache == 'true' }}
+      uses: actions/cache/restore@v5
       with:
-        version: ${{ inputs.helm-version }}
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/helm-${{ inputs.helm-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-helm-${{ inputs.helm-version }}-exact
+    - name: Install Helm
+      shell: bash
+      env:
+        HELM_VERSION: ${{ inputs.helm-version }}
+        BINARY_CACHE: ${{ inputs.binary-cache }}
+      run: |
+        case "$RUNNER_OS" in Linux) platform=linux ;; macOS) platform=darwin ;; esac
+        case "$RUNNER_ARCH" in X64) architecture=amd64 ;; ARM64) architecture=arm64 ;; *) exit 1 ;; esac
+        binary_root="$RUNNER_TEMP/hypothesis-helm-binaries"
+        if [[ "$BINARY_CACHE" != "true" ]]; then binary_root="$(mktemp -d "$RUNNER_TEMP/hh-binaries.XXXXXX")"; fi
+        binary_dir="$binary_root/helm-${HELM_VERSION}-${platform}-${architecture}"
+        if [[ ! -x "$binary_dir/helm" ]]; then
+          download_dir="$(mktemp -d)"
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+          tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" "${platform}-${architecture}/helm"
+          mkdir -p "$binary_dir"
+          install "$download_dir/${platform}-${architecture}/helm" "$binary_dir/helm.pending"
+          mv "$binary_dir/helm.pending" "$binary_dir/helm"
+          rm -rf "$download_dir"
+        fi
+        echo "$binary_dir" >> "$GITHUB_PATH"
+    - name: Save Helm binary
+      if: ${{ inputs.binary-cache == 'true' && steps.helm-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/helm-${{ inputs.helm-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-helm-${{ inputs.helm-version }}-exact
     - name: Install this action's Helm plugin
       id: install
       shell: bash
@@ -158,22 +198,47 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
       run: |
         plugin_root="$(mktemp -d "$RUNNER_TEMP/hypothesis-helm.XXXXXX")"
-        HELM_PLUGINS="$plugin_root" PYTHON=python helm plugin install "$ACTION_PATH"
-        echo "plugins=$plugin_root" >> "$GITHUB_OUTPUT"
+        export HELM_DATA_HOME="$plugin_root"
+        export HELM_PLUGINS="$HELM_DATA_HOME/plugins"
+        PYTHON=python helm plugin install "$ACTION_PATH"
+        helm hypothesis --help
+        echo "data=$HELM_DATA_HOME" >> "$GITHUB_OUTPUT"
+        echo "plugins=$HELM_PLUGINS" >> "$GITHUB_OUTPUT"
+    - name: Restore kubeconform binary
+      id: kubeconform-cache
+      if: ${{ inputs.binary-cache == 'true' && ((inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.kubeconform-binary == 'kubeconform') }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/kubeconform-${{ inputs.kubeconform-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-kubeconform-${{ inputs.kubeconform-version }}-exact
     - name: Install kubeconform
       if: ${{ (inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.kubeconform-binary == 'kubeconform' }}
       shell: bash
       env:
         KUBECONFORM_VERSION: ${{ inputs.kubeconform-version }}
+        BINARY_CACHE: ${{ inputs.binary-cache }}
       run: |
         case "$RUNNER_OS" in Linux) platform=linux ;; macOS) platform=darwin ;; esac
         case "$RUNNER_ARCH" in X64) architecture=amd64 ;; ARM64) architecture=arm64 ;; *) exit 1 ;; esac
-        install_dir="$(mktemp -d "$RUNNER_TEMP/kubeconform.XXXXXX")"
-        curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-${platform}-${architecture}.tar.gz" \
-          -o "$install_dir/kubeconform.tar.gz"
-        tar -xzf "$install_dir/kubeconform.tar.gz" -C "$install_dir" kubeconform
-        chmod +x "$install_dir/kubeconform"
-        echo "$install_dir" >> "$GITHUB_PATH"
+        binary_root="$RUNNER_TEMP/hypothesis-helm-binaries"
+        if [[ "$BINARY_CACHE" != "true" ]]; then binary_root="$(mktemp -d "$RUNNER_TEMP/hh-binaries.XXXXXX")"; fi
+        binary_dir="$binary_root/kubeconform-${KUBECONFORM_VERSION}-${platform}-${architecture}"
+        if [[ ! -x "$binary_dir/kubeconform" ]]; then
+          download_dir="$(mktemp -d)"
+          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+          tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" kubeconform
+          mkdir -p "$binary_dir"
+          install "$download_dir/kubeconform" "$binary_dir/kubeconform.pending"
+          mv "$binary_dir/kubeconform.pending" "$binary_dir/kubeconform"
+          rm -rf "$download_dir"
+        fi
+        echo "$binary_dir" >> "$GITHUB_PATH"
+    - name: Save kubeconform binary
+      if: ${{ inputs.binary-cache == 'true' && steps.kubeconform-cache.outputs.cache-hit != 'true' && ((inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.kubeconform-binary == 'kubeconform') }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/kubeconform-${{ inputs.kubeconform-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-kubeconform-${{ inputs.kubeconform-version }}-exact
     - name: Install GNU Parallel
       if: ${{ inputs.kubesec == 'true' }}
       shell: bash
@@ -184,20 +249,41 @@ runs:
         else
           brew install parallel
         fi
+    - name: Restore Kubesec binary
+      id: kubesec-cache
+      if: ${{ inputs.binary-cache == 'true' && (inputs.kubesec == 'true' && inputs.kubesec-binary == 'kubesec') }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/kubesec-${{ inputs.kubesec-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-kubesec-${{ inputs.kubesec-version }}-exact
     - name: Install Kubesec
       if: ${{ inputs.kubesec == 'true' && inputs.kubesec-binary == 'kubesec' }}
       shell: bash
       env:
         KUBESEC_VERSION: ${{ inputs.kubesec-version }}
+        BINARY_CACHE: ${{ inputs.binary-cache }}
       run: |
         case "$RUNNER_OS" in Linux) platform=linux ;; macOS) platform=darwin ;; esac
         case "$RUNNER_ARCH" in X64) architecture=amd64 ;; ARM64) architecture=arm64 ;; *) exit 1 ;; esac
-        install_dir="$(mktemp -d "$RUNNER_TEMP/kubesec.XXXXXX")"
-        curl -fsSL "https://github.com/controlplaneio/kubesec/releases/download/${KUBESEC_VERSION}/kubesec_${platform}_${architecture}.tar.gz" \
-          -o "$install_dir/kubesec.tar.gz"
-        tar -xzf "$install_dir/kubesec.tar.gz" -C "$install_dir" kubesec
-        chmod +x "$install_dir/kubesec"
-        echo "$install_dir" >> "$GITHUB_PATH"
+        binary_root="$RUNNER_TEMP/hypothesis-helm-binaries"
+        if [[ "$BINARY_CACHE" != "true" ]]; then binary_root="$(mktemp -d "$RUNNER_TEMP/hh-binaries.XXXXXX")"; fi
+        binary_dir="$binary_root/kubesec-${KUBESEC_VERSION}-${platform}-${architecture}"
+        if [[ ! -x "$binary_dir/kubesec" ]]; then
+          download_dir="$(mktemp -d)"
+          curl -fsSL "https://github.com/controlplaneio/kubesec/releases/download/${KUBESEC_VERSION}/kubesec_${platform}_${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+          tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" kubesec
+          mkdir -p "$binary_dir"
+          install "$download_dir/kubesec" "$binary_dir/kubesec.pending"
+          mv "$binary_dir/kubesec.pending" "$binary_dir/kubesec"
+          rm -rf "$download_dir"
+        fi
+        echo "$binary_dir" >> "$GITHUB_PATH"
+    - name: Save Kubesec binary
+      if: ${{ inputs.binary-cache == 'true' && steps.kubesec-cache.outputs.cache-hit != 'true' && (inputs.kubesec == 'true' && inputs.kubesec-binary == 'kubesec') }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/kubesec-${{ inputs.kubesec-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-kubesec-${{ inputs.kubesec-version }}-exact
     - name: Restore Kubernetes schemas
       id: schemas
       if: ${{ (inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.schema-cache == 'true' }}
@@ -211,6 +297,7 @@ runs:
       if: ${{ inputs.kubeconform == 'true' || inputs.kubesec == 'true' }}
       shell: bash
       env:
+        HELM_DATA_HOME: ${{ steps.install.outputs.data }}
         HELM_PLUGINS: ${{ steps.install.outputs.plugins }}
         HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: ${{ inputs.schema-memory-dir }}
         SCHEMA_VERSION: ${{ inputs.schema-version }}
@@ -231,6 +318,7 @@ runs:
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
+        HELM_DATA_HOME: ${{ steps.install.outputs.data }}
         HELM_PLUGINS: ${{ steps.install.outputs.plugins }}
         HYPOTHESIS_HELM_JOB_INDEX: ${{ inputs.job-index }}
         HYPOTHESIS_HELM_JOB_TOTAL: ${{ inputs.job-total }}
@@ -240,6 +328,8 @@ runs:
         HH_RUN_ID: ${{ inputs.run-id }}
         HH_MAX_EXAMPLES: ${{ inputs.max-examples }}
         HH_SEED: ${{ inputs.seed }}
+        HH_SAMPLE_RANDOM: ${{ inputs.sample-random }}
+        HH_SAMPLE_MIN_CASES: ${{ inputs.sample-min-cases }}
         HH_TIMEOUT: ${{ inputs.timeout }}
         HH_MATCH: ${{ inputs.match }}
         HH_KUBECONFORM: ${{ inputs.kubeconform }}
@@ -262,6 +352,7 @@ runs:
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
+        HELM_DATA_HOME: ${{ steps.install.outputs.data }}
         HELM_PLUGINS: ${{ steps.install.outputs.plugins }}
         HH_CHART: ${{ inputs.chart }}
         HH_RESOLVED_SHARD: ${{ steps.test.outputs.shard }}
@@ -287,8 +378,14 @@ runs:
       uses: actions/upload-artifact@v7
       with:
         name: ${{ inputs.artifact-name }}-${{ github.job }}-${{ steps.test.outputs.shard-id }}
-        path: |
-          ${{ steps.test.outputs.report-dir }}
-          ${{ steps.test.outputs.kubesec-report-dir }}
+        path: ${{ steps.test.outputs.report-dir }}
+        if-no-files-found: warn
+        retention-days: ${{ inputs.artifact-retention-days }}
+    - name: Upload this shard's security results
+      if: ${{ always() && inputs.upload-artifacts == 'true' && steps.test.outputs.kubesec-report-dir != '' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.artifact-name }}-kubesec-${{ github.job }}-${{ steps.test.outputs.shard-id }}
+        path: ${{ steps.test.outputs.kubesec-report-dir }}
         if-no-files-found: warn
         retention-days: ${{ inputs.artifact-retention-days }}

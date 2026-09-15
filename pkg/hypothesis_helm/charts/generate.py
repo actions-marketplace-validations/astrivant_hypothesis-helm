@@ -18,28 +18,16 @@ from ruamel.yaml.comments import CommentedMap
 
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.generated import RenderOptions
-from hypothesis_helm.charts.runner import Chart, _schema_nodes
+from hypothesis_helm.charts.model import Chart, _default_paths, _schema_nodes
 from hypothesis_helm.charts.templates import Action, Reference, discover, parse
+from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.reporting.progress import format_path
-from hypothesis_helm.schemas.contracts import mapping, number, sequence, text
+from hypothesis_helm.schemas.contracts import mapping, number
+from hypothesis_helm.schemas.paths import ValuePath as ValuePath
+from hypothesis_helm.schemas.paths import dereference as dereference
+from hypothesis_helm.schemas.paths import enumerate_paths as enumerate_paths
 
 LOGGER = logging.getLogger(__name__)
-
-
-@define
-class ValuePath:
-    """
-    Describe a schema path and the provenance of its strategy.
-
-    Attributes:
-        path (tuple[str | int, ...]): Resolved value path or chart location.
-        schema (dict[str, object]): Schema describing accepted values.
-        origin (str): Source of the inferred or documented contract.
-    """
-
-    path: tuple[str | int, ...]
-    schema: dict[str, object]
-    origin: str = "schema"
 
 
 @define
@@ -89,144 +77,6 @@ def infer_schema(value: object) -> dict[str, object]:
     raise ValueError(f"non-JSON YAML value: {type(value).__name__}")
 
 
-def dereference(schema: dict[str, object], root: dict[str, object], seen: tuple[str, ...] = ()) -> dict[str, object]:
-    """
-    Expand local references without discarding sibling constraints.
-
-    Args:
-        schema (dict[str, object]): JSON Schema defining the accepted value domain.
-        root (dict[str, object]): Root schema used to resolve local references.
-        seen (tuple[str, ...]): References already visited while resolving this schema.
-
-    Returns:
-        dict[str, object]: Resulting schema, values mapping, or structured report.
-    """
-    if not isinstance(schema, dict):
-        return schema
-    if "$ref" not in schema:
-        return schema
-    ref = text(schema["$ref"])
-    if ref in seen:
-        raise ValueError(f"recursive schema path cannot be enumerated: {ref}")
-    if not ref.startswith("#"):
-        raise ValueError("only local schema references are supported")
-    target = root
-    for segment in ref[2:].split("/") if ref != "#" else []:
-        target = mapping(target[segment.replace("~1", "/").replace("~0", "~")])
-    resolved = dereference(target, root, (*seen, ref))
-    siblings = {k: v for k, v in schema.items() if k != "$ref"}
-    if not siblings:
-        return resolved
-    return {"allOf": [resolved, siblings]}
-
-
-def enumerate_paths(schema: dict[str, object]) -> list[ValuePath]:
-    """
-    Enumerate containers, leaves, array items and schema-defined map entries.
-
-    `*` denotes array items or arbitrary map keys, and integer segments denote
-    positional array schemas. Branch constraints are retained as a union of candidate
-    subschemas; the complete schema is checked again when running each generated test.
-
-    Args:
-        schema (dict[str, object]): JSON Schema defining the accepted value domain.
-
-    Returns:
-        list[ValuePath]: Result of the documented operation.
-    """
-    collected: dict[tuple[str | int, ...], list[dict[str, object]]] = {}
-    primary: dict[tuple[str | int, ...], list[dict[str, object]]] = {}
-    root = schema
-
-    def walk(
-        node: object,
-        path: tuple[str | int, ...],
-        ancestors: tuple[int, ...] = (),
-        unconditional: bool = True,
-    ) -> None:
-        """
-        Collect schema paths and their unconditional declarations.
-
-        Args:
-            node (object): Current schema or template node.
-            path (tuple[str | int, ...]): Value path or chart location to inspect.
-            ancestors (tuple[int, ...]): Node identities already visited along this traversal.
-            unconditional (bool): Whether the schema declaration applies outside conditional
-                branches.
-
-        Returns:
-            None: None. The operation completes through its documented side effects.
-        """
-        if not isinstance(node, dict):
-            if node is True and path:
-                collected.setdefault(path, []).append({})
-            return
-        if id(node) in ancestors:
-            raise ValueError(f"recursive schema at {path}")
-        ancestors = (*ancestors, id(node))
-        node = dereference(node, root)
-        if path:
-            collected.setdefault(path, []).append(copy.deepcopy(node))
-            if unconditional:
-                primary.setdefault(path, []).append(copy.deepcopy(node))
-        for key, child in mapping(node.get("properties", {})).items():
-            walk(child, (*path, key), ancestors, unconditional)
-        items = node.get("items")
-        if isinstance(items, dict):
-            walk(items, (*path, "*"), ancestors, unconditional)
-        elif isinstance(items, list):
-            for index, child in enumerate(items):
-                walk(child, (*path, index), ancestors, unconditional)
-        for index, child in enumerate(sequence(node.get("prefixItems", []))):
-            walk(child, (*path, index), ancestors, unconditional)
-        if isinstance(node.get("additionalProperties"), dict):
-            walk(node["additionalProperties"], (*path, "*"), ancestors, unconditional)
-        for child in mapping(node.get("patternProperties", {})).values():
-            walk(child, (*path, "*"), ancestors, unconditional)
-        for keyword in ("allOf", "anyOf", "oneOf"):
-            for branch in sequence(node.get(keyword, [])):
-                walk(branch, path, ancestors, False)
-        for keyword in ("then", "else"):
-            if keyword in node:
-                walk(node[keyword], path, ancestors, False)
-
-    walk(schema, ())
-    result = []
-    for path, branches in collected.items():
-        # Repeated branch paths generate one test whose complete input must still
-        # satisfy the original full contract, including conjunctions/conditionals.
-        # Outer declarations constrain all branches. A conditional minItems
-        # fragment must not broaden a declared array into arbitrary JSON.
-        branches = primary.get(path, branches)
-        unique = {json.dumps(b, sort_keys=True): b for b in branches}
-        node = next(iter(unique.values())) if len(unique) == 1 else {"anyOf": list(unique.values())}
-
-        def expand(value: object, refs: tuple[str, ...] = ()) -> object:
-            """
-            Inline local schema references for standalone path strategies.
-
-            Args:
-                value (object): Candidate value supplied by the property strategy.
-                refs (tuple[str, ...]): Reference pointers already expanded on this path.
-
-            Returns:
-                object: Parsed or generated value at the requested boundary.
-            """
-            if isinstance(value, list):
-                return [expand(v, refs) for v in value]
-            if not isinstance(value, dict):
-                return value
-            if "$ref" in value:
-                ref = value["$ref"]
-                if ref in refs:
-                    raise ValueError(f"recursive schema path cannot be generated: {ref}")
-                return expand(dereference(value, root), (*refs, ref))
-            return {k: expand(v, refs) for k, v in value.items() if k not in ("$defs", "definitions")}
-
-        result.append(ValuePath(path, mapping(expand(node))))
-    return result
-
-
 def _literal(token: str) -> tuple[bool, object]:
     """
     Check  literal.
@@ -263,6 +113,10 @@ def _fallbacks(chart: Chart, references: list[Reference]) -> dict[tuple[str, ...
         dict[tuple[str, ...], list[object]]: Result of the documented operation.
     """
     evidence: dict[tuple[str, ...], list[object]] = {}
+    locations: dict[tuple[str, int], set[tuple[str, ...]]] = {}
+    for reference in references:
+        if reference.path:
+            locations.setdefault((reference.file, reference.line), set()).add(reference.path)
     for file in sorted((chart.path / "templates").rglob("*")):
         if not file.is_file():
             continue
@@ -271,19 +125,19 @@ def _fallbacks(chart: Chart, references: list[Reference]) -> dict[tuple[str, ...
         except ValueError:
             continue
 
-        def walk(nodes: list[Action], file_path: Path = file) -> None:
+        def walk(nodes: list[Action], source_name: str = str(file.relative_to(chart.path))) -> None:
             """
             Collect literal fallback evidence from nested template actions.
 
             Args:
                 nodes (list[Action]): Template actions to inspect in lexical order.
-                file_path (Path): File path used by this operation.
+                source_name (str): Chart-relative template path used by the reference index.
 
             Returns:
                 None: None. The operation completes through its documented side effects.
             """
             for node in nodes:
-                paths = {r.path for r in references if r.file == str(file_path.relative_to(chart.path)) and r.line == node.line and r.path}
+                paths = locations.get((source_name, node.line), set())
                 # Parent references introduced by index/aliases are not separate levers.
                 paths = {p for p in paths if not any(q[: len(p)] == p and q != p for q in paths)}
                 if len(paths) == 1:
@@ -388,7 +242,39 @@ def coalesce(chart: Chart) -> Model:
     values = mapping(yamlio.load(yamlio.dump(chart.defaults)))
     schema = copy.deepcopy(chart.schema)
     references, warnings = discover(chart.path)
+    dependencies = chart.dependency_model or Dependencies.build(chart.path)
+    if dependencies.nodes:
+        values = mapping(yamlio.load(yamlio.dump(dependencies.context(chart.defaults, {}))))
+    references.extend(dependencies.references)
     diagnostics = [asdict(w) for w in warnings]
+    diagnostics.extend(dependencies.diagnostics)
+    # Child defaults supply generation types without changing the original chart contract.
+    for dependency in dependencies.nodes:
+        if '"$ref"' in json.dumps(dependency.schema):
+            diagnostics.append(
+                {"path": list(dependency.path), "message": "Child schema references remain local; unresolved types use supplied defaults"}
+            )
+        for entry in enumerate_paths(dependency.schema):
+            full_path = (*dependency.path, *(str(part) for part in entry.path))
+            if not _schema_nodes(schema, full_path, schema) and '"$ref"' not in json.dumps(entry.schema):
+                _add_schema(schema, full_path, copy.deepcopy(entry.schema))
+        for child_path in _default_paths(dependency.defaults):
+            if "*" in child_path:
+                continue
+            full_path = (*dependency.path, *child_path)
+            found, value = _get(dependency.defaults, child_path)
+            if found:
+                _insert(values, full_path, copy.deepcopy(value))
+                if not _schema_nodes(schema, full_path, schema):
+                    _add_schema(schema, full_path, infer_schema(value))
+        for control in dependency.controls:
+            if not _schema_nodes(schema, control, schema):
+                present, supplied = _get(values, control)
+                control_schema: dict[str, object] = {"type": "boolean"}
+                if present and type(supplied) is not bool:
+                    control_schema = {"anyOf": [{"type": "boolean"}, infer_schema(supplied)]}
+                _add_schema(schema, control, control_schema)
+    dependency_controls = {control for dependency in dependencies.nodes for control in dependency.controls}
     fallbacks = _fallbacks(chart, references)
     inferred_paths = set()
     for path in sorted({r.path for r in references if r.path}, key=lambda p: (len(p), p)):
@@ -403,6 +289,8 @@ def coalesce(chart: Chart) -> Model:
             continue
         found, value = _get(values, path)
         nodes = _schema_nodes(chart.schema, path, chart.schema)
+        if not found and path in dependency_controls:
+            continue
         if not found:
             candidates = [n["default"] for n in nodes if "default" in n]
             candidates += fallbacks.get(path, [])
@@ -519,7 +407,10 @@ def strategy_source(schema: dict[str, object]) -> str:
     if kind == "number" and set(node) <= {"type", "minimum", "maximum"}:
         return f"st.floats(min_value={node.get('minimum')!r}, max_value={node.get('maximum')!r}, allow_nan=False, allow_infinity=False)"
     if kind == "string" and set(node) <= {"type", "minLength", "maxLength"}:
-        return f"st.text(min_size={node.get('minLength', 0)!r}, max_size={node.get('maxLength')!r})"
+        return (
+            "st.text(alphabet=st.characters(exclude_categories=('Cc', 'Cs'), include_characters='\\n\\r'), "
+            f"min_size={node.get('minLength', 0)!r}, max_size={node.get('maxLength')!r})"
+        )
     if kind == "array" and isinstance(node.get("items"), dict) and set(node) <= {"type", "items", "minItems", "maxItems"}:
         return (
             f"st.lists({strategy_source(mapping(node['items']))}, min_size={node.get('minItems', 0)!r}, max_size={node.get('maxItems')!r})"
@@ -555,7 +446,7 @@ def generate_tests(
     if max_examples < 1:
         raise ValueError("max_examples must be positive")
     model = coalesce(chart)
-    from hypothesis_helm.compiler.inputs import InputInventory
+    from hypothesis_helm.compiler.passes.inputs import InputInventory
 
     input_inventory = InputInventory.build(chart)
     output = Path(output).resolve()
@@ -583,7 +474,7 @@ def generate_tests(
         "from hypothesis import HealthCheck, given, settings",
         "from hypothesis import strategies as st",
         "from hypothesis.strategies import DataObject",
-        "from hypothesis_jsonschema import from_schema",
+        "from hypothesis_helm.schemas.contracts import schema_strategy as from_schema, supported_generated_text",
         "from hypothesis_helm import Chart",
         "from hypothesis_helm.charts.generated import RenderOptions, check_path, prepared_chart",
         "",
@@ -611,7 +502,7 @@ def generate_tests(
             f"# Path: {entry.path!r}; contract: {entry.origin}",
             f"@pytest.mark.hypothesis_helm_path({entry.path!r})",
             f"@settings(max_examples={max_examples}, deadline=None, suppress_health_check=[HealthCheck.too_slow])",
-            f"@given(value={strategy_source(entry.schema)}, data=st.data())",
+            f"@given(value=({strategy_source(entry.schema)}).filter(supported_generated_text), data=st.data())",
             f"def test_{name}_{digest}(chart: Chart, value: object, data: DataObject) -> None:",
             '    """',
             "    Verify that this value path renders valid resource envelopes.",

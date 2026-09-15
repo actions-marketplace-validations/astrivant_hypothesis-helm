@@ -9,9 +9,11 @@ import logging
 import time
 from pathlib import Path
 
-from hypothesis_helm.charts.runner import Chart, check_chart
-from hypothesis_helm.compiler.inputs import FieldCoverage, InputInventory
+from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
+from hypothesis_helm.rules import ignored_codes
 from hypothesis_helm.schemas.priority import PriorityInputs
 
 LOGGER = logging.getLogger(__name__)
@@ -176,10 +178,13 @@ def check_prioritized(
         if any(phase["status"] == "generation-error" for phase in phases)
         else "time-limit"
         if incomplete
+        else "ignored"
+        if phases and all(phase["status"] in {"ignored", "not-needed"} for phase in phases)
         else "passed"
     )
     result: dict[str, object] = {
         "status": status,
+        "ignored_rules": ignored_codes(),
         "attempts": sum(int(str(phase.get("attempts", 0))) for phase in phases),
         "phases": phases,
         "time_limit_seconds": budget,
@@ -192,8 +197,9 @@ def check_prioritized(
             "applied": True,
             "method": "known-inputs-first",
             "topology_applied": False,
-            "reason": "Generation order only; original-schema cases run last, not removed",
+            "reason": "Known paths first; extra-key cases run last; control-character fuzzing excluded",
             "known_input_budget_fraction": 0.9,
+            "generated_text_policy": "C0/C1 controls excluded from both sampling phases, except LF and CR",
             "deferred_objects": priority.deferred_objects if priority else [],
             "dynamic_objects": priority.dynamic_objects if priority else [],
             "diagnostics": priority.diagnostics if priority else [],

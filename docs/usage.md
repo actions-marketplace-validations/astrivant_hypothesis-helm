@@ -21,25 +21,26 @@ helm hypothesis test ./chart --collect-only
 
 Inside a chart directory, `helm hypothesis test` uses the current directory.
 
-`test` selects coverage automatically for supported finite schemas. It enumerates
-the whole configuration space when the Cartesian count is **less than 10,000**
-and fits the case budget. Larger finite schemas receive pairwise coverage plus
-affordable exhaustive groups inferred from schema constraints and templates.
-Unbounded or unsupported domains fall back to generated per-path testing with a
-logged reason. See [interaction coverage](#interaction-coverage) for the policy,
-explicit groups and planning statistics.
+`test` chooses coverage automatically when it can list every allowed input choice.
+It multiplies the number of choices for each field to count possible configurations
+before applying constraints between fields. If that count is **less than 10,000**
+and fits the case budget, it tests the full space. Larger finite spaces receive
+coverage of every allowed pair of choices, plus full coverage within selected
+groups of related fields when affordable. Otherwise, it tests values paths
+individually and logs the reason.<sup>[\[1\]](#interaction-coverage)</sup>
 
-`--paths` explicitly selects the generated-suite workflow: it coalesces undocumented
-template levers, generates one Python property per value path, and executes the
-suite. Filters, collection, distributed sharding and fixed parallel worker counts
-greater than one also select this workflow unless a finite mode was explicitly
-requested. `--max-examples`
-is a budget **per property**, not a total across the chart. `--match` selects
+`--paths` explicitly selects the generated-suite workflow: it adds fields discovered
+in templates to the working input model, generates one Python test per values path, and executes the
+suite. Collection and distributed sharding also select this workflow. Recursive
+repository tests support `--jobs N` directly: charts run in sequence, with N workers
+sharing the current chart's path queue and timeout.
+`--max-examples` defaults to **10 per property** for `test` and `scan`, not a total across the chart.
+Shrinking a failure can require additional attempts. `--match` selects
 Python test names with a pytest keyword expression; path segments are included in
 those names. `--collect-only` generates and lists the tests without rendering.
 An empty selection returns a nonzero status rather than reporting success.
 
-Progress is logged for each path as it is coalesced, assigned a generated test,
+Progress is logged for each path as it is added to the input model, assigned a generated test,
 and tested. Generation messages go to stderr so `generate` keeps its JSON output
 on stdout. Test progress appears live, once per selected property rather than once
 per Hypothesis example:
@@ -185,6 +186,13 @@ all template guards were activated or every execution branch was reached.
 
 ### Interaction coverage
 
+A **configuration** is one complete set of input values. A **factor** is a field,
+or a container treated as one choice, that the planner varies. Its **domain** is
+the set of allowed choices. An **interaction** specifies choices for several
+factors together. Pairwise coverage means every allowed pair of choices occurs
+in at least one tested configuration; it does not mean every complete
+configuration is tested.<sup>[\[2\]](getting-started/README.md#quick-start)</sup>
+
 Choose the interaction strength with `--permutations`:
 
 ```sh
@@ -202,9 +210,10 @@ random-example budget. `--max-examples` does not control this mode. The default
 automatic strength for larger finite spaces is `2`.
 
 Small spaces are promoted to full enumeration even with an explicit interaction
-strength. `--exhaustive-threshold 10000` is the default: the **unconstrained
-Cartesian product of factor domain sizes** must be strictly smaller than the
-threshold and fit `--max-cases`. This is a conservative affordability decision,
+strength. `--exhaustive-threshold 10000` is the default: **multiply the number of
+choices for each factor**, including choices that constraints may later rule out.
+That count must be strictly smaller than the threshold and fit `--max-cases`.
+This is a conservative affordability decision,
 not a count of schema-valid inputs. A heavily constrained larger space is not
 automatically classified as small. Set `--exhaustive-threshold 0` to disable
 promotion and retain the requested interaction strength. If the strength already
@@ -394,7 +403,8 @@ and dynamic references; its generated tests may expose real chart failures.
 
 Use `helm hypothesis test ./chart --output json` (or `-o json`) to emit
 newline-delimited JSON: one compact Kubernetes resource per line, flushed as
-each Helm render completes. The same flag works with `helm hypothesis run
+each render reaches coordinator verification. Parallel exhaustive runs preserve seeded order and emit complete records from one coordinator.
+The same flag works with `helm hypothesis run
 reports/hypothesis-helm`, `--whole-chart`, and `--exhaustive`. Progress,
 pytest output, reports, and errors go to stderr; stdout contains only manifests.
 Collection-only runs emit no manifests.
@@ -411,7 +421,7 @@ makes the pipeline fail:
 
 ```bash
 set -o pipefail
-helm hypothesis test ./chart -o json |
+helm hypothesis test ./chart --filter -o json |
   (
     status=0
     while IFS= read -r manifest; do
@@ -477,9 +487,9 @@ records each completed test, elapsed time, exit code, active count, target count
 and latest measured throughput. Target changes also appear in progress logs.
 Any failed worker fails the command.
 
-Collection-only runs stay serial. The explicit `--whole-chart` and
-`--exhaustive` modes remain serial; `auto` does not change their execution and
-they reject numeric `--jobs` values above one.
+Collection-only runs stay serial. Explicit `--exhaustive` supports concurrent
+Helm processes with `--jobs N`; `auto` uses the available CPU count.
+Other whole-chart modes remain serial and reject numeric `--jobs` values above one.
 The pre-commit hook inherits `--jobs auto` without configuration changes.
 
 ## Progress and interruption
@@ -632,8 +642,10 @@ CI=true helm hypothesis test ./chart --rerun failed  # explicitly retry in CI
 
 `--rerun auto` is the default. CI runs execute every selected path while recording
 results. `$CI` is case-insensitive: empty, `0`, `false`, `no`, and `off` mean local;
-other nonempty values mean CI. If `$CI` is absent, `GITHUB_ACTIONS`, `GITLAB_CI`, and
-`CIRCLECI` provide fallback detection. An explicit `$CI` takes precedence.
+other nonempty values mean CI. If `$CI` is absent, provider markers for GitHub Actions,
+GitLab CI, CircleCI, Azure Pipelines, Jenkins, and Buildkite provide fallback detection.
+An explicit `$CI` takes precedence for retry defaults. Progress bars stay disabled when
+any provider marker is enabled, even with `CI=false`.
 
 Cache keys include the suite source, coalesced values, schema, original chart files
 (including dependencies), framework source, Python version, seed, keyword selection,

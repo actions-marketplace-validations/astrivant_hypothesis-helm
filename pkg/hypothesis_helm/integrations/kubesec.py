@@ -6,7 +6,6 @@ import argparse
 import json
 import os
 import shutil
-import subprocess
 from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
@@ -70,7 +69,7 @@ def scan(
     binary, parallel = shutil.which(executable), shutil.which("parallel")
     if not binary or not parallel:
         raise ValueError("Kubesec scanning requires kubesec and GNU Parallel")
-    version = subprocess.run([parallel, "--version"], capture_output=True, text=True, timeout=10)
+    version = Processes().run([parallel, "--version"], capture_output=True, text=True, timeout=10)
     if version.returncode or not version.stdout.startswith("GNU parallel"):
         raise ValueError("parallel must be GNU Parallel")
     output = output.resolve()
@@ -105,6 +104,8 @@ def scan(
     command = [
         parallel,
         "--plain",
+        "--term-seq",
+        "TERM,10000,KILL,1000",
         "--jobs",
         str(workers),
         "--halt",
@@ -134,7 +135,7 @@ def scan(
     status = 0
     if selected:
         with (output / "parallel.stdout").open("w") as stdout:
-            result = Processes().run(command, cwd=Path.cwd(), env={**os.environ, "GOMAXPROCS": "1"}, stdout=stdout)
+            result = Processes(interrupt_grace=12).run(command, cwd=Path.cwd(), env={**os.environ, "GOMAXPROCS": "1"}, stdout=stdout)
         status = int(result.returncode != 0)
     conformity_status = 0
     if validate_rest and skipped:

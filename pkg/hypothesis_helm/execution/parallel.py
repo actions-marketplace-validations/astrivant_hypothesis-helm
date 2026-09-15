@@ -11,12 +11,36 @@ import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
+from typing import Literal
 
 from hypothesis_helm.execution.feedback import ThroughputController
 from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.signals import DeferredSignals, Termination
+from hypothesis_helm.execution.traversal import validate_strategy
+from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.display import start_progress
 
 LOGGER = logging.getLogger(__name__)
+
+
+def worker_limit(jobs: int | Literal["auto"]) -> int:
+    """
+    Resolve the same suite concurrency ceiling for execution and dry-run estimates.
+
+    Args:
+        jobs (int | Literal["auto"]): Fixed worker count or automatic throughput tuning.
+
+    Returns:
+        int: Positive fixed count or four times the available process CPUs.
+
+    Raises:
+        ValueError: The fixed worker count is not positive.
+    """
+    if isinstance(jobs, int):
+        if jobs < 1:
+            raise ValueError("jobs must be positive")
+        return jobs
+    return 4 * (os.process_cpu_count() or 1)
 
 
 def run_parallel(
@@ -47,12 +71,14 @@ def run_parallel(
         tuple[int, int]: Aggregate exit status and number of workers used.
     """
     results = artifact_dir or directory
-    with tempfile.TemporaryDirectory(prefix="workers-", dir=results) as temporary:
+    with Termination(), tempfile.TemporaryDirectory(prefix="workers-", dir=results) as temporary:
         workspace = Path(temporary)
         collected = workspace / "collected.json"
-        collection_environment = dict(environment, HYPOTHESIS_HELM_COLLECT=str(collected))
+        depths_file = workspace / "path-depths.json"
+        collection_environment = dict(environment, HYPOTHESIS_HELM_COLLECT=str(collected), HYPOTHESIS_HELM_COLLECT_DEPTHS=str(depths_file))
         collection_environment.pop("HYPOTHESIS_HELM_MANIFEST_FD", None)
-        processes = Processes()
+        # Allow pytest to clean up its own bounded external-command groups first.
+        processes = Processes(interrupt_grace=5.0)
         collection = processes.run(
             [*command, "--collect-only"],
             cwd=directory,
@@ -73,6 +99,8 @@ def run_parallel(
             print(collection.stderr, end="", file=sys.stderr)
             return (collection.returncode if collection.returncode > 0 else 130), 0
         nodes: list[str] = json.loads(collected.read_text())
+        depths: dict[str, int] = json.loads(depths_file.read_text()) if depths_file.exists() else {}
+        layered = validate_strategy(environment.get("HYPOTHESIS_HELM_TRAVERSAL_STRATEGY", "linear")) in {"root-first", "leaf-first"}
         if not nodes:
             return 5, 0
         maximum = min(jobs, len(nodes))
@@ -92,6 +120,8 @@ def run_parallel(
         lock.touch()
         worker_environment = dict(environment, HYPOTHESIS_HELM_MANIFEST_LOCK=str(lock))
         worker_environment.pop("HYPOTHESIS_HELM_SHARD_REPORT", None)
+        worker_environment.pop("HYPOTHESIS_HELM_SAMPLING", None)
+        worker_environment.pop("HYPOTHESIS_HELM_SAMPLING_REPORT", None)
         report_index = command.index("--junitxml") + 1
         reports = [workspace / f"junit-{index}.xml" for index in range(len(nodes))]
 
@@ -124,11 +154,14 @@ def run_parallel(
         next_index = 0
         peak = 0
         interrupted = False
+        stop_status = 130
         progress, task = start_progress(len(nodes), workers, force=force_progress)
         pool = ThreadPoolExecutor(max_workers=maximum, thread_name_prefix="helm-hypothesis")
         try:
             while next_index < len(nodes) or pending:
                 while next_index < len(nodes) and len(pending) < controller.limit:
+                    if layered and pending and depths.get(nodes[next_index], 0) != depths.get(nodes[next(iter(pending.values()))], 0):
+                        break
                     pending[pool.submit(execute, next_index)] = next_index
                     next_index += 1
                     peak = max(peak, len(pending))
@@ -163,17 +196,27 @@ def run_parallel(
                             "throughput": controller.throughput,
                         }
                     )
-        except KeyboardInterrupt:
+        except (KeyboardInterrupt, TimeLimitReached) as cancellation:
+            stop_status = 124 if isinstance(cancellation, TimeLimitReached) else 130
             interrupted = True
             LOGGER.info("Interrupted; stopping active tests and preserving partial results")
-            processes.stop()
-            for future in pending:
-                future.cancel()
         finally:
-            pool.shutdown(wait=True, cancel_futures=True)
-            if interrupted:
-                progress.update(task, description="Interrupted", workers=0)
-            progress.stop()
+            try:
+                with DeferredSignals():
+                    try:
+                        for future in pending:
+                            future.cancel()
+                        processes.stop()
+                    finally:
+                        try:
+                            pool.shutdown(wait=True, cancel_futures=True)
+                        finally:
+                            if interrupted:
+                                progress.update(task, description="Interrupted", workers=0)
+                            progress.stop()
+            except (KeyboardInterrupt, TimeLimitReached) as cancellation:
+                interrupted = True
+                stop_status = 124 if isinstance(cancellation, TimeLimitReached) else 130
         if interrupted:
             for future, index in pending.items():
                 if future.cancelled():
@@ -227,4 +270,4 @@ def run_parallel(
         merged.attrib.update({key: str(value) for key, value in totals.items()})
         merged.set("time", str(elapsed))
         ET.ElementTree(root).write(results / "junit.xml", encoding="utf-8", xml_declaration=True)
-        return (130 if interrupted else max(statuses)), peak
+        return (stop_status if interrupted else max(statuses)), peak

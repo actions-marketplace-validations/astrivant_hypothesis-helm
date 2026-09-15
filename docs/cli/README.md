@@ -29,24 +29,60 @@ for title, command in parsers:
 
 ~~~text
 usage: helm hypothesis [-h]
-                       {aggregate,export-minimal-values,scan,generate,audit,run,test,schemas} ...
+                       {rules,replay-changes,aggregate,export-minimal-values,scan,generate,audit,run,test,schemas} ...
 
 Audit and property-test Helm chart values.
 
 positional arguments:
-  {aggregate,export-minimal-values,scan,generate,audit,run,test,schemas}
+  {rules,replay-changes,aggregate,export-minimal-values,scan,generate,audit,run,test,schemas}
+    rules               list classified chart findings and diagnostics
+    replay-changes      verify and replay saved values or manifest changes
     aggregate           verify piped shard reports and write one final report
     export-minimal-values
                         write example values beside each discovered chart
-    scan                test charts from a directory, Git, or Helm repository
+    scan                fetch and test charts from remote Git or Helm repositories
     generate            generate one typed Python property test per values path
     audit               discover value references and schema gaps
     run                 run a saved generated Python suite
-    test                select finite coverage or generate per-path tests
+    test                discover and test local charts recursively
     schemas             prepare the sparse Kubernetes schema cache
 
 options:
   -h, --help            show this help message and exit
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis rules</summary>
+
+~~~text
+usage: helm hypothesis rules [-h] [--format {text,json,config,markdown}]
+
+options:
+  -h, --help            show this help message and exit
+  --format {text,json,config,markdown}
+                        catalog output format
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis replay-changes</summary>
+
+~~~text
+usage: helm hypothesis replay-changes [-h] [--section {overrides,values,manifests}]
+                                      [--baseline BASELINE] [--output OUTPUT]
+                                      record
+
+positional arguments:
+  record                changes.json from a failing case
+
+options:
+  -h, --help            show this help message and exit
+  --section {overrides,values,manifests}
+  --baseline BASELINE   baseline JSON file; overrides default to an empty map
+  --output OUTPUT       write reconstructed JSON to this file; default: stdout
 ~~~
 
 </details>
@@ -117,18 +153,24 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--values VALUES] [--timeout TIMEOUT]
                             [--chart-timeout CHART_TIMEOUT]
                             [--scan-timeout SCAN_TIMEOUT]
-                            [--max-examples MAX_EXAMPLES]
-                            [--permutations PERMUTATIONS] [--filter] [--fail]
-                            [--seed SEED]
+                            [--max-examples MAX_EXAMPLES] [--cache-dir CACHE_DIR]
+                            [--no-cache] [--jobs JOBS] [--permutations PERMUTATIONS]
+                            [--filter] [--fail] [--seed SEED]
                             [--build-dependencies | --no-build-dependencies]
+                            [--filter-adaptive]
+                            [--sampling-calibration SAMPLING_CALIBRATION]
+                            [--sample-random PERCENT] [--sample-min-cases N]
+                            [--traversal-strategy {random,linear,root-first,leaf-first}]
+                            [--base-ref BASE_REF]
                             [--export-topological-graph [FILENAME]]
                             [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
-                            [--export-minimal-values [FILENAME]]
+                            [--export-minimal-values [FILENAME]] [--config CONFIG]
+                            [--ignore CODE]
                             SOURCE
 
 positional arguments:
-  SOURCE                directory, Git URL, Helm repo[/chart], public index.yaml URL,
-                        or OCI chart
+  SOURCE                Git URL, Helm repo[/chart], public index.yaml URL, or OCI
+                        chart; local paths use test
 
 options:
   -h, --help            show this help message and exit
@@ -150,16 +192,35 @@ options:
                         scan budget excluding dependency preparation; default:
                         unlimited
   --max-examples MAX_EXAMPLES
+  --cache-dir CACHE_DIR
+                        completed chart-result cache; default: .cache/hypothesis-
+                        helm/charts
+  --no-cache            disable completed chart-result caching
+  --jobs, -j JOBS       path workers per chart; auto: available CPUs
   --permutations PERMUTATIONS
                         finite interaction strength; default: automatic finite
                         coverage or sampling
-  --filter              filter finite charts; otherwise prioritize known inputs and
-                        run robustness cases last
+  --filter              filter finite charts with failure expansion; otherwise filter
+                        generated inputs before path traversal
   --fail                stop on the first chart test failure; save partial results and
                         exit 1
   --seed SEED
   --build-dependencies, --no-build-dependencies
                         build locked dependencies in temporary chart copies
+  --filter-adaptive     enable --filter and retain 70% subject to measured topology
+                        sample floors; unmatched charts keep all filtered cases
+  --sampling-calibration SAMPLING_CALIBRATION
+                        override the packaged adaptive-sampling calibration JSON
+  --sample-random PERCENT
+                        retain this percentage after filtering; default: 100
+                        (disabled); no bug-recall guarantee
+  --sample-min-cases N  retain at least N eligible cases, or all when fewer exist
+                        (default: 128)
+  --traversal-strategy {random,linear,root-first,leaf-first}
+                        value-path order: seeded random (default), original linear,
+                        root-first, or leaf-first
+  --base-ref BASE_REF   Git comparison ref for repository tests; overrides CI target
+                        or previous trunk commit
   --export-topological-graph [FILENAME]
                         export input references, control flow and observed manifests
                         as JSON and DOT
@@ -170,6 +231,9 @@ options:
                         export example values with validation status and missing
                         fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
                         separate files per chart)
+  --config CONFIG       rule policy YAML; default: .hypothesis-helm.yaml in the
+                        working directory
+  --ignore CODE         disable one built-in check; repeat to add codes
 ~~~
 
 </details>
@@ -181,7 +245,8 @@ options:
 usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMPLES]
                                 [--strict] [--export-topological-graph [FILENAME]]
                                 [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
-                                [--export-minimal-values [FILENAME]]
+                                [--export-minimal-values [FILENAME]] [--config CONFIG]
+                                [--ignore CODE]
                                 chart
 
 positional arguments:
@@ -203,6 +268,9 @@ options:
                         export example values with validation status and missing
                         fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
                         separate files per chart)
+  --config CONFIG       rule policy YAML; default: .hypothesis-helm.yaml in the
+                        working directory
+  --ignore CODE         disable one built-in check; repeat to add codes
 ~~~
 
 </details>
@@ -213,7 +281,8 @@ options:
 ~~~text
 usage: helm hypothesis audit [-h] [--strict] [--export-topological-graph [FILENAME]]
                              [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
-                             [--export-minimal-values [FILENAME]]
+                             [--export-minimal-values [FILENAME]] [--config CONFIG]
+                             [--ignore CODE]
                              chart
 
 positional arguments:
@@ -232,6 +301,9 @@ options:
                         export example values with validation status and missing
                         fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
                         separate files per chart)
+  --config CONFIG       rule policy YAML; default: .hypothesis-helm.yaml in the
+                        working directory
+  --ignore CODE         disable one built-in check; repeat to add codes
 ~~~
 
 </details>
@@ -241,14 +313,17 @@ options:
 
 ~~~text
 usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
-                           [--artifact-dir ARTIFACT_DIR] [--kubeconform]
-                           [--schema-version SCHEMA_VERSION]
+                           [--artifact-dir ARTIFACT_DIR] [--sample-random PERCENT]
+                           [--sample-min-cases N]
+                           [--traversal-strategy {random,linear,root-first,leaf-first}]
+                           [--kubeconform] [--schema-version SCHEMA_VERSION]
                            [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
                            [--kubeconform-binary KUBECONFORM_BINARY] [--dry-run]
                            [--cache-dir CACHE_DIR] [--disable-schema-caching]
                            [--progress] [--run-id RUN_ID] [--no-cache]
                            [--rerun {auto,all,failed}] [--shard SHARD] [--jobs JOBS]
-                           [--output {json}] [--strict]
+                           [--output {json}] [--strict] [--config CONFIG]
+                           [--ignore CODE]
                            suite
 
 positional arguments:
@@ -261,6 +336,14 @@ options:
   --collect-only
   --artifact-dir ARTIFACT_DIR
                         report directory for a saved suite
+  --sample-random PERCENT
+                        retain this percentage after filtering; default: 100
+                        (disabled); no bug-recall guarantee
+  --sample-min-cases N  retain at least N eligible cases, or all when fewer exist
+                        (default: 128)
+  --traversal-strategy {random,linear,root-first,leaf-first}
+                        value-path order: seeded random (default), original linear,
+                        root-first, or leaf-first
   --kubeconform         validate Kubernetes API schemas
   --schema-version SCHEMA_VERSION
                         Kubernetes schema version: latest or X.Y.Z
@@ -282,12 +365,15 @@ options:
                         auto: rerun failures locally; run all paths in CI
   --shard SHARD         auto (default): detect CI node; INDEX/TOTAL: explicit shard;
                         none: disable
-  --jobs, -j JOBS       auto (default): PID throughput tuning; N: fixed worker count;
-                        1: serial
+  --jobs, -j JOBS       workers per chart; auto: CPU count for repository/exhaustive
+                        tests, PID tuning for suites; 1: serial
   --output, -o {json}   stream one rendered manifest per JSON line on stdout; reports
                         go to stderr
   --strict              require all configurable fields in source values.yaml and a
                         clean audit
+  --config CONFIG       rule policy YAML; default: .hypothesis-helm.yaml in the
+                        working directory
+  --ignore CODE         disable one built-in check; repeat to add codes
 ~~~
 
 </details>
@@ -296,7 +382,11 @@ options:
 <summary>helm hypothesis test</summary>
 
 ~~~text
-usage: helm hypothesis test [-h] [--max-examples MAX_EXAMPLES] [--time-limit DURATION]
+usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
+                            [--chart-timeout CHART_TIMEOUT]
+                            [--scan-timeout SCAN_TIMEOUT]
+                            [--build-dependencies | --no-build-dependencies] [--fail]
+                            [--max-examples MAX_EXAMPLES] [--time-limit DURATION]
                             [--paths | --exhaustive | --whole-chart |
                             --permutations N] [--filter] [--trim-random N]
                             [--trim-topology N] [--expand-failures]
@@ -305,26 +395,42 @@ usage: helm hypothesis test [-h] [--max-examples MAX_EXAMPLES] [--time-limit DUR
                             [--exhaustive-threshold EXHAUSTIVE_THRESHOLD]
                             [--exhaustive-group PATH,PATH] [--no-infer-groups]
                             [--max-group-cases MAX_GROUP_CASES] [--seed SEED]
+                            [--filter-adaptive]
+                            [--sampling-calibration SAMPLING_CALIBRATION]
+                            [--sample-random PERCENT] [--sample-min-cases N]
+                            [--traversal-strategy {random,linear,root-first,leaf-first}]
                             [--timeout TIMEOUT] [--helm HELM] [--release RELEASE]
                             [--namespace NAMESPACE] [--kube-version KUBE_VERSION]
                             [--allow-empty] [--artifact-dir ARTIFACT_DIR]
                             [--kubeconform] [--schema-version SCHEMA_VERSION]
                             [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
-                            [--kubeconform-binary KUBECONFORM_BINARY] [--dry-run]
-                            [--cache-dir CACHE_DIR] [--disable-schema-caching]
-                            [--progress] [--run-id RUN_ID] [--no-cache]
-                            [--rerun {auto,all,failed}] [--shard SHARD] [--jobs JOBS]
-                            [--output {json}] [--strict]
+                            [--kubeconform-binary KUBECONFORM_BINARY]
+                            [--base-ref BASE_REF] [--dry-run] [--cache-dir CACHE_DIR]
+                            [--disable-schema-caching] [--progress] [--run-id RUN_ID]
+                            [--no-cache] [--rerun {auto,all,failed}] [--shard SHARD]
+                            [--jobs JOBS] [--output {json}] [--strict]
                             [--export-topological-graph [FILENAME]]
                             [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
-                            [--export-minimal-values [FILENAME]]
+                            [--export-minimal-values [FILENAME]] [--config CONFIG]
+                            [--ignore CODE]
                             [chart]
 
 positional arguments:
-  chart                 chart directory (defaults to the current directory)
+  chart                 local chart or directory containing charts (default: current
+                        directory)
 
 options:
   -h, --help            show this help message and exit
+  --report [PATH]       write combined Markdown/PDF; default: <dir>_<epoch>_report
+  --values VALUES       baseline file relative to each chart, or an absolute path
+  --chart-timeout CHART_TIMEOUT
+                        property-test budget per discovered chart (default: 3m)
+  --scan-timeout SCAN_TIMEOUT
+                        total local discovery/testing budget, excluding dependency
+                        preparation
+  --build-dependencies, --no-build-dependencies
+                        build dependencies in isolated copies
+  --fail                stop on the first chart failure and save partial results
   --max-examples MAX_EXAMPLES
   --time-limit DURATION
                         whole-chart execution budget, e.g. 30s or 3m (default: 3m);
@@ -355,6 +461,18 @@ options:
   --max-group-cases MAX_GROUP_CASES
                         bound automatically inferred group domains
   --seed SEED
+  --filter-adaptive     enable --filter and retain 70% subject to measured topology
+                        sample floors; unmatched charts keep all filtered cases
+  --sampling-calibration SAMPLING_CALIBRATION
+                        override the packaged adaptive-sampling calibration JSON
+  --sample-random PERCENT
+                        retain this percentage after filtering; default: 100
+                        (disabled); no bug-recall guarantee
+  --sample-min-cases N  retain at least N eligible cases, or all when fewer exist
+                        (default: 128)
+  --traversal-strategy {random,linear,root-first,leaf-first}
+                        value-path order: seeded random (default), original linear,
+                        root-first, or leaf-first
   --timeout TIMEOUT
   --helm HELM
   --release RELEASE
@@ -368,6 +486,8 @@ options:
   --schema-cache-dir SCHEMA_CACHE_DIR
   --schema-offline      reuse cached schemas without network access
   --kubeconform-binary KUBECONFORM_BINARY
+  --base-ref BASE_REF   Git comparison ref for repository tests; overrides CI target
+                        or previous trunk commit
   --dry-run             plot coverage and forecast filtering or cached property work
                         without execution
   --cache-dir CACHE_DIR
@@ -383,8 +503,8 @@ options:
                         auto: rerun failures locally; run all paths in CI
   --shard SHARD         auto (default): detect CI node; INDEX/TOTAL: explicit shard;
                         none: disable
-  --jobs, -j JOBS       auto (default): PID throughput tuning; N: fixed worker count;
-                        1: serial
+  --jobs, -j JOBS       workers per chart; auto: CPU count for repository/exhaustive
+                        tests, PID tuning for suites; 1: serial
   --output, -o {json}   stream one rendered manifest per JSON line on stdout; reports
                         go to stderr
   --strict              require all configurable fields in source values.yaml and a
@@ -399,6 +519,9 @@ options:
                         export example values with validation status and missing
                         fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
                         separate files per chart)
+  --config CONFIG       rule policy YAML; default: .hypothesis-helm.yaml in the
+                        working directory
+  --ignore CODE         disable one built-in check; repeat to add codes
 
 filtering:
   Use --filter or the individual methods below; random trimming is independent.

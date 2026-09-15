@@ -71,6 +71,9 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
         fcntl.flock(publication, fcntl.LOCK_EX)
         records: list[dict[str, object]] = []
         signatures: set[str] = set()
+        traversal: set[tuple[str, str]] = set()
+        sampling_policies: set[str] = set()
+        ignored_policies: set[str] = set()
         inventories: set[str] = set()
         selected: set[str] = set()
         matched: set[int] = set()
@@ -99,6 +102,9 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             if not isinstance(signature, str) or not isinstance(inventory, str):
                 raise ValueError(f"Shard {index}/{total} lacks suite or collection identity")
             signatures.add(signature)
+            ignored_policies.add(json.dumps(record.get("ignored_rules", []), sort_keys=True))
+            sampling_policies.add(json.dumps(record.get("sampling"), sort_keys=True))
+            traversal.add((str(record.get("traversal_strategy", "linear")), str(record.get("traversal_algorithm", "legacy"))))
             inventories.add(inventory)
             matched.add(int(str(assignment["matched"])))
             nodes = [str(node) for node in sequence(assignment["tests"])]
@@ -136,6 +142,12 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             records.append(record)
             input_hash.update(raw)
             input_hash.update(junit)
+        if len(ignored_policies) != 1:
+            raise ValueError("Shards used different ignored-rule policies")
+        if len(sampling_policies) != 1:
+            raise ValueError("Shards used different random sampling policies or populations")
+        if len(traversal) != 1:
+            raise ValueError("Shards used different traversal strategies or algorithms")
         if len(signatures) != 1 or len(inventories) != 1 or matched != {len(selected)}:
             raise ValueError("Shards do not cover the same suite and complete property selection")
         actual_inventory = hashlib.sha256(json.dumps(sorted(selected)).encode()).hexdigest()
@@ -170,6 +182,7 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
         ]
         record = {
             "chart": Path(str(records[0]["suite"])).name,
+            "sampling": json.loads(next(iter(sampling_policies))),
             "status": outcome,
             "result": "PASS" if status == 0 else "FAIL" if status == 1 else "N/A",
             "coverage": f"{len(selected)} selected properties across {total} shards",
@@ -180,6 +193,7 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             record["error"] = "\n\n".join(failures)
         report: dict[str, object] = {
             "title": "Helm sharded test results",
+            "ignored_rules": json.loads(next(iter(ignored_policies))),
             "directory": str(directory) if directory is not None else "piped shard reports",
             "run_id": run_id,
             "input_digest": identity,
@@ -192,7 +206,13 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             "charts_discovered": 1,
             "counts": {outcome: 1},
             "charts": [record],
-            "settings": {"shards": total, "jobs_per_shard": [item["jobs"] for item in records]},
+            "settings": {
+                "shards": total,
+                "jobs_per_shard": [item["jobs"] for item in records],
+                "sampling": json.loads(next(iter(sampling_policies))),
+                "traversal_strategy": next(iter(traversal))[0],
+                "traversal_algorithm": next(iter(traversal))[1],
+            },
             "summary": summary,
             "shards": records,
             "exit_code": status,

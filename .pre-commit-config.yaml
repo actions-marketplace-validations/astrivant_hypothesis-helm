@@ -15,6 +15,12 @@ repos:
         files: ^(pkg|scripts)/.*\.py$
   - repo: local
     hooks:
+      - id: shfmt
+        name: shfmt
+        entry: bash scripts/project-run.sh shfmt -w
+        language: system
+        types: [shell]
+        files: ^(scripts/|benchmarks/|pkg/hypothesis_helm/integrations/)
       - id: ruff-check
         name: Ruff lint
         entry: bash scripts/project-run.sh ruff check
@@ -33,8 +39,8 @@ repos:
         pass_filenames: false
         always_run: true
       - id: cli-reference
-        name: Generated CLI reference
-        entry: bash scripts/project-run.sh cog --check docs/cli/README.md
+        name: Generated CLI and finding references
+        entry: bash scripts/project-run.sh cog --check docs/cli/README.md docs/rules/README.md
         language: system
         pass_filenames: false
         always_run: true

@@ -1,8 +1,11 @@
 # CI integration
 
-For a final release check, run manually on trunk before tagging, using `--rerun all`
-to refresh results for the selected tests. See the [manual CI examples and retention
-policy](ci/README.md#recommended-release-check); keep the tested commit as the release candidate.
+Use `--filter-adaptive` on MRs/PRs, `--filter` on `main`, and an unfiltered exhaustive search before tagging.
+See the [recommended workflow](ci/README.md#recommended-workflow) for commands and release coverage requirements.
+
+For cached property tests, use `--rerun all` to refresh results for every selected test.
+This does not turn a filtered run into an exhaustive search. See the [release check and cache retention
+policy](ci/README.md#recommended-release-check); tag the commit whose exhaustive coverage you reviewed.
 
 `helm hypothesis test` and `helm hypothesis run` default to `--shard auto`.
 Parallel pipeline jobs automatically select a deterministic partition, while
@@ -84,6 +87,33 @@ jobs:
           jobs: auto
           max-examples: '50'
           seed: '42'
+          run-id: ${{ github.run_id }}-${{ github.run_attempt }}
+  report:
+    needs: chart
+    if: ${{ always() && needs.chart.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install 'git+https://github.com/astrivant/hypothesis-helm.git@main'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: hypothesis-helm-chart-*
+          path: downloaded
+      - name: Write final report
+        env:
+          HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          cat downloaded/*/report.json | hypothesis-helm aggregate \
+            --shards 4 --run-id "$HH_RUN_ID" --output-dir reports/final
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: hypothesis-helm-final
+          path: reports/final/
+          if-no-files-found: error
+          retention-days: 30
 ```
 
 No shard calculation is required in shell. The matrix values create four jobs;
@@ -142,9 +172,20 @@ Use the [copyable remote examples](ci/README.md). CircleCI imports the
 [URL orb](../ci/circleci.yml); GitLab uses `include: remote` with the
 [shared job](../ci/gitlab.yml). Both install the plugin and validators, prepare
 cached schemas, and preserve per-shard artifacts.
+Both provide a downstream aggregation job that verifies every shard, including
+idle shards, and writes the final PDF, Markdown, JSON, and JUnit bundle.
 
 CircleCI detects its node coordinates automatically. The GitLab version/shard
 matrix passes explicit indices so each Kubernetes version covers the whole suite.
+
+## Caching installed binaries
+
+The GitHub Action caches Helm, Kubeconform and optional Kubesec binaries by tool,
+version, operating system and architecture. Set `binary-cache: 'false'` to disable
+both persistence and reuse. This is separate from `cache`, which controls test
+outcomes, and `schema-cache`, which controls Kubernetes schemas. Preinstalled
+validator overrides are unchanged. The shared GitLab and CircleCI definitions
+also cache release binaries by default.<sup>[\[1\]](ci/README.md#binary-downloads-and-caching)</sup>
 
 ## Persisting path outcomes
 

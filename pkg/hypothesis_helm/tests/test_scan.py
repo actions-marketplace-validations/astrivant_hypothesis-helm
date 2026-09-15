@@ -13,6 +13,55 @@ from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.reporting.repository import wrap_markdown, write_reports
 
 
+@pytest.mark.parametrize("existing", [False, True])
+def test_scan_rejects_local_directories(tmp_path: Path, existing: bool, capsys: pytest.CaptureFixture[str]) -> None:
+    """
+    Keep remote scanning separate from local directory testing.
+
+    Args:
+        tmp_path (Path): Local source directory.
+        existing (bool): Whether the requested local path exists.
+        capsys (pytest.CaptureFixture[str]): Capture the CLI diagnostic.
+
+    Returns:
+        None: Both local spellings fail with guidance to use test.
+    """
+    source = tmp_path if existing else tmp_path / "missing"
+    assert main(["scan", str(source), "--helm", "/usr/bin/true"]) == 2
+    error = json.loads(capsys.readouterr().out)["error"]
+    assert "use test" in error
+
+
+def test_local_testing_never_fetches_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Prevent local discovery from interpreting a directory as a remote repository alias.
+
+    Args:
+        tmp_path (Path): Empty local directory.
+        monkeypatch (pytest.MonkeyPatch): Guard remote source preparation.
+
+    Returns:
+        None: Local discovery reports no charts without a source-fetch request.
+    """
+
+    def remote(*args: object, **kwargs: object) -> None:
+        """
+        Reject an unexpected remote source operation.
+
+        Args:
+            *args (object): Source arguments.
+            **kwargs (object): Source options.
+
+        Returns:
+            None: This boundary must never be reached.
+        """
+        pytest.fail("Local testing attempted remote source preparation")
+
+    monkeypatch.setattr("hypothesis_helm.charts.scan.prepare_helm_source", remote)
+    monkeypatch.setattr("hypothesis_helm.charts.scan.RepositorySource.prepare", remote)
+    assert main(["test", str(tmp_path), "--helm", "/usr/bin/true", "--artifact-dir", str(tmp_path / "results")]) == 2
+
+
 def test_discovery(tmp_path: Path) -> None:
     """
     Find nested charts, preserve invalid metadata, and avoid symlink cycles.
@@ -75,7 +124,7 @@ def test_report_paths_and_pagination(tmp_path: Path) -> None:
         tmp_path (Path): Report destination.
 
     Returns:
-        None: Both files contain the complete scan summary.
+        None: Long diagnostics are summarized; many distinct charts still paginate.
     """
     report: dict[str, object] = {
         "directory": "/charts",
@@ -91,8 +140,17 @@ def test_report_paths_and_pagination(tmp_path: Path) -> None:
     assert md.name == "custom.md"
     assert pdf.name == "custom.pdf"
     assert "failure" in md.read_text()
+    assert "<img " not in md.read_text()
+    assert not (tmp_path / "hypothesis-helm-logo.png").exists()
+    assert b"/Subtype /Image" in pdf.read_bytes()
     assert all(len(line) <= 140 for line in md.read_text().splitlines())
     assert pdf.read_bytes().startswith(b"%PDF-")
+    assert pdf.read_bytes().count(b"/Type /Page\n") == 1
+    assert "Diagnostic shortened" in md.read_text()
+    report["charts"] = [{"chart": f"demo-{index}", "status": "failed", "error": "failure"} for index in range(40)]
+    report["charts_discovered"] = 40
+    report["counts"] = {"failed": 40}
+    _, pdf = write_reports(report, tmp_path / "many")
     assert pdf.read_bytes().count(b"/Type /Page\n") >= 2
 
 
@@ -155,7 +213,7 @@ def test_scan_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys:
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--no-build-dependencies",
                 "--report",
@@ -170,7 +228,7 @@ def test_scan_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys:
     assert report["counts"] == {"passed": 1, "baseline-only": 1}
     assert (tmp_path / "result.md").exists()
     assert (tmp_path / "result.pdf").exists()
-    assert argument_parser().parse_args(["scan", str(tmp_path), "--report"]).report == ""
+    assert argument_parser().parse_args(["test", str(tmp_path), "--report"]).report == ""
 
 
 @pytest.mark.parametrize("fail_fast", [False, True])
@@ -228,7 +286,7 @@ def test_scan_fail_flag(
 
     monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", exercise)
     options = [
-        "scan",
+        "test",
         str(tmp_path),
         "--helm",
         "/usr/bin/true",
@@ -275,7 +333,7 @@ def test_missing_values_single_and_recursive(tmp_path: Path, capsys: pytest.Capt
     first = tmp_path / "first"
     first.mkdir()
     (first / "Chart.yaml").write_text("apiVersion: v2\nname: first\nversion: '1.0.0'\n")
-    assert main(["scan", str(first), "--helm", "/usr/bin/true", "--artifact-dir", str(tmp_path / "out")]) == 1
+    assert main(["test", str(first), "--helm", "/usr/bin/true", "--artifact-dir", str(tmp_path / "out")]) == 1
     report = json.loads(capsys.readouterr().out)
     assert report["counts"] == {"missing-values": 1}
     assert report["charts"][0]["result"] == "N/A"
@@ -286,7 +344,7 @@ def test_missing_values_single_and_recursive(tmp_path: Path, capsys: pytest.Capt
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--helm",
                 "/usr/bin/true",
@@ -294,10 +352,12 @@ def test_missing_values_single_and_recursive(tmp_path: Path, capsys: pytest.Capt
                 str(tmp_path / "out"),
             ]
         )
-        == 2
+        == 1
     )
     report = json.loads(capsys.readouterr().out)
-    assert report["counts"] == {"missing-values": 1, "baseline-only": 1}
+    assert report["counts"] == {"missing-values": 1, "failed": 1}
+    assert report["charts"][1]["error"] == "[HH1009] chart rendered no resources"
+    assert report["charts"][1]["baseline"]["code"] == "HH1009"
 
 
 def test_values_override_and_dependency_build(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
@@ -349,12 +409,13 @@ def test_values_override_and_dependency_build(tmp_path: Path, monkeypatch: pytes
         assert (path / "values.yaml").read_text() == "enabled: true\n"
         return {"status": "passed", "attempts": 1}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.subprocess.run", command)
+    monkeypatch.setattr("hypothesis_helm.charts.scan.Processes.run", lambda self, *args, **kwargs: command(*args, **kwargs))
+    monkeypatch.setattr("hypothesis_helm.charts.scan.comparison", lambda *args: {"status": "unavailable"})
     monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", exercise)
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--helm",
                 "/usr/bin/true",
@@ -406,7 +467,7 @@ def test_interrupt_preserves_remaining_charts(tmp_path: Path, monkeypatch: pytes
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--helm",
                 "/usr/bin/true",
@@ -465,7 +526,7 @@ def test_scan_timeout_pauses_for_dependencies(tmp_path: Path, capsys: pytest.Cap
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--helm",
                 str(helm),
@@ -516,11 +577,12 @@ def test_timeout_during_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     import time
 
     (tmp_path / "Chart.yaml").write_text("apiVersion: v2\nname: a\nversion: '1.0.0'\n")
+    monkeypatch.chdir(tmp_path)  # Keep the slow chart parser separate from caller policy loading.
     monkeypatch.setattr("hypothesis_helm.charts.scan.yamlio.load", lambda text: time.sleep(2))
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--helm",
                 "/usr/bin/true",
@@ -610,11 +672,12 @@ def test_dependency_timing_accounting(
         clock[0] += 0.25
         return {"status": "passed", "attempts": 1, "execution_seconds": 0.2}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.subprocess.run", prepare)
+    monkeypatch.setattr("hypothesis_helm.charts.scan.Processes.run", lambda self, *args, **kwargs: prepare(*args, **kwargs))
+    monkeypatch.setattr(module, "comparison", lambda *args: {"status": "unavailable"})
     monkeypatch.setattr(module, "exercise_chart", exercise)
     code = main(
         [
-            "scan",
+            "test",
             str(tmp_path),
             "--helm",
             "/usr/bin/true",
@@ -643,13 +706,13 @@ def test_scan_timeout_arguments() -> None:
         None: Defaults and duration parsing remain explicit.
     """
     parser = argument_parser()
-    args = parser.parse_args(["scan", "."])
+    args = parser.parse_args(["scan", "https://example.com/charts.git"])
     assert args.chart_timeout == 180
     assert args.scan_timeout is None
-    assert parser.parse_args(["scan", ".", "--time-limit", "2m"]).chart_timeout == 120
+    assert parser.parse_args(["scan", "https://example.com/charts.git", "--time-limit", "2m"]).chart_timeout == 120
     for flag in ("--chart-timeout", "--scan-timeout"):
         with pytest.raises(SystemExit):
-            parser.parse_args(["scan", ".", flag, "0"])
+            parser.parse_args(["scan", "https://example.com/charts.git", flag, "0"])
 
 
 def test_scan_deadline_preserves_runner_statistics(
@@ -700,7 +763,7 @@ def test_scan_deadline_preserves_runner_statistics(
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--helm",
                 "/usr/bin/true",
@@ -767,16 +830,19 @@ def test_scan_filter_support(
         return {"status": "passed", "attempts": 1}
 
     monkeypatch.setattr("hypothesis_helm.charts.scan.check_chart", check)
-    monkeypatch.setattr("hypothesis_helm.charts.prioritized.check_chart", check)
+    monkeypatch.setattr("hypothesis_helm.charts.paths.check_chart", check)
+    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     assert (
         main(
             [
-                "scan",
+                "test",
                 str(tmp_path),
                 "--helm",
                 "/usr/bin/true",
                 "--no-build-dependencies",
                 "--filter",
+                "--jobs",
+                "1",
                 "--artifact-dir",
                 str(tmp_path / "out"),
             ]
@@ -788,5 +854,5 @@ def test_scan_filter_support(
     assert called.get("expand_failures", False) is finite
     assert report["charts"][0]["filtering"]["applied"] is True
     if not finite:
-        assert report["charts"][0]["filtering"]["method"] == "known-inputs-first"
+        assert report["charts"][0]["filtering"]["method"] == "known-path-generation"
         assert "input_strategy" in called

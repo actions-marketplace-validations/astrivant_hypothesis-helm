@@ -13,6 +13,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.rules import ignored
+
 ENVIRONMENT = "HYPOTHESIS_HELM_CONFORMITY"
 REPOSITORY = "https://github.com/yannh/kubernetes-json-schema.git"
 LOGGER = logging.getLogger(__name__)
@@ -29,7 +32,7 @@ def git(directory: Path, *arguments: str) -> str:
     Returns:
         str: Git standard output.
     """
-    result = subprocess.run(["git", "-C", str(directory), *arguments], capture_output=True, text=True, timeout=180)
+    result = Processes().run(["git", "-C", str(directory), *arguments], capture_output=True, text=True, timeout=180)
     if result.returncode:
         raise ValueError(f"schema cache git command failed: {result.stderr.strip()}")
     return result.stdout.strip()
@@ -52,7 +55,7 @@ def memory_snapshot(snapshot: Path) -> Path:
     ancestor = root
     while not ancestor.exists():
         ancestor = ancestor.parent
-    result = subprocess.run(
+    result = Processes().run(
         ["stat", "-f", "-c", "%T", str(ancestor)],
         capture_output=True,
         text=True,
@@ -181,12 +184,12 @@ def validate(manifests: str, timeout: float) -> None:
         None: Every resource conforms, or validation raises an assertion failure.
     """
     configuration = os.environ.get(ENVIRONMENT)
-    if not configuration:
+    if not configuration or ignored("HH1010"):
         return
     settings = json.loads(configuration)
     location = settings["schemas"] + "/{{ .ResourceKind }}{{ .KindSuffix }}.json"
     try:
-        result = subprocess.run(
+        result = Processes().run(
             [
                 settings["executable"],
                 "-strict",

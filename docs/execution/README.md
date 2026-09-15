@@ -2,19 +2,89 @@
 
 [Documentation](../README.md) · [Project](../../README.md)
 
+Random text generation excludes tabs and other C0/C1 control characters, such as
+`\u001f`, that are generally not useful chart inputs. Newlines and carriage returns
+remain allowed for multiline configuration, as does other Unicode text. The same
+rules apply inside nested values and generated object keys.
+This applies to whole-chart sampling and newly generated per-path suites; regenerate
+saved suites to update their strategies. Explicit finite domains and chart defaults
+are unchanged. If a schema requires only excluded strings, sampling cannot satisfy
+that schema; an empty or unsatisfiable sample is not a successful test.
+
+## Value-path traversal
+
+`run`, `test`, and `scan` default to `--traversal-strategy random`. Discovery builds
+the path inventory, filtering selects the work, and traversal orders it for execution.
+Each selected path is scheduled once per invocation. Its **property test** can try
+many values and, on failure, simplify the input to a smaller reproducing example
+(called **shrinking**). A timeout leaves the unvisited paths explicitly untested.<sup>[\[1\]](../architecture/README.md#execution-and-validation)</sup>
+
+| Strategy | Execution order |
+| --- | --- |
+| `random` | Random order, reproducible with the same seed and selected paths. |
+| `linear` | Original path order. Scans follow supplied values before additional discovered paths. |
+| `root-first` | Increasing path depth: `.global` before `.global.configMaps`. |
+| `leaf-first` | Decreasing path depth: deepest leaves before their parent containers. |
+
+```sh
+helm hypothesis test ./charts --filter --seed 42 --traversal-strategy random --chart-timeout 3m
+helm hypothesis run generated-tests --traversal-strategy leaf-first --seed 42
+```
+
+The previous names `shallow` and `deep` are no longer accepted. Update existing
+commands to `root-first` and `leaf-first`, respectively.
+
+The same seed and selected paths reproduce the execution order. Change the seed
+to test a different selection of paths before a timeout; some paths may appear in
+both runs. Assigning paths to shards or skipping cached successes does not reorder
+the remaining paths. Root-first and leaf-first traversal finish all paths at one depth
+before starting the next depth within each shard. Independent CI shards do not
+wait for one another. Paths at the same depth keep their original order.
+
+Finite permutation runs order distinct configurations after trimming, with defaults
+checked first. Fields necessarily recur across joint configurations. In these modes,
+root-first uses the shallowest changed field and leaf-first the deepest, relative to defaults.
+A render can be skipped as equivalent only after another input has passed validation
+and the compiler has established that both inputs produce exactly the same output.
+
+Ordering costs O(P) for linear traversal and O(P log P) for the other strategies,
+with O(P) storage, excluding path encoding and finite-case comparisons. P counts
+the paths or configurations selected for execution. Changing traversal strategy
+changes their order; it does not add or remove tests. Testing every path does not
+test every possible value or every interaction between paths.
+
+Scan reports retain the seed, strategy, visited order, completed and incomplete path
+counts, and remaining order. `path-inventory.json` records the planned sequence.
+Per-path dry runs list the same ordered properties without executing them.
+
 ## Parallel execution
 
-The unit of parallel work is a generated property for a values path. Each property
-can render and validate its own inputs without depending on another property's
-results, allowing the suite to execute properties concurrently.
+Repository tests process one chart at a time. With `--jobs 6`, six Python workers
+share that chart's ordered queue of value paths. Each path is claimed once and
+receives up to **10 generated examples** by default (`--max-examples` overrides this).
+Workers share one `--chart-timeout` deadline, rather than receiving a separate chart
+budget each. They stop and are joined before the next chart starts. Dependency
+preparation happens before testing and is excluded from this budget.
+
+`--jobs auto` uses the available CPU count for this repository path queue. Results
+record completed and interrupted paths separately; workers write isolated records
+which the coordinator merges into the chart report. A fixed seed reproduces the
+queue order, but timing and worker scheduling can change where a timed run stops.
+Render-hash caches remain local to each property; this queue does not introduce a
+shared writable render cache. Finite interaction execution remains serial.
+
+The generated pytest suite uses a separate scheduler:
+
+Each worker runs a generated test for one values path. That test may try many
+inputs, independently of tests for other paths, so several workers can run at once.
 
 1. **Collect and dispatch:** Pytest identifies the selected properties. A thread
    pool dispatches each queued property into a separate pytest process, isolating
    fixtures, Hypothesis state, and temporary chart files. Input generation and
    counterexample shrinking remain sequential within each property.
-2. **Measure and adjust:** With `--jobs auto`, each completion feeds a throughput
-   measurement. A PID controller uses measured changes in throughput to adjust
-   active concurrency, starting at the available CPU count and probing up to four
+2. **Measure and adjust:** With `--jobs auto`, the scheduler measures how many tests
+   finish per second. A feedback controller adjusts the number of active workers
+   based on those measurements, starting at the available CPU count and probing up to four
    times that count, bounded by the number of selected tests. Measurement windows
    smooth timing noise; reducing concurrency lets active tests finish.
 3. **Aggregate results:** The parent merges JUnit results and exit statuses, while
@@ -26,9 +96,28 @@ resources can introduce interference. Process and fixture startup add overhead,
 so small suites may benefit less from parallelism. Automatic tuning seeks higher
 throughput within its bounds; it does not guarantee a global optimum. Use
 `--jobs N` for fixed concurrency or `--jobs 1` for serial execution. The explicit
-whole-chart and exhaustive modes remain serial.
+whole-chart sampling and finite interaction modes remain serial. Explicit `--exhaustive --jobs N` runs up to N Helm processes concurrently.
+
+### Input memory
+
+Finite plans store assignment IDs and reconstruct values when needed. Filtering and
+traversal retain selected positions rather than copies of every configuration. Planning
+still validates candidate inputs before claiming coverage; replay trades some repeated
+construction work for lower memory use. The seed, case order and coverage rules are unchanged.
+
+Benchmark workers receive compact ranges of input IDs. Custom JSONL workloads retain byte
+offsets and hashes, read one record at a time, and reject records changed after validation.
+Neither approach requires loading all input documents into each worker's memory.
+
+Memory still grows with the discovered paths, selected IDs, deduplication hashes and
+interaction-coverage bookkeeping. Reports retain bounded factor domains and observed results;
+PCA retains the numerical data needed for its calculation. This reduces input storage without
+claiming constant memory for the entire run.
 
 ### Runtime estimates
+
+This section describes generated property suites. Recursive repository tests can also
+reuse entire completed charts after [Git and content verification](../scanning/README.md#incremental-repository-tests).
 
 **Expect the first execution to take substantially longer than a cached local
 rerun.** The tool traverses the complete schema and discovered values-path tree to
@@ -187,23 +276,32 @@ A shared filesystem must support process locks and atomic renames. CI cache rest
 on separate machines are independent snapshots, not shared memory. Upload shard
 artifacts for aggregation; do not rely on concurrent CI cache uploads to merge data.
 Cached successes appear as reused properties, separately from executed JUnit cases.
+An idle shard exits successfully with zero test workers and still publishes its report,
+whether it owns no properties or all its properties have cached successes. Include that
+report in aggregation, even when every shard is idle. For two pending properties across
+three shards, unused capacity is expected; hash assignment does not guarantee equal loads.
+An unmatched `--match` expression remains an error. Cache reuse requires a compatible
+suite fingerprint; changing chart contents can invalidate the full cached selection.
 Elapsed time spans the timestamps reported by the shards; cross-host clock skew can
 affect that measurement.
 
 ## Progressive dry runs
 
 Run `helm hypothesis test examples/workload --dry-run --prune-equivalent`
-to plot increasing strengths through the finite factor count, additional and cumulative inputs, and
-potential render savings. The plot goes to stderr; stdout remains JSON.
-The configured run retains automatic exhaustive enumeration for small domains.
-Affordable full totals are exact; larger totals show bounds and an explicitly
-heuristic filtering extrapolation. Stages need not be nested, so incremental
-work is calculated using input-set unions.
+to compare pairs, triples, and higher interaction strengths, up to the number of
+fields with finite value choices. The plot shows planned input counts and estimated
+render savings. It goes to stderr; stdout remains JSON.
+Small input spaces are still enumerated automatically. Totals are exact when the
+planner can enumerate the space within its limits. For larger spaces, the report
+gives bounds and labels estimated filtering savings as estimates.
+A higher-strength plan may omit cases from a lower-strength plan. To count the
+additional work across stages, the estimate counts each distinct input only once.
 
 Dry runs never invoke Helm, run assertions, write history, or authorize pruning.
-Filtering forecasts assume successful representatives and a fixed renderer and
-chart; unsupported templates require rendering. Runtime estimates use compatible
-measured renderer and check costs from prior runs in the artifact directory.
+Estimated render savings assume the first tested input in each equivalence group
+passes validation and that the chart and renderer stay unchanged. Templates the
+compiler cannot analyze still require rendering. Runtime estimates use compatible
+render and validation timings from prior runs in the artifact directory.
 Without those measurements, time is unknown. Per-path dry runs instead plot
 selected, scheduled and cached properties with their existing filters.
 
@@ -230,6 +328,30 @@ Library calls from a non-main thread, or applications that already own an alarm,
 instead stop between operations and cap Helm's timeout to the remaining budget;
 an in-flight custom callback in those cases must return before execution can stop.
 
+### Shutdown and partial results
+
+Deadlines stop new work before cleanup. Process owners stop their child groups and
+wait for their direct children; executor owners then join their threads or replicas.
+Cancellation during registration or joining is deferred until ownership is secure.
+SIGTERM uses the same cleanup path as Ctrl-C unless the embedding application has
+installed its own signal handler.
+
+The shutdown regression tests cover these boundaries:
+
+| Hierarchy | Verified cases |
+| --- | --- |
+| CLI → pytest → Helm or nested command | Serial, fixed and adaptive workers; SIGINT and SIGTERM; stubborn descendants |
+| Git, Helm registry or validator command → descendants | Successful exit, communication failure and timeout |
+| Benchmark coordinator → replicas → renderer → descendants | Coordinator cancellation, worker deadline and outer GNU Parallel timeout |
+| Shared process owner → multiple children | One cleanup failure or repeated cancellation does not skip sibling joins |
+
+Benchmark results retain completed and remaining counts when stopped. A timeout is
+incomplete work, not a chart defect or complete coverage. Cleanup can extend elapsed
+time beyond the testing budget. GNU Parallel wrappers allow ten seconds between
+termination and forced killing so Python workers can finish cleanup and reporting.
+SIGKILL, machine loss and CI runners that forcibly destroy the job cannot run Python
+cleanup handlers; these cases require the runner's process or container teardown.
+
 ## Optional trimming
 
 Both controls default to zero and can be combined:
@@ -238,48 +360,38 @@ Both controls default to zero and can be combined:
 helm hypothesis test CHART --permutations 2 --trim-random 1 --trim-topology 1 --seed 2026
 ```
 
-- `--trim-random N`: seeded uniform thinning, retaining one quarter per step.
+- `--trim-random N`: randomly keep one quarter of the cases for each increase in N.
   `--trim` remains an alias. Levels 1–3 retain about 25%, 6.25%, and 1.56%.
-- `--trim-topology N`: thin within matching symbolic output **and branch** regions,
-  keeping at least one representative per region and every unclassified case.
-- Together: apply both depths within regions, preserving those same floors. The
-  resulting case count can exceed a global random sampling target.
+- `--trim-topology N`: group inputs whose predicted template output and branch
+  choices match, then keep one quarter of each group for each increase in N.
+  Keep at least one input per group and every input the compiler cannot classify.
+- Together: add the two levels and sample within each topology group. Still keep
+  at least one input per group and all unclassified inputs. This can keep more
+  cases than random trimming alone at the same total level.
 
-Defaults always run. Counts round upward and fixed seeds produce nested subsets.
-Topology regions describe static projections, not previously successful tests;
-unsupported expressions or uncertain renderer context retain cases. Reports include
-template-to-input influences, branch decisions, region counts, and omitted cases.
-Topology sampling prioritizes outcome diversity; retained frequencies need not
-represent the original input distribution.
+The chart's default values are always checked before the trimmed cases.
+Each quarter-size selection is rounded up to a whole number of cases: 17 non-default cases
+become 5 at level 1, then 2 at level 2. With the same planned cases, seed, and
+other options, increasing the trim level only removes cases. For example, every
+case kept by `--trim-random 2` is also kept by `--trim-random 1`.
 
-Trimming follows planning and deduplication. It reduces execution work, not planning
-limits or cost. Passing means the retained checks passed; interaction and exhaustive
-group coverage are not guaranteed after cases are omitted. Exact-equivalence pruning
-remains a separate control. These options apply to finite permutation plans, including
-automatic enumeration, rather than per-path, random whole-chart or explicit exhaustive modes.
+Topology groups come from template analysis before testing. Membership does not
+mean an input has passed a test. If the compiler cannot analyze an expression or
+establish the renderer's behavior, it keeps the affected cases. Reports show which
+inputs affect each template, branch choices, group sizes, and omitted cases.
+Sampling within groups preserves examples of different outputs, but it can change
+how often each output appears compared with the full input space.
 
-### Computational cost
+The planner builds the test cases and removes duplicates before trimming. Trimming
+reduces the number of cases executed; it does not reduce the work needed to plan
+them. A passing trimmed run means all executed checks passed. It does not establish
+the original plan's interaction coverage or exhaustive group coverage.
+Exact-equivalence pruning remains a separate control. Trimming applies to finite
+permutation plans, including automatic enumeration. It does not apply to per-path
+suites, random whole-chart sampling, or explicit exhaustive mode.
 
-| Mode | Approximate time | Annotation |
-|---|---|---|
-| Default | `P + N·R` | Execute the full finite plan. |
-| `--trim-random` | `P + N + K log K + K·R` | Shuffle once; restore retained cases to execution order. |
-| `--trim-topology` | `P + A + N·C + Σ(Kᵢ log Kᵢ) + K·R` | Classify every candidate; sample within regions. |
-| Both | Same form as topology | Both depths apply inside each region; protected cases remain. |
-
-`P`: planning cost; `N`: planned non-default cases; `K`: retained cases;
-`Kᵢ`: retained cases in region i; `R`: render and validation cost;
-`A`: chart analysis and IR construction; `C`: per-case symbolic evaluation, value
-normalization and projection construction.
-The single defaults check is omitted from these expressions. They describe execution
-without optional equivalence pruning, with bounded-size values; larger values add
-serialization and copying costs.
-
-All modes materialize the plan (`O(N)` case storage). Random trimming adds `O(N)`
-indices. Topology adds case membership and per-region projection metadata. Planning
-can dominate: exhaustive space grows as the product of factor domain sizes, while
-strength-t coverage targets grow with the number of t-way assignments. Configured
-planning limits still apply before trimming.
+See [computational cost](../adaptive-filtering/README.md#computational-cost) for the shared comparison
+of unfiltered execution, trimming, percentage sampling and both filter presets.
 
 ### Expanding observed failures
 
@@ -292,20 +404,83 @@ alongside `--filter` if wanted. Its default remains zero.
 helm hypothesis test ./chart --filter --time-limit 9m
 ```
 
-`--expand-failures` is opt-in for finite permutation runs. After a check fails,
-it schedules omitted inputs in the same supported symbolic region, executes each
+Failure expansion is enabled automatically by `--filter` in finite permutation
+tests and scans. Without `--filter`, opt in with `--expand-failures`. After a check fails,
+it schedules previously omitted inputs that the compiler placed in the same group
+of predicted outputs and branch choices, executes each
 at most once, and continues within the existing `--time-limit`. Added inputs are
 rendered even when `--prune-equivalent` is enabled. The original failure still
 fails the run; reports retain individual failures and additional-work counts.
 The initial selection continues after failures when expansion is enabled;
 without the flag, ordinary execution still stops at the first failure.
 
-This measures how widely a failure applies. In the seeded PCA fixture, 47 tested
-erroneous inputs represented all 51 erroneous inputs' output regions: four regions
-contained a second, output-equivalent input. Expansion can exercise those four
-without discovering a different erroneous output. It does not infer failures for
-unexecuted inputs, and cannot recover an entirely missed failure region.
-Unsupported regions have no automatic expansion membership.
+This measures how widely a failure applies. In one PCA benchmark, testing 47
+failing inputs found every distinct faulty output produced by 51 known failing
+inputs. The other four inputs produced faulty outputs already seen. Expansion
+can test those four as well. It cannot discover a group whose first failing case
+was never tested, or assume an untested input will fail. Cases the compiler cannot
+group are not automatically added through expansion.<sup>[\[2\]](../../studies/expansion/README.md)</sup>
 
-See the [paired failure-expansion matrix](../benchmarks/expansion/README.md).
+See the [paired failure-expansion matrix](../../studies/expansion/README.md).
 Dry runs report a bound on additional work; the actual count depends on failures.
+
+## Percentage sampling
+
+`--sample-random 70 --sample-min-cases 128` keeps 70% of the cases left after earlier
+filters, rounded up to a whole case. It keeps at least 128, or all cases if fewer
+than 128 remain. For example, it keeps 700 of 1,000 cases and all 100 of 100 cases.
+The default is `--sample-random 100`, which disables this reduction. The minimum
+test count does not guarantee how many bugs will be found.<sup>[\[3\]](../adaptive-filtering/README.md#what-determines-the-minimum)</sup>
+
+```sh
+helm hypothesis test ./chart --filter --sample-random 70 --sample-min-cases 128 --seed 2026
+helm hypothesis scan bitnami/nginx --sample-random 70 --sample-min-cases 128 --seed 2026
+helm hypothesis run ./generated-tests --sample-random 70 --sample-min-cases 128 --seed 2026
+```
+
+For finite plans, sampling selects complete configurations. For generated suites
+and nonfinite chart scans, it selects path properties; each property can generate
+many values. Finding a measured fraction of bugs when sampling complete
+configurations does not establish the same result when sampling paths instead.
+Unbounded `--whole-chart` generation has no enumerated population and rejects this option.
+
+Existing filters run first, percentage sampling runs next, then traversal and
+sharding. Chart plans and scans still test defaults before the selected cases.
+With topology filtering, unknown cases and one
+representative per region remain protected, so more than the requested percentage
+may run. Failure expansion may subsequently add cases. Combining this option with
+`--trim-random` applies both reductions; the minimum applies to the population left
+by preceding filters and does not restore cases they already removed.
+
+A fixed seed chooses the same identities independently of traversal order. Increasing
+the percentage keeps previously selected cases and adds more, provided the eligible
+population and protected cases have not changed.
+All shards choose the global sample before partitioning it; workers do not sample
+again. Dry runs, JSON reports, scan summaries, and aggregate reports include the
+eligible, retained, omitted, and protected counts. Omissions are not successful tests.
+
+For N eligible cases, sampling uses O(N log N) time to rank stable case identities
+and O(N) memory. When every case is retained, it skips ranking and takes O(N) time.
+
+See the [measured sample-size study](../../studies/sampling/README.md). Repeated
+bugs can be found from a small sample. An error that occurs for only one input
+requires sampling most of the population to obtain a high discovery probability.
+
+### Adaptive preset
+
+[`--filter-adaptive`](../adaptive-filtering/README.md) combines `--filter` with about 70% retention when measured
+calibration supports it. Each chart receives a fresh complexity and topology analysis before test selection. Case and
+changed-field floors can enlarge the sample. Unknown complexity or unmatched calibration keeps ordinary filtering.
+See the [evidence and test matrix](../adaptive-filtering/TESTS.md).
+
+### Parallel exhaustive execution
+
+`helm hypothesis test ./chart --exhaustive --jobs 8 --shard none` uses eight concurrent Helm processes.
+`--jobs auto` uses the available CPU count; `--jobs 1` preserves serial execution. Dependencies and planning finish before the execution budget starts.
+The baseline is checked first. Workers prefetch a bounded window of finite inputs; the coordinator parses and validates results in seeded order,
+updates one render-hash cache, streams complete JSON records, and writes the report. Schema validators and custom Python assertions run on the coordinator.
+
+A failure, timeout or interrupt stops all owned Helm process groups and joins the worker threads before returning.
+Prefetched inputs that have not reached coordinator validation do not count as completed coverage; their number appears in `parallel_execution`.
+The chart has one shared execution deadline, including coordinator validation. Cleanup can extend wall time slightly beyond that deadline.
+Parallel exhaustive execution requires equivalence pruning and rejection filtering to be disabled. Distributed sharding remains unavailable for this mode.

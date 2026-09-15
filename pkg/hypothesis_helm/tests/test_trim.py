@@ -107,10 +107,10 @@ def test_topology_sampling(tmp_path: Path) -> None:
     Returns:
         None: Region floors, nesting, unknown fallback and CLI composition hold.
     """
-    from hypothesis_helm.benchmarking.generate_benchmark_chart import generate
+    from hypothesis_helm.benchmarking.charts.generator import generate
     from hypothesis_helm.charts.runner import Chart
     from hypothesis_helm.cli import argument_parser
-    from hypothesis_helm.compiler.topology import trim_topology
+    from hypothesis_helm.compiler.passes.topology import trim_topology
     from hypothesis_helm.schemas.finite import enumerate_values
 
     generate(tmp_path, input_complexity=10, output_bins=4, topology=True)
@@ -145,8 +145,8 @@ def test_topology_generator_oracle(tmp_path: Path) -> None:
     """
     import shutil
 
-    from hypothesis_helm.benchmarking.generate_benchmark_chart import generate
-    from hypothesis_helm.benchmarking.topology import validate_topology
+    from hypothesis_helm.benchmarking.charts.generator import generate
+    from hypothesis_helm.benchmarking.charts.topology import validate_topology
     from hypothesis_helm.charts.runner import Chart, render
 
     if not shutil.which("helm"):

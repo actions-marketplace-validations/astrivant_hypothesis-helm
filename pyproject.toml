@@ -1,12 +1,36 @@
 [tool.poetry]
 name = "hypothesis-helm"
 version = "0.1.0"
-description = "Property-based Helm chart testing and value-reference auditing"
+description = "Property-based testing, input auditing, and reproducible failure reports for Helm charts"
 authors = ["Emma Doyle"]
 readme = "README.md"
 license = "GPL-3.0-only"
-packages = [{include = "hypothesis_helm", from = "pkg"}]
+homepage = "https://github.com/astrivant/hypothesis-helm"
+repository = "https://github.com/astrivant/hypothesis-helm"
+documentation = "https://github.com/astrivant/hypothesis-helm/blob/main/docs/README.md"
+keywords = ["helm", "kubernetes", "hypothesis", "property-based-testing", "linting", "testing"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Systems Administration",
+]
+packages = [
+    {include = "hypothesis_helm", from = "pkg"},
+    {include = "workgraph", from = "pkg"},
+]
 include = [{path = "plugin.yaml", format = ["sdist"]}, {path = "scripts", format = ["sdist"]}]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/astrivant/hypothesis-helm/issues"
+"Source Code" = "https://github.com/astrivant/hypothesis-helm"
 
 [tool.poetry.dependencies]
 python = ">=3.13,<4.0"
@@ -18,12 +42,16 @@ attrs = "^25.3"
 pytest = "^8.3"
 rich = ">=13,<15"
 cattrs = ">=25.3,<27"
+deepdiff = ">=9.1,<10"
 matplotlib = {version = ">=3.10,<4", optional = true}
 numpy = {version = ">=2,<3", optional = true}
 reportlab = ">=4,<5"
+immutables = ">=0.21,<1"
+pysr = {version = ">=1.5,<2", optional = true}
 
 [tool.poetry.extras]
 benchmarking = ["matplotlib", "numpy"]
+symbolic = ["matplotlib", "numpy", "pysr"]
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15"
@@ -31,14 +59,19 @@ mypy = "^1.15"
 pydoclint = "0.6.6"
 pydocstyle = "6.3.0"
 pre-commit = "4.6.0"
+shfmt-py = "4.1.0"
 types-jsonschema = "^4.23"
 cogapp = ">=3.6,<4"
 matplotlib = ">=3.10,<4"
 numpy = ">=2,<3"
+pytest-xdist = ">=3.8,<4"
 
 [tool.poetry.scripts]
+hypothesis-helm-path-worker = "hypothesis_helm.execution.path_queue:main"
 hypothesis-helm = "hypothesis_helm.cli:main"
+hypothesis-helm-complexity = "hypothesis_helm.compiler.passes.complexity:main"
 hypothesis-helm-benchmark = "hypothesis_helm.benchmarking.cli:main"
+hypothesis-helm-refresh = "hypothesis_helm.benchmarking.refresh.cli:main"
 hypothesis-helm-kubesec = "hypothesis_helm.integrations.kubesec:main"
 hypothesis-helm-github-action = "hypothesis_helm.integrations.github_action:main"
 

@@ -13,21 +13,30 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
+from hypothesis_helm.charts.audit import audit
 from hypothesis_helm.charts.generate import generate_tests
 from hypothesis_helm.charts.generated import RenderOptions
-from hypothesis_helm.charts.runner import Chart, audit, check_chart
-from hypothesis_helm.charts.scan import scan
-from hypothesis_helm.compiler.exports import export_repository
-from hypothesis_helm.compiler.graph import export_graph
-from hypothesis_helm.compiler.inputs import load_input_chart
-from hypothesis_helm.compiler.minimum import export_minimal
+from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.scan import discover_charts, scan
+from hypothesis_helm.compiler.passes.exports import export_repository
+from hypothesis_helm.compiler.passes.graph import export_graph
+from hypothesis_helm.compiler.passes.inputs import load_input_chart
+from hypothesis_helm.compiler.passes.minimum import export_minimal
 from hypothesis_helm.execution.estimate import estimate_suite
+from hypothesis_helm.execution.sampling import Sampling
+from hypothesis_helm.execution.signals import Termination
 from hypothesis_helm.execution.suite import run_suite
+from hypothesis_helm.execution.traversal import STRATEGIES, validate_strategy
+from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.budget import parse_time_limit
+from hypothesis_helm.reporting.changes import replay_file
 from hypothesis_helm.reporting.output import MANIFEST_FD
 from hypothesis_helm.reporting.progressive import plot_progression
 from hypothesis_helm.reporting.shards import aggregate
+from hypothesis_helm.rules import ENVIRONMENT as RULE_ENVIRONMENT
+from hypothesis_helm.rules import ignored, load_ignored
 from hypothesis_helm.schemas.conformity import ENVIRONMENT, prepare
 from hypothesis_helm.schemas.factors import factor_space
 from hypothesis_helm.schemas.finite import NonFiniteSchema
@@ -58,12 +67,15 @@ class FilterAction(argparse.Action):
         Returns:
             None: Store the option after checking preset exclusivity.
         """
-        if self.dest == "filter":
+        if self.dest in {"filter", "filter_adaptive"}:
             if getattr(namespace, "individual_filter", None):
-                parser.error("--filter cannot be combined with individual filtering options")
+                parser.error(f"{option_string} cannot be combined with individual filtering options")
+            other = "filter_adaptive" if self.dest == "filter" else "filter"
+            if getattr(namespace, other, False):
+                parser.error("--filter and --filter-adaptive cannot be combined")
         else:
-            if getattr(namespace, "filter", False):
-                parser.error(f"{option_string} cannot be combined with --filter")
+            if getattr(namespace, "filter", False) or getattr(namespace, "filter_adaptive", False):
+                parser.error(f"{option_string} cannot be combined with a filter preset")
             namespace.individual_filter = option_string
         setattr(namespace, self.dest, True if self.nargs == 0 else values)
 
@@ -101,6 +113,13 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(prog=prog, description="Audit and property-test Helm chart values.")
     commands = parser.add_subparsers(dest="command", required=True)
+    rules = commands.add_parser("rules", help="list classified chart findings and diagnostics")
+    rules.add_argument("--format", choices=("text", "json", "config", "markdown"), default="text", help="catalog output format")
+    replay = commands.add_parser("replay-changes", help="verify and replay saved values or manifest changes")
+    replay.add_argument("record", type=Path, help="changes.json from a failing case")
+    replay.add_argument("--section", choices=("overrides", "values", "manifests"), default="overrides")
+    replay.add_argument("--baseline", type=Path, help="baseline JSON file; overrides default to an empty map")
+    replay.add_argument("--output", type=Path, help="write reconstructed JSON to this file; default: stdout")
     merge = commands.add_parser("aggregate", help="verify piped shard reports and write one final report")
     merge.add_argument("reports", nargs="*", type=Path, help="JSON files or artifact roots; default: stdin")
     merge.add_argument("--shards", type=int, required=True)
@@ -113,9 +132,9 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     exports.add_argument("--timeout", type=parse_time_limit, default=30)
     exports.add_argument("--minimal-values-timeout", type=parse_time_limit, default=30)
     exports.add_argument("--files-list", type=Path, help="write NUL-delimited exported YAML and proof paths")
-    repository = commands.add_parser("scan", help="test charts from a directory, Git, or Helm repository")
+    repository = commands.add_parser("scan", help="fetch and test charts from remote Git or Helm repositories")
     repository.add_argument(
-        "directory", metavar="SOURCE", help="directory, Git URL, Helm repo[/chart], public index.yaml URL, or OCI chart"
+        "directory", metavar="SOURCE", help="Git URL, Helm repo[/chart], public index.yaml URL, or OCI chart; local paths use test"
     )
     repository.add_argument("--helm-repository", action="store_true", help="interpret SOURCE as a Helm repository name or HTTP(S) base URL")
     repository.add_argument("--chart-version", help="Helm chart version or constraint; default: latest stable release per chart")
@@ -160,7 +179,10 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         type=parse_time_limit,
         help="scan budget excluding dependency preparation; default: unlimited",
     )
-    repository.add_argument("--max-examples", type=int, default=100)
+    repository.add_argument("--max-examples", type=int, default=10)
+    repository.add_argument("--cache-dir", type=Path, help="completed chart-result cache; default: .cache/hypothesis-helm/charts")
+    repository.add_argument("--no-cache", action="store_true", help="disable completed chart-result caching")
+    repository.add_argument("--jobs", "-j", type=parse_jobs, default="auto", help="path workers per chart; auto: available CPUs")
     repository.add_argument(
         "--permutations",
         type=int,
@@ -168,8 +190,10 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     )
     repository.add_argument(
         "--filter",
-        action="store_true",
-        help="filter finite charts; otherwise prioritize known inputs and run robustness cases last",
+        action=FilterAction,
+        nargs=0,
+        default=False,
+        help="filter finite charts with failure expansion; otherwise filter generated inputs before path traversal",
     )
     repository.add_argument(
         "--fail",
@@ -196,15 +220,25 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     run.add_argument("--match", help="select tests by value-path keyword")
     run.add_argument("--collect-only", action="store_true")
     run.add_argument("--artifact-dir", type=Path, help="report directory for a saved suite")
-    test = commands.add_parser("test", help="select finite coverage or generate per-path tests")
+    test = commands.add_parser("test", help="discover and test local charts recursively")
     test.add_argument(
         "chart",
         type=Path,
         nargs="?",
         default=Path("."),
-        help="chart directory (defaults to the current directory)",
+        help="local chart or directory containing charts (default: current directory)",
     )
-    test.add_argument("--max-examples", type=int, default=100)
+    test.add_argument("--report", nargs="?", const="", metavar="PATH", help="write combined Markdown/PDF; default: <dir>_<epoch>_report")
+    test.add_argument("--values", type=Path, default=Path("values.yaml"), help="baseline file relative to each chart, or an absolute path")
+    test.add_argument("--chart-timeout", type=parse_time_limit, help="property-test budget per discovered chart (default: 3m)")
+    test.add_argument(
+        "--scan-timeout", type=parse_time_limit, help="total local discovery/testing budget, excluding dependency preparation"
+    )
+    test.add_argument(
+        "--build-dependencies", action=argparse.BooleanOptionalAction, default=None, help="build dependencies in isolated copies"
+    )
+    test.add_argument("--fail", action="store_true", help="stop on the first chart failure and save partial results")
+    test.add_argument("--max-examples", type=int, default=10)
     test.add_argument(
         "--time-limit",
         type=parse_time_limit,
@@ -287,6 +321,37 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         help="bound automatically inferred group domains",
     )
     test.add_argument("--seed", type=int, default=0)
+    for target in (test, repository):
+        target.add_argument(
+            "--filter-adaptive",
+            action=FilterAction,
+            nargs=0,
+            default=False,
+            help="enable --filter and retain 70%% subject to measured topology sample floors; unmatched charts keep all filtered cases",
+        )
+        target.add_argument("--sampling-calibration", type=Path, help="override the packaged adaptive-sampling calibration JSON")
+    for testing in (run, test, repository):
+        testing.add_argument(
+            "--sample-random",
+            type=float,
+            default=100,
+            metavar="PERCENT",
+            help="retain this percentage after filtering; default: 100 (disabled); no bug-recall guarantee",
+        )
+        testing.add_argument(
+            "--sample-min-cases",
+            type=int,
+            default=128,
+            metavar="N",
+            help="retain at least N eligible cases, or all when fewer exist (default: 128)",
+        )
+        testing.add_argument(
+            "--traversal-strategy",
+            type=validate_strategy,
+            choices=STRATEGIES,
+            default="random",
+            help="value-path order: seeded random (default), original linear, root-first, or leaf-first",
+        )
     test.add_argument("--timeout", type=float, default=30)
     test.add_argument("--helm", default="helm")
     test.add_argument("--release", default="hypothesis")
@@ -309,6 +374,8 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             help="reuse cached schemas without network access",
         )
         command.add_argument("--kubeconform-binary", default="kubeconform")
+    for command in (test, repository):
+        command.add_argument("--base-ref", help="Git comparison ref for repository tests; overrides CI target or previous trunk commit")
     for command in (test, run):
         command.add_argument(
             "--dry-run",
@@ -345,7 +412,7 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             "-j",
             type=parse_jobs,
             default="auto",
-            help="auto (default): PID throughput tuning; N: fixed worker count; 1: serial",
+            help="workers per chart; auto: CPU count for repository/exhaustive tests, PID tuning for suites; 1: serial",
         )
         command.add_argument(
             "--output",
@@ -381,7 +448,71 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             help="export example values with validation status and missing fields; default: "
             "values-minimal-<checksum>-<epoch>.yaml (scan: separate files per chart)",
         )
+    for command in (repository, inspect, generate, test, run):
+        command.add_argument("--config", type=Path, help="rule policy YAML; default: .hypothesis-helm.yaml in the working directory")
+        command.add_argument(
+            "--ignore", action="append", default=[], metavar="CODE", help="disable one built-in check; repeat to add codes"
+        )
     return parser
+
+
+def local_discovery(args: argparse.Namespace) -> bool:
+    """
+    Select recursive local execution while retaining single-chart suite controls.
+
+    Args:
+        args (argparse.Namespace): Local test options with resolved shard coordinates.
+
+    Returns:
+        bool: Whether repository discovery should handle this invocation.
+    """
+    args.chart = args.chart.expanduser()
+    if not args.chart.is_dir():
+        raise ValueError("test requires a local directory; use scan for remote Git or Helm sources")
+    unsupported = {
+        "--paths": args.paths,
+        "--whole-chart": args.whole_chart,
+        "--exhaustive": args.exhaustive,
+        "--match": args.match is not None,
+        "--collect-only": args.collect_only,
+        "--dry-run": args.dry_run,
+        "--shard": args.shard is not None,
+        "--disable-schema-caching": args.disable_schema_caching,
+        "--rerun": args.rerun != "auto",
+        "--run-id": args.run_id is not None,
+    }
+    recursive = (
+        not (args.chart / "Chart.yaml").is_file()
+        or not (args.chart / "values.schema.json").is_file()
+        or args.report is not None
+        or args.values != Path("values.yaml")
+        or args.chart_timeout is not None
+        or args.scan_timeout is not None
+        or args.build_dependencies is not None
+        or args.fail
+        or args.base_ref is not None
+        or bool(os.environ.get("HYPOTHESIS_HELM_BASE_REF"))
+        or (not any(unsupported.values()) and len(discover_charts(args.chart)) > 1)
+    )
+    if args.filter and not recursive:
+        try:
+            factor_space(Chart.load(args.chart).schema, args.max_cases)
+        except NonFiniteSchema:
+            recursive = True
+    if not recursive:
+        return False
+    incompatible = [name for name, enabled in unsupported.items() if enabled]
+    if incompatible:
+        raise ValueError(f"{', '.join(incompatible)} require single-chart suite execution; run test on an individual schema-backed chart")
+    if args.chart_timeout is not None and args.time_limit is not None:
+        raise ValueError("use either --chart-timeout or --time-limit for recursive testing")
+    args.directory = str(args.chart)
+    args.chart_timeout = args.chart_timeout or args.time_limit or 180.0
+    args.build_dependencies = True if args.build_dependencies is None else args.build_dependencies
+    args.clone_timeout = 180.0
+    args.chart_version = None
+    args.helm_repository = False
+    return True
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -394,7 +525,21 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Process exit status, zero on success.
     """
-    args = argument_parser().parse_args(argv)
+    parser = argument_parser()
+    args = parser.parse_args(argv)
+    if getattr(args, "sampling_calibration", None) is not None and not args.filter_adaptive:
+        parser.error("--sampling-calibration requires --filter-adaptive")
+    if getattr(args, "filter_adaptive", False):
+        if args.sample_random != 100 or args.sample_min_cases != 128:
+            parser.error("--filter-adaptive determines the percentage and sample floor; omit manual sampling options")
+        args.filter = True
+    if hasattr(args, "sample_random"):
+        Sampling(
+            args.sample_random,
+            args.sample_min_cases,
+            getattr(args, "filter_adaptive", False),
+            str(args.sampling_calibration) if getattr(args, "sampling_calibration", None) else None,
+        )
     logger = logging.getLogger("hypothesis_helm")
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
@@ -402,18 +547,33 @@ def main(argv: list[str] | None = None) -> int:
     logger.setLevel(logging.INFO)
     logger.addHandler(handler)
     stack = ExitStack()
+    stack.enter_context(Termination())
     descriptor = None
     token = None
     if getattr(args, "output", None) == "json" and not getattr(args, "dry_run", False):
         descriptor = os.dup(sys.stdout.fileno())
         token = MANIFEST_FD.set(descriptor)
         stack.enter_context(redirect_stdout(sys.stderr))
+    previous_rules = os.environ.get(RULE_ENVIRONMENT)
     previous_conformity = os.environ.pop(ENVIRONMENT, None)
     try:
+        if args.command == "rules":
+            print(FindingGenerator.render(args.format), end="")
+            return 0
+        if hasattr(args, "ignore"):
+            args.ignored_rules = load_ignored(args.config, args.ignore)
+            os.environ[RULE_ENVIRONMENT] = json.dumps(args.ignored_rules)
+            if args.ignored_rules:
+                logger.info("Disabled checks: %s", ", ".join(args.ignored_rules))
+        else:
+            os.environ.pop(RULE_ENVIRONMENT, None)
+        if args.command == "replay-changes":
+            replay_file(args.record, args.baseline, args.section, args.output)
+            return 0
         if args.command == "aggregate":
             return aggregate(args.reports, args.shards, args.run_id, args.output_dir)
         if args.command == "export-minimal-values":
-            if args.kubeconform:
+            if args.kubeconform and not ignored("HH1010"):
                 os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.kubeconform_binary, args.schema_offline)
             return export_repository(
                 args.source,
@@ -425,6 +585,16 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "scan":
             return scan(args)
+        if args.command == "test":
+            selector = args.shard
+            args.shard, _ = resolve_shard(args.shard, os.environ)
+            if local_discovery(args):
+                if args.kubeconform and not ignored("HH1010"):
+                    os.environ[ENVIRONMENT] = prepare(
+                        args.schema_cache_dir, args.schema_version, args.kubeconform_binary, args.schema_offline
+                    )
+                return scan(args)
+            args.shard = selector
         minimal_values = None
         if args.command == "schemas":
             print(
@@ -448,7 +618,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(dict(strict_report, status="failed", reason="strict audit failed"), indent=2))
                 return 1
         if args.command in ("test", "run"):
-            if args.kubeconform and not args.collect_only and not args.dry_run:
+            if args.kubeconform and not ignored("HH1010") and not args.collect_only and not args.dry_run:
                 os.environ[ENVIRONMENT] = prepare(
                     args.schema_cache_dir,
                     args.schema_version,
@@ -539,7 +709,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "test" and args.timeout <= 0:
                 raise ValueError("timeout must be positive")
             schema_state = None
-            if args.kubeconform:
+            if args.kubeconform and not ignored("HH1010"):
                 schema_state = {
                     "status": "unavailable",
                     "requested_version": args.schema_version,
@@ -595,6 +765,13 @@ def main(argv: list[str] | None = None) -> int:
                     source,
                     suite_location=logical,
                     seed=args.seed,
+                    traversal_strategy=args.traversal_strategy,
+                    sampling=Sampling(
+                        args.sample_random,
+                        args.sample_min_cases,
+                        getattr(args, "filter_adaptive", False),
+                        str(args.sampling_calibration) if getattr(args, "sampling_calibration", None) else None,
+                    ),
                     match=args.match,
                     jobs=args.jobs,
                     shard=args.shard,
@@ -611,6 +788,13 @@ def main(argv: list[str] | None = None) -> int:
             return run_suite(
                 args.suite,
                 seed=args.seed,
+                traversal_strategy=args.traversal_strategy,
+                sampling=Sampling(
+                    args.sample_random,
+                    args.sample_min_cases,
+                    getattr(args, "filter_adaptive", False),
+                    str(args.sampling_calibration) if getattr(args, "sampling_calibration", None) else None,
+                ),
                 match=args.match,
                 collect_only=args.collect_only,
                 jobs=args.jobs,
@@ -656,6 +840,13 @@ def main(argv: list[str] | None = None) -> int:
             return run_suite(
                 generated,
                 seed=args.seed,
+                traversal_strategy=args.traversal_strategy,
+                sampling=Sampling(
+                    args.sample_random,
+                    args.sample_min_cases,
+                    getattr(args, "filter_adaptive", False),
+                    str(args.sampling_calibration) if getattr(args, "sampling_calibration", None) else None,
+                ),
                 match=args.match,
                 collect_only=args.collect_only,
                 jobs=args.jobs,
@@ -671,14 +862,21 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if args.shard is not None:
                 raise ValueError("--shard applies to per-path suites only")
-            if args.jobs not in ("auto", 1):
-                raise ValueError("--jobs applies to per-path suites; whole-chart modes are serial")
+            if not args.exhaustive and args.jobs not in ("auto", 1):
+                raise ValueError("--jobs applies to per-path suites and exhaustive testing; other whole-chart modes are serial")
             if args.match is not None or args.collect_only:
                 raise ValueError("--match and --collect-only apply to per-path tests only")
             report = check_chart(
                 chart,
                 max_examples=args.max_examples,
                 random_seed=args.seed,
+                traversal_strategy=args.traversal_strategy,
+                sampling=Sampling(
+                    args.sample_random,
+                    args.sample_min_cases,
+                    getattr(args, "filter_adaptive", False),
+                    str(args.sampling_calibration) if getattr(args, "sampling_calibration", None) else None,
+                ),
                 timeout=args.timeout,
                 helm=args.helm,
                 release=args.release,
@@ -687,6 +885,7 @@ def main(argv: list[str] | None = None) -> int:
                 allow_empty=args.allow_empty,
                 artifact_dir=args.artifact_dir,
                 exhaustive=args.exhaustive,
+                jobs=((os.process_cpu_count() or 1) if args.jobs == "auto" else args.jobs) if args.exhaustive else 1,
                 max_cases=args.max_cases,
                 permutations=args.permutations,
                 trim=args.trim,
@@ -700,8 +899,9 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
                 time_limit=args.time_limit if args.time_limit is not None else 180.0,
                 prune_equivalent=args.prune_equivalent,
+                filter_rejections=args.filter,
             )
-            status = 0 if report["status"] in ("passed", "dry-run") else 124 if report["status"] == "time-limit" else 1
+            status = 0 if report["status"] in ("passed", "dry-run", "ignored") else 124 if report["status"] == "time-limit" else 1
         if getattr(args, "dry_run", False):
             plot_progression(report)
         if minimal_values is not None:
@@ -717,6 +917,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "error", "error": str(exc), "type": type(exc).__name__}))
         return 2
     finally:
+        os.environ.pop(RULE_ENVIRONMENT, None)
+        if previous_rules is not None:
+            os.environ[RULE_ENVIRONMENT] = previous_rules
         os.environ.pop(ENVIRONMENT, None)
         if previous_conformity is not None:
             os.environ[ENVIRONMENT] = previous_conformity

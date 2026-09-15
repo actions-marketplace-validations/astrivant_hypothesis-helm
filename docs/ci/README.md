@@ -6,19 +6,60 @@ Use the remote definitions below and change `./chart` to your chart directory.
 The examples track `main`; replace it with a published commit or tag to pin a version.
 The new GitLab and CircleCI URLs become available when these files are published.
 
+## Recommended workflow
+
+Use progressively broader coverage as changes approach a release:
+
+| When | Recommended mode | Starting CPU / RAM per CI job | Local workers | CI shards |
+| --- | --- | --- | ---: | ---: |
+| MR / PR | `--filter-adaptive` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
+| Changes on `main` | `--filter` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
+| Before tagging a release | `--exhaustive` | 2 vCPU / 4 GiB | `--jobs 2` | 2 |
+
+These are starting allocations, not measured resource minimums or completion guarantees.
+Start large dependency-heavy charts with the same 2 vCPU / 4 GiB and two workers per job, then adjust using measured throughput.
+Two release jobs total 4 vCPU / 8 GiB and four workers. Assign different charts to each job;
+exhaustive testing cannot split one chart across CI shards.
+Exhaustive runs launch concurrent Helm processes; the coordinator validates outputs and writes reports in seeded order.
+[Sizing evidence and shard limitations](resources.md) explain how to adjust these estimates.
+
+After installing the plugin, use these commands in the corresponding CI jobs:
+
+```sh
+# Merge request / pull request
+helm hypothesis test ./chart --filter-adaptive --jobs 2 --chart-timeout 3m --shard none
+
+# Main branch
+helm hypothesis test ./chart --filter --jobs 2 --chart-timeout 5m --shard none
+
+# Manual pre-tag check, once per chart with a finite values.schema.json
+helm hypothesis test ./chart --exhaustive --jobs 2 --shard none
+```
+
+Adaptive sampling falls back to ordinary filtering when the chart has no matching
+calibration. Neither filtered mode establishes exhaustive coverage. See the
+[adaptive filtering guide](../adaptive-filtering/README.md) for the selection policy.
+
 ## Recommended release check
 
-Run this manually on trunk just before tagging a service release. It checks the
-sprint's accumulated changes across the chart's input surface. Use `--rerun all`
-(`rerun: all` in the action) to execute the selected tests and refresh their cache,
-including failures. Review every shard and the final report, then tag that exact
-commit. Coverage and time budgets still apply; a passing run is not exhaustive
-unless the report establishes that coverage.
+Run the exhaustive check manually on `main` just before tagging a service release.
+It checks the accumulated changes on the exact commit you intend to tag. Leave
+filtering, trimming and percentage sampling disabled. Explicit exhaustive mode runs
+one local chart at a time, with up to eight concurrent Helm processes in this example, and does not support sharding; use a separate job from the
+sharded examples below.
 
-The examples below use a manual trigger or approval on trunk. GitHub and GitLab
-use the repository's default branch; replace `main` in CircleCI if needed. Keep
-your existing pull-request checks. If tagging is automated, make its job depend
-on successful tests and aggregation; these examples do not create tags.
+The schema must have a supported finite input domain. `--max-cases` bounds enumeration;
+`--time-limit` bounds execution. Increase these budgets to fit the chart, and require
+completed coverage in the report before tagging. An unsupported domain, a failure or
+a timeout does not establish exhaustive coverage. For unbounded domains such as free-form
+strings, use a documented finite test domain and state that coverage is limited to it.
+
+The examples below demonstrate sharded property tests, report aggregation and cache
+retention. Their manual triggers do not make them exhaustive. For these cached property
+checks, `--rerun all` (`rerun: all` in the action) executes the selected tests again and
+refreshes their cache, including failures. The explicit exhaustive command above renders
+its configurations afresh. If tagging is automated, require the exhaustive check to finish
+successfully before tagging the tested commit; these examples do not create tags.
 
 ## GitLab
 
@@ -40,12 +81,21 @@ helm-properties:
     matrix:
       - K8S_VERSION: ['1.34.0', '1.35.0']
         SHARD_INDEX: ['1', '2', '3']
+
+helm-report:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      when: always
 ```
 
 The [shared job](../../ci/gitlab.yml) installs Helm, the plugin and validators;
 restores Kubernetes schemas; runs each version across three shards; and saves
-reports even on failure. If changing the shard matrix, set `SHARD_TOTAL` to match.
+reports even on failure. If changing the shard matrix, set the global `SHARD_TOTAL` variable to match.
 `HYPOTHESIS_HELM_REF` pins the plugin separately and defaults to `main`.
+The included `helm-report` job downloads every shard's artifacts and runs
+`hypothesis-helm aggregate`, producing one final bundle per Kubernetes version.
+Version and shard directories prevent artifact collisions. If changing versions,
+update the `parallel.matrix` on both `helm-properties` and `helm-report`.
 
 GitLab requires a public raw YAML URL for
 [`include:remote`](https://docs.gitlab.com/ci/yaml/#includeremote).
@@ -77,6 +127,13 @@ workflows:
           parallelism: 3
           schema-version: '1.35.0'
           kubesec: false
+      - hypothesis-helm/aggregate:
+          requires:
+            - hypothesis-helm/test-chart: [success, failed, canceled]
+          filters:
+            branches:
+              only: main
+          shards: 3
 ```
 
 Add `https://raw.githubusercontent.com/astrivant/hypothesis-helm/` to your
@@ -84,6 +141,13 @@ organization's [URL-orb allow list](https://circleci.com/docs/orbs/use/managing-
 The [shared orb](../../ci/circleci.yml) installs the plugin remotely by default.
 Its `test` command can also run inside an existing job after installing the tools
 and preparing schemas with `helm hypothesis schemas`.
+`test-chart` persists each shard's report before returning its test or validator
+failure. The `aggregate` job consumes the workspace and runs `hypothesis-helm aggregate`.
+Its workflow dependency accepts failed jobs using CircleCI's
+[status-aware requirements](https://circleci.com/docs/reference/configuration-reference/#requires).
+For multiple charts or Kubernetes versions, give each test/aggregate pair a distinct
+matching `report-group`. Set `aggregate.package` to the same plugin revision used by
+`test-chart.plugin-path` when pinning versions.
 
 ## GitHub Actions
 
@@ -168,7 +232,55 @@ Its [Bash invocation](../../pkg/hypothesis_helm/integrations/github_action.sh) k
 command flags at the execution site; Python handles shard metadata, cancellation
 and action outputs.
 
+## Binary downloads and caching
+
+Helm, Kubeconform and optional Kubesec binaries are cached **by default** across
+GitHub Actions, GitLab and CircleCI runs. Each binary has its own key containing
+the tool name, requested version, operating system and CPU architecture. Updating
+one tool's version downloads that tool again without invalidating the others.
+For example: `hh-binary-v1-linux-amd64-helm-v4.3.0-exact`.
+
+A restored executable is used without downloading its release archive. Missing
+executables are downloaded and extracted into a temporary directory before being
+installed in the cache. Failed downloads do not become usable cache entries.
+GitHub and CircleCI save binaries before running chart tests; GitLab uploads them
+even when tests fail. Each shard restores its own local copy.
+
+| Integration | Disable caching |
+| --- | --- |
+| GitHub Action | Set `binary-cache: 'false'` in the action's `with` inputs. |
+| CircleCI `test-chart` job | Set `binary-cache: false` in the job parameters. |
+| GitLab `helm-properties` job | Override `cache: []`. This disables both binary and schema caches. |
+
+GitHub and CircleCI bypass restored binaries when the switch is disabled. Their
+schema and test-result cache settings remain independent. To keep schema caching
+in GitLab while disabling binary caching, override `cache` with only the schema
+entry from the shared job.<sup>[\[1\]](https://docs.gitlab.com/ci/caching/#disable-cache-for-specific-jobs)</sup>
+
+Custom `kubeconform-binary` and `kubesec-binary` inputs still use the executable you
+provide. GNU Parallel and OS prerequisites remain installed through the package
+manager; these release-binary caches do not replace package-manager caches.
+
+The repository's own benchmark workflows use the same policy. Set the GitHub
+repository variable `HH_BINARY_CACHE=false` or CircleCI pipeline parameter
+`binary-cache: false` to disable it there.
+
+Cache retention is controlled by the CI provider. An evicted cache is downloaded
+again automatically.<sup>[\[2\]](#retention-between-sprints)</sup>
+
 ## Validation and caches
+
+Every sharded example has a downstream aggregation job. Its core command is:
+
+```sh
+cat downloaded/*/report.json | hypothesis-helm aggregate \
+  --shards 3 --run-id "$HH_RUN_ID" --output-dir reports/final
+```
+
+All shards must receive the same run ID. Upload idle shards too: a missing report
+prevents publication. Aggregation writes one PDF, Markdown, JSON, and JUnit bundle
+per chart/version group, including test failures. Optional security results remain
+separate artifacts; require both the test jobs and aggregation before releasing.
 
 Kubeconform validates API schemas by default. With Kubesec enabled, supported
 workloads go to Kubesec and remaining resources go to Kubeconform. GNU Parallel
@@ -260,6 +372,24 @@ for a sharded action. For multiple chart matrices, use one final export job to
 avoid competing pushes. Pushes require a branch checkout and use normal
 fast-forward updates. Pull-request merge refs do not commit back.
 
+For incremental repository tests on main/trunk, a generated commit-back at `HEAD`
+automatically changes the comparison from `HEAD^` to `HEAD~2`. This keeps the preceding
+source change in the diff. The commit-back script identifies its commits with
+`Hypothesis-Helm-Minimal-Values: true`; simply enabling export does not widen the window.
+Use `fetch-depth: 0` with `actions/checkout` to make comparison history available.
+An explicit `--base-ref` takes precedence. See [incremental repository tests](../scanning/README.md#incremental-repository-tests).
+
 Verified examples can be reduced while preserving valid, nonempty output.
 Invalid examples are also exported, with the validation failure recorded for review.
 The exporter does not claim a global minimum. See [verification and limits](../inputs/README.md).
+
+## Optional percentage sampling
+
+Set the GitHub action inputs `sample-random: '70'` and `sample-min-cases: '128'`
+to opt in. The CircleCI command/job exposes the same parameter names. The GitLab
+include uses `SAMPLE_RANDOM` and `SAMPLE_MIN_CASES`. Defaults retain all eligible
+cases. Use identical settings and seeds on every shard; aggregation checks that
+they used the same policy and population.
+
+The [sampling guide](../execution/README.md#percentage-sampling) explains selection
+units, protected cases, and why this does not guarantee a particular bug recall.

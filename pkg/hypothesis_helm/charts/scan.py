@@ -19,16 +19,23 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.prioritized import check_prioritized
+from hypothesis_helm.charts.audit import audit
+from hypothesis_helm.charts.cache import ChartCache
+from hypothesis_helm.charts.changes import comparison
+from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.paths import check_paths
 from hypothesis_helm.charts.registry import prepare_helm_source
-from hypothesis_helm.charts.repository import RepositorySource
-from hypothesis_helm.charts.runner import Chart, check_chart, render
-from hypothesis_helm.compiler.graph import export_graph
-from hypothesis_helm.compiler.inputs import FieldCoverage, InputInventory, load_input_chart
-from hypothesis_helm.compiler.minimum import export_minimal
+from hypothesis_helm.charts.repository import RepositorySource, remote_name
+from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.compiler.passes.graph import export_graph
+from hypothesis_helm.compiler.passes.inputs import load_input_chart
+from hypothesis_helm.compiler.passes.minimum import export_minimal
+from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
 from hypothesis_helm.reporting.errors import chart_errors, deduplicate_errors
 from hypothesis_helm.reporting.repository import write_reports
+from hypothesis_helm.rules import ignored, ignored_codes, record_ignored
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.schemas.factors import factor_space
 from hypothesis_helm.schemas.finite import NonFiniteSchema
@@ -102,30 +109,20 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
     Returns:
         dict[str, object]: Results distinguishing blocked execution and limited coverage.
     """
-    baseline = subprocess.run([args.helm, "lint", str(path)], capture_output=True, text=True, timeout=args.timeout)
+    baseline = Processes().run([args.helm, "lint", str(path)], capture_output=True, text=True, timeout=args.timeout)
     artifacts.mkdir(parents=True, exist_ok=True)
     diagnostic = baseline.stdout + baseline.stderr
     (artifacts / "lint.txt").write_text(diagnostic)
-    if baseline.returncode:
+    if baseline.returncode and ignored("HH1012"):
+        record_ignored("HH1012", diagnostic)
+    if baseline.returncode and not ignored("HH1012"):
         status = (
             "missing-dependencies"
             if "dependencies" in diagnostic.lower() and ("missing" in diagnostic.lower() or "not found" in diagnostic.lower())
             else "baseline-failed"
         )
-        return {"status": status, "error": diagnostic, "coverage": "defaults only"}
+        return {"status": status, "code": "HH1012", "error": diagnostic, "coverage": "defaults only"}
     has_schema = (path / "values.schema.json").is_file()
-    if not has_schema and not args.filter:
-        source = load_input_chart(path)
-        inputs = InputInventory.build(source)
-        measured = FieldCoverage(inputs, source.defaults)
-        render(source, {}, helm=args.helm, timeout=args.timeout)
-        measured.observe(source.defaults)
-        return {
-            "status": "baseline-only",
-            "coverage": "defaults only; no values.schema.json",
-            "input_inventory": inputs.report(),
-            "field_coverage": measured.statistics,
-        }
     try:
         chart = (
             Chart.load(path)
@@ -139,56 +136,95 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
     except Exception as exc:
         return {"status": "unsupported-schema", "error": str(exc), "coverage": "lint only"}
     filtering: dict[str, object] = {"requested": args.filter, "applied": False}
+    if getattr(args, "strict", False):
+        findings = audit(chart)
+        if findings["findings"] or findings["unresolved"]:
+            return {"status": "failed", "error": "Strict input audit failed", "audit": findings, "coverage": "audit only"}
     strength = args.permutations
     try:
         factor_space(chart.schema, 10000)
     except NonFiniteSchema as exc:
         filtering["reason"] = f"Finite filtering unavailable: {exc}"
         if args.filter:
-            LOGGER.info("%s; prioritizing known inputs before robustness sampling", filtering["reason"])
-        if strength is not None:
+            LOGGER.info("%s; filtering generation before value-path traversal", filtering["reason"])
+        if strength is not None or any(
+            getattr(args, option, False) for option in ("trim", "trim_topology", "expand_failures", "prune_equivalent", "exhaustive_group")
+        ):
             return {"status": "unsupported-schema", "error": str(exc), "coverage": "lint only"}
     else:
         strength = strength or 2
-    if args.filter and strength is None:
-        result = check_prioritized(
+    if strength is None:
+        result = check_paths(
             chart,
             budget=min(args.chart_timeout, max(0.000001, args.scan_deadline - time.monotonic()))
             if args.scan_deadline is not None
             else args.chart_timeout,
             max_examples=args.max_examples,
+            jobs=(os.process_cpu_count() or 1) if getattr(args, "jobs", 1) == "auto" else getattr(args, "jobs", 1),
             seed=args.seed,
             helm=args.helm,
             timeout=args.timeout,
             artifacts=artifacts,
             fail_fast=args.fail,
+            filtering=args.filter,
+            traversal_strategy=args.traversal_strategy,
+            sampling=Sampling(
+                getattr(args, "sample_random", 100),
+                getattr(args, "sample_min_cases", 128),
+                getattr(args, "filter_adaptive", False),
+                str(args.sampling_calibration) if getattr(args, "sampling_calibration", None) else None,
+            ),
+            release=getattr(args, "release", "hypothesis"),
+            namespace=getattr(args, "namespace", "default"),
+            kube_version=getattr(args, "kube_version", None),
+            allow_empty=getattr(args, "allow_empty", False),
         )
         return {
             **result,
-            "coverage": "known inputs, then original-schema robustness sampling",
+            "coverage": "unique discovered paths; time-bounded property testing",
             "schema_source": "declared" if has_schema else "inferred generation; no values schema",
-            "lint": "passed",
+            "lint": "ignored" if baseline.returncode else "passed",
         }
     filtering["applied"] = args.filter and strength is not None
     result = check_chart(
         chart,
         max_examples=args.max_examples,
         random_seed=args.seed,
+        traversal_strategy=args.traversal_strategy,
+        sampling=Sampling(
+            getattr(args, "sample_random", 100),
+            getattr(args, "sample_min_cases", 128),
+            getattr(args, "filter_adaptive", False),
+            str(args.sampling_calibration) if getattr(args, "sampling_calibration", None) else None,
+        ),
         helm=args.helm,
         timeout=args.timeout,
         time_limit=min(args.chart_timeout, max(0.000001, args.scan_deadline - time.monotonic()))
         if args.scan_deadline is not None
         else args.chart_timeout,
         permutations=strength,
-        trim_topology=2 if filtering["applied"] else 0,
-        expand_failures=bool(filtering["applied"]),
+        trim=getattr(args, "trim", 0),
+        trim_topology=2 if filtering["applied"] else getattr(args, "trim_topology", 0),
+        expand_failures=bool(filtering["applied"]) or getattr(args, "expand_failures", False),
+        prune_equivalent=getattr(args, "prune_equivalent", False),
+        filter_rejections=bool(args.filter),
+        max_cases=getattr(args, "max_cases", 10000),
+        max_candidates=getattr(args, "max_candidates", 100000),
+        exhaustive_threshold=getattr(args, "exhaustive_threshold", 10000),
+        exhaustive_groups=tuple(getattr(args, "exhaustive_group", [])),
+        infer_exhaustive_groups=not getattr(args, "no_infer_groups", False),
+        max_group_cases=getattr(args, "max_group_cases", 256),
+        release=getattr(args, "release", "hypothesis"),
+        namespace=getattr(args, "namespace", "default"),
+        kube_version=getattr(args, "kube_version", None),
+        allow_empty=getattr(args, "allow_empty", False),
         fail_fast=args.fail,
         artifact_dir=artifacts,
     )
     return {
         **result,
         "coverage": "schema-generated values",
-        "lint": "passed",
+        "lint": "ignored" if baseline.returncode else "passed",
         "filtering": filtering,
     }
 
@@ -213,6 +249,11 @@ def scan(args: argparse.Namespace) -> int:
     scan_started = time.monotonic()
     args.scan_deadline = scan_started + args.scan_timeout if args.scan_timeout is not None else None
     with ExitStack() as scope:
+        if args.command == "test":
+            root = Path(args.directory).expanduser().resolve()
+            return scan_checkout(args, RepositorySource(str(root), root, root.name, False, kind="local"), started, scan_started)
+        if not args.helm_repository and Path(args.directory).expanduser().exists():
+            raise ValueError("scan accepts remote sources only; use test for local charts and directories")
         source = prepare_helm_source(
             str(args.directory),
             scope,
@@ -223,6 +264,8 @@ def scan(args: argparse.Namespace) -> int:
             version=args.chart_version,
         )
         if source is None:
+            if remote_name(str(args.directory)) is None:
+                raise ValueError("scan requires a remote Git or Helm source; use test for local directories")
             if args.chart_version is not None:
                 raise ValueError("--chart-version requires a Helm repository or OCI chart source")
             source = RepositorySource.prepare(str(args.directory), scope, args.clone_timeout, args.scan_deadline)
@@ -243,6 +286,9 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
         int: Scan exit status, including checkout failure or timeout.
     """
     root = source.root
+    changes: dict[str, object] = (
+        comparison(root, getattr(args, "base_ref", None)) if source.status == "ready" else {"status": "unavailable"}
+    )
     records = discover_charts(root, deadline=args.scan_deadline) if source.status == "ready" else []
     if source.kind == "helm":
         for package in source.packages:
@@ -273,6 +319,7 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
         artifacts = output / f"{index:04d}"
         record["artifacts"] = str(artifacts)
         tick = time.monotonic()
+        cache = ChartCache()
         LOGGER.info("Chart %d/%d: %s", index + 1, len(records), record["chart"])
         try:
             with ExitStack() as scope:
@@ -313,7 +360,7 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
                         LOGGER.info("Preparing dependencies for %s (excluded from testing budgets)", record["chart"])
                         preparation_started = time.monotonic()
                         try:
-                            built = subprocess.run(
+                            built = Processes().run(
                                 [args.helm, "dependency", "build", str(copy)],
                                 capture_output=True,
                                 text=True,
@@ -339,6 +386,16 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
                             status="skipped-library",
                             result="N/A",
                             coverage="not a standalone application",
+                        )
+                        continue
+                    cache = ChartCache.prepare(copy, path, args, changes)
+                    record["cache"] = {"key": cache.key, "reused": cache.reusable, "reason": cache.reason}
+                    if cache.reusable:
+                        record.update(
+                            status="cached-pass",
+                            result="CACHED PASS",
+                            attempts=0,
+                            coverage="reused completed tests with identical inputs and settings; no new tests executed",
                         )
                         continue
                     if args.export_minimal_values is not None:
@@ -405,6 +462,8 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
                 timed_out = True
                 if record["status"] in {"time-limit", "timeout"}:
                     record.update(status="scan-timeout", error="Total scan deadline reached")
+            if not cache.reusable:
+                cache.publish(record)
             LOGGER.info(
                 "%s: %s; testing %.2fs; dependency preparation %.2fs; %d charts remain",
                 record["chart"],
@@ -440,6 +499,7 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
         )
     counts = dict(Counter(str(record["status"]) for record in records))
     report: dict[str, object] = {
+        "title": "Remote Helm chart scan" if source.remote else "Local Helm chart tests",
         "directory": source.location,
         "started_epoch": int(started),
         "elapsed_seconds": time.monotonic() - scan_started,
@@ -459,8 +519,13 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
         "charts_discovered": len(records),
         "counts": counts,
         "charts": records,
+        "git_comparison": changes,
+        "ignored_rules": ignored_codes(),
         "settings": {
+            "ignored_rules": ignored_codes(),
             "max_examples": args.max_examples,
+            "jobs": getattr(args, "jobs", 1),
+            "worker_model": "sequential charts, concurrent path properties",
             "filter": args.filter,
             "fail": args.fail,
             "permutations": args.permutations,
@@ -469,6 +534,12 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
             "scan_timeout_excludes_dependency_preparation": True,
             "helm": args.helm,
             "seed": args.seed,
+            "traversal_strategy": args.traversal_strategy,
+            "sampling": {
+                "percent": getattr(args, "sample_random", 100),
+                "minimum": getattr(args, "sample_min_cases", 128),
+                "aggressive": getattr(args, "filter_adaptive", False),
+            },
             "build_dependencies": args.build_dependencies,
             "values": str(args.values),
             "clone_timeout_seconds": args.clone_timeout,
@@ -502,6 +573,13 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
             ]
             if source.status != "ready":
                 report["summary"] = ["Helm source preparation did not complete; available results are retained.", source.diagnostic]
+    summary = report.setdefault("summary", [])
+    assert isinstance(summary, list)
+    summary.append(
+        f"Git comparison: {changes['base_ref']} ({changes['base_commit']}); {counts.get('cached-pass', 0)} cached chart successes reused."
+        if changes["status"] == "resolved"
+        else "Git comparison unavailable; no charts skipped using previous test results."
+    )
     deduplicate_errors(report)
     (output / "scan.json").write_text(json.dumps(report, indent=2) + "\n")
     if args.report is not None:
@@ -518,4 +596,4 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
         return 1
     if any(status in counts for status in ("invalid-metadata", "baseline-failed", "failed", "error")):
         return 1
-    return 0 if records and set(counts) <= {"passed"} else 2
+    return 0 if records and set(counts) <= {"passed", "cached-pass", "ignored"} else 2

@@ -5,14 +5,20 @@ Estimate selected property work without executing fixtures or property examples.
 import ast
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from hypothesis_helm.execution.cache import fingerprint, in_ci, read_outcomes, seed_key
+from hypothesis_helm.execution.cache import fingerprint, read_outcomes, seed_key
+from hypothesis_helm.execution.environment import in_ci
+from hypothesis_helm.execution.parallel import worker_limit
+from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
+from hypothesis_helm.execution.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
+from hypothesis_helm.execution.sampling import REPORT as SAMPLING_REPORT
 from hypothesis_helm.execution.structure import inspect_structure
+from hypothesis_helm.execution.traversal import validate_strategy
 from hypothesis_helm.integrations.sharding import Shard
 
 
@@ -48,6 +54,8 @@ def estimate_suite(
     *,
     suite_location: Path | None = None,
     seed: int = 0,
+    traversal_strategy: str = "random",
+    sampling: Sampling = DEFAULT_SAMPLING,
     match: str | None = None,
     jobs: int | Literal["auto"] = "auto",
     shard: Shard | None = None,
@@ -64,6 +72,8 @@ def estimate_suite(
         directory (Path): Actual suite source, possibly generated in temporary storage.
         suite_location (Path | None): Logical generated suite location for fingerprinting.
         seed (int): Hypothesis seed used by the prospective run.
+        traversal_strategy (str): Path order used by the prospective invocation.
+        sampling (Sampling): Optional retained percentage and minimum sample after filtering.
         match (str | None): Pytest keyword filter.
         jobs (int | Literal["auto"]): Worker setting for the prospective run.
         shard (Shard | None): Optional shard selection.
@@ -76,6 +86,7 @@ def estimate_suite(
     Returns:
         dict[str, object]: Work estimate with exact property counts and nominal budgets.
     """
+    maximum = worker_limit(jobs)
     directory = directory.resolve()
     logical = (suite_location or directory).resolve()
     module = directory / "test_chart_values.py"
@@ -93,10 +104,16 @@ def estimate_suite(
     environment.pop("PYTEST_PLUGINS", None)
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    traversal_strategy = validate_strategy(traversal_strategy)
+    environment["HYPOTHESIS_HELM_TRAVERSAL_STRATEGY"] = traversal_strategy
+    environment["HYPOTHESIS_HELM_TRAVERSAL_SEED"] = str(seed)
+    environment[SAMPLING_ENVIRONMENT] = json.dumps({"percent": sampling.percent, "minimum": sampling.minimum})
     with TemporaryDirectory(prefix="hypothesis-helm-estimate-") as temporary:
         workspace = Path(temporary)
         config = workspace / "pytest.ini"
         config.write_text("[pytest]\n")
+        sampling_file = workspace / "sampling.json"
+        environment[SAMPLING_REPORT] = str(sampling_file)
         inventory = workspace / "nodes.json"
         environment["HYPOTHESIS_HELM_COLLECT"] = str(inventory)
         assignment = workspace / "shard.json"
@@ -123,11 +140,12 @@ def estimate_suite(
         if match is not None:
             command += ["-k", match]
         command.append(str(module))
-        completed = subprocess.run(command, cwd=directory, env=environment, capture_output=True, text=True, check=False)
+        completed = Processes().run(command, cwd=directory, env=environment, capture_output=True, text=True, check=False)
         if completed.returncode not in (0, 5):
             raise ValueError(f"dry-run collection failed:\n{completed.stdout}{completed.stderr}")
         nodes: list[str] = json.loads(inventory.read_text()) if inventory.exists() else []
         assigned = json.loads(assignment.read_text()) if assignment.exists() else None
+        sampling_report = json.loads(sampling_file.read_text()) if sampling_file.exists() else None
     retry = rerun == "failed" or (rerun == "auto" and not in_ci(environment))
     compatible = schema_state is None or schema_state.get("status") == "cached"
     cache_file = (
@@ -163,9 +181,11 @@ def estimate_suite(
     scheduled = [entry for entry in properties if entry["action"] == "run"]
     known = [entry["max_examples"] for entry in scheduled]
     budget = sum(value for value in known if isinstance(value, int))
-    maximum = jobs if isinstance(jobs, int) else 4 * (os.process_cpu_count() or 1)
     return {
         "status": "dry-run",
+        "seed": seed,
+        "sampling": sampling_report,
+        "traversal_strategy": traversal_strategy,
         "suite": str(logical),
         "values_structure": marker.report() if marker is not None else None,
         "schema_cache": schema_state,

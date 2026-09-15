@@ -5,22 +5,24 @@ Verify predictable generated outputs, disjoint benchmarking shards and truthful 
 import json
 import math
 import shutil
+import subprocess
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
-from hypothesis_helm.benchmarking.benchmark_helm import parser
-from hypothesis_helm.benchmarking.generate_benchmark_chart import generate
-from hypothesis_helm.benchmarking.plots import paired_ratio
-from hypothesis_helm.benchmarking.runner import Job, execute_worker
-from hypothesis_helm.benchmarking.workload import (
+from hypothesis_helm.benchmarking.charts.generator import generate
+from hypothesis_helm.benchmarking.charts.workload import (
     expected_output,
     partition_indices,
     standard_values,
 )
-from hypothesis_helm.charts.runner import Chart
+from hypothesis_helm.benchmarking.execution.runner import Job, execute_worker
+from hypothesis_helm.benchmarking.reporting.plots import paired_ratios
+from hypothesis_helm.benchmarking.studies.performance import parser
+from hypothesis_helm.charts.runner import Chart, RenderFailure
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
@@ -86,7 +88,7 @@ def test_shards_and_replicas_partition_identical_global_inputs() -> None:
         serial = partition_indices(101, Shard(index, 3), 1)[0]
         parallel = partition_indices(101, Shard(index, 3), 4)
         flattened = [item for worker in parallel for item in worker]
-        assert serial == flattened
+        assert list(serial) == flattened
         assert not owners.intersection(flattened)
         owners.update(flattened)
     assert owners == set(range(101))
@@ -134,13 +136,58 @@ def test_wrong_output_fails_instead_of_becoming_a_representative(
     """
     generate(tmp_path, input_complexity=8)
     monkeypatch.setattr(
-        "hypothesis_helm.benchmarking.runner.render",
+        "hypothesis_helm.benchmarking.execution.runner.render",
         Mock(return_value=[{"data": {"value": "999"}}]),
     )
     result = execute_worker(Job(str(tmp_path), [0, 1], 5, 8, True, "helm", time.perf_counter() + 30))
     assert result["status"] == "failed"
     assert result["completed"] == result["oracle_checks"] == result["pruned"] == 0
     assert "quantile" in str(result["error"])
+
+
+@pytest.mark.parametrize("remaining", [5.0, 60.0])
+@pytest.mark.parametrize("timeout", [False, True])
+def test_budget_limited_render_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, remaining: float, timeout: bool) -> None:
+    """
+    Distinguish deadline-censored renders from genuine renderer failures and timeouts.
+
+    Args:
+        tmp_path (Path): Generated finite benchmark fixture.
+        monkeypatch (pytest.MonkeyPatch): Control the clock and subprocess failure boundary.
+        remaining (float): Budget available when rendering starts.
+        timeout (bool): Whether the render fails from a subprocess timeout.
+
+    Returns:
+        None: Only budget-bound subprocess timeouts become incomplete, nonfailed runs.
+    """
+    generate(tmp_path, input_complexity=8)
+    monkeypatch.setattr("hypothesis_helm.benchmarking.execution.runner.time.perf_counter", lambda: 100.0)
+    monkeypatch.setattr("hypothesis_helm.benchmarking.execution.runner.execution_timer", lambda seconds: nullcontext())
+
+    def render(*args: object, **kwargs: object) -> list[dict[str, object]]:
+        """
+        Reproduce Helm's wrapped subprocess timeout or an independent render failure.
+
+        Args:
+            *args (object): Chart and generated overrides.
+            **kwargs (object): Per-render options, including the bounded timeout.
+
+        Returns:
+            list[dict[str, object]]: No output is committed by this failing boundary.
+        """
+        assert kwargs["timeout"] == min(30.0, remaining)
+        if timeout:
+            raise RenderFailure("helm exceeded its timeout") from subprocess.TimeoutExpired("helm", float(str(kwargs["timeout"])))
+        raise RenderFailure("invalid manifest")
+
+    monkeypatch.setattr("hypothesis_helm.benchmarking.execution.runner.render", render)
+    result = execute_worker(Job(str(tmp_path), [0, 1], 5, 8, False, "helm", 100.0 + remaining))
+    censored = timeout and remaining <= 30.0
+    assert result["status"] == ("time-limit" if censored else "failed")
+    assert (result["error"] is None) is censored
+    assert result["completed"] == result["oracle_checks"] == 0
+    assert result["attempted"] == result["render_invocations"] == 1
+    assert result["remaining"] == 2
 
 
 def test_censored_timing_is_never_a_scaling_speedup() -> None:
@@ -156,9 +203,9 @@ def test_censored_timing_is_never_a_scaling_speedup() -> None:
     capped: list[dict[str, object]] = [
         {"repeat": 0, "status": "time-limit", "elapsed_seconds": 1},
     ]
-    assert paired_ratio(baseline, capped) is None
+    assert paired_ratios(baseline, capped) == []
     capped[0]["status"] = "passed"
-    assert paired_ratio(baseline, capped) == 10
+    assert paired_ratios(baseline, capped) == [10]
 
 
 @pytest.mark.parametrize("complexity", [1, 3, 100])
@@ -225,8 +272,8 @@ def test_linear_prefix_checkpoints_commit_only_completed_inputs(
         """
         return [{"data": {"value": expected_output(values, spec)}}]
 
-    monkeypatch.setattr("hypothesis_helm.benchmarking.runner.render", render)
-    monkeypatch.setattr("hypothesis_helm.benchmarking.runner.expected_output", oracle)
+    monkeypatch.setattr("hypothesis_helm.benchmarking.execution.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.benchmarking.execution.runner.expected_output", oracle)
     started = time.perf_counter()
     result = execute_worker(
         Job(

@@ -2,79 +2,78 @@
 
 [Documentation](../README.md) · [Project](../../README.md)
 
+The compiler reads the chart to identify configurable fields and template
+conditions. It uses that information to generate inputs and choose tests. Helm
+then renders the selected inputs, and validators check the output. Analysis that
+cannot interpret part of a template records that uncertainty instead of treating
+it as evidence that a test can be skipped.<sup>[\[1\]](../safe-pruning.md#contract-and-distance)</sup>
+
 ```mermaid
 flowchart LR
-    Values[values.yaml] --> Coalesce[Round-trip YAML coalescing]
-    Templates[Helm templates] --> AST[Template action AST]
+    Values[values.yaml] --> Coalesce[Combine supplied values and discovered fields]
+    Templates[Helm templates] --> AST[Parse template statements into a tree]
     AST --> Coalesce
-    Schema[values.schema.json] --> Paths[Schema path enumeration]
+    AST --> Contracts[Find explicit input requirements]
+    Schema[values.schema.json] --> Paths[List configurable values paths]
     Coalesce --> Paths
-    Paths --> Strategies[Typed Hypothesis strategies]
+    Paths --> Strategies[Generate values allowed by each field type]
     Strategies --> Tests[Generated Python tests]
+    Contracts --> Guidance[Try related settings and check predicted rejections with Helm]
+    Guidance --> Helm
     Tests --> Helm[Temporary chart rendering]
-    Helm --> Assertions[Resource assertions and counterexamples]
+    Helm --> Assertions[Validate resources and save failing inputs]
 ```
 
-### Worked example: `$.replicas` to validated Deployments
+## Input discovery and test generation
 
-Start with [`examples/workload/values.yaml`](../../examples/workload/values.yaml):
-`replicas: 1`. Its [schema](../../examples/workload/values.schema.json) declares an
-integer between `0` and `5`, inclusive. The [template](../../examples/workload/templates/resource.yaml)
-reads that lever directly:
+The compiler resolves template references to values paths and combines those
+references with supplied values and schema constraints. Each supported path gets
+rules for generating values of its declared or inferred type. A generated
+**property** is a test that tries multiple inputs against the same checks. Those
+inputs are assembled into complete values documents and checked against the
+values schema.<sup>[\[2\]](../getting-started/README.md#quick-start)</sup>
 
-```yaml
-spec:
-  replicas: {{ .Values.replicas }}
-```
+## Execution and validation
 
-Discovery resolves `.Values.replicas` to `$.replicas`. Coalescing keeps the existing
-value `1` and its documented constraints; nothing needs to be inferred for this
-path. The integer bounds select `st.integers(min_value=0, max_value=5)`.
+Each property tests generated values against an isolated copy of the chart. Helm
+renders the templates, then resource assertions and optional Kubernetes schema
+validation check the output. When a check fails, Hypothesis attempts to simplify
+the failing input while preserving the failure.
 
-From this repository, with Helm, the plugin, Git, and
-[kubeconform](https://github.com/yannh/kubeconform) installed, run:
+A property can test multiple inputs and render multiple manifests. JUnit records
+the property's result; execution reports retain the input and render counts.
+Selection, caching, traversal, and sharding determine which properties execute.
 
-```sh
-mkdir -p reports
-helm hypothesis test examples/workload \
-  --match replicas --max-examples 6 --seed 0 --shard none --rerun all \
-  --kubeconform --schema-version 1.35.0 \
-  --schema-cache-dir .cache/hypothesis-helm/schemas \
-  --artifact-dir reports/replicas --output json > reports/replicas.jsonl
-```
+The chart runner coordinates separate modules: `charts/model.py` owns loaded contracts,
+`charts/planning.py` builds finite plans and estimates, `charts/candidates.py` evaluates one candidate,
+`charts/rendering.py` owns Helm rendering, and `charts/audit.py` assembles audit findings.
 
-The command prepares the cached Kubernetes schemas and writes
-`reports/replicas/test_chart_values.py`. Its replica property contains the following
-code (imports, fixture, and docstring omitted):
+`execution/processes.py` owns external commands and worker process groups until descendants have stopped
+and direct children have been joined. Git, Helm, schema validators, collection, and benchmark commands use
+the same owner. Communication errors and timeouts trigger cleanup; a failed cleanup retains the unresolved
+ownership record while other children are still joined. Execution and cleanup failures are reported together.
+The test scheduler stops children and joins worker threads even when scheduling or cleanup raises an error.
+Outer pytest and CI owners allow longer interruption grace periods so inner command owners can finish cleanup.
+The benchmark process pool also waits for its replicas to exit when a result raises
+an exception.<sup>[\[3\]](../execution/README.md#shutdown-and-partial-results)</sup>
+Benchmark commands pass arguments and chart workspace owners
+explicitly, without changing the process command line or selecting a workspace through ambient context.
 
-```python
-@pytest.mark.hypothesis_helm_path(('replicas',))
-@settings(max_examples=6, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(value=st.integers(min_value=0, max_value=5), data=st.data())
-def test_replicas_fc55c2d623(chart: Chart, value: object, data: DataObject) -> None:
-    check_path(chart, ('replicas',), value, data, options=OPTIONS)
-```
+## Syntax trees and compiler passes
 
-For a draw of `3`, `check_path` replaces `replicas` in a copy of the coalesced
-values, leaving `image.repository: nginx` and `image.tag: stable`. It checks that
-this complete input satisfies the values schema, then runs `helm template` against
-a temporary chart. The resulting Deployment has `spec.replicas: 3` and image
-`nginx:stable`. The resource is emitted as one JSON line and validated against the
-cached Kubernetes 1.35.0 Deployment schema. A rendering or validation error fails
-the property; Hypothesis then tries to reduce the failing input.
+The [compiler guide](../compiler/README.md) describes the flow from template
+parsing and typed values to input discovery, output analysis, selection, and
+exports. It includes a pass reference and
+[panel-by-panel decision diagrams](../compiler/decisions.md).
 
-The amount of work is concrete:
+## Finite permutation planning
 
-| Stage | Work generated | Why |
-| --- | --- | --- |
-| Generate the suite | **4 Python property tests** | Paths are `$.replicas`, `$.image`, `$.image.repository`, and `$.image.tag`; object containers also receive a property. |
-| Select tests | **1 property** | `--match replicas` filters execution after generation; it does not reduce the generated suite. |
-| Execute this example | **6 successful inputs, 6 Helm renders, 6 kubeconform invocations** | The verified run exercised each integer from `0` through `5`, with a six-example budget and valid unchanged sibling values. |
-| Produce results | **6 Deployment JSON lines; 1 passing JUnit test case** | This chart emits one Deployment per render. JUnit counts the property, not its individual Hypothesis examples. |
+When fields have finite value choices, the planner can select complete input
+configurations for the requested interaction coverage or enumerate a small space.
+Optional trimming reduces the planned cases. Exact-equivalence pruning skips a
+render only when the compiler establishes that its output matches an input that
+has already passed validation.
 
-`--rerun all` makes the command execute even if the path passed previously. Six
-renders is the observed successful result for this example, not a general promise
-of `--max-examples 6`: rejected inputs, failure replay, and shrinking can change the
-work. Removing `--match` runs all four properties, each with its own example budget;
-it does not enumerate the `6 × 2 × 2 = 24` whole-chart configurations. Progress and
-ETA count completed properties, so this selected run finishes at **1/1**, not **6/6**.
+See [execution and coverage](../execution/README.md), the
+[pruning contract](../safe-pruning.md), and the
+[introductory examples](../../README.md#examples-failures-hidden-by-defaults).
