@@ -8,18 +8,18 @@ The new GitLab and CircleCI URLs become available when these files are published
 
 ## Recommended workflow
 
-Use progressively broader coverage as changes approach a release:
+For a single chart, use progressively broader coverage as changes approach a release:
 
 | When | Recommended mode | Starting CPU / RAM per CI job | Local workers | CI shards |
 | --- | --- | --- | ---: | ---: |
 | MR / PR | `--filter-adaptive` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
 | Changes on `main` | `--filter` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
-| Before tagging a release | `--exhaustive` | 2 vCPU / 4 GiB | `--jobs 2` | 2 |
+| Before tagging a release | `--exhaustive` | 4 vCPU / 8 GiB | `--jobs 4` | 1 |
 
 These are starting allocations, not measured resource minimums or completion guarantees.
-Start large dependency-heavy charts with the same 2 vCPU / 4 GiB and two workers per job, then adjust using measured throughput.
-Two release jobs total 4 vCPU / 8 GiB and four workers. Assign different charts to each job;
-exhaustive testing cannot split one chart across CI shards.
+Use one CI job per chart: two workers for filtered checks, or four workers for exhaustive release checks.
+Apply the same starting allocations to dependency-heavy charts, then adjust using measured throughput.
+Exhaustive testing parallelizes within that job; it cannot split one chart across CI shards.
 Exhaustive runs launch concurrent Helm processes; the coordinator validates outputs and writes reports in seeded order.
 [Sizing evidence and shard limitations](resources.md) explain how to adjust these estimates.
 
@@ -33,7 +33,7 @@ helm hypothesis test ./chart --filter-adaptive --jobs 2 --chart-timeout 3m --sha
 helm hypothesis test ./chart --filter --jobs 2 --chart-timeout 5m --shard none
 
 # Manual pre-tag check, once per chart with a finite values.schema.json
-helm hypothesis test ./chart --exhaustive --jobs 2 --shard none
+helm hypothesis test ./chart --exhaustive --jobs 4 --shard none
 ```
 
 Adaptive sampling falls back to ordinary filtering when the chart has no matching

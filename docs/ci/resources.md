@@ -2,10 +2,9 @@
 
 [Recommended workflow](README.md#recommended-workflow)
 
-Start with **2 vCPU / 4 GiB and two workers per CI job** at every stage.
-MR/PR and main-branch checks use one job. Release checks use two jobs, totaling
-**4 vCPU / 8 GiB and four workers**. Assign different charts to those release jobs;
-exhaustive testing cannot split one chart across CI shards.
+For a single chart, start with **2 vCPU / 4 GiB and two workers** for filtered MR/PR and main-branch checks.
+For exhaustive release checks, use **4 vCPU / 8 GiB and four workers**. Each mode uses **one CI job**.
+Exhaustive testing distributes the chart's configurations among local workers; it cannot split one chart across CI shards.
 Reserve at least as many vCPUs as workers. The memory allocation covers Python workers,
 Helm children, the coordinator and CI overhead. These are starting estimates to tune,
 not measured requirements.
@@ -57,8 +56,8 @@ on the same chart, seed and example limit. Increase workers when throughput impr
 otherwise keep the smaller runner. Check peak memory on the actual CI runner before
 tightening its allocation. No CPU or memory optimum has been measured for these presets.
 
-Start large dependency-heavy charts with the same two workers on 2 vCPU / 4 GiB,
-then adjust using their discovered queue and measured throughput.
+For large dependency-heavy charts, use the same starting allocations: two workers on 2 vCPU / 4 GiB for filtered checks,
+or four workers on 4 vCPU / 8 GiB for exhaustive release checks. Then adjust using measured throughput.
 Path count alone cannot predict render cost, shrinking work or the size of a finite
 permutation space. `--filter-adaptive` also falls back to ordinary filtering when
 its calibration does not cover the chart, including the current path-property mode.

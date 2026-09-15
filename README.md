@@ -38,17 +38,17 @@ equivalent configurations reuse a rendered manifest. [See the synthetic error st
 - Test local chart trees or scan remote Git and authenticated Helm repositories; build dependencies and export Markdown/PDF reports.
 - Integrate Kubernetes schema validation and optional security checks into CI with [kubesec](https://github.com/controlplaneio/kubesec) and [kubeconform](https://github.com/yannh/kubeconform).
 
-Choose coverage for each stage of development:
+Choose coverage for a single chart at each stage of development:
 
 | When | Recommended mode | Starting CPU / RAM per CI job | Local workers | CI shards |
 | --- | --- | --- | ---: | ---: |
 | MR / PR | `--filter-adaptive` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
 | Changes on `main` | `--filter` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
-| Before tagging a release | `--exhaustive` | 2 vCPU / 4 GiB | `--jobs 2` | 2 |
+| Before tagging a release | `--exhaustive` | 4 vCPU / 8 GiB | `--jobs 4` | 1 |
 
 These are starting estimates for one chart at a time, not measured minimum requirements.
-Start with 2 vCPU / 4 GiB and two workers per job, including for large dependency-heavy charts; increase resources after measuring throughput.
-The two-job release allocation totals 4 vCPU / 8 GiB and four workers, with different charts assigned to each job.
+Use two workers on 2 vCPU / 4 GiB for filtered checks, and four workers on 4 vCPU / 8 GiB for exhaustive release checks.
+Both use one CI job for the chart. Adjust resources after measuring throughput.
 Exhaustive runs use parallel Helm processes; finite interaction execution remains serial. Repository path queues are local to one CI job;
 distributed shards apply to the separate generated-suite workflow.<sup>[\[3\]](docs/ci/resources.md)</sup>
 
