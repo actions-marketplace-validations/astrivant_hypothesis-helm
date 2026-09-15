@@ -92,6 +92,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workers", default="auto", help="concurrent independent refresh operations; auto uses available CPUs")
     parser.add_argument("--dry-run", action="store_true", help="print every operation and prerequisite without launching commands")
+    parser.add_argument("--ci-phase", choices=("prepare", "study", "finish"), help="run one artifact-connected GitHub refresh phase")
+    parser.add_argument("--root", type=Path, help="prepared CI workspace shared between jobs")
+    parser.add_argument("--study", help="study assigned to this CI matrix job")
     args = parser.parse_args(argv)
     try:
         workers = (os.process_cpu_count() or 1) if args.workers == "auto" else int(args.workers)
@@ -100,7 +103,22 @@ def main(argv: list[str] | None = None) -> int:
         project = Path.cwd()
         if not (project / "benchmarks/refresh/operations.sh").is_file():
             raise ValueError("Run hypothesis-helm-refresh from the project checkout root")
-        root = Path(f".cache/refresh/refresh-{int(time.time())}")
+        root = args.root or Path(f".cache/refresh/refresh-{int(time.time())}")
+        if args.ci_phase:
+            from hypothesis_helm.benchmarking.refresh.ci import phase_operations, run_phase
+
+            if args.dry_run:
+                print(
+                    json.dumps(
+                        {"workers": workers, "operations": [asdict(item) for item in phase_operations(root, args.ci_phase, args.study)]},
+                        indent=2,
+                    )
+                )
+            else:
+                run_phase(root, args.ci_phase, args.study, workers)
+            return 0
+        if args.root or args.study:
+            raise ValueError("--root and --study require --ci-phase")
         operations = Refresh(root).operations()
         if args.dry_run:
             print(json.dumps({"workers": workers, "operations": [asdict(item) for item in operations]}, indent=2))

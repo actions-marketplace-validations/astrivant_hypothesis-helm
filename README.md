@@ -11,6 +11,12 @@ to a small example you can reproduce. Filtering skips redundant renders, while o
 sampling techniques reduce the number of inputs tested so you can cover more charts within your
 time budget.
 
+[![Filtering runtime as the input space grows, comparing unfiltered testing, random sampling, and filtering](studies/filtering/filtering-runtime.png)](studies/filtering/README.md)
+
+In this synthetic load test, `--filter` reduced average runtime from roughly 25-28 seconds to 2-7 seconds
+at 512 valid input configurations. [See the measurements and methodology](studies/filtering/README.md).
+The plot uses the earlier name `filter-aggressive` for `--filter-adaptive`.
+
 - Audit templates, values schemas, and missing defaults.
 - Generate a minimal values schema.
 - Choose permutation coverage, with exhaustive testing for small finite spaces.

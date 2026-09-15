@@ -1,0 +1,53 @@
+name: Refresh environment
+description: Install versioned benchmark tools on an isolated refresh runner
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.13'
+    - run: pip install poetry==2.1.3
+      shell: bash
+    - run: poetry install --extras benchmarking
+      shell: bash
+    - name: Install GNU Parallel
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y parallel
+      shell: bash
+    - name: Restore Helm binary
+      id: helm-cache
+      if: ${{ vars.HH_BINARY_CACHE != 'false' }}
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/helm-${{ env.HELM_VERSION }}-linux-amd64
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-helm-${{ env.HELM_VERSION }}-exact
+    - name: Install Helm 4
+      env:
+        BINARY_CACHE: ${{ vars.HH_BINARY_CACHE != 'false' }}
+      run: |
+        platform=linux
+        architecture=amd64
+        binary_root="$RUNNER_TEMP/hypothesis-helm-binaries"
+        if [[ "$BINARY_CACHE" != "true" ]]; then binary_root="$(mktemp -d)"; fi
+        binary_dir="$binary_root/helm-${HELM_VERSION}-${platform}-${architecture}"
+        if [[ ! -x "$binary_dir/helm" ]]; then
+          download_dir="$(mktemp -d)"
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+          tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" "${platform}-${architecture}/helm"
+          mkdir -p "$binary_dir"
+          install "$download_dir/${platform}-${architecture}/helm" "$binary_dir/helm.pending"
+          mv "$binary_dir/helm.pending" "$binary_dir/helm"
+          rm -rf "$download_dir"
+        fi
+        echo "$binary_dir" >> "$GITHUB_PATH"
+      shell: bash
+    - name: Save Helm binary
+      if: ${{ vars.HH_BINARY_CACHE != 'false' && steps.helm-cache.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ runner.temp }}/hypothesis-helm-binaries/helm-${{ env.HELM_VERSION }}-linux-amd64
+        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-helm-${{ env.HELM_VERSION }}-exact
+    - name: Use HTTPS for public submodules
+      shell: bash
+      run: git config --global url."https://github.com/".insteadOf 'git@github.com:'
