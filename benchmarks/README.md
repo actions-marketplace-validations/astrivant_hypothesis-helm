@@ -97,7 +97,9 @@ hypothesis-helm-benchmark generate \
 
 ### Complexity-informed sampling
 
-The [calibration study](../studies/calibration-variation/README.md) compares 30 generated chart variants across 100 seeds each.
+The [calibration study](../studies/calibration-variation/README.md) compares 54 generated chart variants across 100 seeds each.
+Its [breadth × depth sweep](../studies/calibration-variation/README.md#breadth-and-depth-sweep) measures nine output sizes
+while holding the input count and defect triggers fixed within each panel.
 Its [matrix and graphs](../studies/calibration-variation/MATRIX.md) show retained cases, known-bug discovery and nearby-profile fallback.
 The [test matrix](../docs/adaptive-filtering/TESTS.md) separates deterministic selector properties from empirical results.
 

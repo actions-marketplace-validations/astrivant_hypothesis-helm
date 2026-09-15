@@ -205,7 +205,7 @@ def test_calibration_command_writes_reproducible_matrix_and_plots(tmp_path: Path
     Returns:
         None: The command writes full reference data, numerical matrices, PNG/SVG plots and redrawable reports.
     """
-    from hypothesis_helm.benchmarking.studies.calibration import main
+    from hypothesis_helm.benchmarking.studies.calibration import main, verify_sweep
 
     output = tmp_path / "study"
     assert (
@@ -234,6 +234,11 @@ def test_calibration_command_writes_reproducible_matrix_and_plots(tmp_path: Path
     document = json.loads((output / "calibration.json").read_text())
     assert document["status"] == "complete"
     assert len(document["profiles"]) == 4
+    verify_sweep(document)
+    with pytest.raises(ValueError, match="every declared sweep cell"):
+        verify_sweep({**document, "profiles": document["profiles"][:-1]})
+    with pytest.raises(ValueError, match="every declared sweep cell"):
+        verify_sweep({**document, "profiles": [document["profiles"][0]] * 4})
     assert all(cell["evidence"]["reference_renders"] == 8 for cell in document["profiles"])
     assert all(cell["faults"] == document["profiles"][0]["faults"] for cell in document["profiles"])
     dimensions = [cell["analysis"]["complexity"]["maximum_output"] for cell in document["profiles"]]

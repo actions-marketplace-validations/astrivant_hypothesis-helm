@@ -11,6 +11,7 @@ from attrs import asdict
 from hypothesis_helm.benchmarking.charts.stress import Stress, progression
 from hypothesis_helm.benchmarking.charts.structures import STRUCTURES
 from hypothesis_helm.benchmarking.refresh.plan import STUDIES
+from hypothesis_helm.benchmarking.studies.calibration import verify_sweep
 from hypothesis_helm.benchmarking.studies.error_surface import METHODS, METRICS, RATES, verify
 from hypothesis_helm.benchmarking.studies.matrix import STRATEGIES
 from hypothesis_helm.benchmarking.studies.structural_sparsity import verify as verify_structural_sparsity
@@ -96,12 +97,18 @@ for study in STUDIES:
         assert (directory / "summary.csv").is_file()
     if study == "calibration-variation":
         calibration = json.loads((directory / "calibration.json").read_text())
-        assert calibration["status"] == "complete" and len(calibration["profiles"]) == 30
-        assert len(rows) == 180 and all(row["trials"] == 100 for row in rows)
+        if "sweep" in calibration.get("metadata", {}):
+            verify_sweep(calibration)
+        else:
+            assert calibration["status"] == "complete" and len(calibration["profiles"]) == 30
+        assert len(rows) == 6 * len(calibration["profiles"]) and all(row["trials"] == 100 for row in rows)
         cases = {cell["case"] for cell in calibration["profiles"]}
         strategies = {"filter", "exact", "nearby-0.1", "nearby-0.2", "nearby-0.35", "nearby-0.5"}
-        assert len(cases) == 30
+        assert len(cases) == len(calibration["profiles"])
         assert {(row["case"], row["strategy"]) for row in rows} == {(case, strategy) for case in cases for strategy in strategies}
+        if "sweep" in calibration.get("metadata", {}):
+            for filename in ("complexity-sweep.png", "complexity-sweep.svg", "complexity-sweep.csv"):
+                assert (directory / filename).is_file(), filename
         for cell in calibration["profiles"]:
             assert len(cell["reference"]["cases"]) + 1 == cell["evidence"]["reference_renders"]
         for filename in ("matrix.csv", "matrix.json", "MATRIX.md", "matching-matrix.png", "profile-variation.png"):

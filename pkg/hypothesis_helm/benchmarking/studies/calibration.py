@@ -36,6 +36,36 @@ from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequen
 from hypothesis_helm.schemas.model import ValuesModel
 
 
+def verify_sweep(document: dict[str, object]) -> None:
+    """
+    Require every declared breadth/depth sweep cell exactly once.
+
+    Args:
+        document (dict[str, object]): Completed calibration with recorded sweep metadata.
+
+    Returns:
+        None: Missing, duplicated or mislabeled measurements raise ValueError.
+    """
+    sweep = mapping(mapping(document["metadata"])["sweep"])
+    expected = {
+        f"fields-{inputs}-depth-{depth}-placement-{placement}-breadth-{breadth}-output-depth-{output_depth}": (breadth, output_depth)
+        for inputs, depth, placement, breadth, output_depth in itertools.product(
+            sequence(sweep["inputs"]),
+            sequence(sweep["gate_depths"]),
+            range(int(str(sweep["placements"]))),
+            sequence(sweep["resource_copies"]),
+            sequence(sweep["list_wrappers"]),
+        )
+    }
+    cells = [mapping(cell) for cell in sequence(document["profiles"])]
+    if document.get("status") != "complete" or len(cells) != len(expected) or {str(cell["case"]) for cell in cells} != expected.keys():
+        raise ValueError("calibration must contain every declared sweep cell exactly once")
+    for cell in cells:
+        shape = mapping(cell["output_shape"])
+        if (shape["copies"], shape["wrappers"]) != expected[str(cell["case"])]:
+            raise ValueError("calibration output shape does not match its declared sweep cell")
+
+
 def study(chart: Chart, faults: list[Fault], trials: int, seed: int, helm: str, deadline: float) -> dict[str, object]:
     """
     Render one finite population and measure seeded selection at increasing sample sizes.
@@ -354,6 +384,7 @@ def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = 
         return 1
     from hypothesis_helm.benchmarking.analysis.calibration_matrix import evaluate
 
+    verify_sweep(document)
     evaluate(args.output, document)
     plot(args.output, document)
     return 0
