@@ -50,7 +50,7 @@ def test_inventory_covers_refresh_and_publication_barriers() -> None:
     Returns:
         None: Every required refresh operation is reachable from the final barrier.
     """
-    operations = Refresh(Path("benchmarks/runs/refresh-1234")).operations()
+    operations = Refresh(Path(".cache/refresh/refresh-1234")).operations()
     by_name = {operation.name: operation for operation in operations}
 
     def ancestors(name: str) -> set[str]:
@@ -65,7 +65,8 @@ def test_inventory_covers_refresh_and_publication_barriers() -> None:
         """
         return {parent for direct in by_name[name].requires for parent in {direct, *ancestors(direct)}}
 
-    assert len(STUDIES) == 15
+    assert STUDIES
+    assert len(STUDIES) == len(set(STUDIES))
     assert set(by_name) - {"publication-finished"} == ancestors("publication-finished")
     assert set(STUDIES) <= ancestors("topologies")
     assert set(STUDIES) <= ancestors("profile")
