@@ -9,6 +9,7 @@ from pathlib import Path
 
 from hypothesis_helm.benchmarking.charts.fixture import read_spec
 from hypothesis_helm.benchmarking.reporting.descriptions import describe
+from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
@@ -79,7 +80,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
     lines = [
         "# Structure depth sweep",
         "",
-        "[Benchmarking](../../benchmarks/README.md)",
+        "[Benchmarking](../../docs/benchmarking/README.md)",
         "",
         "Only topology trim depth varies. Random trimming stays at zero and failure expansion stays enabled.",
         "",
@@ -158,4 +159,4 @@ def plot(output: Path, document: dict[str, object]) -> None:
         "```",
         "",
     ]
-    (output / "README.md").write_text("\n".join(lines))
+    (output / "README.md").write_text(with_contents("\n".join(lines)))

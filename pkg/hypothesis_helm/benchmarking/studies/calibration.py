@@ -31,6 +31,7 @@ from hypothesis_helm.execution.aggressive import CALIBRATION_VERSION, changed_fi
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer, parse_time_limit
+from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.combinations import plan_interactions, trim_values
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 from hypothesis_helm.schemas.model import ValuesModel
@@ -284,7 +285,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
         "[Calibration JSON](calibration.json) · [Measurements](results.csv)",
         "",
     ]
-    (output / "README.md").write_text("\n".join(lines))
+    (output / "README.md").write_text(with_contents("\n".join(lines)))
 
 
 def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = None) -> int:
@@ -299,7 +300,7 @@ def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = 
         int: Zero for completed calibration, one when the execution budget expires.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("benchmarks/runs/calibration"))
+    parser.add_argument("--output", type=Path, default=Path(".cache/benchmarks/calibration"))
     parser.add_argument("--inputs", type=int, nargs="+", default=[6, 7, 8])
     parser.add_argument("--depths", type=int, nargs="+", default=[1, 2, 3, 4, 5])
     parser.add_argument("--breadths", type=int, nargs="+", default=[1], help="sibling copies of the fault resource (1..16)")

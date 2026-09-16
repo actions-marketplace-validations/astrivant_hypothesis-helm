@@ -1,6 +1,12 @@
 # Error rate and filtering
 
-[Benchmarking](../../benchmarks/README.md)
+<!-- toc:start -->
+**Table of contents**
+
+- [Error rate and filtering](#error-rate-and-filtering)
+<!-- toc:end -->
+
+[Benchmarking](../../docs/benchmarking/README.md)
 
 Measured axes in this run: clustering. The default refresh runs all three axes.
 

@@ -1,6 +1,12 @@
 # Mixed chart structures
 
-[Benchmarking](../../benchmarks/README.md) · [Depth sweep](../structure-depth/README.md)
+<!-- toc:start -->
+**Table of contents**
+
+- [Nesting-depth distributions](#nesting-depth-distributions)
+<!-- toc:end -->
+
+[Benchmarking](../../docs/benchmarking/README.md) · [Depth sweep](../structure-depth/README.md)
 
 Generate multiple structural components distributed throughout one chart:
 

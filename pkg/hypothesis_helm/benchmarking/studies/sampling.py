@@ -29,6 +29,7 @@ from hypothesis_helm.charts.rendering import RenderFailure, render
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer, parse_time_limit
+from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, number, sequence
 
 
@@ -97,7 +98,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
     lines = [
         "# Random sampling and defect discovery",
         "",
-        "[Benchmarking](../../benchmarks/README.md)",
+        "[Benchmarking](../../docs/benchmarking/README.md)",
         "",
         f"The shared stress chart has {metadata['valid_inputs']} valid inputs and six known defect families. "
         f"Every input was rendered with Helm; {metadata['trials']} seeded samples were evaluated at each size.",
@@ -134,7 +135,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
             "",
         ]
     )
-    (output / "README.md").write_text("\n".join(lines))
+    (output / "README.md").write_text(with_contents("\n".join(lines)))
 
 
 def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = None) -> int:
@@ -149,7 +150,7 @@ def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = 
         int: Zero after verified plots, or one when the reference cannot be completed.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("benchmarks/runs/sampling"))
+    parser.add_argument("--output", type=Path, default=Path(".cache/benchmarks/sampling"))
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--trials", type=int, default=500)
     parser.add_argument("--time-limit", type=parse_time_limit, default=540.0)

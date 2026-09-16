@@ -24,6 +24,7 @@ from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.reporting.budget import parse_time_limit
+from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 
 
@@ -127,7 +128,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
         ]
     )
     lines.extend(explanation(rows))
-    (output / "README.md").write_text("\n".join(lines))
+    (output / "README.md").write_text(with_contents("\n".join(lines)))
 
 
 def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = None) -> int:
@@ -142,7 +143,7 @@ def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = 
         int: Zero for completed or censored measurements; one for an oracle disagreement.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("benchmarks/runs/stress"))
+    parser.add_argument("--output", type=Path, default=Path(".cache/benchmarks/stress"))
     parser.add_argument("--parameters", type=Path, help="starting chart parameter file with stress controls")
     parser.add_argument("--steps", type=int, help="measure only this many steps from the fixed progression")
     parser.add_argument("--seed", type=int, default=2026)

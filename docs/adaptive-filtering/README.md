@@ -1,5 +1,16 @@
 # Adaptive filtering
 
+<!-- toc:start -->
+**Table of contents**
+
+- [What determines the minimum?](#what-determines-the-minimum)
+- [Recompute before visiting each chart](#recompute-before-visiting-each-chart)
+- [Selection and evidence](#selection-and-evidence)
+- [Reproduce the study](#reproduce-the-study)
+- [Computational cost](#computational-cost)
+  - [Conditions behind the comparison](#conditions-behind-the-comparison)
+<!-- toc:end -->
+
 [Execution](../execution/README.md#percentage-sampling) · [Audit complexity](../inputs/README.md#potential-output-complexity)
 
 `--filter-adaptive` starts with `--filter`, then aims to test about **70% of the
@@ -106,7 +117,7 @@ alone would achieve the same result.
 
 ```sh
 pip install 'hypothesis-helm[benchmarking]'
-hypothesis-helm-benchmark calibration --output benchmarks/runs/calibration --time-limit 9m
+hypothesis-helm-benchmark calibration --output .cache/benchmarks/calibration --time-limit 9m
 ```
 
 The command reuses one generated chart across 30 parameter recipes, renders every finite input with Helm,
@@ -207,4 +218,4 @@ Constraints or correlated fields invalidate that calculation. The load fixture h
 therefore provide controlled changes in branch rarity and symbolic region structure.
 
 See the [real Helm load test](../../studies/filtering/README.md) for runtime, planning, completed-work and phase graphs.
-Reproduce it with `hypothesis-helm-benchmark filtering --output benchmarks/runs/filtering --time-limit 9m`.
+Reproduce it with `hypothesis-helm-benchmark filtering --output .cache/benchmarks/filtering --time-limit 9m`.

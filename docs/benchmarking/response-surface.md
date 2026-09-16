@@ -1,6 +1,15 @@
 # Quadratic response surfaces
 
-[Benchmarking](../../benchmarks/README.md) · [Collected and fitted surfaces](../../studies/error-surface/quadratic-fits.md)
+<!-- toc:start -->
+**Table of contents**
+
+- [Estimation and interpretation](#estimation-and-interpretation)
+- [Regeneration and reference](#regeneration-and-reference)
+- [Quadratic versus quartic comparison](#quadratic-versus-quartic-comparison)
+- [Optional symbolic regression](#optional-symbolic-regression)
+<!-- toc:end -->
+
+[Benchmarking](README.md) · [Collected and fitted surfaces](../../studies/error-surface/quadratic-fits.md)
 
 We expect each control to affect runtime and error discovery, and one control to change
 another's effect. A quadratic gives these hypotheses explicit terms without assuming

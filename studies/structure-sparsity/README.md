@@ -1,6 +1,12 @@
 # Sparsity across structural outcomes
 
-[Benchmarking](../../benchmarks/README.md)
+<!-- toc:start -->
+**Table of contents**
+
+- [Sparsity across structural outcomes](#sparsity-across-structural-outcomes)
+<!-- toc:end -->
+
+[Benchmarking](../../docs/benchmarking/README.md)
 
 Each stage uses a smaller nested random subset of the same input prefix, fresh caches, and a nine-minute ceiling. Case count varies; interaction strength does not. Scalar and categorical outcome distributions are checked against independent finite references.
 
@@ -28,4 +34,4 @@ Each stage uses a smaller nested random subset of the same input prefix, fresh c
 
 One seeded trajectory is shown. Errors need not increase monotonically; categorical outcomes have no CDF ordering. High distribution coverage does not establish a generally safe trimming level for bug discovery. Rare faults can be lost.
 
-See [trimming controls](../../docs/execution/README.md#optional-trimming) and [refresh commands](../../benchmarks/refresh/README.md).
+See [trimming controls](../../docs/execution/README.md#optional-trimming) and [refresh commands](../../docs/benchmarking/refresh.md).

@@ -1,6 +1,12 @@
 # Sparsity and Stochasticity
 
-[Benchmarking](../../benchmarks/README.md)
+<!-- toc:start -->
+**Table of contents**
+
+- [Fresh measurements](#fresh-measurements)
+<!-- toc:end -->
+
+[Benchmarking](../../docs/benchmarking/README.md)
 
 This study varies case count, not `--permutations` interaction strength. It measures
 outcome coverage and distribution error; see the main benchmark for bug discovery.

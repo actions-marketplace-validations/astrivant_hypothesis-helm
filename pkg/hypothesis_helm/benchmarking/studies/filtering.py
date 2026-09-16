@@ -22,6 +22,7 @@ from hypothesis_helm.charts.runner import check_chart
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.reporting.budget import parse_time_limit
+from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 METHODS = ("baseline", "sample-random", "filter", "filter-adaptive")
@@ -259,7 +260,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
             f"{float(str(row['complexity_seconds'])):.3f} | {float(str(row['execution_seconds'])):.3f} | {row['status']} |"
         )
     lines += ["", "[Raw timings and fallback decisions](results.csv) · [Full measurements](results.json) · [Chart recipes](cases/)", ""]
-    (output / "README.md").write_text("\n".join(lines))
+    (output / "README.md").write_text(with_contents("\n".join(lines)))
 
 
 def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = None) -> int:
@@ -274,7 +275,7 @@ def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = 
         int: Zero after successful or time-limited runs, one for unexpected chart failures.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("benchmarks/runs/filtering"))
+    parser.add_argument("--output", type=Path, default=Path(".cache/benchmarks/filtering"))
     parser.add_argument("--inputs", type=int, nargs="+", default=[6, 7, 8, 9])
     parser.add_argument("--depths", type=int, nargs="+", default=[1, 3, 5])
     parser.add_argument("--repeats", type=int, default=2)

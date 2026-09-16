@@ -1,6 +1,13 @@
 # Structure depth sweep
 
-[Benchmarking](../../benchmarks/README.md)
+<!-- toc:start -->
+**Table of contents**
+
+- [Mixed fixtures](#mixed-fixtures)
+- [Measurement](#measurement)
+<!-- toc:end -->
+
+[Benchmarking](../../docs/benchmarking/README.md)
 
 Only topology trim depth varies. Random trimming stays at zero and failure expansion stays enabled.
 
