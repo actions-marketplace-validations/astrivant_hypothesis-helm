@@ -5,6 +5,7 @@
 
 - [Recommended workflow](#recommended-workflow)
 - [Recommended release check](#recommended-release-check)
+- [Production promotion](#production-promotion)
 - [GitLab](#gitlab)
 - [CircleCI](#circleci)
 - [GitHub Actions](#github-actions)
@@ -77,6 +78,41 @@ checks, `--rerun all` (`rerun: all` in the action) executes the selected tests a
 refreshes their cache, including failures. The explicit exhaustive command above renders
 its configurations afresh. If tagging is automated, require the exhaustive check to finish
 successfully before tagging the tested commit; these examples do not create tags.
+
+## Production promotion
+
+For large production deployments, use the [validation flow](../../README.md#production-validation)
+to find failures before taking progressively more expensive actions. These are recommended release gates;
+the CI examples below provide chart tests and scanner integration. Add cluster validation and deployment jobs
+to your delivery pipeline, requiring each preceding gate to pass.
+
+| Gate | Question it answers | Evidence required to continue |
+| --- | --- | --- |
+| hypothesis-helm with Kubesec and Kubeconform | Do tested inputs produce acceptable manifests? | Passing tests, reviewed coverage and scanner results. |
+| Server-side dry-run in a vcluster or staging cluster | Will that API server admit the release configuration? | Successful admission and validation. |
+| Actual staging deployment | Does the application work when its resources are created? | Successful rollout, smoke tests and integration tests. |
+| Production promotion | Does the tested release remain healthy under production conditions? | Monitored rollout and application health. |
+
+Run hypothesis-helm with the [coverage appropriate to the release stage](#recommended-workflow),
+and enable the optional Kubesec integration. [Kubesec](https://kubesec.io/) checks security-sensitive manifest settings;
+[Kubeconform](https://github.com/yannh/kubeconform#limits-of-kubeconform-validation) checks API schemas.
+The examples [route resources between these scanners](#validation-and-caches).
+Require the configured security policy and schema checks to pass, and review incomplete coverage or unsupported resources.
+Use schemas for the target Kubernetes version, including any required custom resources.
+
+After testing generated inputs, render the intended release values and submit those manifests for
+[Kubernetes server-side dry-run](https://kubernetes.io/docs/reference/using-api/api-concepts/#dry-run),
+for example with `kubectl --context staging apply --dry-run=server -f candidate.yaml`.
+This exercises API validation and admission without persisting the resources; it does not start containers or test controllers.
+The `helm hypothesis test --dry-run` option estimates test work and does not perform this cluster check.
+For a vcluster, configure the Kubernetes version, CRDs and admission policies to represent the target environment;
+acceptance there establishes compatibility with that environment only.
+
+Deploy the candidate to staging through your normal Helm release process. Wait for the rollout and run application smoke
+and integration tests, including the storage, networking and external dependencies that matter to the service.
+Promote the same chart package and container image digests after these checks pass. Record environment-specific values;
+validate the production values too, since changing configuration can change the rendered resources and behavior.
+Retain the test and deployment results with the release so the promotion decision is traceable.
 
 ## GitLab
 

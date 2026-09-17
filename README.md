@@ -7,6 +7,7 @@
 - [Examples: failures hidden by defaults](#examples-failures-hidden-by-defaults)
 - [Audit, test, or scan?](#audit-test-or-scan)
   - [Quick start](#quick-start)
+- [Production validation](#production-validation)
 - [Guides](#guides)
 - [Test case: Bitnami charts](#test-case-bitnami-charts)
 - [Test case: Prometheus Community charts](#test-case-prometheus-community-charts)
@@ -162,6 +163,27 @@ helm hypothesis scan prometheus-community --filter --report
 ```
 
 See [Repository scanning](docs/scanning/README.md) for authentication, public indexes, version selection, and dependency handling.
+
+## Production validation
+
+For large production deployments, catch inexpensive failures before committing cluster resources.
+Build confidence through successive checks, then promote the tested release:
+
+```mermaid
+flowchart TD
+    tests["hypothesis-helm + Kubesec + Kubeconform<br/>Generated inputs, security checks and API schemas"]
+    admission["Server-side dry-run<br/>vcluster or staging cluster"]
+    staging["Deploy to staging<br/>Rollout, smoke and integration tests"]
+    production["Promote the tested release to production<br/>Monitor rollout and application health"]
+    tests -->|Checks pass and coverage reviewed| admission
+    admission -->|API accepts the candidate| staging
+    staging -->|Runtime checks pass| production
+```
+
+Cost and operational impact increase down the graph. Any failed gate blocks promotion.
+Test generated values broadly, then use the intended release configuration for the cluster stages.
+Passing these gates builds evidence for release confidence; it does not guarantee security or correctness.
+See the [production promotion guide](docs/ci/README.md#production-promotion) for what each gate establishes.
 
 ## Guides
 
