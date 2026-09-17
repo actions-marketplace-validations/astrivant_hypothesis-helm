@@ -279,6 +279,7 @@ continues scheduler development independently; existing benchmark runs retain th
 
 Refresh workspaces live under `.cache/refresh/refresh-<epoch>/`. Each run keeps its
 `operations.json` journal, verification records, source snapshots and operation logs there.
+Operation output appears live in the terminal with labels such as `[checks]`; complete raw logs remain under `logs/`.
 Only benchmark results, plots and chart recipes are published; refresh bookkeeping is not committed.
 Failures stop scheduling, join owned children, and mark pending operations blocked.
 Repository command failures are retained for their finalizer to inspect; missing

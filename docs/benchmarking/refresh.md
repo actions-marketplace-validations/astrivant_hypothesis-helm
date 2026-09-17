@@ -15,6 +15,10 @@ Refresh workspaces and internal records live under `.cache/refresh/refresh-<epoc
 That includes logs, timestamps, process journals, verification results, source snapshots and checksum inventories.
 They are generated when needed and are not required in a fresh checkout.
 
+The terminal shows each operation's stdout and stderr as it runs, prefixed with its name, such as `[checks]` or `[performance]`.
+The complete, unprefixed output is also saved in `logs/<operation>.log`. Repository scans forward chart diagnostics while keeping
+their JSON results in separate files. CI uses the same live output without progress bars.
+
 Published measurements, plots and chart recipes remain under `studies/` and `pkg/hypothesis_helm/benchmarking/assets/fixture/`.
 Repository scan reports remain under `docs/reports/`.
 

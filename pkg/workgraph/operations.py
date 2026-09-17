@@ -11,11 +11,15 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import asdict, dataclass, field
+from functools import partial
 from pathlib import Path
 from subprocess import CompletedProcess
 from typing import Protocol, TextIO
 
+from workgraph.output import OperationOutput
 from workgraph.workloads import Statistics
+
+NOTIFY = partial(print, flush=True)
 
 
 class ProcessOwner(Protocol):
@@ -97,7 +101,7 @@ class OperationQueue:
         cwd: Path,
         environment: dict[str, str],
         owner_factory: Callable[[], ProcessOwner],
-        notify: Callable[[str], None] = print,
+        notify: Callable[[str], None] = NOTIFY,
         cancellation_scope: Callable[[], AbstractContextManager[object]] = nullcontext,
         critical_scope: Callable[[], AbstractContextManager[object]] = nullcontext,
     ) -> None:
@@ -111,7 +115,7 @@ class OperationQueue:
             cwd (Path): Shared command working directory.
             environment (dict[str, str]): Explicit environment snapshot passed to each command.
             owner_factory (Callable[[], ProcessOwner]): Independent process owner supplied by the integrating application.
-            notify (Callable[[str], None]): Coordinator-only progress sink, including plain CI logs.
+            notify (Callable[[str], None]): Coordinator-only progress and labeled child-output sink, including plain CI logs.
             cancellation_scope (Callable[[], AbstractContextManager[object]]): Application cancellation-handler scope.
             critical_scope (Callable[[], AbstractContextManager[object]]): Scope deferring cancellation during ownership changes.
         """
@@ -121,6 +125,7 @@ class OperationQueue:
         self.workers = workers
         self.directory, self.cwd = directory, cwd
         self.environment = dict(environment)
+        self.environment.setdefault("PYTHONUNBUFFERED", "1")
         self.notify, self.owner_factory = notify, owner_factory
         self.cancellation_scope, self.critical_scope = cancellation_scope, critical_scope
         names = {item.name for item in operations}
@@ -142,6 +147,7 @@ class OperationQueue:
         }
         self.active: dict[Future[int], tuple[Operation, ProcessOwner]] = {}
         self.owners: dict[str, ProcessOwner] = {}
+        self.outputs: dict[str, OperationOutput] = {}
 
     def save(self) -> None:
         """
@@ -168,7 +174,8 @@ class OperationQueue:
         """
         logs = self.directory / "logs"
         logs.mkdir(parents=True, exist_ok=True)
-        with (logs / f"{operation.name}.log").open("w") as output:
+        # The coordinator creates and opens the log before submitting this worker.
+        with (logs / f"{operation.name}.log").open("a") as output:
             return owner.run(
                 list(operation.command),
                 cwd=self.cwd,
@@ -206,6 +213,9 @@ class OperationQueue:
                         with self.critical_scope():
                             owner = self.owner_factory()
                             self.owners[operation.name] = owner
+                            self.outputs[operation.name] = OperationOutput(
+                                self.directory / "logs" / f"{operation.name}.log", operation.name, self.notify
+                            )
                             self.records[operation.name].update(status="running", started_epoch=time.time())
                             future = pool.submit(self.execute, operation, owner)
                             self.active[future] = operation, owner
@@ -214,6 +224,8 @@ class OperationQueue:
                         self.notify(f"[{len(completed)}/{len(self.operations)}] Starting {operation.name}")
                         exclusive = operation.exclusive
                     done, _ = wait(self.active, timeout=0.1, return_when=FIRST_COMPLETED)
+                    for output in self.outputs.values():
+                        output.drain()
                     for future in done:
                         operation, owner = self.active[future]
                         record = self.records[operation.name]
@@ -221,6 +233,8 @@ class OperationQueue:
                             code = future.result()
                             record["exit_code"] = code
                             owner.stop()
+                            self.outputs[operation.name].close()
+                            self.outputs.pop(operation.name)
                             if code and not operation.allow_failure:
                                 raise RuntimeError(
                                     f"Operation {operation.name} exited {code}; see {self.directory}/logs/{operation.name}.log"
@@ -254,6 +268,13 @@ class OperationQueue:
                                 pool.shutdown(wait=True, cancel_futures=True)
                             except BaseException as exc:
                                 failures.append(exc)
+                        for name, output in tuple(self.outputs.items()):
+                            try:
+                                output.close()
+                            except BaseException as exc:
+                                failures.append(exc)
+                            finally:
+                                self.outputs.pop(name)
                         for operation in pending:
                             if self.records[operation.name]["status"] == "pending":
                                 self.records[operation.name]["status"] = "blocked"

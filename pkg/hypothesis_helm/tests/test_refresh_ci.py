@@ -69,7 +69,9 @@ def test_merge_ci_statuses(tmp_path: Path, damage: str | None) -> None:
 
 
 @pytest.mark.parametrize("exit_code", [0, 3])
-def test_ci_study_retains_status_and_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exit_code: int) -> None:
+def test_ci_study_retains_status_and_logs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exit_code: int, capsys: pytest.CaptureFixture[str]
+) -> None:
     """
     Retain matrix diagnostics on success and failure using a native owned process.
 
@@ -77,6 +79,7 @@ def test_ci_study_retains_status_and_logs(tmp_path: Path, monkeypatch: pytest.Mo
         tmp_path (Path): Runner checkout with a restored preparation snapshot.
         monkeypatch (pytest.MonkeyPatch): Isolate working directory and executable lookup.
         exit_code (int): Native study outcome.
+        capsys (pytest.CaptureFixture[str]): Coordinator stdout and stderr capture.
 
     Returns:
         None: The coordinator copies study status and logs to artifact locations even on failure.
@@ -110,4 +113,5 @@ def test_ci_study_retains_status_and_logs(tmp_path: Path, monkeypatch: pytest.Mo
         run_phase(root, "study", "performance", 1)
     assert (restored / "statuses/performance.tsv").read_text() == f"performance\t{exit_code}\n"
     assert "native study diagnostic" in (restored / "logs/performance.log").read_text()
+    assert "[performance] native study diagnostic" in capsys.readouterr().err
     assert json.loads((restored / "ci-jobs/performance/operations.json").read_text())

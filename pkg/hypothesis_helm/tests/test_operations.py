@@ -4,6 +4,7 @@ Verify dependency scheduling and process ownership above the complete refresh wo
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -319,3 +320,202 @@ def test_interrupt_joins_running_operations(tmp_path: Path, monkeypatch: pytest.
     assert not scheduler.owners
     assert scheduler.records["publish"]["status"] == "blocked"
     assert not any(thread.name.startswith("workgraph-worker") for thread in threading.enumerate())
+
+
+@pytest.mark.parametrize("exit_code", [0, 7])
+def test_operation_output_streams_before_exit(tmp_path: Path, exit_code: int) -> None:
+    """
+    Deliver both streams while children wait for acknowledgement, then flush final partial lines.
+
+    Args:
+        tmp_path (Path): Child acknowledgements and untouched raw log files.
+        exit_code (int): Native exit status to preserve after forwarding output.
+
+    Returns:
+        None: Concurrent output reaches only the coordinator before command completion.
+    """
+    script = dedent(
+        """
+        import sys, time
+        from pathlib import Path
+        name, code = sys.argv[1:]
+        print('stdout ready')
+        print('stderr ready', file=sys.stderr)
+        deadline = time.monotonic() + 10
+        while not Path('release').exists():
+            if time.monotonic() > deadline:
+                raise RuntimeError('output was not forwarded while running')
+            time.sleep(.01)
+        print('final partial line', end='')
+        raise SystemExit(int(code))
+        """
+    )
+    names = ("left", "right") if exit_code == 0 else ("failed",)
+    operations = [Operation(name, (sys.executable, "-c", script, name, str(exit_code))) for name in names]
+    scheduler = queue(operations, tmp_path)
+    messages: list[str] = []
+    coordinator = threading.get_ident()
+
+    def notify(message: str) -> None:
+        """
+        Release children only after all stdout and stderr diagnostics reach the coordinator.
+
+        Args:
+            message (str): Scheduling event or labeled child output.
+
+        Returns:
+            None: Every running child receives the shared acknowledgement.
+        """
+        assert threading.get_ident() == coordinator
+        messages.append(message)
+        if all(f"[{name}] {stream} ready" in messages for name in names for stream in ("stdout", "stderr")):
+            (tmp_path / "release").touch()
+
+    scheduler.notify = notify
+    if exit_code:
+        with pytest.raises(RuntimeError, match="exited 7"):
+            scheduler.run()
+    else:
+        scheduler.run()
+    for name in names:
+        assert messages.count(f"[{name}] stdout ready") == 1
+        assert messages.count(f"[{name}] stderr ready") == 1
+        assert messages.count(f"[{name}] final partial line") == 1
+        assert (tmp_path / "logs" / f"{name}.log").read_bytes() == b"stdout ready\nstderr ready\nfinal partial line"
+        if not exit_code:
+            complete = next(index for index, message in enumerate(messages) if f"Completed {name} " in message)
+            assert messages.index(f"[{name}] final partial line") < complete
+    assert not scheduler.outputs
+    assert not scheduler.owners
+
+
+def test_operation_output_retains_bytes_and_bounds_partial_lines(tmp_path: Path) -> None:
+    """
+    Handle split UTF-8, carriage returns, invalid bytes and long output without changing its log.
+
+    Args:
+        tmp_path (Path): Binary operation log.
+
+    Returns:
+        None: Terminal decoding is incremental and pending output is bounded.
+    """
+    from workgraph.output import OperationOutput
+
+    messages: list[str] = []
+    path = tmp_path / "operation.log"
+    output = OperationOutput(path, "operation", messages.append)
+    with path.open("ab", buffering=0) as writer:
+        writer.write(b"\xc3")
+        output.drain()
+        assert not messages
+        writer.write(b"\xa9\nprogress\rnext\r\ninvalid:\xff\n")
+        output.drain()
+        assert messages == ["[operation] é", "[operation] progress", "[operation] next", "[operation] invalid:�"]
+        writer.write(b"x" * 200000)
+        output.drain()
+        assert len(output.pending) < 8192
+        assert output.reader.tell() < path.stat().st_size
+    output.close()
+    assert "".join(message.removeprefix("[operation] ") for message in messages[4:]) == "x" * 200000
+    assert path.read_bytes() == b"\xc3\xa9\nprogress\rnext\r\ninvalid:\xff\n" + b"x" * 200000
+    assert output.reader.closed
+    output.close()
+
+
+def test_logging_failure_still_joins_children(tmp_path: Path) -> None:
+    """
+    Preserve raw logs and release process ownership if the terminal sink stops accepting output.
+
+    Args:
+        tmp_path (Path): Interrupted operation journal and raw log.
+
+    Returns:
+        None: A logging exception cannot leave command threads or child owners running.
+    """
+    scheduler = queue([Operation("child", (sys.executable, "-u", "-c", "import time; print('ready'); time.sleep(30)"))], tmp_path)
+
+    def notify(message: str) -> None:
+        """
+        Simulate a closed terminal only after the command starts writing.
+
+        Args:
+            message (str): Coordinator notification.
+
+        Returns:
+            None: Child output raises a broken-pipe failure.
+        """
+        if message.startswith("[child]"):
+            raise BrokenPipeError("terminal closed")
+
+    scheduler.notify = notify
+    with pytest.raises((BrokenPipeError, BaseExceptionGroup)):
+        scheduler.run()
+    assert "ready" in (tmp_path / "logs/child.log").read_text()
+    assert not scheduler.outputs
+    assert not scheduler.owners
+    assert not any(thread.name.startswith("workgraph-worker") for thread in threading.enumerate())
+
+
+@pytest.mark.skipif(shutil.which("parallel") is None, reason="requires GNU Parallel")
+def test_repository_diagnostics_reach_queue_before_chart_exit(tmp_path: Path) -> None:
+    """
+    Forward nested scan diagnostics through tee and GNU Parallel without corrupting result JSON.
+
+    Args:
+        tmp_path (Path): Isolated chart recipe, recording executable and scan data.
+
+    Returns:
+        None: Live stderr is both saved and forwarded, and the failed chart still fails the queue.
+    """
+    recipes = Path(__file__).resolve().parents[1] / "benchmarking/refresh/recipes"
+    scan = tmp_path / "scan"
+    (scan / "jobs").mkdir(parents=True)
+    (scan / "charts.txt").write_bytes(b"example-chart\0")
+    shutil.copyfile(recipes / "repository-chart.sh", scan / "chart.sh")
+    binary = tmp_path / "bin"
+    binary.mkdir()
+    executable = binary / "hypothesis-helm"
+    executable.write_text(
+        dedent(
+            """
+            #!/usr/bin/env bash
+            printf '{"chart":"example-chart"}\n'
+            printf 'chart diagnostic\n' >&2
+            for ((attempt = 0; attempt < 500; attempt++)); do
+              if [[ -f release ]]; then exit 7; fi
+              sleep .01
+            done
+            exit 99
+            """
+        ).lstrip()
+    )
+    executable.chmod(0o755)
+    scheduler = queue([Operation("repository", ("bash", str(recipes / "repository-run.sh"), "scan"), timeout=10)], tmp_path)
+    scheduler.environment["PATH"] = f"{binary}{os.pathsep}{os.environ['PATH']}"
+    messages: list[str] = []
+
+    def notify(message: str) -> None:
+        """
+        Allow the scan to finish only after its diagnostic traverses the complete execution stack.
+
+        Args:
+            message (str): Coordinator output from the repository operation.
+
+        Returns:
+            None: Receipt of the live diagnostic acknowledges the blocked chart process.
+        """
+        messages.append(message)
+        if message == "[repository] chart diagnostic":
+            (tmp_path / "release").touch()
+
+    scheduler.notify = notify
+    with pytest.raises(RuntimeError, match="Operation repository exited"):
+        scheduler.run()
+    assert (tmp_path / "release").exists()
+    assert json.loads((scan / "jobs/1.json").read_text()) == {"chart": "example-chart"}
+    assert (scan / "jobs/1.err").read_text() == "chart diagnostic\n"
+    assert not any('"chart"' in message for message in messages)
+    columns, row = (scan / "joblog.tsv").read_text().splitlines()
+    assert dict(zip(columns.split("\t"), row.split("\t"), strict=True))["Exitval"] == "7"
+    assert not scheduler.outputs
+    assert not scheduler.owners
