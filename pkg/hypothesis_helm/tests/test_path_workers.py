@@ -5,8 +5,11 @@ Exercise a shared chart queue with real interpreters, Helm renders and bounded c
 import json
 import os
 import shutil
+import signal
 import sys
 import time
+from collections.abc import Iterable
+from concurrent.futures import Future, wait
 from pathlib import Path
 from textwrap import dedent
 
@@ -15,6 +18,7 @@ import pytest
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.paths import check_paths
 from hypothesis_helm.cli import argument_parser
+from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 
@@ -95,7 +99,7 @@ def test_deadline_stops_workers_and_helm_children(tmp_path: Path, monkeypatch: p
 
     Args:
         tmp_path (Path): Shared chart and slow external Helm replacement.
-        monkeypatch (pytest.MonkeyPatch): Supply the already verified baseline in the coordinator.
+        monkeypatch (pytest.MonkeyPatch): Supply a verified baseline and expire the timer after every child starts.
 
     Returns:
         None: The deadline is shared, queued paths remain unvisited, and descendants are joined.
@@ -115,24 +119,93 @@ def test_deadline_stops_workers_and_helm_children(tmp_path: Path, monkeypatch: p
     )
     slow.chmod(0o755)
     monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
-    started = time.monotonic()
+    expired_at: float | None = None
+
+    def expire_after_children_start(
+        futures: Iterable[Future[int]], timeout: float | None = None
+    ) -> tuple[set[Future[int]], set[Future[int]]]:
+        """
+        Deliver the real deadline signal after all three slow Helm children exist.
+
+        Args:
+            futures (Iterable[Future[int]]): Workers being awaited by the queue.
+            timeout (float | None): Original polling or cleanup wait.
+
+        Returns:
+            tuple[set[Future[int]], set[Future[int]]]: Completed and pending futures unless the deadline interrupts polling.
+        """
+        nonlocal expired_at
+        result = wait(futures, timeout=timeout)
+        if expired_at is None and len(list(tmp_path.glob("slow-helm.*"))) == 3:
+            expired_at = time.monotonic()
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.raise_signal(signal.SIGALRM)
+        return result
+
+    monkeypatch.setattr("hypothesis_helm.execution.path_queue.wait", expire_after_children_start)
+    # Startup can exceed four seconds during parallel suite execution. The budget is
+    # a startup watchdog; the handshake above triggers expiry at the state under test.
     result = check_paths(
-        chart, budget=4, max_examples=10, seed=0, helm=str(slow), timeout=60, artifacts=tmp_path / "results", jobs=3, filtering=True
+        chart, budget=60, max_examples=10, seed=0, helm=str(slow), timeout=60, artifacts=tmp_path / "results", jobs=3, filtering=True
     )
-    assert time.monotonic() - started < 15
+    assert expired_at is not None, "Workers never reached the cleanup scenario before the startup watchdog expired"
+    assert time.monotonic() - expired_at < 15
     traversal = mapping(result["traversal"])
     assert result["status"] == "time-limit"
     assert traversal["visited_paths"] == traversal["incomplete_paths"] == 3
     assert traversal["remaining_paths"] == 5
     assert traversal["completed_paths"] == 0
     children = list(tmp_path.glob("slow-helm.*"))
-    assert children
+    assert len(children) == 3
     for marker in children:
         with pytest.raises(ProcessLookupError):
             os.kill(int(marker.suffix[1:]), 0)
     for phase in sequence(result["phases"]):
         with pytest.raises(ProcessLookupError):
             os.kill(int(str(mapping(phase)["worker_pid"])), 0)
+
+
+def test_deadline_before_first_path_keeps_all_paths_unvisited(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Report a deadline during startup without inventing visited or incomplete path work.
+
+    Args:
+        tmp_path (Path): Discovered chart and report artifacts.
+        monkeypatch (pytest.MonkeyPatch): Expire the execution budget at the queue boundary.
+
+    Returns:
+        None: All eight paths remain unvisited after a successful baseline and startup timeout.
+    """
+    chart = fixture_chart(tmp_path)
+    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+
+    def expire(context: dict[str, object], directory: Path, workers: int) -> list[dict[str, object]]:
+        """
+        Simulate budget expiry before any path has been claimed.
+
+        Args:
+            context (dict[str, object]): Prepared chart and complete path inventory.
+            directory (Path): Reserved queue directory.
+            workers (int): Requested concurrent workers.
+
+        Returns:
+            list[dict[str, object]]: No records are returned because the deadline interrupts startup.
+        """
+        assert workers == 3
+        assert len(sequence(context["paths"])) == 8
+        raise TimeLimitReached()
+
+    monkeypatch.setattr("hypothesis_helm.execution.path_queue.execute", expire)
+    result = check_paths(
+        chart, budget=60, max_examples=10, seed=0, helm="helm", timeout=60, artifacts=tmp_path / "results", jobs=3, filtering=True
+    )
+    assert result["status"] == "time-limit"
+    assert mapping(result["baseline"])["status"] == "passed"
+    traversal = mapping(result["traversal"])
+    assert traversal["visited_paths"] == traversal["incomplete_paths"] == traversal["completed_paths"] == 0
+    assert traversal["selected_paths"] == traversal["remaining_paths"] == 8
+    assert not traversal["path_targets_complete"]
+    assert result["phases"] == []
 
 
 def test_repository_options_accept_path_workers() -> None:
