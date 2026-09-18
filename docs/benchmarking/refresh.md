@@ -3,6 +3,8 @@
 <!-- toc:start -->
 **Table of contents**
 
+- [Recovering an interrupted refresh](#recovering-an-interrupted-refresh)
+  - [Recovery after measurement verification failed](#recovery-after-measurement-verification-failed)
 - [Parallel refresh on GitHub Actions](#parallel-refresh-on-github-actions)
 <!-- toc:end -->
 
@@ -21,6 +23,36 @@ their JSON results in separate files. CI uses the same live output without progr
 
 Published measurements, plots and chart recipes remain under `studies/` and `pkg/hypothesis_helm/benchmarking/assets/fixture/`.
 Repository scan reports remain under `docs/reports/`.
+
+## Recovering an interrupted refresh
+
+Refresh keeps completed measurements in its workspace after a failure. Keep that directory, including its
+`operations.json`, logs, frozen source and checksum records. The CLI currently has no general `--resume` option;
+starting it again does not continue the previous queue, and an unfinished run blocks a fresh refresh.
+
+### Recovery after measurement verification failed
+
+A recovery script was prepared locally for `refresh-1789617223`, where all measurements completed but the verifier
+expected an obsolete clustering grid. From the project root, preview its remaining work, then resume:
+
+```sh
+bash scripts/project-run.sh python .cache/refresh/refresh-1789617223/resume.py --dry-run
+bash scripts/project-run.sh python .cache/refresh/refresh-1789617223/resume.py
+```
+
+This script belongs to that saved workspace; it is not installed with the package or generated for new runs.
+It preserves the 22 completed stages and starts the remaining 23 at `verify-measurements`, using the corrected verifier.
+Successful verification allows profiling, diagrams, publication, and the Bitnami and Prometheus scans to continue.
+It does not repeat completed benchmark measurements or resume partway through an individual measurement.
+
+Before proceeding, it acquires the refresh lock, checks the recorded prerequisite results, and verifies the frozen source
+and repaired verifier checksums. The original failed journal and logs remain available. Recovery writes its own progress
+to `resumed/operations.json` and terminal output to `resumed/logs/` inside the same workspace.
+
+The script refuses another attempt once `resumed/` exists. If recovery fails or is interrupted, inspect that journal and
+its logs before planning another continuation; stages may already have published results or started repository scans.
+Do not delete the recovery directory or mark failed stages complete to bypass this check. Other failure points need a
+recovery plan based on their saved state, including whether the failed operation can safely run again.
 
 ## Parallel refresh on GitHub Actions
 

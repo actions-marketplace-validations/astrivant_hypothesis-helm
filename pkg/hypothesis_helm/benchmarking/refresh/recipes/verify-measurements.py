@@ -12,7 +12,7 @@ from hypothesis_helm.benchmarking.charts.stress import Stress, progression
 from hypothesis_helm.benchmarking.charts.structures import STRUCTURES
 from hypothesis_helm.benchmarking.refresh.plan import STUDIES
 from hypothesis_helm.benchmarking.studies.calibration import verify_sweep
-from hypothesis_helm.benchmarking.studies.error_surface import METHODS, METRICS, RATES, verify
+from hypothesis_helm.benchmarking.studies.error_surface import METHODS, METRICS, grid_values, verify
 from hypothesis_helm.benchmarking.studies.matrix import STRATEGIES
 from hypothesis_helm.benchmarking.studies.structural_sparsity import verify as verify_structural_sparsity
 from hypothesis_helm.charts import yamlio
@@ -95,9 +95,11 @@ for study in STUDIES:
             assert (directory / f"{name}.png").is_file() and (directory / f"{name}.svg").is_file()
     if study == "error-surface":
         verify(result)
-        assert metadata["methods"] == list(METHODS) and metadata["error_rates"] == list(RATES)
+        clustering, rates = grid_values((11, 13))
+        assert metadata["methods"] == list(METHODS) and metadata["error_rates"] == rates
         assert metadata["input_fields"] == 8 and metadata["repeats"] == 3
-        assert metadata["axes"] == {"depth": list(range(6)), "redundancy": list(range(8)), "clustering": [0, 0.5, 1]}
+        expected_axes = {"depth": list(range(6)), "redundancy": list(range(8)), "clustering": clustering}
+        assert metadata["axes"] == expected_axes, f"error-surface axes: expected {expected_axes}, received {metadata['axes']}"
         for axis in metadata["axes"]:
             for metric in METRICS:
                 for extension in ("png", "svg"):

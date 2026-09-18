@@ -131,6 +131,7 @@ def test_refresh_repository_recipe(tmp_path: Path) -> None:
         "error-surface-count",
         "error-surface-zero-recall",
         "error-surface-chart",
+        "error-surface-coarse-grid",
         "filtering-count",
         "filtering-duplicate",
         "filtering-timing",
@@ -365,7 +366,13 @@ def test_refresh_requires_complete_stress_matrix(tmp_path: Path, damage: str | N
                 for extension in ("png", "svg"):
                     (directory / f"{name}.{extension}").write_bytes(b"x" * 1001)
         if study == "error-surface":
-            axes: dict[str, list[int | float]] = {"depth": list(range(6)), "redundancy": list(range(8)), "clustering": [0, 0.5, 1]}
+            axes: dict[str, list[int | float]] = {
+                "depth": list(range(6)),
+                "redundancy": list(range(8)),
+                "clustering": [index / 10 for index in range(11)],
+            }
+            if damage == "error-surface-coarse-grid":
+                axes["clustering"] = [0, 0.5, 1]
             mapping(document["metadata"]).update(
                 status="complete", input_fields=8, repeats=3, axes=axes, error_rates=list(RATES), methods=list(METHODS)
             )

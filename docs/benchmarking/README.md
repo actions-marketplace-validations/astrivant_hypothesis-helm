@@ -308,7 +308,8 @@ Each benchmark run has a nine-minute ceiling; the complete refresh takes hours.
 The command initializes missing submodules (Prometheus uses GitHub SSH), records
 source snapshots, and prints the fresh run directory containing progress and logs.
 Results are published under `studies/` and `docs/reports/`. It refuses to
-start while an earlier refresh is active or unfinished. Chart findings are retained
+start while an earlier refresh is active or unfinished. See [recovering an interrupted refresh](refresh.md#recovering-an-interrupted-refresh)
+for retained results, the current recovery command and its limitations. Chart findings are retained
 in reports; incomplete workers or failed verification stop publication.
 
 GitHub Actions and CircleCI run `bash scripts/project-run.sh hypothesis-helm-benchmark smoke` on changes. It

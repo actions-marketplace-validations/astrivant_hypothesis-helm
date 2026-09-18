@@ -54,9 +54,9 @@ case "$study" in
     ;;
   error-surface)
     if [[ "${BENCHMARK_SYMBOLIC_FIT:-false}" == "true" ]]; then
-      hypothesis-helm-benchmark error-surface --symbolic-fit --time-limit 9m --output "$root/outputs/error-surface"
+      hypothesis-helm-benchmark error-surface --output-size 11x13 --symbolic-fit --time-limit 9m --output "$root/outputs/error-surface"
     else
-      hypothesis-helm-benchmark error-surface --time-limit 9m --output "$root/outputs/error-surface"
+      hypothesis-helm-benchmark error-surface --output-size 11x13 --time-limit 9m --output "$root/outputs/error-surface"
     fi
     ;;
   *)
