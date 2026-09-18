@@ -120,7 +120,7 @@ summary = [
     "time-limited coverage remains incomplete.",
     "",
     "Checks: dependency build in isolated copies, Helm lint, Helm template with values-schema checks, and built-in manifest checks. "
-    "External kubeconform/kubesec validation was not configured.",
+    "Cached Kubernetes schema validation and optional Kubesec checks were not configured.",
     "",
     f"Source: `{metadata['source']}` at `{metadata['revision']}`; {metadata['helm_version']}. Per-worker dependency caches are isolated. "
     "Each primary chart has one dedicated job; nested results from parent jobs are retained separately and excluded from totals.",

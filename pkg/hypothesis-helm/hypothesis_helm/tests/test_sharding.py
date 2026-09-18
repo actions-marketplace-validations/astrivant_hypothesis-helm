@@ -139,6 +139,7 @@ def test_property(index):
     assert set(outcomes) == nodeids
     assert list(outcomes.values()).count("failed") == 1
     assert not list(cache.rglob("*.tmp"))
+    final = tmp_path / "final"
     mergers = [
         subprocess.Popen(
             [
@@ -149,6 +150,8 @@ def test_property(index):
                 "3",
                 "--run-id",
                 "cold",
+                "--output-dir",
+                str(final),
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -165,7 +168,6 @@ def test_property(index):
             if child.poll() is None:
                 child.kill()
             child.wait()
-    final = reports / "final"
     combined = json.loads((final / "report.json").read_text())
     assert combined["properties"]["selected"] == combined["properties"]["tests"] == 12
     assert combined["properties"]["failures"] == 1
@@ -174,7 +176,7 @@ def test_property(index):
     assert len(list(ET.parse(final / "junit.xml").iter("testcase"))) == 12
     assert (final / "report.md").exists() and (final / "report.pdf").exists()
     original = (final / "report.json").read_bytes()
-    assert main(["aggregate", str(reports), "--shards", "3", "--run-id", "cold"]) == 1
+    assert main(["aggregate", str(reports), "--shards", "3", "--run-id", "cold", "--output-dir", str(final)]) == 1
     assert (final / "report.json").read_bytes() == original
 
     warm = tmp_path / "retry"
@@ -217,7 +219,7 @@ def test_property(index):
                 child.kill()
             child.wait()
     assert repeated == ["case-7"]
-    assert main(["aggregate", str(warm), "--shards", "3", "--run-id", "warm"]) == 1
+    assert main(["aggregate", str(warm), "--shards", "3", "--run-id", "warm", "--output-dir", str(warm / "final")]) == 1
     retried = json.loads((warm / "final/report.json").read_text())
     assert retried["properties"]["selected"] == 12
     assert retried["properties"]["reused"] == 11

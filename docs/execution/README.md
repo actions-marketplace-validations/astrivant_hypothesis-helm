@@ -188,7 +188,7 @@ reuse entire completed charts after [Git and content verification](../scanning/R
 rerun.** The tool traverses the complete schema and discovered values-path tree to
 generate properties, then executes every selected property because no successful
 results are cached yet. Without filters or sharding, that means the full generated
-suite, with repeated Helm renders and optional kubeconform validation for each
+suite, with repeated Helm renders and optional API schema validation for each
 property's examples. A cold schema cache also requires the initial Git fetch and
 sparse checkout.
 
@@ -244,7 +244,7 @@ For PR/MR comparisons, restore the main branch's path cache and pass
 its structure baseline without replacing it; only main-branch jobs should publish
 updates to that shared baseline. The GitHub Action exposes the same option as
 `disable-schema-caching: 'true'`. This flag controls the values structure marker;
-kubeconform's downloaded Kubernetes schemas retain their existing cache behavior.
+Downloaded Kubernetes schemas retain their existing cache behavior.
 See [structure baselines](../usage.md#values-structure-baselines) for cache layout
 and CI requirements.
 
@@ -257,7 +257,7 @@ successful-example budget. With a cold cache, this selection schedules one
 property with a budget of six. With a compatible cached success, a local rerun
 schedules zero; `--rerun all` or CI defaults schedule it again. Match the original
 run's artifact directory, validation options, seed, and budget when inspecting its
-cache. `--kubeconform` also reports schema-cache availability without fetching
+cache. `--validate-schemas` also reports schema-cache availability without fetching
 schemas; an online refresh may change the predicted result-cache hit. See
 [cache-aware dry runs](../usage.md#cache-aware-dry-runs) for details.
 

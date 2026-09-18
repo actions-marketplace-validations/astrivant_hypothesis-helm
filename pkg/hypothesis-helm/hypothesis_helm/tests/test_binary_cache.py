@@ -38,11 +38,7 @@ def installer_commands(root: Path, provider: str) -> list[str]:
         return [str(command) for command in sequence(mapping(document["helm-properties"])["before_script"]) if "curl -fsSL" in str(command)]
     if provider == "github":
         steps = sequence(mapping(document["runs"])["steps"])
-        return [
-            str(mapping(step)["run"])
-            for step in steps
-            if mapping(step).get("name") in {"Install Helm", "Install kubeconform", "Install Kubesec"}
-        ]
+        return [str(mapping(step)["run"]) for step in steps if mapping(step).get("name") in {"Install Helm", "Install Kubesec"}]
     job = {"circleci": "test-chart", "github-benchmark": "smoke", "circleci-project": "test-python", "github-project": "test-python"}[
         provider
     ]
@@ -101,7 +97,7 @@ def test_binary_installers_reuse_exact_versions(tmp_path: Path, provider: str, p
                 log.write(url + '\\n')
             if os.environ.get('DOWNLOAD_FAIL') == 'true':
                 sys.exit(22)
-            tool = 'kubesec' if '/controlplaneio/' in url else 'kubeconform' if '/yannh/' in url else 'helm'
+            tool = 'kubesec' if '/controlplaneio/' in url else 'helm'
             member = tool
             if tool == 'helm':
                 system, arch = url.removesuffix('.tar.gz').rsplit('-', 2)[-2:]
@@ -138,7 +134,7 @@ def test_binary_installers_reuse_exact_versions(tmp_path: Path, provider: str, p
         "DOWNLOAD_LOG": str(log),
         "TMPDIR": str(tmp_path),
     }
-    for name, value in (("HELM_VERSION", "v4.3.0"), ("KUBECONFORM_VERSION", "v0.7.0"), ("KUBESEC_VERSION", "v2.14.2")):
+    for name, value in (("HELM_VERSION", "v4.3.0"), ("KUBESEC_VERSION", "v2.14.2")):
         environment[name] = environment[f"HH_{name}"] = value
 
     def execute() -> subprocess.CompletedProcess[str]:
@@ -151,7 +147,7 @@ def test_binary_installers_reuse_exact_versions(tmp_path: Path, provider: str, p
         script = "\n".join(commands).replace("/usr/local/bin/", str(installed) + "/")
         return subprocess.run(["bash", "-euo", "pipefail", "-c", script], cwd=tmp_path, env=environment, text=True, capture_output=True)
 
-    count = 1 if provider.endswith(("benchmark", "project")) else 3
+    count = 1 if provider.endswith(("benchmark", "project")) else 2
     first = execute()
     assert first.returncode == 0, first.stderr
     assert len(log.read_text().splitlines()) == count
@@ -199,7 +195,7 @@ def test_binary_cache_keys_are_release_specific(provider: str) -> None:
     if provider == "github":
         assert mapping(mapping(document["inputs"])["binary-cache"])["default"] == "true"
         steps = [mapping(step) for step in sequence(mapping(document["runs"])["steps"])]
-        for tool in ("helm", "kubeconform", "kubesec"):
+        for tool in ("helm", "kubesec"):
             restore = next(step for step in steps if step.get("id") == f"{tool}-cache")
             metadata = mapping(restore["with"])
             key = str(metadata["key"])
@@ -211,8 +207,8 @@ def test_binary_cache_keys_are_release_specific(provider: str) -> None:
         return
     if provider == "gitlab":
         caches = [mapping(cache) for cache in sequence(mapping(document["helm-properties"])["cache"])]
-        assert len(caches) == 4  # GitLab permits four entries, including the schema cache.
-        for tool in ("helm", "kubeconform", "kubesec"):
+        assert len(caches) == 3  # Helm, optional Kubesec, and the schema cache.
+        for tool in ("helm", "kubesec"):
             cache = next(cache for cache in caches if f"-{tool}-" in str(cache["key"]))
             version = "${" + tool.upper() + "_VERSION}"
             assert version in str(cache["key"]) and "linux-amd64" in str(cache["key"])
@@ -230,7 +226,7 @@ def test_binary_cache_keys_are_release_specific(provider: str) -> None:
             saves.extend(mapping(mapping(nested)["save_cache"]) for nested in sequence(mapping(fields["when"])["steps"]))
         else:
             saves.append(mapping(fields["save_cache"]))
-    for tool in ("helm", "kubeconform", "kubesec"):
+    for tool in ("helm", "kubesec"):
         restore = next(cache for cache in restores if f"-{tool}-" in str(cache["keys"]))
         key = str(sequence(restore["keys"])[0])
         assert len(sequence(restore["keys"])) == 1

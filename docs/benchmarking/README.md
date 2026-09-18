@@ -296,7 +296,7 @@ topology catalog. After these plots, tables and benchmark summaries are publishe
 Bitnami, then Prometheus, with six path workers per chart,
 `--filter`, seeded random traversal, and five minutes per chart, then verifies and
 publishes the combined Markdown/PDF reports. Dependency preparation is outside
-each chart's testing budget. External kubeconform/kubesec checks are not enabled.
+each chart's testing budget. External schema validation/kubesec checks are not enabled.
 Repository refreshes use `--no-cache` to collect fresh results. Generated summary blocks
 in this README and the root README update counts, settings and report links from the new
 result files. Edit the surrounding prose freely; retain the `refresh:...` comment markers.

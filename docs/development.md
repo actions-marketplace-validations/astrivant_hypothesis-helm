@@ -25,10 +25,21 @@ inside the checkout. Preserve an older environment elsewhere before recreating i
 when upgrading from Python 3.10.
 
 ```sh
-python3.13 -m venv .venv
-env -u VIRTUAL_ENV -u PYENV_VERSION -u PYENV_VIRTUAL_ENV poetry install
-bash scripts/project-run.sh pre-commit install
+bash scripts/setup-dev.sh
+bash scripts/setup-dev.sh --check
+# Also rebuild the ignored Kubernetes schema cache and input catalog:
+bash scripts/setup-dev.sh --schemas
 ```
+
+The setup script supports macOS with Homebrew and Debian/Ubuntu Linux with apt. It installs Git, Git LFS and GNU Parallel;
+uses a pinned uv bootstrap to provision Python 3.13 and Poetry 2.1.3 locally; and installs checksum-verified Go 1.25.0 and Helm 4.3.0
+under `.cache/dev-tools/`. Python linting, formatting, typing and testing dependencies come from the Poetry lock.
+It creates `.venv` only when absent, installs the benchmarking extra and pre-commit hooks, and registers the Helm plugin.
+It prints the PATH command to use in your current shell. Other Linux distributions need their OS packages installed first.
+
+Ordinary chart testing needs Python and Helm. Go is required only for rebuilding the source-derived catalog; GNU Parallel
+also supports optional Kubesec scanning. Kubesec itself is optional and is installed by the CI integrations when enabled.
+Generated [schema caches](../schemas/README.md) are ignored by Git and can be restored from CI cache or rebuilt at any time.
 
 `scripts/project-run.sh` uses this checkout's installed commands even when another
 virtual environment is active. Pytest is a runtime dependency because Helm runs

@@ -68,7 +68,7 @@ def main() -> int:
                         if key
                         in {
                             "HH_KUBESEC",
-                            "HH_KUBECONFORM",
+                            "HH_VALIDATE_SCHEMAS",
                             "HH_CACHE",
                             "HH_SCHEMA_OFFLINE",
                             "HH_DISABLE_SCHEMA_CACHING",
@@ -83,9 +83,8 @@ def main() -> int:
         status = result.returncode if result.returncode >= 0 else 130
         if security and status != 130:
             configuration = prepare(
-                Path(os.environ.get("HH_SCHEMA_CACHE_DIR", ".cache/hypothesis-helm/schemas")),
+                Path(os.environ.get("HH_SCHEMA_CACHE_DIR", "schemas")),
                 os.environ.get("HH_SCHEMA_VERSION", "latest"),
-                os.environ.get("HH_KUBECONFORM_BINARY", "kubeconform"),
                 offline=True,
             )
             security_status = scan(

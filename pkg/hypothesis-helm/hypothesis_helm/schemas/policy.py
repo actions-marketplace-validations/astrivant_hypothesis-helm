@@ -10,6 +10,7 @@ import os
 import re
 from pathlib import Path
 
+from hypothesis_helm_catalog.profiles import schema as profile_schema
 from jsonschema import validators
 
 from hypothesis_helm.charts import yamlio
@@ -21,11 +22,8 @@ from hypothesis_helm.schemas.settings import SETTING_KEYS, validate_settings
 
 ENVIRONMENT = "HYPOTHESIS_HELM_INPUT_POLICY"
 PROFILES: dict[str, dict[str, object]] = {
-    "kubernetes-secret-name": {
-        "type": "string",
-        "maxLength": 253,
-        "pattern": r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(?![\s\S])",
-    },
+    "kubernetes-secret-name": profile_schema("dns1123-subdomain"),
+    "kubernetes-configmap-name": profile_schema("dns1123-subdomain"),
     "absolute-posix-path": {"type": "string", "pattern": r"^/[^\x00\r\n]*(?![\s\S])"},
 }
 

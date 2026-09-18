@@ -10,7 +10,7 @@ from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.integrations.sharding import Shard, parse_shard_option, resolve_shard
-from hypothesis_helm.schemas.conformity import prepare
+from hypothesis_helm.schemas.conformity import prepare, validate
 from hypothesis_helm.schemas.contracts import mapping
 
 SUPPORTED = {"Pod", "Deployment", "StatefulSet", "DaemonSet"}
@@ -59,7 +59,7 @@ def scan(
         executable (str): Installed Kubesec binary.
         shard (Shard | None): Partition coordinates for a shared input stream.
         pre_sharded (bool): Input is already selected; do not partition its records again.
-        validate_rest (bool): Route unsupported resources to standalone Kubeconform.
+        validate_rest (bool): Route unsupported resources to native schema validation.
 
     Returns:
         int: Zero if all scans succeed, one if any scan fails.
@@ -80,7 +80,7 @@ def scan(
     records.mkdir(exist_ok=True)
     tasks = output / "tasks.bin"
     selected, skipped = 0, 0
-    remaining = output / "kubeconform.yaml"
+    remaining = output / "schema-validation.yaml"
     with (
         manifests.open() as source,
         tasks.open("wb") as destinations,
@@ -130,7 +130,7 @@ def scan(
     ]
     if any("__HH_MANIFEST__" in str(path) for path in (output, settings["schemas"], binary)):
         raise ValueError("reserved GNU Parallel replacement token in path")
-    disposition = "routed to Kubeconform" if validate_rest else "skipped"
+    disposition = "routed to native schema validation" if validate_rest else "skipped"
     print(f"Kubesec: {selected} resources, {workers} workers, {skipped} {disposition}")
     status = 0
     if selected:
@@ -139,33 +139,19 @@ def scan(
         status = int(result.returncode != 0)
     conformity_status = 0
     if validate_rest and skipped:
-        with (output / "kubeconform.json").open("w") as stdout:
-            result = Processes().run(
-                [
-                    str(settings["executable"]),
-                    "-strict",
-                    "-n",
-                    str(workers),
-                    "-kubernetes-version",
-                    str(settings["version"]),
-                    "-schema-location",
-                    str(settings["schemas"]) + "/{{ .ResourceKind }}{{ .KindSuffix }}.json",
-                    "-output",
-                    "json",
-                    str(remaining),
-                ],
-                cwd=Path.cwd(),
-                env=dict(os.environ),
-                stdout=stdout,
-            )
-        conformity_status = int(result.returncode != 0)
+        error = None
+        try:
+            validate(remaining.read_text(), max(30, skipped * 30), configuration=configuration)
+        except (AssertionError, ValueError) as exc:
+            conformity_status, error = 1, str(exc)
+        (output / "schema-validation.json").write_text(json.dumps({"status": "failed" if error else "passed", "error": error}) + "\n")
     status = status or conformity_status
     report = {
         "status": "failed" if status else "passed",
         "scanned": selected,
         "skipped": 0 if validate_rest else skipped,
-        "kubeconform_scanned": skipped if validate_rest else 0,
-        "kubeconform_exit_code": conformity_status,
+        "schema_scanned": skipped if validate_rest else 0,
+        "schema_exit_code": conformity_status,
         "jobs": workers,
         "shard": shard.name if shard else None,
         "pre_sharded": pre_sharded,
@@ -189,17 +175,16 @@ def main() -> int:
     parser.add_argument("--jobs", default="auto")
     parser.add_argument("--shard", type=parse_shard_option, default="auto")
     parser.add_argument("--pre-sharded", action="store_true")
-    parser.add_argument("--validate-rest", action="store_true", help="Validate other kinds with Kubeconform")
+    parser.add_argument("--validate-rest", action="store_true", help="Validate other kinds with native schema validation")
     parser.add_argument("--schema-version", default="latest")
-    parser.add_argument("--schema-cache-dir", type=Path, default=Path(".cache/hypothesis-helm/schemas"))
+    parser.add_argument("--schema-cache-dir", type=Path, default=Path("schemas"))
     parser.add_argument("--schema-offline", action="store_true")
-    parser.add_argument("--kubeconform-binary", default="kubeconform")
     parser.add_argument("--kubesec-binary", default="kubesec")
     args = parser.parse_args()
     try:
         worker_count(args.jobs)
         shard, _ = resolve_shard(args.shard, os.environ)
-        configuration = prepare(args.schema_cache_dir, args.schema_version, args.kubeconform_binary, args.schema_offline)
+        configuration = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
         return scan(
             args.manifests,
             args.output,

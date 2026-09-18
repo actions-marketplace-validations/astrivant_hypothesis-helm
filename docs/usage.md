@@ -463,30 +463,25 @@ resource that fails those checks still reaches the validator. Failed Helm
 invocations and unparseable YAML cannot produce JSON manifests. Empty renders
 emit no lines. This is a JSON Lines stream, not one JSON array.
 
-To validate each manifest with both tools as it arrives, use this Bash pipeline.
-Each validator receives the original resource separately, and either failure
-makes the pipeline fail:
+Enable API validation in the test command and pipe the manifest stream to Kubesec for security checks:
 
 ```bash
 set -o pipefail
-helm hypothesis test ./chart --filter -o json |
+helm hypothesis test ./chart --filter --validate-schemas --schema-version 1.35.0 -o json |
   (
     status=0
     while IFS= read -r manifest; do
-      printf '%s\n' "$manifest" | kubeconform -strict || status=1
       printf '%s\n' "$manifest" | kubesec scan /dev/stdin || status=1
     done
     exit "$status"
   )
 ```
 
-The per-line loop avoids requiring validators to understand JSON Lines.
-[Kubeconform](https://github.com/yannh/kubeconform) validates Kubernetes resource
-schemas; [Kubesec](https://github.com/controlplaneio/kubesec) analyzes security
-configuration. Their exit statuses determine pipeline success; external validator
-findings are not fed back into Hypothesis for shrinking or recorded as pytest
-assertions. Configure any score threshold separately from Kubesec's scan exit
-status. In `generate`, `--output` continues to specify the suite directory.
+The per-line loop avoids requiring Kubesec to understand JSON Lines. Use this example with Kubesec-supported workloads;
+the [CI wrapper](ci.md#optional-kubesec-scans) routes mixed bundles and parallelizes scans.
+Built-in API schema failures participate in Hypothesis shrinking. External Kubesec findings are not fed back into
+Hypothesis or recorded as pytest assertions. Configure any security score threshold separately from Kubesec's exit status.
+In `generate`, `--output` continues to specify the suite directory.
 
 ## Adaptive parallel test execution
 
@@ -652,7 +647,7 @@ their entire cache over the main branch's cache. The GitHub Action accepts
 Without the flag, completed or interrupted test runs save their starting structure.
 Collection errors leave the baseline intact. `--dry-run` and `--collect-only` never
 update it; `--no-cache` disables both marker reads and writes. The flag does not
-change kubeconform schema downloads or `--schema-cache-dir`.
+change Kubernetes schema downloads or `--schema-cache-dir`.
 
 ## Persistent path results
 
@@ -706,14 +701,13 @@ changing external tools or environment-dependent behavior, or to resample passin
 
 ## Kubernetes API conformity
 
-Enable strict [kubeconform](https://github.com/yannh/kubeconform) validation for each
-rendered YAML stream. Install Git and kubeconform first (`brew install git kubeconform`
-on macOS), then use the Helm command:
+Use `--validate-schemas` to validate rendered resources in Python against cached Kubernetes JSON Schemas.
+Git is needed to prepare the cache. No separate validator binary or Go toolchain is needed for ordinary testing:
 
 ```bash
-helm hypothesis test ./chart --kubeconform
-helm hypothesis test ./chart --kubeconform --schema-version 1.35.0
-helm hypothesis run ./generated-tests --kubeconform --schema-version 1.35.0
+helm hypothesis test ./chart --validate-schemas
+helm hypothesis test ./chart --validate-schemas --schema-version 1.35.0
+helm hypothesis run ./generated-tests --validate-schemas --schema-version 1.35.0
 ```
 
 `--schema-version latest` is the default: it selects the highest stable `X.Y.Z`
@@ -724,14 +718,14 @@ the same version when testing a specific cluster target.
 
 The tool fetches Git metadata with `--depth=1 --filter=blob:none` and sparsely checks
 out only the selected `vX.Y.Z-standalone-strict` directory. The cache defaults to
-`.cache/hypothesis-helm/schemas`; override it with `--schema-cache-dir PATH`. A file
+`schemas`; override it with `--schema-cache-dir PATH`. A file
 lock serializes checkout updates, and immutable snapshots let threads and shards
 validate against the same schema content even while another run updates the checkout.
-Online runs refresh the catalog. To use only previously downloaded schemas:
+Online runs refresh the schema checkout. To use only previously downloaded schemas:
 
 ```bash
-helm hypothesis test ./chart --kubeconform --schema-version 1.35.0 \
-  --schema-cache-dir .cache/hypothesis-helm/schemas --schema-offline
+helm hypothesis test ./chart --validate-schemas --schema-version 1.35.0 \
+  --schema-cache-dir schemas --schema-offline
 ```
 
 Offline mode fails clearly if the requested schemas are absent. Restore/save the
@@ -739,18 +733,18 @@ entire schema cache directory in CI, including its Git metadata. This cache is
 separate from path-result caching; `--no-cache` disables cached test outcomes, while
 schema caching remains active. `--collect-only` does not fetch schemas or run the validator.
 
-Validation uses local schema files, strict mode, and one kubeconform worker per
-property worker to avoid nested concurrency. Invalid resources, unsupported API
+Validation runs inside each property worker, using local strict schemas that reject undeclared fields.
+Compiled validators are reused within that process. Invalid resources, unsupported API
 versions, and missing schemas fail the property and participate in Hypothesis shrinking.
 Custom resources require [explicit resource schemas](input-domains/README.md#custom-resources)
 beyond the upstream Kubernetes catalog. Supplied schemas validate those resources locally;
-kubeconform continues to check built-in resources. Missing custom schemas fail validation.
+The built-in validator checks native Kubernetes resources. Missing custom schemas fail validation.
 This checks API structure, not admission policies or live cluster behavior.
 Manifests still stream through `--output-format json` before validation,
-including failing examples. Use `--kubeconform-binary PATH` for a specific executable.
+including failing examples.
 
 Path-result cache keys include the schema content identity, resolved Kubernetes
-version, and validator binary digest. Enabling validation or changing any of these
+version, validator implementation, and the rebuilt catalog digest when one is selected. Enabling validation or changing any of these
 requires a fresh property run. Use `--rerun all` to validate fresh manifests again
 when an unchanged local suite previously passed.
 
@@ -758,10 +752,10 @@ when an unchanged local suite previously passed.
 ### Preparing schemas independently
 
 `helm hypothesis schemas --schema-version latest --schema-cache-dir
-.cache/hypothesis-helm/schemas` fetches the remote catalog, sparsely checks out the
+schemas` fetches the remote catalog, sparsely checks out the
 selected strict schema version, and prints the resolved configuration as JSON.
 Use it before a CI cache-save step when schema downloads must survive a later
-failing test. It accepts `--schema-offline` and `--kubeconform-binary` as well.
+failing test. It accepts `--schema-offline` to reuse an existing cache without network access.
 
 ### Timing estimates
 
@@ -779,8 +773,8 @@ manifests, or downloading schemas:
 
 ```bash
 helm hypothesis test ./chart --paths --dry-run
-helm hypothesis test ./chart --paths --dry-run --rerun all --kubeconform \
-  --schema-version latest --schema-cache-dir .cache/hypothesis-helm/schemas
+helm hypothesis test ./chart --paths --dry-run --rerun all --validate-schemas \
+  --schema-version latest --schema-cache-dir schemas
 helm hypothesis run generated-tests --dry-run --match replicas
 ```
 
@@ -799,7 +793,7 @@ successes produce zero scheduled properties and a zero budget locally; CI or
 `--rerun all` still schedules the full selected suite. Cache files do not contain
 reliable timing histories, so `estimated_seconds` remains `null` when work exists.
 
-With `--kubeconform`, the dry run inspects locally available schemas using offline
+With `--validate-schemas`, the dry run inspects locally available schemas using offline
 preparation. Missing schemas or a missing validator are reported without downloading
 anything, and cached successes are not reused when validation identity cannot be
 established. An online execution can refresh schema content and invalidate the
@@ -857,7 +851,7 @@ order, array order, scalar types and resource contents remain significant.
 Digest-set membership is average O(1); parsing and hashing still process the output.
 Memory grows with the number of distinct output and validation-context digests.
 
-Repeated output reuses successful resource-envelope and kubeconform validation
+Repeated output reuses successful resource-envelope and API schema validation
 under the same validation configuration. Failed validation is never cached.
 Helm still runs for every selected input, manifest streaming is preserved, and
 custom assertions and the empty-output policy still execute for every input.

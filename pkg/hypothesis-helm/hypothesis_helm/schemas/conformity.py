@@ -9,15 +9,20 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import tempfile
+import time
+from functools import lru_cache
 from pathlib import Path
+
+from jsonschema import FormatChecker, ValidationError, validators
+from jsonschema.protocols import Validator
 
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.rules import ignored
-from hypothesis_helm.schemas.contracts import mapping
-from hypothesis_helm.schemas.resources import resource_schemas, validate_custom
+from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.policy import check_schema
+from hypothesis_helm.schemas.resources import validate_custom
 
 ENVIRONMENT = "HYPOTHESIS_HELM_CONFORMITY"
 REPOSITORY = "https://github.com/yannh/kubernetes-json-schema.git"
@@ -87,10 +92,10 @@ def memory_snapshot(snapshot: Path) -> Path:
 def prepare(
     cache: Path,
     version: str,
-    executable: str,
     offline: bool = False,
     *,
     read_only: bool = False,
+    revision: str | None = None,
 ) -> str:
     """
     Resolve a stable release and materialize strict schemas through sparse checkout.
@@ -98,18 +103,15 @@ def prepare(
     Args:
         cache (Path): Persistent schema cache root.
         version (str): Exact Kubernetes version or latest stable published schema version.
-        executable (str): Kubeconform executable name or path.
         offline (bool): Reuse the cached repository without fetching upstream changes.
         read_only (bool): Inspect existing cache files without creating or changing them.
+        revision (str | None): Immutable upstream commit for reproducible catalog rebuilding, or the current schema branch.
 
     Returns:
         str: Serialized validator configuration inherited by all property workers.
     """
     if version != "latest" and not re.fullmatch(r"v?\d+\.\d+\.\d+", version):
         raise ValueError("--schema-version requires latest or an exact version such as 1.35.0")
-    binary = shutil.which(executable)
-    if binary is None:
-        raise ValueError(f"kubeconform executable not found: {executable}; install kubeconform first")
     cache = cache.expanduser().resolve()
     if read_only:
         offline = True
@@ -128,8 +130,8 @@ def prepare(
             git(repository, "config", "remote.origin.partialclonefilter", "blob:none")
         if not offline:
             LOGGER.info("Refreshing Kubernetes schema catalog")
-            git(repository, "fetch", "--depth=1", "--filter=blob:none", "origin", "master")
-        revision = git(repository, "rev-parse", "FETCH_HEAD")
+            git(repository, "fetch", "--depth=1", "--filter=blob:none", "origin", revision or "master")
+        revision = git(repository, "rev-parse", revision or "FETCH_HEAD")
         names = git(repository, "ls-tree", "--name-only", revision).splitlines()
         versions = [
             tuple(map(int, match.groups())) for name in names if (match := re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)-standalone-strict", name))
@@ -163,62 +165,112 @@ def prepare(
         )
     if not read_only:
         snapshot = memory_snapshot(snapshot)
+    catalog = cache / "catalogs" / version / "input-domains.json"
+    catalog_identity = None
+    if catalog.is_file():
+        contents = catalog.read_bytes()
+        catalog_identity = hashlib.sha256(contents).hexdigest()
+        frozen = catalog.parent / "snapshots" / f"{catalog_identity}.json"
+        if not read_only and not frozen.is_file():
+            frozen.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=frozen.parent) as temporary:
+                staged = Path(temporary) / frozen.name
+                staged.write_bytes(contents)
+                staged.replace(frozen)
+        if frozen.is_file():
+            catalog = frozen
     return json.dumps(
         {
             "version": version,
             "identity": identity,
             "schemas": str(snapshot),
             "cache_root": str(cache),
-            "executable": str(Path(binary).resolve()),
-            "binary_digest": hashlib.sha256(Path(binary).read_bytes()).hexdigest(),
+            "validator": "hypothesis-helm-jsonschema-v1",
+            "catalog": str(catalog) if catalog.is_file() else None,
+            "catalog_digest": catalog_identity,
         }
     )
 
 
-def validate(manifests: str, timeout: float) -> None:
+@lru_cache(maxsize=512)
+def schema_validator(file: Path, identity: str) -> Validator:
+    """
+    Compile a local immutable schema without permitting implicit reference downloads.
+
+    Args:
+        file (Path): Standalone schema within the selected snapshot.
+        identity (str): Snapshot content identity, also separating cache generations.
+
+    Returns:
+        Validator: Reusable validator for the schema's declared JSON Schema dialect.
+    """
+    schema = mapping(json.loads(file.read_text()))
+    check_schema(schema)
+    return validators.validator_for(schema)(schema, format_checker=FormatChecker())
+
+
+def validate(manifests: str, timeout: float, *, configuration: str | None = None) -> None:
     """
     Validate rendered YAML strictly against the selected local API schemas.
 
     Args:
         manifests (str): Complete rendered YAML stream.
-        timeout (float): Maximum validator runtime in seconds.
+        timeout (float): Time budget checked between resources; the owning chart worker enforces its process deadline.
+        configuration (str | None): Explicit cache selection, or the configuration inherited by the current worker.
 
     Returns:
         None: Every resource conforms, or validation raises an assertion failure.
     """
-    configuration = os.environ.get(ENVIRONMENT)
+    configuration = configuration or os.environ.get(ENVIRONMENT)
     if not configuration or ignored("HH1108"):
         return
     settings = json.loads(configuration)
-    if resource_schemas():
-        documents = yamlio.load_all(manifests)
-        native = [mapping(resource) for resource in documents if isinstance(resource, dict) and not validate_custom(mapping(resource))]
-        if not native:
+    deadline = time.monotonic() + timeout
+
+    def check(document: object) -> None:
+        """
+        Check one resource, including resources nested in Kubernetes List objects.
+
+        Args:
+            document (object): Decoded YAML resource.
+
+        Returns:
+            None: Raise an assertion identifying the resource and invalid field on failure.
+        """
+        if time.monotonic() >= deadline:
+            raise AssertionError(f"Kubernetes schema validation exceeded {timeout}s")
+        if not isinstance(document, dict):
+            raise AssertionError("Kubernetes schema validation requires an object")
+        resource = mapping(document)
+        if resource.get("apiVersion") == "v1" and resource.get("kind") == "List":
+            items = resource.get("items")
+            if not isinstance(items, list):
+                raise AssertionError("Kubernetes List requires an items array")
+            for item in items:
+                check(item)
             return
-        manifests = "---\n".join(yamlio.dump(resource) for resource in native)
-    location = settings["schemas"] + "/{{ .ResourceKind }}{{ .KindSuffix }}.json"
-    try:
-        result = Processes().run(
-            [
-                settings["executable"],
-                "-strict",
-                "-n",
-                "1",
-                "-kubernetes-version",
-                settings["version"],
-                "-schema-location",
-                location,
-                "-output",
-                "json",
-            ],
-            input=manifests,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise AssertionError(f"kubeconform exceeded {timeout}s") from exc
-    if result.returncode:
-        raise AssertionError(
-            f"Kubernetes {settings['version']} API schema validation failed: {result.stdout.strip()} {result.stderr.strip()}"
-        )
+        try:
+            if validate_custom(resource):
+                return
+            api, kind = str(resource.get("apiVersion", "")), str(resource.get("kind", ""))
+            if not re.fullmatch(r"(?:[a-z0-9.-]+/)?[a-z0-9]+", api) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", kind):
+                raise ValueError("resource needs a valid apiVersion and kind")
+            group, version = api.rsplit("/", 1) if "/" in api else ("", api)
+            suffix = f"-{group.split('.')[0]}" if group else ""
+            file = Path(settings["schemas"]) / f"{kind.lower()}{suffix}-{version.lower()}.json"
+            if not file.is_file():
+                raise ValueError(f"no cached schema for {api}/{kind}; supply custom resource schemas explicitly")
+            validator = schema_validator(file, str(settings.get("identity", "")))
+            kinds = sequence(mapping(validator.schema).get("x-kubernetes-group-version-kind", []))
+            if kinds and {"group": group, "version": version, "kind": kind} not in kinds:
+                raise ValueError(f"cached schema does not describe {api}/{kind}")
+            error = next(validator.iter_errors(json_value(resource)), None)
+            if error is not None:
+                field = "$" + "".join(f"[{part}]" if isinstance(part, int) else f".{part}" for part in error.absolute_path)
+                raise ValueError(f"{api}/{kind} {field}: {error.message}")
+        except (ValueError, OSError, ValidationError) as exc:
+            raise AssertionError(f"Kubernetes {settings['version']} API schema validation failed: {exc}") from exc
+
+    for document in yamlio.load_all(manifests):
+        if document is not None:
+            check(document)

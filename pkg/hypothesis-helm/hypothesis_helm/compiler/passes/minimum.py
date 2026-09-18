@@ -256,7 +256,9 @@ def export_minimal(
         "kubernetes_schema_version": conformity["version"] if conformity else None,
         "verified": verified,
         "validation_error": last_error.replace(str(isolated), "chart") if not verified else None,
-        "checks": (["values schema", "Helm lint", "Helm template", "manifest envelopes"] + (["Kubeconform"] if conformity else []))
+        "checks": (
+            ["values schema", "Helm lint", "Helm template", "manifest envelopes"] + (["Kubernetes schema validation"] if conformity else [])
+        )
         if verified
         else [],
         "nonempty_resources": best_count,

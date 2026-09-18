@@ -116,7 +116,7 @@ whose types are unknown stay unresolved in the inventory; no placeholder is inve
 Validation runs in an isolated chart copy with `values.yaml` replaced, so Helm
 cannot silently fill removed keys back in from the original defaults. Checks cover
 the values schema, Helm lint, rendering, and manifest envelopes. Configured
-Kubeconform validation also applies. If the example passes, the existing bounded
+API schema validation also applies. If the example passes, the existing bounded
 reduction removes unnecessary entries while keeping valid, nonempty output.
 
 If validation fails, **the illustrative YAML is still exported**, with
@@ -249,20 +249,20 @@ If no candidate passes verification, the deterministic example is still written
 with `verified: false` and the validation error in its `.proof` file. Check that
 record, provide an appropriate value in the source values file or a default in
 the values schema, and rerun the export. Only checks that actually ran can flag
-invalid values; enable Kubeconform to include Kubernetes API schema validation.
+invalid values; enable the built-in schema validator to include Kubernetes API schema validation.
 
 Export-only workflows can use the existing local Kubernetes schema validation:
 
 ```sh
-helm hypothesis export-minimal-values ./charts --kubeconform --schema-version 1.35.0
+helm hypothesis export-minimal-values ./charts --validate-schemas --schema-version 1.35.0
 # Reuse a prepared snapshot without fetching:
-helm hypothesis export-minimal-values ./charts --kubeconform --schema-version 1.35.0 --schema-offline
+helm hypothesis export-minimal-values ./charts --validate-schemas --schema-version 1.35.0 --schema-offline
 ```
 
 Exports record whether API validation passed, was not confirmed, or did not run.
-The GitHub action reuses API validation when `kubeconform` or `kubesec` is enabled.
+The GitHub action reuses API validation when `schema-validation` or `kubesec` is enabled.
 API schema checks still omit some server-side checks; see
-[Kubeconform's documented limits](https://github.com/yannh/kubeconform#limits-of-kubeconform-validation).
+[Kubernetes' explanation of schema limitations](https://kubernetes.io/docs/concepts/overview/kubernetes-api/).
 
 ## Potential output complexity
 

@@ -1,0 +1,44 @@
+[
+  {
+    "chart": "mongodb",
+    "destination": "apps/v1/StatefulSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "b081c15d28c25e1c6e6217dff58279450ecc02be36df0e76b79d5ad69eceeaa1",
+      "templates/replicaset/statefulset.yaml": "749015a2d0f6f774810e0bedc9ec4dd7f8a587c70defb2ff5f98b87d2ff6b43c",
+      "templates/standalone/dep-sts.yaml": "3657c687694ba2613217c55ce978329456cbe09c0a14d20a58dc289c5e7deb47"
+    },
+    "path": [
+      "existingConfigmap"
+    ],
+    "profile": "dns1123-subdomain",
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/mongodb"
+  },
+  {
+    "chart": "mongodb",
+    "destination": "apps/v1/StatefulSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "b081c15d28c25e1c6e6217dff58279450ecc02be36df0e76b79d5ad69eceeaa1",
+      "templates/arbiter/statefulset.yaml": "c37f09c8adfb6fd0d2827e0a366c8cfc690912d584fd85ff8ae13ab49ebd4941"
+    },
+    "path": [
+      "arbiter",
+      "existingConfigmap"
+    ],
+    "profile": "dns1123-subdomain",
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/mongodb"
+  },
+  {
+    "chart": "mongodb",
+    "destination": "apps/v1/StatefulSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "b081c15d28c25e1c6e6217dff58279450ecc02be36df0e76b79d5ad69eceeaa1",
+      "templates/hidden/statefulset.yaml": "6b7d08e73ef46d6d7669218c0ac43edaff640d6a37b1c1ad10f11980948d0228"
+    },
+    "path": [
+      "hidden",
+      "existingConfigmap"
+    ],
+    "profile": "dns1123-subdomain",
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/mongodb"
+  }
+]

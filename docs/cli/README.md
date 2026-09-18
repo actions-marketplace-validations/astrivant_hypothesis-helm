@@ -140,11 +140,11 @@ options:
 usage: helm hypothesis export-minimal-values [-h] [--filename FILENAME] [--helm HELM]
                                              [--timeout TIMEOUT]
                                              [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
-                                             [--files-list FILES_LIST] [--kubeconform]
+                                             [--files-list FILES_LIST]
+                                             [--validate-schemas]
                                              [--schema-version SCHEMA_VERSION]
                                              [--schema-cache-dir SCHEMA_CACHE_DIR]
                                              [--schema-offline]
-                                             [--kubeconform-binary KUBECONFORM_BINARY]
                                              source
 
 Create an example minimal values file beside each chart found in a local directory.
@@ -162,12 +162,12 @@ options:
   --minimal-values-timeout MINIMAL_VALUES_TIMEOUT
   --files-list FILES_LIST
                         write NUL-delimited exported YAML and proof paths
-  --kubeconform         validate Kubernetes API schemas
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
   --schema-version SCHEMA_VERSION
                         Kubernetes schema version: latest or X.Y.Z
   --schema-cache-dir SCHEMA_CACHE_DIR
   --schema-offline      reuse cached schemas without network access
-  --kubeconform-binary KUBECONFORM_BINARY
 ~~~
 
 </details>
@@ -193,6 +193,8 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--sensitivity-order N] [--sample-random PERCENT]
                             [--sample-min-cases N]
                             [--traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}]
+                            [--validate-schemas] [--schema-version SCHEMA_VERSION]
+                            [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
                             [--base-ref BASE_REF] [--output-format {json,yaml}]
                             [--export-suppressions]
                             [--export-topological-graph [FILENAME]]
@@ -262,6 +264,12 @@ options:
   --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
                         seeded random (default), linear, root-first, leaf-first, or
                         sensitivity-first for finite --permutations tests
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
+  --schema-version SCHEMA_VERSION
+                        Kubernetes schema version: latest or X.Y.Z
+  --schema-cache-dir SCHEMA_CACHE_DIR
+  --schema-offline      reuse cached schemas without network access
   --base-ref BASE_REF   Git comparison ref for repository tests; overrides CI target
                         or previous trunk commit
   --output-format, -o {json,yaml}
@@ -420,17 +428,16 @@ usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
                            [--artifact-dir ARTIFACT_DIR] [--sample-random PERCENT]
                            [--sample-min-cases N]
                            [--traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}]
-                           [--kubeconform] [--schema-version SCHEMA_VERSION]
+                           [--validate-schemas] [--schema-version SCHEMA_VERSION]
                            [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
-                           [--kubeconform-binary KUBECONFORM_BINARY] [--dry-run]
-                           [--cache-dir CACHE_DIR] [--disable-schema-caching]
-                           [--progress] [--run-id RUN_ID] [--no-cache]
-                           [--rerun {auto,all,failed}] [--shard SHARD] [--jobs JOBS]
-                           [--output-format {json,yaml}] [--export-suppressions]
-                           [--fail] [--log-color [{auto,always,never}]]
-                           [--log-file PATH] [--config CONFIG]
-                           [--character-sets {ascii,unicode}] [--ignore CODE]
-                           [--disable-codes CODE[,CODE...]]
+                           [--dry-run] [--cache-dir CACHE_DIR]
+                           [--disable-schema-caching] [--progress] [--run-id RUN_ID]
+                           [--no-cache] [--rerun {auto,all,failed}] [--shard SHARD]
+                           [--jobs JOBS] [--output-format {json,yaml}]
+                           [--export-suppressions] [--fail]
+                           [--log-color [{auto,always,never}]] [--log-file PATH]
+                           [--config CONFIG] [--character-sets {ascii,unicode}]
+                           [--ignore CODE] [--disable-codes CODE[,CODE...]]
                            suite
 
 Execute a property-test suite previously created by generate. Generate values for its
@@ -454,12 +461,12 @@ options:
   --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
                         seeded random (default), linear, root-first, leaf-first, or
                         sensitivity-first for finite --permutations tests
-  --kubeconform         validate Kubernetes API schemas
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
   --schema-version SCHEMA_VERSION
                         Kubernetes schema version: latest or X.Y.Z
   --schema-cache-dir SCHEMA_CACHE_DIR
   --schema-offline      reuse cached schemas without network access
-  --kubeconform-binary KUBECONFORM_BINARY
   --dry-run             plot coverage and forecast filtering or cached property work
                         without execution
   --cache-dir CACHE_DIR
@@ -529,9 +536,8 @@ usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
                             [--timeout TIMEOUT] [--helm HELM] [--release RELEASE]
                             [--namespace NAMESPACE] [--kube-version KUBE_VERSION]
                             [--allow-empty] [--artifact-dir ARTIFACT_DIR]
-                            [--kubeconform] [--schema-version SCHEMA_VERSION]
+                            [--validate-schemas] [--schema-version SCHEMA_VERSION]
                             [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
-                            [--kubeconform-binary KUBECONFORM_BINARY]
                             [--base-ref BASE_REF] [--dry-run] [--cache-dir CACHE_DIR]
                             [--disable-schema-caching] [--progress] [--run-id RUN_ID]
                             [--no-cache] [--rerun {auto,all,failed}] [--shard SHARD]
@@ -618,12 +624,12 @@ options:
   --kube-version KUBE_VERSION
   --allow-empty
   --artifact-dir ARTIFACT_DIR
-  --kubeconform         validate Kubernetes API schemas
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
   --schema-version SCHEMA_VERSION
                         Kubernetes schema version: latest or X.Y.Z
   --schema-cache-dir SCHEMA_CACHE_DIR
   --schema-offline      reuse cached schemas without network access
-  --kubeconform-binary KUBECONFORM_BINARY
   --base-ref BASE_REF   Git comparison ref for repository tests; overrides CI target
                         or previous trunk commit
   --dry-run             plot coverage and forecast filtering or cached property work
@@ -694,18 +700,16 @@ filtering:
 usage: helm hypothesis schemas [-h] [--schema-version SCHEMA_VERSION]
                                [--schema-cache-dir SCHEMA_CACHE_DIR]
                                [--schema-offline]
-                               [--kubeconform-binary KUBECONFORM_BINARY]
 
-Prepare a local cache of Kubernetes API schemas for kubeconform validation. Select a
-Kubernetes version to download, or use --schema-offline to reuse schemas already
-cached.
+Prepare a local cache of Kubernetes API schemas for built-in manifest validation.
+Select a Kubernetes version to download, or use --schema-offline to reuse schemas
+already cached.
 
 options:
   -h, --help            show this help message and exit
   --schema-version SCHEMA_VERSION
   --schema-cache-dir SCHEMA_CACHE_DIR
   --schema-offline
-  --kubeconform-binary KUBECONFORM_BINARY
 ~~~
 
 </details>

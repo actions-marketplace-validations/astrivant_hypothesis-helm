@@ -23,6 +23,7 @@ class Dependency:
         references (tuple[Reference, ...]): Template references projected into parent values.
         templates (tuple[str, ...]): Logical template paths belonging to this child.
         reason (str | None): Unsupported metadata or loading details that prevent guidance.
+        input_rules (tuple[dict[str, object], ...]): Reviewed generation domains, namespaced to this dependency instance.
     """
 
     path: tuple[str, ...]
@@ -35,6 +36,7 @@ class Dependency:
     references: tuple[Reference, ...]
     templates: tuple[str, ...]
     reason: str | None = None
+    input_rules: tuple[dict[str, object], ...] = ()
 
     @property
     def controls(self) -> tuple[tuple[str, ...], ...]:

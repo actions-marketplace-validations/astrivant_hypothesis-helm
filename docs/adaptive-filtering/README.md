@@ -202,7 +202,7 @@ additional saved execution exceeds the cost of fresh analysis and selection:
 
 This break-even approximation assumes comparable per-case costs and completed runs. It does not apply directly to censored timings
 or when the selected inputs have materially different render costs.
-The current load test uses native Helm/render checks without external kubeconform or kubesec validation; those checks can change the per-case cost.
+The current load test uses native Helm/render checks without external schema validation or kubesec validation; those checks can change the per-case cost.
 
 Preserving a representative can preserve a failure **if** exact manifest equivalence is established, the property depends only on
 those manifests, the render context is fixed, and the representative is actually tested.

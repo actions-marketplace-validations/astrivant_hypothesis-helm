@@ -46,16 +46,16 @@ def test_sparse_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     )
     monkeypatch.setattr(conformity, "REPOSITORY", str(upstream))
     cache = tmp_path / "cache"
-    configuration = json.loads(conformity.prepare(cache, "latest", "/usr/bin/true"))
+    configuration = json.loads(conformity.prepare(cache, "latest"))
     assert configuration["version"] == "1.31.0"
     assert (cache / "repository/v1.31.0-standalone-strict/configmap-v1.json").is_file()
     assert not (cache / "repository/v1.30.0-standalone-strict").exists()
-    assert json.loads(conformity.prepare(cache, "latest", "/usr/bin/true", True)) == configuration
-    old = json.loads(conformity.prepare(cache, "1.30.0", "/usr/bin/true"))
+    assert json.loads(conformity.prepare(cache, "latest", True)) == configuration
+    old = json.loads(conformity.prepare(cache, "1.30.0"))
     assert Path(configuration["schemas"]).is_dir()
     assert Path(old["schemas"]).is_dir()
     files_before = {p: p.read_bytes() for p in cache.rglob("*") if p.is_file()}
-    inspected = json.loads(conformity.prepare(cache, "1.30.0", "/usr/bin/true", read_only=True))
+    inspected = json.loads(conformity.prepare(cache, "1.30.0", read_only=True))
     assert inspected == old
     assert files_before == {p: p.read_bytes() for p in cache.rglob("*") if p.is_file()}
     newer = upstream / "v1.32.0-standalone-strict"
@@ -74,29 +74,38 @@ def test_sparse_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         "-m",
         "new release",
     )
-    refreshed = json.loads(conformity.prepare(cache, "latest", "/usr/bin/true"))
+    refreshed = json.loads(conformity.prepare(cache, "latest"))
     assert refreshed["version"] == "1.32.0"
     assert Path(configuration["schemas"]).is_dir()
     restored_cache = tmp_path / "restored"
     shutil.copytree(cache, restored_cache)
-    restored = json.loads(conformity.prepare(restored_cache, "latest", "/usr/bin/true", True))
+    restored = json.loads(conformity.prepare(restored_cache, "latest", True))
     assert restored["identity"] == refreshed["identity"]
     assert Path(restored["schemas"]).is_relative_to(restored_cache)
     with pytest.raises(ValueError, match="no published"):
-        conformity.prepare(cache, "9.9.9", "/usr/bin/true", True)
+        conformity.prepare(cache, "9.9.9", True)
     with pytest.raises(ValueError, match="exact version"):
-        conformity.prepare(cache, "../escape", "/usr/bin/true")
+        conformity.prepare(cache, "../escape")
     with pytest.raises(ValueError, match="cache is empty"):
-        conformity.prepare(tmp_path / "empty", "latest", "/usr/bin/true", True)
+        conformity.prepare(tmp_path / "empty", "latest", True)
+    catalog = cache / "catalogs/1.30.0/input-domains.json"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text('{"version":"1.30.0","resources":{}}')
+    first = json.loads(conformity.prepare(cache, "1.30.0", True))
+    catalog.write_text('{"version":"1.30.0","resources":{"v1/Pod":{}}}')
+    second = json.loads(conformity.prepare(cache, "1.30.0", True))
+    assert first["catalog_digest"] != second["catalog_digest"]
+    assert json.loads(Path(first["catalog"]).read_text())["resources"] == {}
+    assert "v1/Pod" in json.loads(Path(second["catalog"]).read_text())["resources"]
 
 
 def test_validator_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Feed manifests through stdin and invalidate outcomes when conformity is enabled.
+    Validate manifests in process and invalidate outcomes when conformity is enabled.
 
     Args:
         tmp_path (Path): Isolated suite directory.
-        monkeypatch (pytest.MonkeyPatch): Replace the validator process boundary.
+        monkeypatch (pytest.MonkeyPatch): Select a local schema cache.
 
     Returns:
         None: Strict local-only validation errors fail the property.
@@ -110,31 +119,31 @@ def test_validator_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
             {
                 "version": "1.31.0",
                 "schemas": str(tmp_path),
-                "executable": "kubeconform",
             }
         ),
     )
     assert fingerprint(tmp_path, 0, None, "none") != before
 
-    def execute(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        """
-        Check validator arguments and simulate an API schema rejection.
-
-        Args:
-            command (list[str]): Validator arguments.
-            **kwargs (object): Process options including manifest stdin.
-
-        Returns:
-            subprocess.CompletedProcess[str]: Failed validation result.
-        """
-        assert "-strict" in command and "-ignore-missing-schemas" not in command
-        assert command[command.index("-schema-location") + 1].startswith(str(tmp_path))
-        assert kwargs["input"] == "kind: ConfigMap"
-        return subprocess.CompletedProcess(command, 1, "invalid resource", "")
-
-    monkeypatch.setattr("hypothesis_helm.schemas.conformity.Processes.run", lambda self, *args, **kwargs: execute(*args, **kwargs))
-    with pytest.raises(AssertionError, match="invalid resource"):
-        conformity.validate("kind: ConfigMap", 1)
+    (tmp_path / "configmap-v1.json").write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "apiVersion": {"const": "v1"},
+                    "kind": {"const": "ConfigMap"},
+                    "data": {"type": "object", "additionalProperties": {"type": "string"}},
+                },
+                "additionalProperties": False,
+            }
+        )
+    )
+    conformity.validate('apiVersion: v1\nkind: ConfigMap\ndata: {answer: "42"}', 1)
+    with pytest.raises(AssertionError, match=r"ConfigMap \$\.data\.answer"):
+        conformity.validate("apiVersion: v1\nkind: ConfigMap\ndata: {answer: 42}", 1)
+    with pytest.raises(AssertionError, match="Additional properties"):
+        conformity.validate("apiVersion: v1\nkind: ConfigMap\nunexpected: true", 1)
+    with pytest.raises(AssertionError, match="no cached schema"):
+        conformity.validate("apiVersion: v1\nkind: Secret", 1)
 
 
 def test_cli_validation_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -154,14 +163,13 @@ def test_cli_validation_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
     prepared: list[str] = []
 
-    def prepare(cache: Path, version: str, executable: str, offline: bool = False) -> str:
+    def prepare(cache: Path, version: str, offline: bool = False) -> str:
         """
         Record schema preparation without downloading artifacts.
 
         Args:
             cache (Path): Schema cache directory.
             version (str): Requested schema version.
-            executable (str): Validator binary.
             offline (bool): Whether network access is disabled.
 
         Returns:
@@ -187,7 +195,7 @@ def test_cli_validation_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(cli, "prepare", prepare)
     monkeypatch.setattr(cli, "run_suite", run)
     monkeypatch.delenv(conformity.ENVIRONMENT, raising=False)
-    arguments = ["run", str(tmp_path), "--kubeconform", "--schema-version", "1.31.0"]
+    arguments = ["run", str(tmp_path), "--validate-schemas", "--schema-version", "1.31.0"]
     assert cli.main(arguments) == 0
     assert conformity.ENVIRONMENT not in os.environ
     assert cli.main([*arguments, "--collect-only"]) == 0

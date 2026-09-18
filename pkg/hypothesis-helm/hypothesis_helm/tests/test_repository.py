@@ -123,7 +123,7 @@ def test_remote_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: py
     assert report["charts"][0]["values_file"] == "nested/demo/values.yaml"
     assert report["counts"] == {"passed": 1}
     assert roots and not roots[0].exists()
-    markdown = next(tmp_path.glob("charts_*_report.md"))
+    markdown = next((tmp_path / "docs/reports").glob("charts_*_report.md"))
     assert url in markdown.read_text() and revision in markdown.read_text()
     assert markdown.with_suffix(".pdf").exists()
     assert list((tmp_path / "artifacts").glob("charts_*/checkout.txt"))

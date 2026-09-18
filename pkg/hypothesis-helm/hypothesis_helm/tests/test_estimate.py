@@ -123,7 +123,9 @@ def test_plan_shards_and_missing_schemas(tmp_path: Path, capsys: pytest.CaptureF
     (tmp_path / "test_chart_values.py").write_text("def test_one(): assert False\ndef test_two(): assert False\n")
     assert sum(int(str(estimate_suite(tmp_path, shard=Shard(i, 2))["selected_properties"])) for i in (1, 2)) == 2
     cache = tmp_path / "missing"
-    assert main(["run", "--log-file", "/dev/stderr", str(tmp_path), "--dry-run", "--kubeconform", "--schema-cache-dir", str(cache)]) == 0
+    assert (
+        main(["run", "--log-file", "/dev/stderr", str(tmp_path), "--dry-run", "--validate-schemas", "--schema-cache-dir", str(cache)]) == 0
+    )
     report = json.loads(capsys.readouterr().out)
     assert report["schema_cache"]["status"] == "unavailable"
     assert report["scheduled_properties"] == 2

@@ -36,7 +36,7 @@ commands:
         default: ""
       schema-cache-dir:
         type: string
-        default: .cache/hypothesis-helm/schemas
+        default: schemas
       artifact-dir:
         type: string
         default: .cache/hypothesis-helm/runs
@@ -89,7 +89,7 @@ commands:
                 --jobs "$HH_JOBS" --max-examples "$HH_MAX_EXAMPLES" --seed "$HH_SEED" \
                 --sample-random "$HH_SAMPLE_RANDOM" --sample-min-cases "$HH_SAMPLE_MIN_CASES" \
                 --schema-version "$HH_SCHEMA_VERSION" --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
-                --kubeconform --schema-offline --shard "$((${CIRCLE_NODE_INDEX:-0} + 1))/${CIRCLE_NODE_TOTAL:-1}" --rerun all \
+                --validate-schemas --schema-offline --shard "$((${CIRCLE_NODE_INDEX:-0} + 1))/${CIRCLE_NODE_TOTAL:-1}" --rerun all \
                 --run-id "${CIRCLE_WORKFLOW_ID}-${HH_REPORT_GROUP}" \
                 --artifact-dir "$HH_ARTIFACT_DIR" --output json \
                 > "$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl" || test_status=$?
@@ -112,9 +112,6 @@ jobs:
       kubesec-version:
         type: string
         default: v2.14.2
-      kubeconform-version:
-        type: string
-        default: v0.7.0
       helm-version:
         type: string
         default: v4.3.0
@@ -153,7 +150,7 @@ jobs:
         default: false
       schema-cache-dir:
         type: string
-        default: .cache/hypothesis-helm/schemas
+        default: schemas
       artifact-dir:
         type: string
         default: .cache/hypothesis-helm/runs
@@ -169,7 +166,7 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-
+            - helm-schemas-v2-{{ arch }}-<< parameters.schema-version >>-
       - when:
           condition: << parameters.binary-cache >>
           steps:
@@ -178,16 +175,12 @@ jobs:
                   - hh-binary-v1-linux-amd64-helm-<< parameters.helm-version >>-exact
             - restore_cache:
                 keys:
-                  - hh-binary-v1-linux-amd64-kubeconform-<< parameters.kubeconform-version >>-exact
-            - restore_cache:
-                keys:
                   - hh-binary-v1-linux-amd64-kubesec-<< parameters.kubesec-version >>-exact
       - run:
-          name: Install Helm and validators
+          name: Install Helm and optional Kubesec
           environment:
             HH_KUBESEC: "<< parameters.kubesec >>"
             HH_KUBESEC_VERSION: << parameters.kubesec-version >>
-            HH_KUBECONFORM_VERSION: << parameters.kubeconform-version >>
             HH_HELM_VERSION: << parameters.helm-version >>
             HH_BINARY_CACHE: "<< parameters.binary-cache >>"
           command: |
@@ -206,17 +199,6 @@ jobs:
               rm -rf "$download_dir"
             fi
             sudo install "$binary_dir/helm" /usr/local/bin/helm
-            binary_dir="$binary_root/kubeconform-${HH_KUBECONFORM_VERSION}-${platform}-${architecture}"
-            if [[ ! -x "$binary_dir/kubeconform" ]]; then
-              download_dir="$(mktemp -d)"
-              curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${HH_KUBECONFORM_VERSION}/kubeconform-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
-              tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" kubeconform
-              mkdir -p "$binary_dir"
-              install "$download_dir/kubeconform" "$binary_dir/kubeconform.pending"
-              mv "$binary_dir/kubeconform.pending" "$binary_dir/kubeconform"
-              rm -rf "$download_dir"
-            fi
-            sudo install "$binary_dir/kubeconform" /usr/local/bin/kubeconform
             if [[ "$HH_KUBESEC" == "true" ]]; then
               sudo apt-get update
               sudo apt-get install -y parallel
@@ -239,10 +221,6 @@ jobs:
                 key: hh-binary-v1-linux-amd64-helm-<< parameters.helm-version >>-exact
                 paths:
                   - .cache/hypothesis-helm/binaries/helm-<< parameters.helm-version >>-linux-amd64
-            - save_cache:
-                key: hh-binary-v1-linux-amd64-kubeconform-<< parameters.kubeconform-version >>-exact
-                paths:
-                  - .cache/hypothesis-helm/binaries/kubeconform-<< parameters.kubeconform-version >>-linux-amd64
             - when:
                 condition: << parameters.kubesec >>
                 steps:
@@ -271,7 +249,7 @@ jobs:
                 --schema-cache-dir "$HH_SCHEMA_CACHE_DIR"
             fi
       - save_cache:
-          key: helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-{{ epoch }}-{{ .Environment.CIRCLE_NODE_INDEX }}
+          key: helm-schemas-v2-{{ arch }}-<< parameters.schema-version >>-{{ epoch }}-{{ .Environment.CIRCLE_NODE_INDEX }}
           paths:
             - << parameters.schema-cache-dir >>
       - test:

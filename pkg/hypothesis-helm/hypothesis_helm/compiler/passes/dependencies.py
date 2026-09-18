@@ -17,7 +17,7 @@ from ruamel.yaml.error import YAMLError
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.templates import Reference, discover
 from hypothesis_helm.compiler.asts.dependencies import Dependency
-from hypothesis_helm.schemas.contracts import configuration_key, mapping
+from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
 
 def lookup(values: object, path: tuple[str | int, ...]) -> object:
@@ -230,10 +230,16 @@ class Dependencies:
             schema: dict[str, object] = {}
             references: list[Reference] = []
             templates: tuple[str, ...] = ()
+            input_rules: tuple[dict[str, object], ...] = ()
             if root is None:
                 reason = reason or "Dependency source missing or ambiguous; run helm dependency build"
             else:
                 try:
+                    from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings
+
+                    bindings, notes = reviewed_bindings(root)
+                    input_rules = tuple({**rule, "path": [*path, *sequence(rule["path"])]} for rule in bindings)
+                    self.diagnostics.extend({"file": child_source, **note, "path": [*path, *sequence(note["path"])]} for note in notes)
                     defaults = mapping(yamlio.load((root / "values.yaml").read_text()) or {}) if (root / "values.yaml").is_file() else {}
                     schema = (
                         mapping(json.loads((root / "values.schema.json").read_text())) if (root / "values.schema.json").is_file() else {}
@@ -258,7 +264,9 @@ class Dependencies:
                 reason = reason or "Nested global activation forwarding remains unresolved"
             if any(node.path == path for node in self.nodes):
                 reason = reason or "Duplicate dependency namespace"
-            node = Dependency(path, name, child_source, selectors, tag_paths, defaults, schema, tuple(references), templates, reason)
+            node = Dependency(
+                path, name, child_source, selectors, tag_paths, defaults, schema, tuple(references), templates, reason, input_rules
+            )
             self.nodes.append(node)
             if reason:
                 self.diagnostics.append({"file": source + "Chart.yaml", "path": list(path), "message": reason})

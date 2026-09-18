@@ -26,12 +26,12 @@ jobs:
         with:
           chart: examples/workload
           max-examples: '5'
-          kubeconform: 'true'
+          schema-validation: 'true'
           schema-version: ${{ matrix.kubernetes }}
           kubesec: ${{ github.event_name == 'workflow_dispatch' && inputs.kubesec }}
           kubesec-jobs: auto
           artifact-name: hypothesis-helm-${{ matrix.kubernetes }}
-          schema-cache-dir: .cache/hypothesis-helm/schemas
+          schema-cache-dir: schemas
           job-index: ${{ matrix.shard }}
           job-total: '3'
           run-id: ${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.kubernetes }}

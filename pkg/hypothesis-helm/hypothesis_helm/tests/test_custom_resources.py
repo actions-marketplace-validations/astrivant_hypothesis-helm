@@ -4,7 +4,6 @@ Exercise real Polyad custom resources through Helm rendering, generation, and va
 
 import json
 import shutil
-import subprocess
 from contextlib import nullcontext
 from pathlib import Path
 from textwrap import dedent
@@ -272,49 +271,30 @@ def test_saved_suite_preserves_custom_resource_schema(polyad_chart: Chart, tmp_p
 @pytest.mark.parametrize("saved", [False, True])
 def test_mixed_bundle_keeps_builtin_validation(polyad_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, saved: bool) -> None:
     """
-    Route built-ins to kubeconform while validating custom resources with their supplied contract.
+    Route built-ins to native schema validation while validating custom resources with their supplied contract.
 
     Args:
         polyad_chart (Chart): Fixture installing the custom-resource policy.
         tmp_path (Path): Mixed-resource chart and local schema location.
-        monkeypatch (pytest.MonkeyPatch): Replace only the external validator boundary after rendering.
+        monkeypatch (pytest.MonkeyPatch): Select local schema files after rendering.
         saved (bool): Restore the custom schema from a generated suite instead of current configuration.
 
     Returns:
-        None: Kubeconform receives the ConfigMap, rejects it, and does not request a Gate schema.
+        None: The native validator rejects the ConfigMap and does not request a Gate schema.
     """
     chart = direct_chart(tmp_path / "direct")
     suite = tmp_path / "suite"
     if saved:
         generate_tests(chart, suite, max_examples=1)
         monkeypatch.delenv(ENVIRONMENT)
-    calls: list[str] = []
-
-    def execute(self: object, command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        """
-        Observe validator stdin and simulate a failing built-in API check.
-
-        Args:
-            self (object): Process owner at the patched boundary.
-            command (list[str]): Kubeconform invocation.
-            **kwargs (object): Validator process options and manifest input.
-
-        Returns:
-            subprocess.CompletedProcess[str]: A built-in resource rejection.
-        """
-        assert command[0] == "kubeconform" and "-ignore-missing-schemas" not in command
-        documents = list(yamlio.load_all(str(kwargs["input"])))
-        assert len(documents) == 1 and mapping(documents[0])["kind"] == "ConfigMap"
-        calls.append(str(kwargs["input"]))
-        return subprocess.CompletedProcess(command, 1, "invalid ConfigMap", "")
-
+    (tmp_path / "configmap-v1.json").write_text(
+        json.dumps({"type": "object", "properties": {"data": {"properties": {"ready": {"const": "expected"}}}}})
+    )
     with prepared_chart(chart.path, suite) if saved else nullcontext(chart) as prepared:
         resources = render(prepared, {})
         monkeypatch.setenv(
             conformity.ENVIRONMENT,
-            json.dumps({"version": "1.35.0", "schemas": str(tmp_path), "executable": "kubeconform"}),
+            json.dumps({"version": "1.35.0", "schemas": str(tmp_path)}),
         )
-        monkeypatch.setattr("hypothesis_helm.schemas.conformity.Processes.run", execute)
-        with pytest.raises(AssertionError, match="invalid ConfigMap"):
+        with pytest.raises(AssertionError, match="ConfigMap.*ready"):
             conformity.validate("---\n".join(yamlio.dump(resource) for resource in resources), 10)
-    assert len(calls) == 1

@@ -14,21 +14,15 @@ helm-properties:
   variables:
     HELM_VERSION: v4.3.0
     HELM_CHART: ./chart
-    KUBECONFORM_VERSION: v0.7.0
     KUBESEC_ENABLED: 'false' # opt in to security scanning
     KUBESEC_VERSION: v2.14.2
     KUBESEC_JOBS: auto
     HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: "" # Optional: /dev/shm/helm-schemas
-    SCHEMA_CACHE_DIR: .cache/hypothesis-helm/schemas
+    SCHEMA_CACHE_DIR: schemas
   cache:
     - key: "hh-binary-v1-linux-amd64-helm-${HELM_VERSION}-exact"
       paths:
         - .cache/hypothesis-helm/binaries/helm-${HELM_VERSION}-linux-amd64/
-      policy: pull-push
-      when: always
-    - key: "hh-binary-v1-linux-amd64-kubeconform-${KUBECONFORM_VERSION}-exact"
-      paths:
-        - .cache/hypothesis-helm/binaries/kubeconform-${KUBECONFORM_VERSION}-linux-amd64/
       policy: pull-push
       when: always
     - key: "hh-binary-v1-linux-amd64-kubesec-${KUBESEC_VERSION}-exact"
@@ -36,9 +30,9 @@ helm-properties:
         - .cache/hypothesis-helm/binaries/kubesec-${KUBESEC_VERSION}-linux-amd64/
       policy: pull-push
       when: always
-    - key: "helm-schemas-v1-linux-amd64-${K8S_VERSION}-${SHARD_INDEX}"
+    - key: "helm-schemas-v2-linux-amd64-${K8S_VERSION}-${SHARD_INDEX}"
       paths:
-        - .cache/hypothesis-helm/schemas/
+        - schemas/
       policy: pull-push
       when: always
   before_script:
@@ -59,17 +53,6 @@ helm-properties:
         rm -rf "$download_dir"
       fi
       install "$binary_dir/helm" /usr/local/bin/helm
-      binary_dir=".cache/hypothesis-helm/binaries/kubeconform-${KUBECONFORM_VERSION}-${platform}-${architecture}"
-      if [ ! -x "$binary_dir/kubeconform" ]; then
-        download_dir="$(mktemp -d)"
-        curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
-        tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" kubeconform
-        mkdir -p "$binary_dir"
-        install "$download_dir/kubeconform" "$binary_dir/kubeconform.pending"
-        mv "$binary_dir/kubeconform.pending" "$binary_dir/kubeconform"
-        rm -rf "$download_dir"
-      fi
-      install "$binary_dir/kubeconform" /usr/local/bin/kubeconform
       if [ "$KUBESEC_ENABLED" = "true" ]; then
         apt-get install -y --no-install-recommends parallel
         binary_dir=".cache/hypothesis-helm/binaries/kubesec-${KUBESEC_VERSION}-${platform}-${architecture}"
@@ -105,7 +88,7 @@ helm-properties:
           --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
           --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun all \
           --sample-random "$SAMPLE_RANDOM" --sample-min-cases "$SAMPLE_MIN_CASES" \
-          --kubeconform --schema-version "$K8S_VERSION" \
+          --validate-schemas --schema-version "$K8S_VERSION" \
           --schema-cache-dir "$SCHEMA_CACHE_DIR" --schema-offline \
           --artifact-dir "$HH_ARTIFACT_DIR" --output json \
           > "$HH_ARTIFACT_DIR/manifests.jsonl" || test_status=$?

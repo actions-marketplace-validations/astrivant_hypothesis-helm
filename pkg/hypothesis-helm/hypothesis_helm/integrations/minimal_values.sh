@@ -10,13 +10,12 @@ case "${HH_RESOLVED_SHARD:-none}" in
 esac
 files_list="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/helm-minimal-files.XXXXXX")"
 trap 'rm -f "$files_list"' EXIT
-if [[ "${HH_KUBECONFORM:-false}" == true || "${HH_KUBESEC:-false}" == true ]]; then
+if [[ "${HH_VALIDATE_SCHEMAS:-false}" == true || "${HH_KUBESEC:-false}" == true ]]; then
   helm hypothesis export-minimal-values "$HH_CHART" \
     --filename "${HH_MINIMAL_VALUES_FILENAME:-values-minimal.yaml}" \
     --minimal-values-timeout "${HH_MINIMAL_VALUES_TIMEOUT:-30s}" \
-    --files-list "$files_list" --kubeconform \
-    --schema-version "$HH_SCHEMA_VERSION" --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
-    --kubeconform-binary "$HH_KUBECONFORM_BINARY" --schema-offline
+    --files-list "$files_list" --validate-schemas \
+    --schema-version "$HH_SCHEMA_VERSION" --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" --schema-offline
 else
   helm hypothesis export-minimal-values "$HH_CHART" \
     --filename "${HH_MINIMAL_VALUES_FILENAME:-values-minimal.yaml}" \

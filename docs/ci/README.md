@@ -88,14 +88,14 @@ to your delivery pipeline, requiring each preceding gate to pass.
 
 | Gate | Question it answers | Evidence required to continue |
 | --- | --- | --- |
-| hypothesis-helm with Kubesec and Kubeconform | Do tested inputs produce acceptable manifests? | Passing tests, reviewed coverage and scanner results. |
+| hypothesis-helm with Kubesec and the built-in schema validator | Do tested inputs produce acceptable manifests? | Passing tests, reviewed coverage and scanner results. |
 | Server-side dry-run in a vcluster or staging cluster | Will that API server admit the release configuration? | Successful admission and validation. |
 | Actual staging deployment | Does the application work when its resources are created? | Successful rollout, smoke tests and integration tests. |
 | Production promotion | Does the tested release remain healthy under production conditions? | Monitored rollout and application health. |
 
 Run hypothesis-helm with the [coverage appropriate to the release stage](#recommended-workflow),
 and enable the optional Kubesec integration. [Kubesec](https://kubesec.io/) checks security-sensitive manifest settings;
-[Kubeconform](https://github.com/yannh/kubeconform#limits-of-kubeconform-validation) checks API schemas.
+the built-in schema validator checks API schemas.
 The examples [route resources between these scanners](#validation-and-caches).
 Require the configured security policy and schema checks to pass, and review incomplete coverage or unsupported resources.
 Use schemas for the target Kubernetes version, including any required custom resources.
@@ -287,7 +287,7 @@ and action outputs.
 
 ## Binary downloads and caching
 
-Helm, Kubeconform and optional Kubesec binaries are cached **by default** across
+Helm and optional Kubesec binaries are cached **by default** across
 GitHub Actions, GitLab and CircleCI runs. Each binary has its own key containing
 the tool name, requested version, operating system and CPU architecture. Updating
 one tool's version downloads that tool again without invalidating the others.
@@ -310,8 +310,7 @@ schema and test-result cache settings remain independent. To keep schema caching
 in GitLab while disabling binary caching, override `cache` with only the schema
 entry from the shared job.<sup>[\[1\]](https://docs.gitlab.com/ci/caching/#disable-cache-for-specific-jobs)</sup>
 
-Custom `kubeconform-binary` and `kubesec-binary` inputs still use the executable you
-provide. GNU Parallel and OS prerequisites remain installed through the package
+The `kubesec-binary` input can select a preinstalled security scanner. GNU Parallel and OS prerequisites remain installed through the package
 manager; these release-binary caches do not replace package-manager caches.
 
 The repository's own benchmark workflows use the same policy. Set the GitHub
@@ -335,13 +334,13 @@ prevents publication. Aggregation writes one PDF, Markdown, JSON, and JUnit bund
 per chart/version group, including test failures. Optional security results remain
 separate artifacts; require both the test jobs and aggregation before releasing.
 
-Kubeconform validates API schemas by default. With Kubesec enabled, supported
-workloads go to Kubesec and remaining resources go to Kubeconform. GNU Parallel
+the built-in schema validator validates API schemas by default. With Kubesec enabled, supported
+workloads go to Kubesec and remaining resources go to the built-in schema validator. GNU Parallel
 uses the available cores; `KUBESEC_JOBS` (GitLab) or `kubesec-jobs` (CircleCI/GitHub)
 overrides concurrency. Each scanner receives only its shard's emitted manifests.
 Helm failures retain their exit code; scanner failures fail otherwise successful jobs.
 
-Schemas use a versioned sparse checkout in `.cache/hypothesis-helm/schemas`,
+Schemas use a versioned sparse checkout in `schemas`,
 persisted across pipelines. Preparation refreshes the selected version once;
 validation then uses the local snapshot offline. GitLab cache keys include the
 version and shard. If changing its cache directory, also update `cache.paths`.

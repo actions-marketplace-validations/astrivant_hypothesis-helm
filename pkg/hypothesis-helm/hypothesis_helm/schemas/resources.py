@@ -2,6 +2,7 @@
 Look up manifest destinations in supplied, cached, or bundled Kubernetes schemas.
 """
 
+import hashlib
 import json
 import os
 from contextvars import ContextVar
@@ -39,6 +40,24 @@ def library() -> dict[str, object]:
     return mapping(json.loads(LIBRARY.read_text()))
 
 
+@lru_cache(maxsize=16)
+def cached_catalog(file: Path, digest: str) -> dict[str, object]:
+    """
+    Load a prepared catalog once and reject content changes to its recorded snapshot.
+
+    Args:
+        file (Path): Local catalog snapshot.
+        digest (str): Content hash fixed by schema preparation.
+
+    Returns:
+        dict[str, object]: Verified catalog data shared by destination lookups in this process.
+    """
+    contents = file.read_bytes()
+    if hashlib.sha256(contents).hexdigest() != digest:
+        raise ValueError("Cached input catalog changed after preparation; prepare schemas again")
+    return mapping(json.loads(contents))
+
+
 def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object], str] | None:
     """
     Resolve a direct field's scalar constraints without guessing a custom resource contract.
@@ -53,6 +72,11 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
     custom = resource_schemas()
     live = mapping(json.loads(os.environ.get("HYPOTHESIS_HELM_CONFORMITY", "{}")))
     catalog = library()
+    if live.get("catalog"):
+        candidate = cached_catalog(Path(str(live["catalog"])), str(live["catalog_digest"]))
+        if candidate.get("version") != live.get("version"):
+            raise ValueError("Cached input catalog does not match the selected Kubernetes schema version")
+        catalog = candidate
     root: dict[str, object] | None = None
     source = ""
     if identity in custom:
@@ -65,7 +89,7 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
         file = Path(str(live["schemas"])) / f"{kind.lower()}{suffix}-{version.lower()}.json"
         if file.is_file():
             root = mapping(json.loads(file.read_text()))
-            source = f"kubeconform:{live.get('version')}:{live.get('identity')}"
+            source = f"schema-cache:{live.get('version')}:{live.get('identity')}"
     if root is not None:
         node = root
         for key in path:
@@ -86,6 +110,12 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
                 if node.get("description") == review["description"]:
                     result = intersect(result, mapping(review["schema"]))
                     source += f"+reviewed:{review['id']}"
+            if catalog.get("version") == live.get("version"):
+                record_id = mapping(mapping(catalog["resources"]).get(identity, {})).get("/".join(path))
+                if record_id is not None:
+                    record = mapping(mapping(catalog["domains"])[str(record_id)])
+                    result = intersect(result, mapping(record["schema"]))
+                    source += f"+catalog:{record_id}"
         return (result, source) if result else None
     if live or identity in custom:
         return None

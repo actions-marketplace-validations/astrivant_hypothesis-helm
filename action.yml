@@ -24,7 +24,7 @@ inputs:
     description: Python version (3.13 or newer).
     default: '3.13'
   binary-cache:
-    description: Restore and save versioned Helm and validator binaries between workflow runs.
+    description: Restore and save versioned Helm and optional Kubesec binaries between workflow runs.
     default: 'true'
   helm-version:
     description: Helm 4 version to install.
@@ -62,11 +62,11 @@ inputs:
   match:
     description: Optional pytest keyword expression applied before sharding.
     default: ''
-  kubeconform:
+  schema-validation:
     description: Enable strict API validation when Kubesec routing is disabled.
     default: 'true'
   kubesec:
-    description: Route workloads to Kubesec and other resources to Kubeconform; rerun all selected tests.
+    description: Route workloads to Kubesec and other resources to native schema validation; rerun all selected tests.
     default: 'false'
   kubesec-version:
     description: Kubesec release to install.
@@ -77,9 +77,6 @@ inputs:
   kubesec-binary:
     description: Path or name of a preinstalled Kubesec executable.
     default: kubesec
-  kubeconform-version:
-    description: Kubeconform release to install when using the default binary.
-    default: v0.7.0
   schema-cache:
     description: Restore and save Kubernetes schemas between workflow runs.
     default: 'true'
@@ -88,16 +85,13 @@ inputs:
     default: latest
   schema-cache-dir:
     description: Sparse schema checkout and immutable snapshot cache.
-    default: .cache/hypothesis-helm/schemas
+    default: schemas
   schema-memory-dir:
     description: Optional directory on a Linux tmpfs mount, such as /dev/shm/helm-schemas
     default: ''
   schema-offline:
     description: Use restored schemas without fetching upstream.
     default: 'false'
-  kubeconform-binary:
-    description: Path or name of a preinstalled kubeconform executable.
-    default: kubeconform
   cache-dir:
     description: Optional persistent path-result cache directory to restore with your CI cache.
     default: ''
@@ -204,51 +198,6 @@ runs:
         helm hypothesis --help
         echo "data=$HELM_DATA_HOME" >> "$GITHUB_OUTPUT"
         echo "plugins=$HELM_PLUGINS" >> "$GITHUB_OUTPUT"
-    - name: Restore kubeconform binary
-      id: kubeconform-cache
-      if: ${{ inputs.binary-cache == 'true' && ((inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.kubeconform-binary == 'kubeconform') }}
-      uses: actions/cache/restore@v5
-      with:
-        path: ${{ runner.temp }}/hypothesis-helm-binaries/kubeconform-${{ inputs.kubeconform-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
-        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-kubeconform-${{ inputs.kubeconform-version }}-exact
-    - name: Install kubeconform
-      if: ${{ (inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.kubeconform-binary == 'kubeconform' }}
-      shell: bash
-      env:
-        KUBECONFORM_VERSION: ${{ inputs.kubeconform-version }}
-        BINARY_CACHE: ${{ inputs.binary-cache }}
-      run: |
-        case "$RUNNER_OS" in Linux) platform=linux ;; macOS) platform=darwin ;; esac
-        case "$RUNNER_ARCH" in X64) architecture=amd64 ;; ARM64) architecture=arm64 ;; *) exit 1 ;; esac
-        binary_root="$RUNNER_TEMP/hypothesis-helm-binaries"
-        if [[ "$BINARY_CACHE" != "true" ]]; then binary_root="$(mktemp -d "$RUNNER_TEMP/hh-binaries.XXXXXX")"; fi
-        binary_dir="$binary_root/kubeconform-${KUBECONFORM_VERSION}-${platform}-${architecture}"
-        if [[ ! -x "$binary_dir/kubeconform" ]]; then
-          download_dir="$(mktemp -d)"
-          curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
-          tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" kubeconform
-          mkdir -p "$binary_dir"
-          install "$download_dir/kubeconform" "$binary_dir/kubeconform.pending"
-          mv "$binary_dir/kubeconform.pending" "$binary_dir/kubeconform"
-          rm -rf "$download_dir"
-        fi
-        echo "$binary_dir" >> "$GITHUB_PATH"
-    - name: Save kubeconform binary
-      if: ${{ inputs.binary-cache == 'true' && steps.kubeconform-cache.outputs.cache-hit != 'true' && ((inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.kubeconform-binary == 'kubeconform') }}
-      uses: actions/cache/save@v5
-      with:
-        path: ${{ runner.temp }}/hypothesis-helm-binaries/kubeconform-${{ inputs.kubeconform-version }}-${{ runner.os == 'Linux' && 'linux' || 'darwin' }}-${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
-        key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-kubeconform-${{ inputs.kubeconform-version }}-exact
-    - name: Install GNU Parallel
-      if: ${{ inputs.kubesec == 'true' }}
-      shell: bash
-      run: |
-        if [[ "$RUNNER_OS" == "Linux" ]]; then
-          sudo apt-get update
-          sudo apt-get install -y parallel
-        else
-          brew install parallel
-        fi
     - name: Restore Kubesec binary
       id: kubesec-cache
       if: ${{ inputs.binary-cache == 'true' && (inputs.kubesec == 'true' && inputs.kubesec-binary == 'kubesec') }}
@@ -286,15 +235,15 @@ runs:
         key: hh-binary-v1-${{ runner.os }}-${{ runner.arch }}-kubesec-${{ inputs.kubesec-version }}-exact
     - name: Restore Kubernetes schemas
       id: schemas
-      if: ${{ (inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.schema-cache == 'true' }}
+      if: ${{ (inputs.schema-validation == 'true' || inputs.kubesec == 'true') && inputs.schema-cache == 'true' }}
       uses: actions/cache/restore@v5
       with:
         path: ${{ inputs.schema-cache-dir }}
-        key: helm-schemas-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.schema-version }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ inputs.job-index }}
+        key: helm-schemas-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.schema-version }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}-${{ inputs.job-index }}
         restore-keys: |
-          helm-schemas-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.schema-version }}-
+          helm-schemas-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.schema-version }}-
     - name: Prepare local Kubernetes schemas
-      if: ${{ inputs.kubeconform == 'true' || inputs.kubesec == 'true' }}
+      if: ${{ inputs.schema-validation == 'true' || inputs.kubesec == 'true' }}
       shell: bash
       env:
         HELM_DATA_HOME: ${{ steps.install.outputs.data }}
@@ -303,15 +252,14 @@ runs:
         SCHEMA_VERSION: ${{ inputs.schema-version }}
         SCHEMA_CACHE_DIR: ${{ inputs.schema-cache-dir }}
         SCHEMA_OFFLINE: ${{ inputs.schema-offline }}
-        KUBECONFORM_BINARY: ${{ inputs.kubeconform-binary }}
       run: |
         if [[ "$SCHEMA_OFFLINE" == "true" ]]; then
           helm hypothesis schemas --schema-version "$SCHEMA_VERSION" \
-            --schema-cache-dir "$SCHEMA_CACHE_DIR" --kubeconform-binary "$KUBECONFORM_BINARY" \
+            --schema-cache-dir "$SCHEMA_CACHE_DIR" \
             --schema-offline
         else
           helm hypothesis schemas --schema-version "$SCHEMA_VERSION" \
-            --schema-cache-dir "$SCHEMA_CACHE_DIR" --kubeconform-binary "$KUBECONFORM_BINARY"
+            --schema-cache-dir "$SCHEMA_CACHE_DIR"
         fi
     - name: Test chart values
       id: test
@@ -332,7 +280,7 @@ runs:
         HH_SAMPLE_MIN_CASES: ${{ inputs.sample-min-cases }}
         HH_TIMEOUT: ${{ inputs.timeout }}
         HH_MATCH: ${{ inputs.match }}
-        HH_KUBECONFORM: ${{ inputs.kubeconform }}
+        HH_VALIDATE_SCHEMAS: ${{ inputs.schema-validation }}
         HH_KUBESEC: ${{ inputs.kubesec }}
         HH_KUBESEC_JOBS: ${{ inputs.kubesec-jobs }}
         HH_KUBESEC_BINARY: ${{ inputs.kubesec-binary }}
@@ -340,7 +288,6 @@ runs:
         HH_SCHEMA_VERSION: ${{ inputs.schema-version }}
         HH_SCHEMA_CACHE_DIR: ${{ inputs.schema-cache-dir }}
         HH_SCHEMA_OFFLINE: 'true'
-        HH_KUBECONFORM_BINARY: ${{ inputs.kubeconform-binary }}
         HH_CACHE_DIR: ${{ inputs.cache-dir }}
         HH_CACHE: ${{ inputs.cache }}
         HH_DISABLE_SCHEMA_CACHING: ${{ inputs.disable-schema-caching }}
@@ -358,17 +305,16 @@ runs:
         HH_RESOLVED_SHARD: ${{ steps.test.outputs.shard }}
         HH_MINIMAL_VALUES_FILENAME: ${{ inputs.minimal-values-filename }}
         HH_MINIMAL_VALUES_TIMEOUT: ${{ inputs.minimal-values-timeout }}
-        HH_KUBECONFORM: ${{ inputs.kubeconform }}
+        HH_VALIDATE_SCHEMAS: ${{ inputs.schema-validation }}
         HH_KUBESEC: ${{ inputs.kubesec }}
         HH_SCHEMA_VERSION: ${{ inputs.schema-version }}
         HH_SCHEMA_CACHE_DIR: ${{ inputs.schema-cache-dir }}
-        HH_KUBECONFORM_BINARY: ${{ inputs.kubeconform-binary }}
         HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: ${{ inputs.schema-memory-dir }}
         HH_COMMIT_MINIMAL_VALUES: ${{ inputs.commit-minimal-values }}
         HH_COMMIT_BRANCH: ${{ github.ref_type == 'branch' && github.ref_name || '' }}
       run: bash "$ACTION_PATH/pkg/hypothesis-helm/hypothesis_helm/integrations/minimal_values.sh"
     - name: Save Kubernetes schemas
-      if: ${{ always() && (inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.schema-cache == 'true' && steps.schemas.outputs.cache-primary-key != '' && steps.schemas.outputs.cache-hit != 'true' }}
+      if: ${{ always() && (inputs.schema-validation == 'true' || inputs.kubesec == 'true') && inputs.schema-cache == 'true' && steps.schemas.outputs.cache-primary-key != '' && steps.schemas.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v5
       with:
         path: ${{ inputs.schema-cache-dir }}

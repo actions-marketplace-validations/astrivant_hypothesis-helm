@@ -489,24 +489,24 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         "schemas",
         help="prepare the sparse Kubernetes schema cache",
         description=(
-            "Prepare a local cache of Kubernetes API schemas for kubeconform validation. "
+            "Prepare a local cache of Kubernetes API schemas for built-in manifest validation. "
             "Select a Kubernetes version to download, or use --schema-offline to reuse schemas already cached."
         ),
     )
     schemas.add_argument("--schema-version", default="latest")
-    schemas.add_argument("--schema-cache-dir", type=Path, default=Path(".cache/hypothesis-helm/schemas"))
+    schemas.add_argument("--schema-cache-dir", type=Path, default=Path("schemas"))
     schemas.add_argument("--schema-offline", action="store_true")
-    schemas.add_argument("--kubeconform-binary", default="kubeconform")
-    for command in (test, run, exports):
-        command.add_argument("--kubeconform", action="store_true", help="validate Kubernetes API schemas")
+    for command in (test, repository, run, exports):
+        command.add_argument(
+            "--validate-schemas", action="store_true", help="validate rendered resources against the local Kubernetes schema cache"
+        )
         command.add_argument("--schema-version", default="latest", help="Kubernetes schema version: latest or X.Y.Z")
-        command.add_argument("--schema-cache-dir", type=Path, default=Path(".cache/hypothesis-helm/schemas"))
+        command.add_argument("--schema-cache-dir", type=Path, default=Path("schemas"))
         command.add_argument(
             "--schema-offline",
             action="store_true",
             help="reuse cached schemas without network access",
         )
-        command.add_argument("--kubeconform-binary", default="kubeconform")
     for command in (test, repository):
         command.add_argument("--base-ref", help="Git comparison ref for repository tests; overrides CI target or previous trunk commit")
     for command in (test, run):
@@ -775,8 +775,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "aggregate":
             return aggregate(args.reports, args.shards, args.run_id, args.output_dir)
         if args.command == "export-minimal-values":
-            if args.kubeconform and may_check("HH1108"):
-                os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.kubeconform_binary, args.schema_offline)
+            if args.validate_schemas and may_check("HH1108"):
+                os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
             return export_repository(
                 args.source,
                 args.filename,
@@ -786,15 +786,15 @@ def main(argv: list[str] | None = None) -> int:
                 files_list=args.files_list,
             )
         if args.command == "scan":
+            if args.validate_schemas and may_check("HH1108"):
+                os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
             return scan(args)
         if args.command == "test":
             selector = args.shard
             args.shard, _ = resolve_shard(args.shard, os.environ)
             if local_discovery(args):
-                if args.kubeconform and may_check("HH1108"):
-                    os.environ[ENVIRONMENT] = prepare(
-                        args.schema_cache_dir, args.schema_version, args.kubeconform_binary, args.schema_offline
-                    )
+                if args.validate_schemas and may_check("HH1108"):
+                    os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
                 return scan(args)
             args.shard = selector
         minimal_values = None
@@ -803,7 +803,6 @@ def main(argv: list[str] | None = None) -> int:
                 prepare(
                     args.schema_cache_dir,
                     args.schema_version,
-                    args.kubeconform_binary,
                     args.schema_offline,
                 )
             )
@@ -834,11 +833,10 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps(dict(finding_report, status="failed", reason="input audit findings (--fail)"), indent=2))
                 return 1
         if args.command in ("test", "run"):
-            if args.kubeconform and may_check("HH1108") and not args.collect_only and not args.dry_run:
+            if args.validate_schemas and may_check("HH1108") and not args.collect_only and not args.dry_run:
                 os.environ[ENVIRONMENT] = prepare(
                     args.schema_cache_dir,
                     args.schema_version,
-                    args.kubeconform_binary,
                     args.schema_offline,
                 )
             args.shard, shard_source = resolve_shard(args.shard, os.environ)
@@ -925,7 +923,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "test" and args.timeout <= 0:
                 raise ValueError("timeout must be positive")
             schema_state = None
-            if args.kubeconform and may_check("HH1108"):
+            if args.validate_schemas and may_check("HH1108"):
                 schema_state = {
                     "status": "unavailable",
                     "requested_version": args.schema_version,
@@ -938,7 +936,6 @@ def main(argv: list[str] | None = None) -> int:
                     configuration = prepare(
                         args.schema_cache_dir,
                         args.schema_version,
-                        args.kubeconform_binary,
                         True,
                         read_only=True,
                     )

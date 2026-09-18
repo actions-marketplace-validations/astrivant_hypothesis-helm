@@ -14,6 +14,7 @@
 - [Custom resources](#custom-resources)
 - [Coverage and reproducibility](#coverage-and-reproducibility)
 - [Rebuilding the catalog before release](#rebuilding-the-catalog-before-release)
+  - [Source verification and limits](#source-verification-and-limits)
 <!-- toc:end -->
 
 Input domains control which values Hypothesis generates and shrinks. For example, a Secret reference can use a valid
@@ -54,22 +55,29 @@ We also constrain nested values from unconstrained schemas, where a generic JSON
 
 ## Default destination catalog
 
-`hypothesis_helm_catalog` ships a versioned catalog extracted from Kubernetes 1.35.0 schemas used by kubeconform.
-No network access is needed to use it. With `--kubeconform`, generation uses the selected cached schema version instead.
-Reviewed descriptions supplement that schema only while their text still matches the reviewed source.
+`hypothesis_helm_catalog` ships generation constraints for Kubernetes 1.35.0. No network or Go installation is needed to use them.
+The rebuild combines pinned OpenAPI schemas, supported Go validation annotations, and reusable API machinery validators.
+With `--validate-schemas`, generation also uses the selected cached schema version. A locally rebuilt catalog in the same
+cache supplements that version; its digest becomes part of the test cache identity.
 
 The compiler follows direct `.Values.field` references to entire manifest scalar values, including string `| quote`.
 It retains supported Boolean and string-equality branch conditions. A restriction applies only when the branch emits
 that field. Helpers, loops, computed values, concatenation, ambiguous types and more than 64 branch variants remain
 unresolved. A template containing unsupported output is left unchanged and its limitation is reported.
 
+Reviewed chart bindings can bridge an opaque helper when the relevant template files match recorded SHA-256 hashes.
+The bundled MongoDB bindings cover `existingConfigmap`, `arbiter.existingConfigmap` and `hidden.existingConfigmap`, including
+installed dependencies and their aliases. Generated nonempty references then follow ConfigMap naming rules; the empty fallback
+remains available. Supplied values and `tpl` expressions are preserved. Changed templates disable that binding and produce a
+diagnostic. This is a source-specific certificate, not general analysis of arbitrary helpers.
+
 The catalog imports explicit scalar constraints and integer format limits. It also includes these reviewed supplements:
 
 | Destination | Generated domain | Evidence |
 | --- | --- | --- |
-| Container `containerPort` | Integers 1 through 65,535 | Published field description states the range |
+| Container `containerPort` | Integers 1 through 65,535 | Upstream `IsValidPortNum` plus the field description |
 | Deployment `replicas` | Nonnegative integers, including zero | Replica semantics and the published int32 format |
-| Secret volume/key references | DNS subdomain names, at most 253 characters | Secret naming rules |
+| Secret and ConfigMap volume/key references | DNS subdomain names, at most 253 characters | Upstream `IsDNS1123Subdomain` and reviewed API field bindings |
 | Service port `protocol` | `TCP`, `UDP`, `SCTP` | Published supported protocols |
 | Pod `restartPolicy` | `Always`, `OnFailure`, `Never` | Published alternatives; a particular workload can require a subset |
 | Volume `mountPath` | Nonempty strings without `:` | Published mount-path restriction |
@@ -80,7 +88,7 @@ Passwords, commands and other free-form strings keep their declared schema const
 and any known destination or explicit input policy.
 
 Kubernetes explains that [published validation schemas can be incomplete](https://kubernetes.io/docs/concepts/overview/kubernetes-api/).
-These domains do not replace kubeconform, admission checks or a server-side dry run.
+These domains do not replace schema validation, admission checks or a server-side dry run.
 See [Secret name constraints](https://kubernetes.io/docs/concepts/configuration/secret/#constraints-on-secret-names-and-data)
 and the [schema source repository](https://github.com/yannh/kubernetes-json-schema).
 
@@ -302,7 +310,7 @@ Paths are relative to the configuration file. Supply a schema for the **whole re
 API version and kind. Extract the relevant version's `openAPIV3Schema` from a CRD if that is the source of its contract.
 Only local JSON references are permitted; references are never downloaded implicitly.
 The tool uses this schema for direct input mappings and validates the rendered custom resources against it.
-When kubeconform is enabled, it continues to validate built-in resources against its cached schemas.
+When schema validation is enabled, it continues to validate built-in resources against its cached schemas.
 JSON Schema checking does not execute CRD CEL rules, admission webhooks or controller logic.
 
 Saved suites embed these schemas in `input-domains.json`, so `run` can validate custom resources even when
@@ -313,7 +321,7 @@ The [CRD integration tests](../../pkg/hypothesis-helm/hypothesis_helm/tests/test
 [pinned Polyad Gate chart fixture](../../pkg/hypothesis-helm/hypothesis_helm/tests/fixtures/polyad-gate/README.md).
 They run Helm's real helper and `tpl` rendering, check schema bounds and missing contracts, exercise generated
 values and failure reports, and verify saved-suite reuse. Mixed-resource routing tests check that built-ins still
-reach kubeconform; the validator process is simulated in that test. No cluster or neighboring checkout is required.
+reach the Python schema validator against local fixture schemas. No cluster or neighboring checkout is required.
 
 ```sh
 bash scripts/project-run.sh pytest pkg/hypothesis-helm/hypothesis_helm/tests/test_custom_resources.py
@@ -333,26 +341,47 @@ Generated suites retain their generation constraints; regenerate a suite to remo
 
 ## Rebuilding the catalog before release
 
-From a development checkout:
+To populate the ignored local cache on a developer or end-user machine:
 
 ```sh
-poetry run hypothesis-helm-catalog
-poetry run hypothesis-helm-catalog --check
+hypothesis-helm-catalog --cache-dir schemas
 ```
 
-The command fetches the pinned source revision with Git sparse checkout. For an already cached snapshot:
+The [development setup script](../development.md#environment) installs the required Git and Go 1.25+ toolchain on Linux or macOS.
+The command sparsely checks out pinned Kubernetes and JSON Schema revisions, compiles the Go extractor, and writes
+`schemas/catalogs/1.35.0/input-domains.json`. Go module and build caches also live under `schemas/`.
+After an initial online build, `--offline` requires cached sources, schemas and Go dependencies.
+
+For release publication, explicitly update the bundled catalog, then verify it:
 
 ```sh
-poetry run hypothesis-helm-catalog --schema-dir /path/to/v1.35.0-standalone-strict
+hypothesis-helm-catalog --output pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/input-domains.json
+hypothesis-helm-catalog --check
 ```
 
-`--schema-version` records the source version, and `--output` chooses another destination.
-The generated catalog contains source hashes and review provenance, without timestamps, so identical sources produce identical output.
-The tag-release workflow runs `--check` before building distributions.
+`--schema-dir` selects an existing standalone-strict schema directory; `--kubernetes-source-dir` selects existing pinned sources.
+Both paths are useful for offline rebuilds. `--go` selects a toolchain executable. The Go bindings are pinned to Kubernetes 1.35.0;
+changing `--schema-version` alone cannot upgrade them. Ordinary API validation can use other published schema versions.
+`--check` compares generated contents without rewriting either catalog. The tag-release workflow runs it before building distributions.
 
-Reviewed supplements live in [reviewed-domains.json](../../pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/reviewed-domains.json).
-If an anchored description changes, rebuilding stops for review. It does not ask an LLM to invent a new bound during release.
-Update the pinned revision and reviewed rules deliberately, rebuild, run the input-domain tests, and commit the resulting catalog.
+### Source verification and limits
 
+The extractor reads Go syntax trees and accepts supported independent numeric and string-length annotations.
+It resolves DNS naming patterns and port bounds from the pinned API machinery source and checks exported domains against the
+actual compiled Go validators on deterministic boundary cases. The catalog records the corpus hash, source hashes, function
+hashes, and unresolved annotations. These comparisons detect translation mistakes; they are not a proof that every Kubernetes
+validation rule has been translated.
 
-[def]: #custom-resources
+Exact API type/field bindings connect those primitives to destinations such as `ConfigMapVolumeSource.name`.
+Reviewed descriptions supplement published schema gaps only while their text matches the reviewed source.
+No bound is inferred solely from a Helm values key's name. Conditional annotations, unsupported types, arbitrary Go validation
+functions and state-dependent rules are not translated. A field with no supported bound remains unconstrained by this catalog;
+users can add an explicit profile or schema.
+
+Source inventories are checked against [kubernetes-source-lock.json](../../pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/kubernetes-source-lock.json).
+Reviewed prose rules live in [reviewed-domains.json](../../pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/reviewed-domains.json).
+Source changes require review; rebuilding does not invent replacements. Identical sources produce identical output without timestamps.
+
+References: [Kubernetes declarative validation](https://kubernetes.io/docs/reference/using-api/declarative-validation/),
+[API machinery validators](https://github.com/kubernetes/apimachinery/blob/v0.35.0/pkg/util/validation/validation.go), and
+[core API validation](https://github.com/kubernetes/kubernetes/blob/v1.35.0/pkg/apis/core/validation/validation.go).

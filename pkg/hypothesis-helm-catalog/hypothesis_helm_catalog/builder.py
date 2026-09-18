@@ -8,7 +8,6 @@ import json
 import tempfile
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import intersect
 
@@ -30,13 +29,14 @@ KEYWORDS = {
 }
 
 
-def build(directory: Path, version: str) -> dict[str, object]:
+def build(directory: Path, version: str, *, upstream: dict[str, object] | None = None) -> dict[str, object]:
     """
     Extract scalar bounds and attach reviewed rules only to matching source descriptions.
 
     Args:
-        directory (Path): Kubeconform standalone-strict schema snapshot.
+        directory (Path): Standalone strict Kubernetes schema snapshot.
         version (str): Kubernetes version represented by the snapshot.
+        upstream (dict[str, object] | None): Verified constraints extracted from matching Kubernetes Go sources.
 
     Returns:
         dict[str, object]: Deterministic catalog, with source hashes and review provenance.
@@ -102,7 +102,7 @@ def build(directory: Path, version: str) -> dict[str, object]:
             resources[f"{api}/{kind['kind']}"] = paths
     if not resources:
         raise ValueError("No Kubernetes resource schemas found in the source snapshot")
-    return {
+    catalog: dict[str, object] = {
         "version": version,
         "revision": REVISION,
         "repository": "https://github.com/yannh/kubernetes-json-schema",
@@ -111,6 +111,26 @@ def build(directory: Path, version: str) -> dict[str, object]:
         "domains": domains,
         "resources": resources,
     }
+    if upstream is not None:
+        if upstream["version"] != version:
+            raise ValueError("Kubernetes source and schema versions must match")
+        for identity, raw in mapping(upstream["resources"]).items():
+            if identity not in resources:
+                continue
+            projected_paths = mapping(resources[identity])
+            for path, raw_rule in mapping(raw).items():
+                rule = mapping(raw_rule)
+                previous = mapping(domains[str(projected_paths[path])]) if path in projected_paths else {"schema": {}, "sources": []}
+                record = {
+                    "schema": intersect(mapping(previous["schema"]), mapping(rule["schema"])),
+                    "sources": [*sequence(previous["sources"]), f"kubernetes-go:{upstream['revision']}"],
+                    "evidence": rule["evidence"],
+                }
+                key = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()[:20]
+                domains[key] = record
+                projected_paths[path] = key
+        catalog["upstream"] = {key: value for key, value in upstream.items() if key not in {"resources", "fields"}}
+    return catalog
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -126,32 +146,39 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--schema-dir", type=Path, help="local standalone-strict schema snapshot")
     parser.add_argument("--schema-version", default="1.35.0")
-    parser.add_argument("--output", type=Path, default=LIBRARY)
+    parser.add_argument("--cache-dir", type=Path, default=Path("schemas"), help="local versioned schemas, source checkouts and Go caches")
+    parser.add_argument("--kubernetes-source-dir", type=Path, help="existing checkout of the pinned Kubernetes release")
+    parser.add_argument("--go", default="go", help="Go 1.25+ executable used only for catalog rebuilding")
+    parser.add_argument("--offline", action="store_true", help="require cached sources and Go dependencies; do not download")
+    parser.add_argument(
+        "--output", type=Path, help="catalog destination; defaults to the versioned cache, or the bundled catalog with --check"
+    )
     parser.add_argument("--check", action="store_true", help="compare without writing; fail if release data is stale")
     args = parser.parse_args(argv)
+    from hypothesis_helm.schemas.conformity import prepare
+
+    from hypothesis_helm_catalog.sources import VERSION, checkout, rebuild
+
+    if args.schema_version != VERSION:
+        parser.error(f"Go source bindings are pinned to Kubernetes {VERSION}; review the source pin before changing versions")
+    source = args.kubernetes_source_dir or checkout(args.cache_dir, offline=args.offline)
+    print("Extracting Kubernetes constraints and checking upstream validators")
+    upstream = rebuild(source, args.cache_dir, args.go, offline=args.offline)
     if args.schema_dir is not None:
-        catalog = build(args.schema_dir, args.schema_version)
+        catalog = build(args.schema_dir, args.schema_version, upstream=upstream)
     else:
-        with tempfile.TemporaryDirectory(prefix="hypothesis-helm-domain-sources-") as temporary:
-            root = Path(temporary)
-            folder = f"v{args.schema_version}-standalone-strict"
-            owner = Processes()
-            owner.run(["git", "init", str(root)], check=True, capture_output=True, text=True, timeout=30)
-            owner.run(
-                ["git", "-C", str(root), "remote", "add", "origin", "https://github.com/yannh/kubernetes-json-schema.git"],
-                check=True,
-                timeout=30,
-            )
-            owner.run(["git", "-C", str(root), "config", "remote.origin.promisor", "true"], check=True, timeout=30)
-            owner.run(["git", "-C", str(root), "config", "remote.origin.partialclonefilter", "blob:none"], check=True, timeout=30)
-            owner.run(["git", "-C", str(root), "fetch", "--depth=1", "--filter=blob:none", "origin", REVISION], check=True, timeout=180)
-            owner.run(["git", "-C", str(root), "sparse-checkout", "set", "--no-cone", f"/{folder}/"], check=True, timeout=30)
-            owner.run(["git", "-C", str(root), "checkout", "--detach", "FETCH_HEAD"], check=True, timeout=180)
-            catalog = build(root / folder, args.schema_version)
+        configuration = mapping(json.loads(prepare(args.cache_dir, args.schema_version, args.offline, revision=REVISION)))
+        catalog = build(Path(str(configuration["schemas"])), args.schema_version, upstream=upstream)
+    cache_catalog = args.cache_dir / "catalogs" / args.schema_version / "input-domains.json"
+    args.output = args.output or (LIBRARY if args.check else cache_catalog)
     contents = json.dumps(catalog, sort_keys=True, indent=2) + "\n"
     if args.check:
         return int(not args.output.is_file() or args.output.read_text() != contents)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(contents)
+    for destination in {cache_catalog, args.output}:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+            staged = Path(temporary) / "input-domains.json"
+            staged.write_text(contents)
+            staged.replace(destination)
     print(f"Wrote {len(mapping(catalog['resources']))} resource domains to {args.output}")
     return 0

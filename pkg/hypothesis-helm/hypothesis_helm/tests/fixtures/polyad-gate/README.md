@@ -23,7 +23,7 @@ The values and tool configuration are local test inputs. No neighboring checkout
 Tests render the real helper and `tpl` implementation with Helm, validate custom-resource boundaries,
 reject missing or mismatched resource schemas, and preserve schemas in saved suites.
 A separate direct-mapping template exercises input-domain inference and reports a deliberately introduced
-output defect. Mixed bundles route custom resources to their supplied schema and built-ins to kubeconform.
+output defect. Mixed bundles route custom resources to their supplied schema and built-ins to schema validation.
 
 Gate's CEL expression requires exactly one of `expression` and `delaySeconds`. JSON Schema validation does
 not execute that rule, admission webhooks, or controller behavior; those require Kubernetes-side tests.

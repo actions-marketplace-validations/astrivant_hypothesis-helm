@@ -46,3 +46,7 @@ terraform/**/terraform.tfvars
 terraform/**/outputs.json
 ansible/run.yml
 ansible/.collections/
+
+# Rebuildable Kubernetes schemas, upstream sources and development toolchains.
+/schemas/*
+!/schemas/README.md

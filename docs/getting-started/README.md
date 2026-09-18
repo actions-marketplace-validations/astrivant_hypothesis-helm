@@ -53,10 +53,10 @@ helm hypothesis scan prometheus-community/prometheus --filter --chart-timeout 5m
 | `--seed 42` | Reproduce input selection, or change the seed to explore different paths before a timeout. |
 | `--report` | Save Markdown and PDF summaries. Add a filename prefix to choose the destination. |
 | `--fail` | Stop at the first unsuppressed finding and exit 1. Includes audit warnings. |
-| `--kubeconform` | Validate rendered resources against Kubernetes API schemas. Requires the kubeconform binary. |
+| `--validate-schemas` | Validate rendered resources against Kubernetes API schemas. Uses locally cached schemas; no validator binary is needed. |
 
 Choose either filtering mode. Worker counts are starting estimates.<sup>[\[1\]](../ci/resources.md)</sup>
-Kubeconform works with local `test`; pin the target Kubernetes version and provide custom-resource schemas.
+Schema validation works with both local `test` and remote `scan`; pin the target Kubernetes version and provide custom-resource schemas.
 See [validation setup](../usage.md#kubernetes-api-conformity) and [CRD requirements](../input-domains/README.md#custom-resources).
 
 ## What our tests suggest

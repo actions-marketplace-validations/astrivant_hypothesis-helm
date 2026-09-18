@@ -70,7 +70,7 @@ def fingerprint(
             excluded = (*excluded, Path(settings["cache_root"]))
         digest.update(
             json.dumps(
-                {k: v for k, v in settings.items() if k not in {"schemas", "cache_root", "executable"}},
+                {k: v for k, v in settings.items() if k not in {"schemas", "cache_root", "catalog"}},
                 sort_keys=True,
             ).encode()
         )

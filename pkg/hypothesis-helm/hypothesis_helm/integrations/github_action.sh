@@ -6,7 +6,7 @@ validate_api=
 schema_offline=
 disable_schema_caching=
 disable_cache=
-if [[ ${HH_KUBECONFORM:-true} == true && ${HH_KUBESEC:-false} != true ]]; then validate_api=1; fi
+if [[ ${HH_VALIDATE_SCHEMAS:-true} == true && ${HH_KUBESEC:-false} != true ]]; then validate_api=1; fi
 if [[ ${HH_SCHEMA_OFFLINE:-false} == true ]]; then schema_offline=1; fi
 if [[ ${HH_DISABLE_SCHEMA_CACHING:-false} == true ]]; then disable_schema_caching=1; fi
 if [[ ${HH_CACHE:-true} == false ]]; then disable_cache=1; fi
@@ -31,8 +31,7 @@ exec helm hypothesis test "${HH_CHART:-.}" \
   --cache-dir "${HH_CACHE_DIR:-$HH_RESULT_DIR/cache}" \
   ${disable_schema_caching:+--disable-schema-caching} \
   ${disable_cache:+--no-cache} \
-  ${validate_api:+--kubeconform} \
+  ${validate_api:+--validate-schemas} \
   --schema-version "${HH_SCHEMA_VERSION:-latest}" \
-  --schema-cache-dir "${HH_SCHEMA_CACHE_DIR:-.cache/hypothesis-helm/schemas}" \
-  --kubeconform-binary "${HH_KUBECONFORM_BINARY:-kubeconform}" \
+  --schema-cache-dir "${HH_SCHEMA_CACHE_DIR:-schemas}" \
   ${schema_offline:+--schema-offline}

@@ -110,7 +110,6 @@ def test_action_plugin_installation(tmp_path: Path, working_entrypoint: bool) ->
                 SCHEMA_OFFLINE=offline,
                 SCHEMA_VERSION="1.35.0",
                 SCHEMA_CACHE_DIR=str(tmp_path / "schemas"),
-                KUBECONFORM_BINARY="kubeconform",
             ),
             capture_output=True,
             text=True,
@@ -232,7 +231,7 @@ def test_action_preserves_arguments_outputs_and_status(
     monkeypatch.setenv("HH_RERUN", "failed")
     monkeypatch.setenv("HH_DISABLE_SCHEMA_CACHING", "true")
     monkeypatch.setenv("HH_CACHE", "false")
-    monkeypatch.setenv("HH_KUBECONFORM", "true")
+    monkeypatch.setenv("HH_VALIDATE_SCHEMAS", "true")
     monkeypatch.setenv("HH_SCHEMA_VERSION", "1.35.0")
     monkeypatch.setenv("HH_SCHEMA_OFFLINE", "true")
     monkeypatch.setenv("HYPOTHESIS_HELM_JOB_INDEX", "1")
@@ -318,7 +317,7 @@ def test_action_preserves_arguments_outputs_and_status(
     assert command[command.index("--rerun") + 1] == ("all" if security else "failed")
     assert "--disable-schema-caching" in command
     assert "--no-cache" in command
-    assert ("--kubeconform" in command) is (not security)
+    assert ("--validate-schemas" in command) is (not security)
     if not security:
         assert "--schema-offline" in command
         assert command[command.index("--schema-version") + 1] == "1.35.0"
@@ -434,7 +433,7 @@ def test_remote_ci_commands(tmp_path: Path, provider: str, defer_failure: bool, 
     assert command[:4] == ["helm", "hypothesis", "test", chart]
     assert command[command.index("--sample-random") + 1] == "70"
     assert command[command.index("--sample-min-cases") + 1] == "32"
-    assert ("--kubeconform" in command) is (not security)
+    assert ("--validate-schemas" in command) is (not security)
     assert "--schema-offline" in command
     assert command[command.index("--shard") + 1] == "2/3"
     assert command[command.index("--run-id") + 1] == ("123-1.35.0" if provider == "gitlab" else "workflow-123-chart")

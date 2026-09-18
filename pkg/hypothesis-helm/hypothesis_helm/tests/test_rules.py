@@ -311,9 +311,10 @@ def test_native_workers_inherit_config(tmp_path: Path, capsys: pytest.CaptureFix
                 str(policy),
                 "--disable-codes",
                 "HH1108,HH2006",
-                "--kubeconform",
-                "--kubeconform-binary",
-                "missing-kubeconform",
+                "--validate-schemas",
+                "--schema-cache-dir",
+                str(tmp_path / "missing-schemas"),
+                "--schema-offline",
             ]
         )
         == 0

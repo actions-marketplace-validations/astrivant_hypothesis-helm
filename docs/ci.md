@@ -195,7 +195,7 @@ matrix passes explicit indices so each Kubernetes version covers the whole suite
 
 ## Caching installed binaries
 
-The GitHub Action caches Helm, Kubeconform and optional Kubesec binaries by tool,
+The GitHub Action caches Helm and optional Kubesec binaries by tool,
 version, operating system and architecture. Set `binary-cache: 'false'` to disable
 both persistence and reuse. This is separate from `cache`, which controls test
 outcomes, and `schema-cache`, which controls Kubernetes schemas. Preinstalled
@@ -223,13 +223,11 @@ nor remote cache provisioning is required for the local disk cache.
 
 ## Kubernetes API schema validation
 
-The action exposes `kubeconform: 'true'`, `schema-version: 'latest'`,
-`schema-cache-dir`, `schema-offline: 'false'`, and `kubeconform-binary` inputs.
-The action installs kubeconform by default (`kubeconform-version: v0.7.0`); the
-binary input can point to a preinstalled executable. API validation defaults to
-enabled. Git must be available on the runner. Pin `schema-version` for reproducibility.
+The action exposes `schema-validation: 'true'`, `schema-version: 'latest'`, `schema-cache-dir`, and `schema-offline: 'false'`.
+API validation runs in Python and is enabled by default in the action. Git must be available on the runner.
+Pin `schema-version` for reproducibility. No separate API validator binary is installed.
 Restore/save the entire schema cache directory (default
-`.cache/hypothesis-helm/schemas`) with your provider's cache facility. Set
+`schemas`) with your provider's cache facility. Set
 `schema-offline: 'true'` only after those schemas have been cached. Each matrix shard
 then validates locally, without downloading schemas for individual test cases.
 
@@ -245,7 +243,7 @@ The repository's own Action workflow explicitly uses validation and this cache.
 The CircleCI URL orb prepares and saves schemas before running properties.
 The GitLab shared job uses `cache:when: always`. Neither requires putting schemas
 inside the report directory. `helm hypothesis schemas --schema-version latest
---schema-cache-dir .cache/hypothesis-helm/schemas` can prepare the cache independently
+--schema-cache-dir schemas` can prepare the cache independently
 without generating or running tests.
 
 ## Optional Kubesec scans
@@ -256,7 +254,7 @@ Scans consume the current shard's manifest stream and retain separate job logs,
 security reports, and resource counts for each validator. The action exposes `kubesec-report-dir`
 and `kubesec-exit-code`; either test or scanner failure fails the action.
 
-Kubesec and Kubeconform share the prepared local schema snapshot. Schema cache
+Kubesec and the built-in schema validator share the prepared local schema snapshot. Schema cache
 restore/save also runs when only Kubesec is enabled. Preparation refreshes the
 catalog once unless `schema-offline: 'true'`; validators then use local files.
 See [CI examples](ci/README.md) for installation and version/shard matrices.
@@ -269,8 +267,8 @@ names as well as schema-cache keys.
 For optional Linux RAM-backed schema staging, see [memory-backed schemas](ci/README.md#memory-backed-schemas).
 
 With `kubesec: true`, supported workloads receive schema and security validation
-through Kubesec; remaining resources go to Kubeconform. This routing also applies
-when the separate `kubeconform` input is false. Security runs force `--rerun all`
+through Kubesec; remaining resources go to the built-in schema validator. This routing also applies
+when the separate `schema-validation` input is false. Security runs force `--rerun all`
 to produce the manifests needed for validation. Validator failures fail the job
 and appear in scan artifacts. Helm JUnit records the Helm tests.
 
