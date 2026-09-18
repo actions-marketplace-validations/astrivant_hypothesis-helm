@@ -50,9 +50,21 @@ git lfs install --local
 git lfs pull
 ```
 
-The patterns are maintained in [`.gitattributes`](../.gitattributes). Add regenerated
-data normally with `git add`; Git stores LFS pointers and the pre-push hook uploads
-the content. Markdown, plots, PDFs and chart schemas remain ordinary Git files.
+Raw-data publication is currently paused. The published benchmark remains tracked,
+and new raw measurements are ignored by [`.gitignore`](../.gitignore). The
+`lfs-snapshot` pre-commit check rejects staged changes to existing LFS files; use
+`git restore --staged -- <paths>` to unstage them while keeping your local results.
+Markdown, plots, PDFs and chart schemas can still be committed normally. After
+regenerating plots, their new raw measurements remain local until explicitly published.
+
+To deliberately publish another snapshot, add the chosen ignored files with
+`git add -f -- <paths>`, then use `SKIP=lfs-snapshot git commit`. Other pre-commit
+checks still run, and the LFS pre-push hook uploads the new content. Keep that
+upload hook enabled so pushed pointers remain downloadable.
+
+The LFS patterns remain in [`.gitattributes`](../.gitattributes) so the existing
+snapshot can still be downloaded. Pausing updates does not remove LFS data already
+present in unpushed commits.
 LFS tracking does not remove large blobs from earlier commits; that requires a
 separate history migration.
 
@@ -71,7 +83,7 @@ After changing CLI arguments, regenerate the [CLI reference](cli/README.md):
 bash scripts/project-run.sh cog -r docs/cli/README.md
 ```
 
-Unit and integration tests live under `pkg/hypothesis_helm/tests`. Helm must be
+Unit and integration tests live under `pkg/hypothesis-helm/hypothesis_helm/tests`. Helm must be
 available for render tests; the neighboring Astrivant audit skips when absent.
 `ASTRIVANT_CHART=<path>` opts into the full whole-chart Astrivant integration gate.
 Fixture schemas deliberately containing documentation gaps are not processed by
@@ -106,6 +118,7 @@ Publishing and remote repository-setting changes are not automated by local chec
 Run `hypothesis-helm-docs` from the checkout root after editing headings. It updates linked tables of contents in maintained
 Markdown pages; `hypothesis-helm-docs --check` verifies them without writing. Pre-commit updates the Markdown files in a commit,
 and project checks verify the full documentation set. Regenerated study and scan reports include contents automatically.
+Guides include all heading levels. Scan reports list sections and charts, leaving individual error entries out of their contents.
 Archived run snapshots and third-party sources are excluded to preserve recorded checksums and upstream files.
 
 ## Publishing to PyPI
@@ -172,11 +185,10 @@ pre-commit run helm-hypothesis --all-files
       require_serial: true
 ```
 
-Pre-commit local hooks repeat the manifest fields rather than importing another
-checkout's manifest. Chart or vendored dependency changes trigger the hook.
+Pre-commit local hooks declare the manifest fields in the consuming checkout. Chart or vendored dependency changes trigger the hook.
 A failing property blocks the commit; the generated suite and results are saved
-under `reports/hypothesis-helm`. Ten examples per property keeps the default
-sampling budget modest; this does not guarantee complete branch coverage.
+under `.cache/hypothesis-helm/runs`. Ten examples per property keeps the default
+sampling budget modest. Use branch analysis and broader testing to assess coverage.
 
 ## Package organization
 
@@ -200,10 +212,16 @@ cache fingerprints cover implementation modules recursively across all subpackag
 
 ## Repository map
 
+Project folders under `pkg/` use dashes. Python modules inside them keep underscores, as in
+`pkg/hypothesis-helm/hypothesis_helm`, so imports and editable installs work normally.
+
 | Location | Responsibility |
 | --- | --- |
-| [`pkg/hypothesis_helm/`](../pkg/hypothesis_helm) | CLI and public API; implementation grouped under charts, schemas, execution, reporting, and integrations. |
-| [`pkg/hypothesis_helm/tests/`](../pkg/hypothesis_helm/tests) | Unit tests and real Helm integration tests. |
+| [`pkg/hypothesis-helm/hypothesis_helm/`](../pkg/hypothesis-helm/hypothesis_helm) | CLI and public API; implementation grouped under charts, schemas, execution, reporting, and integrations. |
+| [`pkg/hypothesis-helm/hypothesis_helm/tests/`](../pkg/hypothesis-helm/hypothesis_helm/tests) | Unit tests and real Helm integration tests. |
+| [`pkg/hypothesis-helm-benchmarking/`](../pkg/hypothesis-helm-benchmarking) | Independently packaged benchmark commands, studies, and refresh automation. |
+| [`pkg/hypothesis-helm-catalog/`](../pkg/hypothesis-helm-catalog) | Shipped input-domain catalog and its rebuild command. |
+| [`pkg/pipeline/`](../pkg/pipeline) | Shared work scheduling and balancing. |
 | [`examples/`](../examples) | Small charts and a checked-in generated workload suite. |
 | [`scripts/`](../scripts) | Project command runner, validation command and Helm plugin hooks. |
 | [`action.yml`](../action.yml) | GitHub Action with automatic CI sharding and artifact uploads. |
@@ -215,8 +233,8 @@ cache fingerprints cover implementation modules recursively across all subpackag
 
 ## Preserved scheduler and separate Reflow project
 
-The local `pkg/workgraph` and `pkg/workbalance` packages retain the pre-extraction implementation for existing benchmark runs.
-Hypothesis Helm's refresh code continues to import these local packages. Their tests and graph documentation remain here.
+The local `pkg/pipeline` package contains the scheduler retained from before the Reflow extraction.
+Hypothesis Helm's refresh code imports this local package. Its tests and graph documentation remain here.
 
 The independent [Reflow project](https://github.com/astrivant/reflow) lives at `../reflow`, with its own `reflow.graph` and
 `reflow.balance` packages. Development there does not change the local benchmark scheduler. Hypothesis Helm currently does

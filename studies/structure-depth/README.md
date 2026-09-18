@@ -7,7 +7,7 @@
 - [Measurement](#measurement)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md)
+[Benchmarking](<../../docs/benchmarking/README.md>)
 
 Only topology trim depth varies. Random trimming stays at zero and failure expansion stays enabled.
 
@@ -30,7 +30,7 @@ Each cell below is **checks; erroneous inputs found / total (missed percentage)*
 
 ## Mixed fixtures
 
-Topology types are categorical, so weights describe their relative frequency rather than a normal distribution over arbitrarily ordered names. Requested probabilities and realized counts are both recorded. Types and wiring use a separate fixed seed. Components can share inputs; numeric boundary inputs are reserved so Boolean roles retain their declared types.
+Topology types are categorical, so weights describe their relative frequency. Requested probabilities and realized counts are both recorded. Types and wiring use a separate fixed seed. Components can share inputs; numeric boundary inputs are reserved so Boolean roles retain their declared types.
 
 | Fixture | Realized component counts |
 |---|---|
@@ -47,8 +47,8 @@ Reference rendering and all added renders share a 540s execution ceiling per fix
 
 A single fixed fault/topology seed isolates depth sensitivity; it cannot establish an optimal default across real charts. Repeated seeds are needed before changing the provisional `--filter` depth of 2.
 
-[Raw observations](results.json) · [CSV](results.csv)
+Raw observations (local run data) · CSV (local run data)
 
 ```sh
-hypothesis-helm-benchmark structure-depth --time-limit 9m --output benchmarks/runs/structure-depth
+hypothesis-helm-benchmark structure-depth --time-limit 9m --output .cache/benchmarks/structure-depth
 ```

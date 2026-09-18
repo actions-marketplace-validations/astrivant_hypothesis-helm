@@ -8,10 +8,10 @@
 
 [All chart topologies](../../../../README.md)
 
-Status: **rendered**. Source: `.cache/benchmark-refresh-1789311940/outputs/expansion/charts/equivalence`.
-Potential references are not proof of exact input-to-output causality.
+Status: **rendered**. Source: `.cache/refresh/refresh-1789617223/outputs/expansion/cases/equivalence.yaml`.
+Potential references identify inputs to investigate for causal effects on output.
 Baseline-unavailable graphs contain static evidence only.
 
 ![Full directed dependency multigraph](topology.png)
 
-[Vector graph](topology.svg) · [Graph JSON](graph.json.gz) · [DOT](graph.dot.gz) · [Coordinates](positions.csv.gz) · [Invariants](metrics.json)
+[Vector graph](topology.svg) · Graph JSON (local run data) · DOT (local run data) · Coordinates (local run data) · Invariants (local run data)

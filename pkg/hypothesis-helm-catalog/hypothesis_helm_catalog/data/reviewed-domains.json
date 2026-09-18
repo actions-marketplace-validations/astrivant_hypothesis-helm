@@ -1,0 +1,112 @@
+[
+  {
+    "id": "containerport.containerPort",
+    "file": "containerport.json",
+    "path": [
+      "containerPort"
+    ],
+    "description": "Number of port to expose on the pod's IP address. This must be a valid port number, 0 < x < 65536.",
+    "schema": {
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "reference": "https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#ports"
+  },
+  {
+    "id": "secretvolumesource.secretName",
+    "file": "secretvolumesource.json",
+    "path": [
+      "secretName"
+    ],
+    "description": "secretName is the name of the secret in the pod's namespace to use. More info: https://kubernetes.io/docs/concepts/storage/volumes#secret",
+    "schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(?![\\s\\S])",
+      "maxLength": 253
+    },
+    "reference": "https://kubernetes.io/docs/concepts/configuration/secret/#constraints-on-secret-names-and-data"
+  },
+  {
+    "id": "secretkeyselector.name",
+    "file": "secretkeyselector.json",
+    "path": [
+      "name"
+    ],
+    "description": "Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+    "schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(?![\\s\\S])",
+      "maxLength": 253
+    },
+    "reference": "https://kubernetes.io/docs/concepts/configuration/secret/#constraints-on-secret-names-and-data"
+  },
+  {
+    "id": "deploymentspec.replicas",
+    "file": "deploymentspec.json",
+    "path": [
+      "replicas"
+    ],
+    "description": "Number of desired pods. This is a pointer to distinguish between explicit zero and not specified. Defaults to 1.",
+    "schema": {
+      "minimum": 0
+    },
+    "reference": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#replicas"
+  },
+  {
+    "id": "serviceport.protocol",
+    "file": "serviceport.json",
+    "path": [
+      "protocol"
+    ],
+    "description": "The IP protocol for this port. Supports \"TCP\", \"UDP\", and \"SCTP\". Default is TCP.",
+    "schema": {
+      "enum": [
+        "TCP",
+        "UDP",
+        "SCTP",
+        null
+      ]
+    },
+    "reference": "https://kubernetes.io/docs/concepts/services-networking/service/#protocol-support"
+  },
+  {
+    "id": "podspec.restartPolicy",
+    "file": "podspec.json",
+    "path": [
+      "restartPolicy"
+    ],
+    "description": "Restart policy for all containers within the pod. One of Always, OnFailure, Never. In some contexts, only a subset of those values may be permitted. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy",
+    "schema": {
+      "enum": [
+        "Always",
+        "OnFailure",
+        "Never",
+        null
+      ]
+    },
+    "reference": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy"
+  },
+  {
+    "id": "volumemount.mountPath",
+    "file": "volumemount.json",
+    "path": [
+      "mountPath"
+    ],
+    "description": "Path within the container at which the volume should be mounted.  Must not contain ':'.",
+    "schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "pattern": "^[^:]+$"
+    },
+    "reference": "https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#volumes-1"
+  }
+]

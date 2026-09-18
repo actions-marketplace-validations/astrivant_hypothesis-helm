@@ -87,10 +87,7 @@ jobs:
         env:
           ROOT: ${{ steps.prepare.outputs.root }}
         run: |
-          stamp="${ROOT##*-}"
-          tar -czf "$RUNNER_TEMP/refresh-prepared.tar.gz" "$ROOT" \
-            "docs/reports/bitnami-runs/bitnami-charts_$stamp" \
-            "docs/reports/prometheus-runs/prometheus-charts_$stamp"
+          tar -czf "$RUNNER_TEMP/refresh-prepared.tar.gz" "$ROOT"
       - uses: actions/upload-artifact@v7
         with:
           name: refresh-prepared
@@ -172,13 +169,15 @@ jobs:
         with:
           name: benchmark-refresh
           path: |
-            studies/
-            pkg/hypothesis_helm/benchmarking/assets/fixture/parameters/
+            pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/parameters/
             docs/benchmarking/
             docs/reports/
-            .cache/refresh/refresh-*/logs/
-            .cache/refresh/refresh-*/ci-jobs/
-            .cache/refresh/refresh-*/status.tsv
-            .cache/refresh/refresh-*/operations.json
+            studies/
+          retention-days: 30
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: refresh-resume-data
+          path: ${{ env.ROOT }}
           include-hidden-files: true
           retention-days: 30

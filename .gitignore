@@ -6,19 +6,37 @@ __pycache__/
 .ruff_cache/
 dist/
 *.egg-info/
-reports/
-benchmarks/runs/
+/reports/
+/benchmarks/
 generated-tests/
 
 .cache/
 .mypy_cache/
 .env
 
-# Retain published scan reports and their underlying measurements.
-!docs/reports/
-!docs/reports/**
-
-studies/chart-topologies/verification.json
+# Publish documents and figures only; run data and workers belong under .cache/.
+/studies/**
+!/studies/**/
+!/studies/**/*.md
+!/studies/**/*.pdf
+!/studies/**/*.png
+!/studies/**/*.svg
+/studies/**/*-runs/
+/studies/**/runs/
+/studies/**/cases/
+/studies/**/reports/
+/studies/**/helm/
+/docs/reports/**
+!/docs/reports/**/
+!/docs/reports/**/*.md
+!/docs/reports/**/*.pdf
+!/docs/reports/**/*.png
+!/docs/reports/**/*.svg
+/docs/reports/**/*-runs/
+/docs/reports/**/runs/
+/docs/reports/**/cases/
+/docs/reports/**/reports/
+/docs/reports/**/helm/
 
 # Local infrastructure state, credentials and downloaded providers.
 terraform/**/.terraform/

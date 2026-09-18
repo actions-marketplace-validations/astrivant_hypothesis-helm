@@ -45,7 +45,7 @@ used in the benchmark. The profile includes:
 - **Gate depth:** how many nested `if` conditions must be satisfied to reach a
   template branch. A **gate** is one such condition.
 - **Template fan-in:** how many input fields a template reads. This indicates
-  where interactions may occur; it does not prove those fields interact.
+  where interactions may occur. Measuring interactions requires testing their effects.
 - **Region sizes:** how many configurations the compiler groups together because
   they have matching predicted output and branch choices, before and after filtering.<sup>[\[3\]](../execution/README.md#optional-trimming)</sup>
 
@@ -53,7 +53,7 @@ The benchmark determines two separate minimums, also called **floors**: how many
 configurations to test, and how many different fields those configurations must
 change from the defaults. One configuration can change several fields. A list
 counts as one changed path. These minimums come from measured bug discovery, not
-from treating the complexity score as a number of tests.<sup>[\[4\]](../../studies/calibration-variation/README.md)</sup>
+from treating the complexity score as a number of tests.<sup>[\[4\]](<../../studies/calibration-variation/README.md>)</sup>
 
 The tool first looks for a measured profile that matches exactly. **Nearby matching**
 can use similar profiles, but only if the benchmark evidence enables that policy.
@@ -65,12 +65,11 @@ Similarity is measured one quantity at a time: the relative difference is
 these differences determines whether a profile is close enough. The allowed
 difference is called the **radius**. Among all matching profiles, the tool takes
 the largest minimum test count and the largest minimum changed-field count.
-It does not extend the evidence beyond the measured ranges.<sup>[\[5\]](../../studies/calibration-variation/MATRIX.md)</sup>
+It does not extend the evidence beyond the measured ranges.<sup>[\[5\]](<../../studies/calibration-variation/MATRIX.md>)</sup>
 
 To evaluate a radius, the study removes a chart's exact matches and checks whether
 nearby profiles still find enough of its known bugs. This reuses the generated
-benchmark charts; it is not a test on independent charts and does not guarantee
-the same fraction of bugs will be found in your chart.
+benchmark charts. Independent charts need separate validation of their bug recall.
 
 The packaged study covers 30 variants with maximum output score 24. Ordinary filtering leaves 886 cases across these variants;
 exact-profile sampling retains 875, with all known defects found across 100 seeds per variant. Nearby matching remains disabled:
@@ -89,7 +88,7 @@ The report records the reason. Baseline failures and charts that cannot be prepa
 
 This calibration applies to finite configuration plans. Non-finite path-property testing keeps ordinary filtering and
 reports that no path-property calibration is available. The preset uses the same finite-plan execution restrictions as
-`--filter`; it is not an additional sampling mode for exported pytest suites or their shards.
+`--filter`. Exported pytest suites and their shards use the path-property workflow.
 
 ## Selection and evidence
 
@@ -108,7 +107,7 @@ for execution; a timeout can prevent some selected cases from completing.
 Reports distinguish eligible, selected, omitted and protected cases, selected fields, calibration ID and matching distance.
 
 See the [proof obligations and regression matrix](TESTS.md) for the deterministic properties checked by tests.
-The [benchmark matrix](../../studies/calibration-variation/MATRIX.md) shows empirical case reduction and known-bug discovery.
+The [benchmark matrix](<../../studies/calibration-variation/MATRIX.md>) shows empirical case reduction and known-bug discovery.
 Keeping examples from every predicted output group can explain why all known bugs
 were found in these benchmark charts. The graphs do not show that random sampling
 alone would achieve the same result.
@@ -133,7 +132,7 @@ packaged runtime policy; changes to that policy should be reviewed alongside the
 
 The table describes how filtering work grows as the problem gets larger. It starts
 **after the input configurations have been generated** and excludes running Helm.
-`O(...)` describes growth in work, not a predicted duration in seconds.
+`O(...)` describes growth in work as input size increases. Runtime in seconds requires measurement.
 
 | Symbol | Meaning |
 | --- | --- |
@@ -165,23 +164,23 @@ bounded-size values; larger values add copying and serialization work, including
 
 `A` can be exponential in the number of independently varying fields. With `F` Boolean fields, the input space has `2^F`
 assignments. Component tables restrict enumeration to the fields each template uses, and branch-and-bound can skip many assignments.
-Its bounds rescan those tables, so the worst case can cost more than one exhaustive pass. There is no polynomial-time guarantee.
+Its bounds rescan those tables, so the worst case can cost more than one exhaustive pass.
 The maximum search currently allows 4,096 charged evaluations and targets a five-second budget, checked between work units;
 source loading, profiling and later topology selection add overhead. An incomplete maximum disables additional percentage sampling.
-These are the costs of establishing a maximum. The budget limits effort by allowing an unknown result; it does not turn exact maximization
-into a polynomial-time algorithm.
+These are the costs of establishing a maximum. The budget limits effort by allowing an unknown result
+when the exponential search exceeds its budget.
 
 Total runtime adds candidate generation and roughly `K × H` for execution, where `H` is the average Helm/property-test cost.
 A completed unfiltered plan has `K = N`. These expressions omit the single defaults check. Planning may dominate: full enumeration grows
 with the product of field-domain sizes, while strength-t planning must cover every valid assignment to each set of t fields.
 Trimming happens after planning and does not reduce that cost. Failure expansion can increase `K` toward the original plan. Thus filtering reduces typical execution volume without improving
-its worst-case asymptotic bound. The measured matrix records case counts; it is not a runtime speedup benchmark.
+its worst-case asymptotic bound. The measured matrix records case counts; the load test measures runtime.
 
 ### Conditions behind the comparison
 
 These are bounds for a finite, already generated plan. Variable-size values and templates are represented by `V` and `T`;
 calling the pass simply `O(N log N)` assumes their sizes stay bounded. The load test includes candidate generation in planning,
-so its total runtime is not a direct measurement of the filtering pass alone.
+so its total runtime includes both stages.
 
 For unique non-default inputs, the number retained before execution is more precise than a complexity class:
 
@@ -206,16 +205,17 @@ or when the selected inputs have materially different render costs.
 The current load test uses native Helm/render checks without external kubeconform or kubesec validation; those checks can change the per-case cost.
 
 Preserving a representative can preserve a failure **if** exact manifest equivalence is established, the property depends only on
-those manifests, the render context is fixed, and the representative is actually tested. Similar topology descriptors alone do not
-establish equivalence or guarantee recall.
+those manifests, the render context is fixed, and the representative is actually tested.
+Topology descriptors group potentially similar cases; exact equivalence requires the pruning contract.
 
 Under an ideal uniform sample without replacement, with `B` erroneous inputs among `N` fixed inputs, the probability of missing all
-of them in `k` tests is `C(N-B, k) / C(N, k)`. This is a model for percentage sampling, not a guarantee supplied by a deterministic seed.
+of them in `k` tests is `C(N-B, k) / C(N, k)`. This probability is over uniformly drawn samples;
+a deterministic seed selects one reproducible sample.
 Protected representatives and adaptive field floors make adaptive sampling nonuniform, so that formula cannot be applied to it unchanged.
 
 For independent, uniformly chosen Boolean fields, a specified chain of `g` gates is reached with probability `2^-g`.
 Constraints or correlated fields invalidate that calculation. The load fixture has unconstrained Boolean fields; its gate depths
 therefore provide controlled changes in branch rarity and symbolic region structure.
 
-See the [real Helm load test](../../studies/filtering/README.md) for runtime, planning, completed-work and phase graphs.
+See the [real Helm load test](<../../studies/filtering/README.md>) for runtime, planning, completed-work and phase graphs.
 Reproduce it with `hypothesis-helm-benchmark filtering --output .cache/benchmarks/filtering --time-limit 9m`.

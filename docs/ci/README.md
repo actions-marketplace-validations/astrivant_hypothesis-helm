@@ -34,7 +34,7 @@ For a single chart, use progressively broader coverage as changes approach a rel
 | Changes on `main` | `--filter` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
 | Before tagging a release | `--exhaustive` | 4 vCPU / 8 GiB | `--jobs 4` | 1 |
 
-These are starting allocations, not measured resource minimums or completion guarantees.
+Use these starting allocations to collect measurements for your workload.
 Use one CI job per chart: two workers for filtered checks, or four workers for exhaustive release checks.
 Apply the same starting allocations to dependency-heavy charts, then adjust using measured throughput.
 Exhaustive testing parallelizes within that job; it cannot split one chart across CI shards.
@@ -152,7 +152,7 @@ update the `parallel.matrix` on both `helm-properties` and `helm-report`.
 
 GitLab requires a public raw YAML URL for
 [`include:remote`](https://docs.gitlab.com/ci/yaml/#includeremote).
-Use `raw.githubusercontent.com`, rather than a GitHub HTML page.
+Use `raw.githubusercontent.com` to serve the YAML content.
 
 ## CircleCI
 
@@ -281,7 +281,7 @@ jobs:
 
 The [action](../../action.yml) installs the tools and uploads per-shard reports.
 See [action inputs and outputs](../ci.md#github-action) for worker, cache and artifact settings.
-Its [Bash invocation](../../pkg/hypothesis_helm/integrations/github_action.sh) keeps
+Its [Bash invocation](../../pkg/hypothesis-helm/hypothesis_helm/integrations/github_action.sh) keeps
 command flags at the execution site; Python handles shard metadata, cancellation
 and action outputs.
 
@@ -327,7 +327,7 @@ Every sharded example has a downstream aggregation job. Its core command is:
 
 ```sh
 cat downloaded/*/report.json | hypothesis-helm aggregate \
-  --shards 3 --run-id "$HH_RUN_ID" --output-dir reports/final
+  --shards 3 --run-id "$HH_RUN_ID" --output-dir docs/reports/final
 ```
 
 All shards must receive the same run ID. Upload idle shards too: a missing report
@@ -358,7 +358,7 @@ Content-derived keys still reject incompatible results.
 | GitLab | Configure the runner cache backend's lifecycle/cleanup policy for **30 days or longer**. CI YAML cannot set cache expiry. [GitLab caching](https://docs.gitlab.com/ci/caching/) |
 | GitHub | Native caches can be removed after **seven idle days**, or earlier under storage pressure. The example also saves a **30-day artifact snapshot** of the schemas and outcomes. [GitHub cache limits](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching) |
 
-GitHub snapshots are a fallback, not an automatic cache restore. To recover one
+GitHub snapshots support explicit recovery. To restore one
 from a previous trusted trunk run before executing the next run's tests:
 
 ```sh
@@ -434,7 +434,7 @@ An explicit `--base-ref` takes precedence. See [incremental repository tests](..
 
 Verified examples can be reduced while preserving valid, nonempty output.
 Invalid examples are also exported, with the validation failure recorded for review.
-The exporter does not claim a global minimum. See [verification and limits](../inputs/README.md).
+A completed reduction establishes deletion-minimality under its validation checks. See [verification and limits](../inputs/README.md).
 
 ## Optional percentage sampling
 
@@ -445,7 +445,7 @@ cases. Use identical settings and seeds on every shard; aggregation checks that
 they used the same policy and population.
 
 The [sampling guide](../execution/README.md#percentage-sampling) explains selection
-units, protected cases, and why this does not guarantee a particular bug recall.
+units, protected cases and the factors that determine bug discovery.
 
 ## Remote VM shards
 

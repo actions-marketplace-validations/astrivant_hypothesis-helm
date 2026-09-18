@@ -3,49 +3,65 @@
 <!-- toc:start -->
 **Table of contents**
 
-- [Combined workers](#combined-workers)
-- [Coordinator](#coordinator)
-- [Individual workers and captures](#individual-workers-and-captures)
+- [coordinator-36025-ab7347375e8c7d1c603de5a78f29568b](#coordinator-36025-ab7347375e8c7d1c603de5a78f29568b)
+- [worker-36044-badfc76279a0d2bdf15d475e44a225c3](#worker-36044-badfc76279a0d2bdf15d475e44a225c3)
+- [worker-36046-7faf62365a98e1dfa9c593c7333b7075](#worker-36046-7faf62365a98e1dfa9c593c7333b7075)
+- [worker-36047-23900f1861e6b1193d08dc5836c29638](#worker-36047-23900f1861e6b1193d08dc5836c29638)
+- [worker-36052-01f54125d079f002a319a52b1f525bbc](#worker-36052-01f54125d079f002a319a52b1f525bbc)
+- [worker-36053-12109a221eb87bdba518034b731fa12b](#worker-36053-12109a221eb87bdba518034b731fa12b)
+- [workers-combined](#workers-combined)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md#flame-graphs-across-worker-cores)
+[Benchmarking](<../../docs/benchmarking/README.md#flame-graphs-across-worker-cores>)
 
-These captures come from a scaling smoke test with four cases and worker settings of one and two.
-They illustrate the profiler; they are not measurements from the Bitnami or Prometheus scans.
-Five worker processes were captured across the scaling invocations, along with their coordinator.
+Fresh captures from a separate scaling run with four cases and one or two workers.
+Profiling adds overhead, so these captures do not contribute to the uninstrumented timing studies.
 
-Wider boxes mean more time in a function and its children. Stacked boxes show who called whom.
-The combined graph adds worker time across processes, including overlapping execution.
-Helm subprocess waits appear under their Python callers; Helm's internal functions are not shown.
+Wider boxes mean more time in a function and its children; stacked boxes show who called whom.
+Combined workers sum overlapping process time. Helm waits appear under Python callers; Helm internals are not profiled.
 
-## Combined workers
+Captured 6 profiles across 5 worker processes.
+Recording limits and incomplete captures are reported in the capture index (local run data).
+Raw captures (local run data) retain the measured stacks for redrawing.
 
-![Combined worker flame graph](workers-combined.png)
+## coordinator-36025-ab7347375e8c7d1c603de5a78f29568b
+
+![coordinator-36025-ab7347375e8c7d1c603de5a78f29568b](coordinator-36025-ab7347375e8c7d1c603de5a78f29568b.png)
+
+[Open zoomable SVG](coordinator-36025-ab7347375e8c7d1c603de5a78f29568b.svg)
+
+## worker-36044-badfc76279a0d2bdf15d475e44a225c3
+
+![worker-36044-badfc76279a0d2bdf15d475e44a225c3](worker-36044-badfc76279a0d2bdf15d475e44a225c3.png)
+
+[Open zoomable SVG](worker-36044-badfc76279a0d2bdf15d475e44a225c3.svg)
+
+## worker-36046-7faf62365a98e1dfa9c593c7333b7075
+
+![worker-36046-7faf62365a98e1dfa9c593c7333b7075](worker-36046-7faf62365a98e1dfa9c593c7333b7075.png)
+
+[Open zoomable SVG](worker-36046-7faf62365a98e1dfa9c593c7333b7075.svg)
+
+## worker-36047-23900f1861e6b1193d08dc5836c29638
+
+![worker-36047-23900f1861e6b1193d08dc5836c29638](worker-36047-23900f1861e6b1193d08dc5836c29638.png)
+
+[Open zoomable SVG](worker-36047-23900f1861e6b1193d08dc5836c29638.svg)
+
+## worker-36052-01f54125d079f002a319a52b1f525bbc
+
+![worker-36052-01f54125d079f002a319a52b1f525bbc](worker-36052-01f54125d079f002a319a52b1f525bbc.png)
+
+[Open zoomable SVG](worker-36052-01f54125d079f002a319a52b1f525bbc.svg)
+
+## worker-36053-12109a221eb87bdba518034b731fa12b
+
+![worker-36053-12109a221eb87bdba518034b731fa12b](worker-36053-12109a221eb87bdba518034b731fa12b.png)
+
+[Open zoomable SVG](worker-36053-12109a221eb87bdba518034b731fa12b.svg)
+
+## workers-combined
+
+![workers-combined](workers-combined.png)
 
 [Open zoomable SVG](workers-combined.svg)
-
-## Coordinator
-
-![Coordinator flame graph](coordinator-24976.png)
-
-[Open zoomable SVG](coordinator-24976.svg)
-
-## Individual workers and captures
-
-[Worker 25005](worker-25005.svg) · [Worker 25040](worker-25040.svg) · [Worker 25041](worker-25041.svg) ·
-[Worker 25073](worker-25073.svg) · [Worker 25074](worker-25074.svg)
-
-All six captures completed, but the profiler reached its recording limits: 2,722,562 events were
-charged to retained ancestors instead of recorded as separate detail. Profiling also adds overhead.
-Use these plots to inspect call structure, rather than compare uninstrumented benchmark timings.
-
-[Capture index](index.json) · [Raw captures](captures.tar.gz) · [Artifact checksums](sha256.json)
-
-To redraw the saved captures from the repository root:
-
-```sh
-mkdir -p benchmarks/runs/flamegraph-captures
-tar -xzf studies/flamegraphs/captures.tar.gz -C benchmarks/runs/flamegraph-captures
-hypothesis-helm-benchmark flamegraph benchmarks/runs/flamegraph-captures \
-  --output benchmarks/runs/flamegraphs
-```

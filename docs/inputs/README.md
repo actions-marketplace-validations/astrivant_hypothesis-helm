@@ -69,8 +69,8 @@ that a literal `if true` or `if false` makes unreachable.
 
 This count is a **lower bound**: the chart may read additional fields through
 computed keys or template code the compiler cannot resolve. Those unknowns are
-listed separately. The count tells you what the audit found, not how many fields
-are guaranteed to change the rendered output.<sup>[\[1\]](#export-the-input-to-output-graph)</sup>
+listed separately. The count describes discovered input paths. Their effect on
+rendered output depends on the template and the selected values.<sup>[\[1\]](#export-the-input-to-output-graph)</sup>
 
 Whole-chart tests and scans measure against the same inventory. `present_count`
 counts fields supplied to a render attempt. `varied_count` counts fields whose
@@ -78,8 +78,8 @@ merged values changed or were removed relative to the original baseline.
 Unchanged defaults do not count as variation. Failed render attempts count;
 candidates skipped because their output is proven equivalent do not. Across testing
 phases, each field is counted only once. Unvaried paths stay visible.
-A zero-field inventory has no percentage, rather than reporting 100% coverage.
-These measurements do not prove branch, interaction, or output coverage.
+A zero-field inventory has no percentage. Branch, interaction and output coverage
+require separate measurements.
 Generated path suites record the inventory and planned known fields in
 `paths.json`; planning is not reported as executed variation.
 
@@ -123,13 +123,12 @@ If validation fails, **the illustrative YAML is still exported**, with
 `verified: false` and the error in the `.proof` file. For example,
 an integer without a supplied value or declared default gets `0`, even when a
 schema requires at least `1`; validation flags that mismatch for the engineer.
-This file demonstrates configuration and is not a deployment certificate.
+Use the verification record to review the example before deployment.
 
 `--minimal-values-timeout 30s` bounds verification and reduction. A completed,
 verified reduction establishes **deletion-minimality**: no remaining entry can be
-removed on its own while still passing those checks. It does not prove that a
-different set of values, or removing several entries together, could not produce
-a smaller valid configuration.<sup>[\[2\]](#verification-record)</sup>
+removed on its own while still passing those checks. A different set of values,
+or removing several entries together, may produce a smaller valid configuration.<sup>[\[2\]](#verification-record)</sup>
 A timeout preserves the last verified candidate, or the deterministic example
 if verification never completed. Elapsed time stays in the CLI/run report so
 repeated completed YAML and proof exports remain stable. Original chart inputs are untouched.
@@ -146,8 +145,8 @@ A custom YAML basename produces a matching `.proof` basename. The proof records:
 - The full input-field inventory and source references.
 
 Verification metadata lives in the proof; missing-field metadata remains after
-`---` in the YAML. The proof is an evidence record, not an assertion that every
-export is valid or globally minimal. It uses a versioned JSON format and is
+`---` in the YAML. The proof records verification outcomes and the reduction
+status. It uses a versioned JSON format and is
 published after the YAML, with the checksum binding it to those exact YAML bytes.
 Export timestamps and elapsed time remain in the CLI/run report, outside the
 committed proof. Pre-commit and optional CI commit-back keep both files together.
@@ -178,8 +177,8 @@ an arrow connects related nodes. The compiler removes branches it can prove will
 never run. Computed lookups and code it cannot interpret are marked unresolved.
 
 Reference edges describe potential influence, and rendered edges describe one
-observed baseline. The graph does not claim exact per-field causality or complete
-output-space coverage. It records paths and types rather than manifest values.
+observed baseline. The graph records paths and types. Causal attribution and
+output-space coverage require further analysis across input configurations.
 If the baseline cannot render, static evidence is still exported with output
 observation marked unavailable. Default names are
 `topological-graph-<checksum>-<epoch>.json`; scans keep each chart's graph separate.
@@ -212,11 +211,10 @@ when arrow direction is ignored (**weak components**), nodes with no arrows
 not nested `if` statements or manifest nesting. A cycle, where following arrows
 leads back to a previous node, is reported as an error.
 
-These are graphs of the compiler's available evidence. Potential references and
-baseline observations do not prove exact causal influence; opaque access remains
-explicitly unresolved.
+These graphs combine potential references with baseline observations.
+Opaque access remains explicitly unresolved.
 
-The [topology catalog](../../studies/chart-topologies/README.md) contains rendered
+The [topology catalog](<../../studies/chart-topologies/README.md>) contains rendered
 graphs for the synthetic fixtures and the Bitnami and Prometheus chart collections.
 
 ## Deterministic type constants

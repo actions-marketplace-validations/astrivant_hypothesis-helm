@@ -1,0 +1,145 @@
+"""
+Resolve and report the generation-only domain for one chart.
+"""
+
+import copy
+import hashlib
+import json
+
+from attrs import field, frozen
+from jsonschema import validators
+from ruamel.yaml.error import YAMLError
+
+from hypothesis_helm.charts.model import Chart, _schema_nodes
+from hypothesis_helm.schemas.characters import character_sets as active_character_sets
+from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.policy import inherited_policy, path_parts, restrict
+from hypothesis_helm.schemas.selectors import matching_rules
+from hypothesis_helm.schemas.settings import generation_settings, settings_at
+
+
+@frozen
+class InputDomains:
+    """
+    Keep source contracts separate from explicit and destination-derived test domains.
+
+    Attributes:
+        rules (list[dict[str, object]]): Resolved chart-specific constraints.
+        diagnostics (list[dict[str, object]]): Unresolved destinations and default conflicts.
+        identity (str): Stable content digest for reports and caching.
+        character_sets (str): Generated text alphabet saved with this domain snapshot.
+        generation (dict[str, object]): Frozen per-branch text and Hypothesis settings.
+    """
+
+    rules: list[dict[str, object]]
+    diagnostics: list[dict[str, object]]
+    identity: str
+    character_sets: str = "ascii"
+    generation: dict[str, object] = field(factory=dict)
+
+    @classmethod
+    def build(cls, chart: Chart) -> "InputDomains":
+        """
+        Resolve configured paths and conservative destination mappings once per chart.
+
+        Args:
+            chart (Chart): Original chart and unchanged source values.
+
+        Returns:
+            InputDomains: Domain policy with explicit evidence and limitations.
+        """
+        from hypothesis_helm.charts.generate import coalesce
+        from hypothesis_helm.compiler.passes.domains import project
+
+        policy = inherited_policy()
+        diagnostics: list[dict[str, object]] = []
+        try:
+            schema = coalesce(chart).schema
+        except (ValueError, YAMLError) as inference_error:
+            # Optional domain analysis must not turn an unsupported inferred type
+            # into an audit failure. Declared types remain usable evidence.
+            schema = chart.schema
+            diagnostics.append({"reason": "inferred domains unavailable; using declared paths only", "detail": str(inference_error)})
+        generation = generation_settings(chart.path)
+        rules: list[dict[str, object]] = []
+        for rule in matching_rules(chart.path):
+            path = path_parts(str(rule["path"]))
+            settings_at(generation, path)
+            if "schema" not in rule:
+                continue
+            if not _schema_nodes(schema, path, schema):
+                raise ValueError(f"Input constraint {rule['path']} has no known path in chart {chart.path.name}")
+            rules.append({**rule, "path": list(path)})
+        projected, projection_diagnostics = project(chart.path, schema) if policy.get("downstream_inputs", True) else ([], [])
+        diagnostics.extend(projection_diagnostics)
+        for rule in projected:
+            path = tuple(str(part) for part in sequence(rule["path"]))
+            nodes = _schema_nodes(schema, path, schema)
+            kinds = {str(node["type"]) for node in nodes if isinstance(node.get("type"), str)}
+            if rule["quoted"] and kinds != {"string"}:
+                diagnostics.append({"path": list(path), "reason": "quote converts a non-string or unknown input; domain unchanged"})
+                continue
+            if not kinds or not kinds <= {"string", "integer", "number", "boolean"}:
+                diagnostics.append({"path": list(path), "reason": "direct mapping has no unambiguous scalar input type"})
+                continue
+            try:
+                for node in nodes:
+                    restrict(node, (), mapping(rule["schema"]))
+            except ValueError:
+                diagnostics.append({"path": list(path), "reason": "destination type or bounds conflict with source; domain unchanged"})
+                continue
+            rules.append(rule)
+        selected = active_character_sets()
+        identity = hashlib.sha256(
+            json.dumps({"rules": rules, "character_sets": selected, "generation": generation}, sort_keys=True).encode()
+        ).hexdigest()
+        result = cls(rules, diagnostics, identity, selected, generation)
+        restricted = result.apply(schema)
+        validator = validators.validator_for(restricted)(restricted)
+        for error in validator.iter_errors(json_value(chart.defaults)):
+            # Only report newly introduced conflicts, not unrelated original schema gaps.
+            if validators.validator_for(schema)(schema).is_valid(json_value(chart.defaults)):
+                diagnostics.append(
+                    {"path": list(error.absolute_path), "reason": "supplied default outside generation domain", "detail": error.message}
+                )
+        return result
+
+    def apply(self, schema: dict[str, object]) -> dict[str, object]:
+        """
+        Intersect every applicable rule, preserving conditional resource activation.
+
+        Args:
+            schema (dict[str, object]): Original, coalesced or focused generation contract.
+
+        Returns:
+            dict[str, object]: Generation-only copy of the contract.
+        """
+        result = copy.deepcopy(schema)
+        for rule in self.rules:
+            path = tuple(str(part) for part in sequence(rule["path"]))
+            restriction = mapping(rule["schema"])
+            guards = sequence(rule.get("guards", []))
+            if guards:
+                sequence(result.setdefault("allOf", [])).append({"if": {"allOf": guards}, "then": restrict({}, path, restriction)})
+            else:
+                try:
+                    result = restrict(result, path, restriction)
+                except ValueError as exc:
+                    raise ValueError(f"Input domain at $.{'.'.join(path)}: {exc}") from exc
+        return result
+
+    def report(self) -> dict[str, object]:
+        """
+        Expose reduced coverage and unchanged defaults in machine-readable reports.
+
+        Returns:
+            dict[str, object]: Active rules, provenance and unresolved mapping diagnostics.
+        """
+        return {
+            "identity": self.identity,
+            "character_sets": self.character_sets,
+            "generation": self.generation,
+            "constraints": self.rules,
+            "diagnostics": self.diagnostics,
+            "scope": "generated cases satisfying these input domains; supplied defaults are tested unchanged",
+        }

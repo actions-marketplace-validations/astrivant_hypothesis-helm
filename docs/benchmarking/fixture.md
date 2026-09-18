@@ -6,14 +6,14 @@
 - [One configurable benchmark chart](#one-configurable-benchmark-chart)
 <!-- toc:end -->
 
-[Benchmarking](README.md) · [Chart](../../pkg/hypothesis_helm/benchmarking/assets/chart)
+[Benchmarking](README.md) · [Chart](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/chart)
 
 The generator is the common chart definition for every synthetic study. A command
 compiles each setting into the same temporary directory, measures it, and saves its
 parameters. It releases the directory after the command's workers finish. Concurrent
 commands use separate directories.
 
-The [combined stress parameters](../../pkg/hypothesis_helm/benchmarking/assets/chart/benchmark-parameters.yaml)
+The [combined stress parameters](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/chart/benchmark-parameters.yaml)
 start with twelve named Boolean inputs and the controls below. Edit the parameter
 file and regenerate the chart to change its shape. The generated `values.yaml`
 contains the inputs that vary during testing; the topology controls are held fixed
@@ -33,7 +33,7 @@ for each measurement.
 plus those changes gives 22 measurements per strategy. Field names, defect triggers,
 and seed remain fixed. Removing constraints increases the valid input space;
 removing equivalent inputs can increase render cost. Costs need not decrease at
-every step. This is a deliberately difficult case, not a proven maximum.
+every step. The case combines constraints chosen to stress planning and rendering.
 
 The defects produce an incorrect ConfigMap value for known input interactions.
 The study's independent oracle detects these semantic errors; ordinary YAML or
@@ -62,16 +62,16 @@ The time limit applies to each strategy at each step, not the whole command.
 Five strategies run at each setting: unfiltered, exact equivalence, random,
 topology, and combined. Time-limited results show only the work completed.
 
-Other studies select profiles of this same generator: [normal quantiles](../../pkg/hypothesis_helm/benchmarking/assets/fixture/standard.yaml),
-[gated resources](../../pkg/hypothesis_helm/benchmarking/assets/fixture/topology.yaml), individual topology categories, mixed depths, and
+Other studies select profiles of this same generator: [normal quantiles](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/standard.yaml),
+[gated resources](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/topology.yaml), individual topology categories, mixed depths, and
 seeded faults. Their existing distribution and fault controls remain available.
 
 ```sh
-hypothesis-helm-benchmark --parameters pkg/hypothesis_helm/benchmarking/assets/fixture/standard.yaml \
+hypothesis-helm-benchmark --parameters pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/standard.yaml \
   run --time-limit 9m --output .cache/benchmarks/performance
 ```
 
 Each retained case records generator parameters, fault operations, and oracle
 metadata. Replay requires the matching generator version; measurement metadata
 records the application source fingerprint. Historical published results keep
-their original snapshots rather than being relabeled as new measurements.
+their original snapshots and measurement provenance.

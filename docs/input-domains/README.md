@@ -1,0 +1,358 @@
+# Input domains
+
+<!-- toc:start -->
+**Table of contents**
+
+- [Character sets](#character-sets)
+- [Default destination catalog](#default-destination-catalog)
+- [Chart-specific constraints](#chart-specific-constraints)
+- [Complete configuration example](#complete-configuration-example)
+  - [Inheritance and test budgets](#inheritance-and-test-budgets)
+  - [Character exclusions](#character-exclusions)
+  - [Source and chart matrices](#source-and-chart-matrices)
+- [Opaque objects: HH2006](#opaque-objects-hh2006)
+- [Custom resources](#custom-resources)
+- [Coverage and reproducibility](#coverage-and-reproducibility)
+- [Rebuilding the catalog before release](#rebuilding-the-catalog-before-release)
+<!-- toc:end -->
+
+Input domains control which values Hypothesis generates and shrinks. For example, a Secret reference can use a valid
+Secret name while its activation flag still varies. This avoids spending the test budget on `secretName: ">0"`, while
+keeping YAML validation enabled for the configurations that are tested.
+
+## Character sets
+
+Generated strings and arbitrary map keys use ASCII by default. Tabs and other control characters are excluded by default;
+line feeds (`\n`) and carriage returns (`\r`) remain available for multiline configuration.
+ASCII punctuation is still tested. This restriction applies before rendering, in both normal and deferred sampling.
+
+To include Unicode text, set the mode in `.hypothesis-helm.yaml`:
+
+```yaml
+hypothesis:
+  character_sets: unicode
+```
+
+Or override the config for one command:
+
+```sh
+helm hypothesis test ./chart --filter --character-sets unicode
+helm hypothesis scan https://github.com/example/charts.git --character-sets ascii
+```
+
+`--character-sets ascii|unicode` is available on `test`, `scan`, `run`, `generate` and `audit`.
+The CLI overrides the global config default; more specific branch rules still apply. Reports and saved suites record the mode, workers inherit it,
+and changing it invalidates cached test successes.
+
+Supplied defaults, explicitly declared property names, and exact `enum`/`const` strings are not rewritten to ASCII.
+The configured control-character restriction still applies to sampled enum/const values. Finite exhaustive enumeration
+retains its declared domain. A pattern requiring non-ASCII generated text needs `unicode`; incompatible restrictions
+produce a generation diagnostic rather than relaxing the schema.
+
+The underlying generators support an [encoding constraint](https://github.com/python-jsonschema/hypothesis-jsonschema#api).
+We also constrain nested values from unconstrained schemas, where a generic JSON strategy may produce Unicode.
+
+## Default destination catalog
+
+`hypothesis_helm_catalog` ships a versioned catalog extracted from Kubernetes 1.35.0 schemas used by kubeconform.
+No network access is needed to use it. With `--kubeconform`, generation uses the selected cached schema version instead.
+Reviewed descriptions supplement that schema only while their text still matches the reviewed source.
+
+The compiler follows direct `.Values.field` references to entire manifest scalar values, including string `| quote`.
+It retains supported Boolean and string-equality branch conditions. A restriction applies only when the branch emits
+that field. Helpers, loops, computed values, concatenation, ambiguous types and more than 64 branch variants remain
+unresolved. A template containing unsupported output is left unchanged and its limitation is reported.
+
+The catalog imports explicit scalar constraints and integer format limits. It also includes these reviewed supplements:
+
+| Destination | Generated domain | Evidence |
+| --- | --- | --- |
+| Container `containerPort` | Integers 1 through 65,535 | Published field description states the range |
+| Deployment `replicas` | Nonnegative integers, including zero | Replica semantics and the published int32 format |
+| Secret volume/key references | DNS subdomain names, at most 253 characters | Secret naming rules |
+| Service port `protocol` | `TCP`, `UDP`, `SCTP` | Published supported protocols |
+| Pod `restartPolicy` | `Always`, `OnFailure`, `Never` | Published alternatives; a particular workload can require a subset |
+| Volume `mountPath` | Nonempty strings without `:` | Published mount-path restriction |
+
+Nullable upstream fields retain their nullable domain; a chart's narrower type still takes precedence.
+Unclear prose does not justify invented limits. There is no blanket punctuation ban and no guessing based on a values key's name.
+Passwords, commands and other free-form strings keep their declared schema constraints, subject to the selected character set
+and any known destination or explicit input policy.
+
+Kubernetes explains that [published validation schemas can be incomplete](https://kubernetes.io/docs/concepts/overview/kubernetes-api/).
+These domains do not replace kubeconform, admission checks or a server-side dry run.
+See [Secret name constraints](https://kubernetes.io/docs/concepts/configuration/secret/#constraints-on-secret-names-and-data)
+and the [schema source repository](https://github.com/yannh/kubernetes-json-schema).
+
+## Chart-specific constraints
+
+Use `.hypothesis-helm.yaml`, or select a file with `--config`:
+
+```yaml
+input_constraints:
+  - charts: [external-dns]
+    path: $.txtEncrypt.secretName
+    profile: kubernetes-secret-name
+    allow_empty: true
+  - charts: [external-dns]
+    path: $.aws.credentials.mountPath
+    profile: absolute-posix-path
+```
+
+`charts` matches names from `Chart.yaml`, using exact names or case-sensitive glob patterns. It also accepts
+[source/name matrices](#source-and-chart-matrices). Paths accept `$`, dotted object keys and array-item selectors such as
+`$.containers[*].name`. Unknown paths are errors for schema/profile restrictions; settings and finding rules can target
+branches that are not present in the defaults.
+`allow_empty` retains an intentional empty-string branch but cannot override a chart schema that forbids empty strings.
+
+The `absolute-posix-path` profile requires a leading `/` and excludes NUL and line breaks. It does not check that a file exists.
+For a smaller application-specific domain, replace `profile` with an inline JSON Schema:
+
+```yaml
+input_constraints:
+  - charts: [external-dns]
+    path: $.aws.credentials.mountPath
+    schema:
+      type: string
+      enum: ["/.aws", "/etc/aws", "/var/run/aws"]
+```
+
+Set `downstream_inputs: false` to disable automatic destination constraints. Explicit `input_constraints` still apply.
+This switch is useful when deliberately testing how templates handle values outside the downstream API's domain.
+Inline constraints must be self-contained: `$ref`, `$dynamicRef`, `$recursiveRef`, and `$id` are rejected because embedding them
+under a values path would change how their references resolve. Resource schemas can use local references within their own document.
+
+Rules also accept `ignored: [HH2001]` and `enabled: [HH2006]` to control findings for a values branch.
+These lists can appear alongside a `profile` or `schema`, or on their own without changing generated values.
+See [path-specific finding controls](../rules/README.md#controls-for-individual-values-paths) for precedence and multi-field failures.
+
+## Complete configuration example
+
+This example covers every supported local configuration field. Start with
+`helm hypothesis --generate-config > .hypothesis-helm.yaml` for a safe template whose optional examples are commented out.
+Uncomment only the rules for your charts. The example resource schema is available at
+[schemas/widget.json](schemas/widget.json); supply your own schema when testing a real custom resource.
+
+<!-- [[[cog
+import cog
+from hypothesis_helm.findings.configuration import COMPLETE_EXAMPLE
+cog.outl("```yaml")
+cog.out(COMPLETE_EXAMPLE)
+cog.outl("```")
+]]] -->
+```yaml
+ignored: [HH2006]  # Other findings remain enabled.
+
+# Global defaults for fresh generated text; supplied values are preserved.
+downstream_inputs: true  # Use constraints from supported downstream field mappings.
+hypothesis:
+  character_sets: ascii  # ascii or unicode; explicit enum/const literals retain their alphabet.
+  control_characters:
+    exclude: true  # Exclude U+0000-U+001F and U+007F-U+009F, including tabs and DEL.
+    allow: ["\n", "\r"]  # Exceptions; [] excludes every control character.
+  exclude_characters: ""  # Additional literal characters to exclude, e.g. ">|".
+  max_examples: 10  # Per path property, not a shared budget for a branch.
+  deadline_ms: null  # No Hypothesis per-example deadline; chart/render timeouts still apply.
+  phases: [generate, shrink]  # Use [generate] to omit shrinking.
+  suppress_health_check: [too_slow]  # Use [] to retain all ordinary health checks.
+
+input_constraints:
+  - charts:
+      # Every source/name pairing in this row is eligible. Patterns are case-sensitive.
+      - sources:
+          - https://github.com/example/charts.git
+          - git@github.com:example/charts.git
+          - ./charts
+        names: [example, example-worker]
+    path: $  # Whole chart; descendants inherit these partial overrides.
+    hypothesis:
+      character_sets: ascii
+      max_examples: 20
+
+  - charts: [example]  # Chart.yaml names or glob patterns; any source.
+    path: $.credentials
+    ignored: [HH2001]  # Silence this code only within this branch.
+    hypothesis:
+      max_examples: 30
+      deadline_ms: 5000
+
+  - charts: [example]
+    path: $.credentials.secretName
+    profile: kubernetes-secret-name
+    allow_empty: true  # Only if the chart's own schema also permits an empty string.
+    enabled: [HH2001]  # More specific than the credentials suppression.
+
+  - charts: [example]
+    path: $.credentials.mountPath
+    profile: absolute-posix-path  # Alternative to a self-contained inline schema.
+
+  - charts: [example]
+    path: $.containers[*].label
+    schema:
+      type: string
+      minLength: 1
+      maxLength: 40
+    hypothesis:
+      character_sets: unicode
+      control_characters:
+        exclude: true
+        allow: []
+      exclude_characters: ">|"
+      max_examples: 50
+      phases: [generate]
+      suppress_health_check: [too_slow, filter_too_much]
+
+# Whole-resource JSON schemas, relative to this configuration file.
+# Remove this entry until you supply the schema; it is required when present.
+resource_schemas:
+  example.org/v1/Widget: ./schemas/widget.json
+```
+<!-- [[[end]]] -->
+
+### Inheritance and test budgets
+
+All text-generation and example controls live under `hypothesis`, globally or within an `input_constraints` rule.
+Top-level `character_sets`, `control_characters` and `exclude_characters` are not accepted.
+
+Global settings are defaults. A rule's `path` applies to that branch and its descendants; the deepest matching rule wins
+for each setting independently. For example, overriding `max_examples` retains the inherited deadline and phases.
+Conflicting generation settings at equal path depth are configuration errors. Schema/profile restrictions intersect;
+[finding controls](../rules/README.md#controls-for-individual-values-paths) have their own suppression rules.
+
+`--max-examples` and `--character-sets` override global defaults, while branch rules remain more specific.
+`hypothesis.max_examples` sets the number of successful generated examples **per selected path property**.
+For example, three selected paths under a branch with `max_examples: 20` can run up to 60 successful examples.
+Baseline renders, rejected candidates, failure reproduction and shrinking can add attempts.
+Timeouts and `--fail` can end testing earlier. Whole-document sampling uses root settings.
+Finite permutation plans and exhaustive enumeration retain their explicit cases; this setting does not truncate them.
+
+`deadline_ms` is Hypothesis' per-example deadline, separate from Helm invocation and chart timeouts. It defaults to `null`
+because render times vary across machines. `phases` accepts `generate` and optional `shrink`; `generate` is required.
+`--fail` disables shrinking to stop on the first finding. `suppress_health_check` accepts Hypothesis health-check names:
+`data_too_large`, `filter_too_much`, `too_slow`, `large_base_example`, `function_scoped_fixture`,
+`differing_executors`, and `nested_given`. Normally only `too_slow` is suppressed.
+When the compiler rejects inputs known to violate chart constraints, the runner also suppresses `filter_too_much`.
+
+### Character exclusions
+
+`hypothesis.control_characters.exclude: true` excludes U+0000 through U+001F and U+007F through U+009F. That includes tabs and DEL.
+The default `allow: ["\n", "\r"]` permits multiline text. Set `allow: []` to exclude every control character, or add
+`"\t"` to deliberately test tabs in a particular branch. `exclude: false` permits all controls in the selected alphabet.
+`hypothesis.exclude_characters` is a literal string of additional exclusions, not a regex; it takes precedence over `allow`.
+ASCII means U+0000 through U+007F before these exclusions. Unicode mode uses UTF-8 encodable characters.
+
+These settings apply to fresh strings and map keys, including descendants generated together in an object or array.
+They do not rewrite supplied chart defaults. Generated candidates still have to satisfy the chart's schema; a pattern
+requiring only forbidden characters is unsatisfiable and is reported as a generation problem. Explicit finite enum/const
+plans retain their declared cases. All generation settings are saved with suites and included in cache identities.
+
+### Source and chart matrices
+
+Each matrix row selects every pairing of its `sources` and `names`. Rows and simple name entries are alternatives.
+For example, two sources and three names describe six eligible source/name pairs. They restrict which charts a rule
+applies to; they do not initiate downloads or discover additional charts.
+
+Names come from `Chart.yaml`. Sources match the original URL or Helm reference passed to `scan`, or the local source
+passed to `test`, before temporary dependency preparation. Direct single-chart commands use the resolved chart directory.
+Local source patterns starting with `./`, `../`, `/` or `~` resolve relative to the config file; use `./charts` for a
+recursive local test rooted there, or `./charts/*` for individual chart directories. Source and name patterns use
+case-sensitive shell glob syntax (`*`, `?`, `[abc]`). HTTPS and SSH URLs are distinct: list both if both should match.
+Source identity is inherited by workers and retained in saved suites.
+
+## Opaque objects: HH2006
+
+An entry such as `"extraConfig": {"type": "object"}` permits arbitrary field names and values.
+It gives the generator no structure to test against: `enabled` could be a Boolean, a string or another object.
+The tool reports **HH2006: Opaque object schema** with the affected values path during audits and test planning.
+This is a schema documentation gap, not proof of a chart bug.
+
+Describe known fields with `properties`. For an intentional map of strings, use
+`"additionalProperties": {"type": "string"}`; use `patternProperties` when key patterns describe the fields.
+These declarations improve generated inputs without requiring every valid configuration to be enumerable.
+An object with named fields does not trigger HH2006 merely because additional keys are allowed.
+
+To silence this warning for intentional free-form configuration, add this to `.hypothesis-helm.yaml`:
+
+```yaml
+ignored:
+  - HH2006  # Opaque object schema
+```
+
+The repository config and `helm hypothesis --generate-config` template already include this exclusion.
+Remove or comment out that entry to enable the warning.
+The equivalent CLI option is `--disable-codes HH2006` (or `--ignore HH2006`); multiple codes can be comma-delimited.
+Suppression does not exclude these values from testing or make
+their domains finite. Audits retain suppressed findings under `ignored_findings`; `--fail` treats an unsuppressed
+HH2006 like other audit findings. See the [finding catalog](../rules/README.md#hh2006-opaque-object-schema).
+
+When a repository test cannot enumerate its input domain, it samples generated values for each selected path instead.
+Input filtering still applies. An explicit finite `--permutations` request requires a finite domain and cannot use that fallback.
+
+## Custom resources
+
+Custom resources require an explicitly supplied JSON Schema. A schema describing the values file is a different contract:
+it describes chart inputs, whereas a resource schema describes the rendered object.
+
+```yaml
+resource_schemas:
+  example.org/v1/Widget: ./schemas/widget.json
+```
+
+Paths are relative to the configuration file. Supply a schema for the **whole rendered resource**, keyed by its exact
+API version and kind. Extract the relevant version's `openAPIV3Schema` from a CRD if that is the source of its contract.
+Only local JSON references are permitted; references are never downloaded implicitly.
+The tool uses this schema for direct input mappings and validates the rendered custom resources against it.
+When kubeconform is enabled, it continues to validate built-in resources against its cached schemas.
+JSON Schema checking does not execute CRD CEL rules, admission webhooks or controller logic.
+
+Saved suites embed these schemas in `input-domains.json`, so `run` can validate custom resources even when
+the original schema files are unavailable. An explicit current configuration overrides saved schemas for the same
+API version and kind. Changes to the effective schema invalidate cached manifest validation.
+
+The [CRD integration tests](../../pkg/hypothesis-helm/hypothesis_helm/tests/test_custom_resources.py) use a
+[pinned Polyad Gate chart fixture](../../pkg/hypothesis-helm/hypothesis_helm/tests/fixtures/polyad-gate/README.md).
+They run Helm's real helper and `tpl` rendering, check schema bounds and missing contracts, exercise generated
+values and failure reports, and verify saved-suite reuse. Mixed-resource routing tests check that built-ins still
+reach kubeconform; the validator process is simulated in that test. No cluster or neighboring checkout is required.
+
+```sh
+bash scripts/project-run.sh pytest pkg/hypothesis-helm/hypothesis_helm/tests/test_custom_resources.py
+```
+
+## Coverage and reproducibility
+
+Constraints intersect the chart's schema. They affect whole-document generation, individual path properties, generated suites,
+finite plans and shrinking. Declared defaults and supplied values files are preserved and tested as the baseline.
+A default outside the generation domain appears as a diagnostic rather than being silently replaced.
+Clearly contradictory types, enum domains and bounds fail early; more complex unsatisfiable schemas can fail during generation.
+
+Reports retain the input paths, destination fields, source templates, constraints and unresolved mappings.
+Coverage refers to this restricted domain, even with `--exhaustive`; it does not include intentionally excluded inputs.
+Workers inherit the same resolved policy, and cache identities include policy contents and catalog data.
+Generated suites retain their generation constraints; regenerate a suite to remove an earlier restriction.
+
+## Rebuilding the catalog before release
+
+From a development checkout:
+
+```sh
+poetry run hypothesis-helm-catalog
+poetry run hypothesis-helm-catalog --check
+```
+
+The command fetches the pinned source revision with Git sparse checkout. For an already cached snapshot:
+
+```sh
+poetry run hypothesis-helm-catalog --schema-dir /path/to/v1.35.0-standalone-strict
+```
+
+`--schema-version` records the source version, and `--output` chooses another destination.
+The generated catalog contains source hashes and review provenance, without timestamps, so identical sources produce identical output.
+The tag-release workflow runs `--check` before building distributions.
+
+Reviewed supplements live in [reviewed-domains.json](../../pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/reviewed-domains.json).
+If an anchored description changes, rebuilding stops for review. It does not ask an LLM to invent a new bound during release.
+Update the pinned revision and reviewed rules deliberately, rebuild, run the input-domain tests, and commit the resulting catalog.
+
+
+[def]: #custom-resources

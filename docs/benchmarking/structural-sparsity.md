@@ -6,7 +6,7 @@
 - [Structural sparsity](#structural-sparsity)
 <!-- toc:end -->
 
-[Results and plots](../../studies/structural-sparsity/README.md) · [Benchmark guide](README.md)
+[Results and plots](<../../studies/structural-sparsity/README.md>) · [Benchmark guide](README.md)
 
 This extends the sparsity study in a different direction: enlarge the chart while keeping the
 parts that affect output small. It asks whether irrelevant structure adds discovery cost or
@@ -52,9 +52,9 @@ hypothesis-helm-benchmark structural-sparsity --breadths 50 200 --depths 2 8 --r
 
 Each run uses production selectors and real Helm renders, checked against an independent oracle.
 Planning uses interaction strength four so the unfiltered reference covers all 16 configurations.
-The same strength is passed to the filter presets; these are not measurements of the default pairwise setting.
+The filter presets also use strength four, so all methods share the same reference domain.
 Preset failure expansion remains enabled,
-and adaptive sampling records any fallback rather than forcing a reduction on a small domain.
+and adaptive sampling records fallbacks that retain the eligible cases on small domains.
 Fresh in-memory caches are used per method; OS caches may remain warm. Method order is shuffled
 with the repeat seed. Results include the selection decisions and exact distances.
 
@@ -64,8 +64,8 @@ enumerating the independent reference, and report serialization are outside the 
 partial counts in the ledger, and incomplete cells are excluded from completed-time averages.
 The execution ceiling does not limit planning time.
 
-Plots show mean ±1 sample standard deviation across repeats. This is observed variation, not a
-confidence interval or a guarantee of bug recall on arbitrary charts. The study reuses one
+Plots show mean ±1 sample standard deviation across repeats, describing variation within
+this fixture. Recall on other charts requires measurements of their defect populations. The study reuses one
 temporary chart and retains YAML recipes under `cases/`; refresh also includes those recipes
 in its topology visualization inventory.
 

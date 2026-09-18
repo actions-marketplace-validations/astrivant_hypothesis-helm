@@ -15,12 +15,18 @@ repos:
         files: ^(pkg|scripts)/.*\.py$
   - repo: local
     hooks:
+      - id: lfs-snapshot
+        name: Preserve published raw-data snapshot
+        entry: bash scripts/check-lfs-snapshot.sh
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: shfmt
         name: shfmt
         entry: bash scripts/project-run.sh shfmt -w
         language: system
         types: [shell]
-        files: ^(scripts/|ansible/|pkg/hypothesis_helm/(integrations|benchmarking)/)
+        files: ^(scripts/|ansible/|pkg/hypothesis-helm/hypothesis_helm/integrations/|pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/)
       - id: ruff-check
         name: Ruff lint
         entry: bash scripts/project-run.sh ruff check
@@ -40,7 +46,7 @@ repos:
         always_run: true
       - id: cli-reference
         name: Generated CLI and finding references
-        entry: bash scripts/project-run.sh cog --check docs/cli/README.md docs/rules/README.md
+        entry: bash scripts/project-run.sh cog --check README.md docs/cli/README.md docs/rules/README.md docs/input-domains/README.md
         language: system
         pass_filenames: false
         always_run: true

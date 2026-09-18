@@ -39,7 +39,7 @@ commands:
         default: .cache/hypothesis-helm/schemas
       artifact-dir:
         type: string
-        default: reports/hypothesis-helm
+        default: .cache/hypothesis-helm/runs
       report-group:
         type: string
         default: chart
@@ -156,7 +156,7 @@ jobs:
         default: .cache/hypothesis-helm/schemas
       artifact-dir:
         type: string
-        default: reports/hypothesis-helm
+        default: .cache/hypothesis-helm/runs
       report-group:
         type: string
         default: chart
@@ -345,13 +345,13 @@ jobs:
             aggregate_status=0
             cat "$source_dir"/*/report.json | hypothesis-helm aggregate \
               --shards "$HH_SHARDS" --run-id "${CIRCLE_WORKFLOW_ID}-${HH_REPORT_GROUP}" \
-              --output-dir reports/final || aggregate_status=$?
+              --output-dir docs/reports/final || aggregate_status=$?
             for status_file in "$source_dir"/*/exit-code.txt; do
               status="$(cat "$status_file")"
               if ((aggregate_status == 0 && status != 0)); then aggregate_status=$status; fi
             done
             exit "$aggregate_status"
       - store_test_results:
-          path: reports/final
+          path: docs/reports/final
       - store_artifacts:
-          path: reports/final
+          path: docs/reports/final

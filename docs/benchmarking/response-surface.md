@@ -9,7 +9,7 @@
 - [Optional symbolic regression](#optional-symbolic-regression)
 <!-- toc:end -->
 
-[Benchmarking](README.md) · [Collected and fitted surfaces](../../studies/error-surface/quadratic-fits.md)
+[Benchmarking](README.md) · [Collected and fitted surfaces](<../../studies/error-surface/quadratic-fits.md>)
 
 We expect each control to affect runtime and error discovery, and one control to change
 another's effect. A quadratic gives these hypotheses explicit terms without assuming
@@ -36,7 +36,8 @@ v = 2*(y - ymin)/(ymax - ymin) - 1
 
 All six coefficients have the response's units: seconds or erroneous input counts.
 The generated `quadratic-fits.json` records their values, bounds, cell counts and fit diagnostics.
-Other chart settings remain fixed within each surface. An erroneous input count is not a count of distinct bugs.
+Other chart settings remain fixed within each surface. Several erroneous inputs
+can trigger the same bug, so the count measures affected configurations.
 
 ## Estimation and interpretation
 
@@ -48,8 +49,8 @@ prevent fitting that surface: dropping slow measurements could bias the result.
 Each figure places measured means beside a continuous quadratic prediction and a
 residual panel (observed minus predicted). Measured labels include one sample standard
 deviation when repeats are available. Residuals reveal structure the quadratic misses.
-The continuous plot between integer settings is a model visualization, not a measurement
-or necessarily an executable chart configuration.
+The continuous plot interpolates the fitted model between measured integer settings.
+Executable chart configurations use the supported integer settings.
 
 RMSE is the typical cell-mean prediction error in the response's units. R² describes
 how much observed variation the fit explains; it is undefined when every observation
@@ -74,8 +75,8 @@ hypothesis-helm-benchmark error-surface --plot-only --output studies/error-surfa
 
 The polynomial follows the two-factor quadratic form described in the
 [NIST/SEMATECH handbook: Response surface designs](https://www.itl.nist.gov/div898/handbook/pri/section3/pri336.htm).
-Our measurement design is a full grid of the chosen factor settings, not a central
-composite or Box-Behnken design. Choosing a quadratic model does not change that design.
+Our measurement design is a full grid of the chosen factor settings.
+We fit the quadratic to observations from that grid.
 
 ## Quadratic versus quartic comparison
 
@@ -96,12 +97,12 @@ in training) and the last repeat. Both models use exactly the same remaining cel
 The report separately scores withheld settings, the withheld repeat at training settings, and
 settings withheld in that repeat. The last group tests both kinds of generalization together.
 No held-out observations select coefficients or tune the model. Scores are descriptive results
-for these measurements and this split, not guarantees for other charts.
+for these measurements and this split. Assessing other charts requires independent data.
 
 A quartic needs more than 15 training cells and a full-rank design matrix. It needs at least five
-distinct settings along each axis; that alone does not guarantee rank after withholding cells.
+distinct settings along each axis. Rank is checked after withholding cells.
 The original quick study has only three clustering settings, so its quartic is explicitly unavailable.
-We do not interpolate new training observations or silently substitute a different polynomial.
+The report retains that unavailable status until sufficient training observations exist.
 
 ```sh
 hypothesis-helm-benchmark polynomial-surface --input studies/error-surface/results.json
@@ -113,9 +114,9 @@ PNG/SVG comparisons, coefficients, exact splits and RMSE/R² scores go into a se
 and `--seed` to change the reproducible holdout. The command returns 1 when a model is unavailable,
 while still saving the available results and reasons. Neither Helm nor PySR is run by this command.
 
-[Original quick study: sparse-grid limitations](../../studies/error-surface/polynomial-comparison/README.md)
+[Original quick study: sparse-grid limitations](<../../studies/error-surface/polynomial-comparison/README.md>)
 
-[Additional 5×5 comparison](../../studies/error-surface-quartic/polynomial-comparison/README.md)
+[Additional 5×5 comparison](<../../studies/error-surface-quartic/polynomial-comparison/README.md>)
 uses eight input fields, combined filtering, two repeats and 50 completed runs.
 The original quick study and its fitted results remain unchanged.
 
@@ -141,12 +142,13 @@ then reserve 25% of factor cells (rounded upward), keeping all four corners in t
 The report scores three separate groups: unseen cells on training repeats, the unseen repeat at training cells,
 and the joint holdout of both. The seed controls the cell split. At least two complete repeats and an identifiable
 quadratic training design are required; censored or incomplete surfaces are not fitted.
-With only two repeats, this provides one held-out seed, not a reliable estimate of variation across many seeds.
+With two repeats, this evaluates one held-out seed. Estimating variation across seeds requires more repeats.
 
 The initial search permits `+`, `-`, `*`, `/`, `square`, and `exp`. It defaults to 40 iterations and a maximum
 expression complexity of 20 (`--iterations`, `--max-size`). PySR chooses an expression using its `best` criterion
 on training data; holdouts do not select the equation, tune parameters or change runtime filtering.
-This is a candidate empirical explanation, not an automatic replacement for the quadratic or a pruning guarantee.
+The expression is a candidate empirical explanation evaluated alongside the quadratic.
+Runtime pruning continues to use its existing equivalence contract.
 Repeatedly tuning against these same holdouts would invalidate their role as independent evaluation data.
 
 Search is serial and seeded (`--seed`, default 2026). `--fit-timeout` defaults to 60 seconds per model;

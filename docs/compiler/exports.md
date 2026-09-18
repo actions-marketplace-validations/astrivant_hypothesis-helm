@@ -16,21 +16,21 @@ references, observed output, and checks that actually passed.
 
 ## Input inventory export
 
-[`inputs.py`](../../pkg/hypothesis_helm/compiler/passes/inputs.py) serializes field
+[`inputs.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/inputs.py) serializes field
 locations, missing declarations, unresolved access, and coverage counts.
 `InputInventory.dump` writes concrete values and a verification record supplied
 by the minimal-values pass. Missing-field information follows the values document
 after a YAML `---` separator.
 
 The shared defaults in
-[`constants.py`](../../pkg/hypothesis_helm/compiler/constants.py) fill missing
+[`constants.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/constants.py) fill missing
 typed values deterministically. A typed zero can still violate a template or a
 downstream Kubernetes constraint. The exporter records that result instead of
 searching for arbitrary replacement values.<sup>[\[1\]](../inputs/README.md)
 
 ## Minimal values
 
-[`minimum.py`](../../pkg/hypothesis_helm/compiler/passes/minimum.py) works in an
+[`minimum.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/minimum.py) works in an
 isolated chart copy. It tries the supplied defaults, then a deterministic example
 with missing known fields filled. Each accepted candidate must pass the values
 schema, Helm lint, rendering, resource-envelope checks, and configured Kubernetes
@@ -42,8 +42,9 @@ smaller groups. Accepted removals must preserve validity without increasing the
 resource count.
 
 A completed search establishes **deletion minimality**: no single remaining
-entry can be removed under these checks. It does not prove the smallest possible
-configuration over all values, or preserve the original rendered manifests.
+entry can be removed under these checks. Changing several entries together or
+choosing other values may yield a smaller configuration. The reduction may also
+change the rendered manifests.
 Timeouts retain the best verified candidate. If neither starting candidate works,
 the illustrative export remains available with failed verification recorded.
 
@@ -53,7 +54,7 @@ status, and whether the search completed. Kubernetes API validation is explicitl
 
 ## Topological graph export
 
-[`graph.py`](../../pkg/hypothesis_helm/compiler/passes/graph.py) emits JSON and a
+[`graph.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/graph.py) emits JSON and a
 DOT companion. Nodes represent values paths, conditions, dependency instances,
 templates, resources, and manifest fields. Typed edges record references,
 enablement controls, source associations, and containment.
@@ -69,7 +70,7 @@ and the matplotlib plots produced from them.
 
 ## Repository export
 
-[`exports.py`](../../pkg/hypothesis_helm/compiler/passes/exports.py) applies minimal
+[`exports.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/exports.py) applies minimal
 export independently to every discovered application chart. It places the chosen
 YAML basename in each chart directory, records individual outcomes, and can write
 a NUL-delimited list of YAML and proof paths for CI staging. Library charts have

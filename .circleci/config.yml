@@ -55,7 +55,7 @@ jobs:
                 key: hh-binary-v1-linux-amd64-helm-{{ .Environment.HELM_VERSION }}-exact
                 paths:
                   - .cache/hypothesis-helm/binaries
-      - run: bash scripts/check.sh --junitxml=reports/pytest.xml
+      - run: bash scripts/check.sh --junitxml=.cache/tests/pytest.xml
       - run:
           name: Exercise the shared benchmark chart and stress plots
           command: bash scripts/project-run.sh hypothesis-helm-benchmark smoke
@@ -69,7 +69,7 @@ jobs:
             helm hypothesis generate examples/workload --output /tmp/generated-workload --max-examples 5
             helm hypothesis run /tmp/generated-workload
       - store_test_results:
-          path: reports
+          path: .cache/tests
       - store_artifacts:
           path: dist
       - store_artifacts:

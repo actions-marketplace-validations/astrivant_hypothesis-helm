@@ -54,7 +54,8 @@ flowchart LR
 In panel B, changing `label` cannot change this template's output because that
 lookup never executes. The candidate still contains `label`, and schema
 validation still checks it. In panel C, `label` contributes to the output witness.
-This is candidate specialization, not a permanent deletion of a values path.
+This specialization applies to the current candidate. The values path remains
+available to other candidates.
 See [output compilation stages](syntax-trees.md#output-compilation-stages).
 
 ## When may an equal output skip Helm?
@@ -175,7 +176,7 @@ and [failure expansion](selection.md#failure-expansion).
 ## Why can the same template rejection have different outcomes?
 
 Suppose a chart explicitly rejects an input that disables a required component.
-The treatment depends on the authored contract, not just the error message.
+The authored contract determines how the rejection is classified.
 The following panels start from a supported rejection prediction whose required
 native verification agrees.
 
@@ -185,7 +186,7 @@ flowchart LR
         direction TB
         a1[Template explicitly rejects this input] --> a2[Try a permitted adjustment]
         a2 -->|replacement found| a3[Render and test the replacement]
-        a2 -->|none found| a4[Record filtered rejection, not a pass]
+        a2 -->|none found| a4[Record filtered rejection]
     end
     subgraph Declared["B. Authored schema admits this input"]
         direction TB
@@ -235,7 +236,7 @@ flowchart LR
 Nothing under L can improve 14, so dropping it preserves the maximum being sought.
 R's bound of 20 does not establish that an assignment actually reaches 20; the
 search must check feasible completions. A bound equal to 14 can also be dropped
-when finding one maximum, rather than all maximizing assignments.
+when finding one maximum. Finding all maximizing assignments requires keeping it.
 
 This pruning saves **analysis work**. It does not remove chart tests merely
 because their outputs are smaller. The [complexity pass](analysis.md#maximum-output-complexity)

@@ -27,7 +27,7 @@
 [Documentation](../README.md) · [Project](../../README.md)
 
 Benchmark code, shell helpers, refresh recipes and chart assets ship together in
-[`hypothesis_helm.benchmarking`](../../pkg/hypothesis_helm/benchmarking/).
+[`hypothesis-helm-benchmarking`](<../../pkg/hypothesis-helm-benchmarking>).
 
 | Location in the package | Contents |
 | --- | --- |
@@ -36,8 +36,8 @@ Benchmark code, shell helpers, refresh recipes and chart assets ship together in
 | `refresh/recipes/` | Bash and Python recipes copied into each refresh's source snapshot. |
 | `scripts/` | Shell implementations of the `smoke` and `shards` commands. |
 
-Published [studies](../../studies/README.md) stay at the repository root. New local measurements default to
-`.cache/benchmarks/`; refresh workspaces use `.cache/refresh/`. Existing legacy run directories are left intact.
+Published [studies](<../../studies/README.md>) contain only final pages and plots under `studies/`. New local measurements default to
+`.cache/benchmarks/`; refresh workspaces use `.cache/refresh/`. Historical raw runs are also kept under `.cache/`.
 
 Run `hypothesis-helm-benchmark smoke` for a short integration check, or
 `hypothesis-helm-refresh` from the checkout root for the complete refresh.
@@ -100,7 +100,7 @@ All synthetic studies use the same chart generator. Each command reuses one temp
 chart and retains YAML parameter records for its cases. Separate invocations have
 separate workspaces, including concurrent CI jobs.
 
-The [combined stress chart](../../pkg/hypothesis_helm/benchmarking/assets/chart) includes gates, shared outputs,
+The [combined stress chart](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/chart) includes gates, shared outputs,
 interactions, equivalent inputs, boundary changes, coupled inputs, and six known defect
 families. The [fixture guide](fixture.md) explains its controls and fixed progression.
 
@@ -123,10 +123,10 @@ hypothesis-helm-benchmark generate \
 
 ### Complexity-informed sampling
 
-The [calibration study](../../studies/calibration-variation/README.md) compares 54 generated chart variants across 100 seeds each.
-Its [breadth × depth sweep](../../studies/calibration-variation/README.md#breadth-and-depth-sweep) measures nine output sizes
+The [calibration study](<../../studies/calibration-variation/README.md>) compares 54 generated chart variants across 100 seeds each.
+Its [breadth × depth sweep](<../../studies/calibration-variation/README.md#breadth-and-depth-sweep>) measures nine output sizes
 while holding the input count and defect triggers fixed within each panel.
-Its [matrix and graphs](../../studies/calibration-variation/MATRIX.md) show retained cases, known-bug discovery and nearby-profile fallback.
+Its [matrix and graphs](<../../studies/calibration-variation/MATRIX.md>) show retained cases, known-bug discovery and nearby-profile fallback.
 The [test matrix](../adaptive-filtering/TESTS.md) separates deterministic selector properties from empirical results.
 
 ```sh
@@ -135,7 +135,7 @@ hypothesis-helm-benchmark calibration --output .cache/benchmarks/calibration --t
 
 ### Filtering runtime
 
-The [filtering load test](../../studies/filtering/README.md) compares an unfiltered baseline, 70% random sampling, ordinary filtering and adaptive filtering.
+The [filtering load test](<../../studies/filtering/README.md>) compares an unfiltered baseline, 70% random sampling, ordinary filtering and adaptive filtering.
 It varies the finite input-space size and gate depth, using paired seeds and real Helm execution. Graphs separate planning from test execution;
 time-limited observations retain their unfinished counts. The [theoretical comparison](../adaptive-filtering/README.md#conditions-behind-the-comparison)
 states the conditions under which each bound and expected saving applies.
@@ -175,25 +175,25 @@ Explicit `--clustering` or `--error-rates` lists override the corresponding dime
 This controls measured settings, not image pixels; other structural axes keep their own depth/redundancy settings.
 With eight methods and three seeds, the clustering sweep runs `columns × rows × 24` measurements.
 
-[Results and interpretation](../../studies/error-surface/README.md)
+[Results and interpretation](<../../studies/error-surface/README.md>)
 
-[Fitted response surfaces](../../studies/error-surface/quadratic-fits.md) place quadratic predictions beside
+[Fitted response surfaces](<../../studies/error-surface/quadratic-fits.md>) place quadratic predictions beside
 the collected measurements and their residuals. The [model guide](response-surface.md)
 defines the six coefficients and explains where the approximation can fail.
 
 Optional [symbolic regression](response-surface.md#optional-symbolic-regression)
 compares PySR equations with quadratics on reserved cells and seeds, using retained measurements without rerunning Helm.
-See the [quick comparison](../../studies/error-surface/symbolic/README.md) for equations, validation scores and plots.
+See the [quick comparison](<../../studies/error-surface/symbolic/README.md>) for equations, validation scores and plots.
 
-![Error rate and failure clustering](../../studies/error-surface/clustering-error-recall.png)
+![Error rate and failure clustering](<../../studies/error-surface/clustering-error-recall.png>)
 
 ### Random sampling and defect discovery
 
-The [sample-size study](../../studies/sampling/README.md) renders the shared chart's complete
+The [sample-size study](<../../studies/sampling/README.md>) renders the shared chart's complete
 population, then measures distinct defect recall across 500 reproducible seeds.
 It distinguishes repeated defect patterns from erroneous input assignments.
 
-![Sample size and defect discovery](../../studies/sampling/sampling-recall.png)
+![Sample size and defect discovery](<../../studies/sampling/sampling-recall.png>)
 
 ```sh
 hypothesis-helm-benchmark sampling --time-limit 9m --output .cache/benchmarks/sampling
@@ -205,7 +205,7 @@ a defect exposed by one input has only a 70% detection chance when 70% are teste
 
 ### Flame graphs across worker cores
 
-[View published flame graphs](../../studies/flamegraphs/README.md), including combined workers,
+[View published flame graphs](<../../studies/flamegraphs/README.md>), including combined workers,
 the coordinator and individual processes. These are scaling smoke-test captures.
 
 Repository refreshes process charts sequentially, using six path workers per chart,
@@ -271,9 +271,9 @@ count. Timing studies and repository scans reserve the queue. Independent tables
 and plot preparation can overlap. Nested workers retain their own settings,
 including six path workers per chart in the repository tests.
 
-The [operation inventory](../../pkg/hypothesis_helm/benchmarking/refresh/plan.py) declares
+The [operation inventory](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/refresh/plan.py) declares
 all declared studies, fresh profiling captures, diagrams, verification gates, repository
-reports, and documentation updates. The preserved local [Workgraph](../../pkg/workgraph) scheduler runs this inventory.
+reports, and documentation updates. The preserved local [Workgraph](../../pkg/pipeline) scheduler runs this inventory.
 The Helm-specific inventory and Bash commands ship in the benchmarking package. The separate [Reflow](https://github.com/astrivant/reflow) project
 continues scheduler development independently; existing benchmark runs retain the local implementation.
 
@@ -307,7 +307,7 @@ The scaling study varies workers within each measurement to compare parallel exe
 Each benchmark run has a nine-minute ceiling; the complete refresh takes hours.
 The command initializes missing submodules (Prometheus uses GitHub SSH), records
 source snapshots, and prints the fresh run directory containing progress and logs.
-Results are published under `studies/` and `docs/reports/`. It refuses to
+Final reports and plots are published under `docs/reports/`. Raw run data stays under `.cache/`. It refuses to
 start while an earlier refresh is active or unfinished. See [recovering an interrupted refresh](refresh.md#recovering-an-interrupted-refresh)
 for retained results, the current recovery command and its limitations. Chart findings are retained
 in reports; incomplete workers or failed verification stop publication.
@@ -322,7 +322,7 @@ For the complete hosted run, open **Actions > Benchmarks > Run workflow** and en
 **full-refresh**. It runs the same refresh command and uploads measurements, plots,
 reports, and diagnostic logs for 30 days. It uses HTTPS for public submodules and
 leaves committing regenerated files to the reviewer. The workflow has a six-hour
-job limit; interrupted runs retain available artifacts without claiming completion.
+job limit; interrupted runs retain available artifacts and report incomplete status.
 
 Render an exported compiler dependency graph with Matplotlib:
 
@@ -332,7 +332,7 @@ hypothesis-helm-benchmark topology --graph topology.json --output .cache/benchma
 
 The PNG/SVG plots retain all vertices and directed edges. See
 [what the graph and its layout represent](../inputs/README.md#render-the-mathematical-graph).
-Browse the [synthetic and real-chart topology catalog](../../studies/chart-topologies/README.md)
+Browse the [synthetic and real-chart topology catalog](<../../studies/chart-topologies/README.md>)
 for complete graphs, per-chart measurements, and downloadable graph data.
 
 ## Local shard wrapper
@@ -341,13 +341,13 @@ Run saved suites with 1–4 local GNU Parallel shards:
 
 ~~~sh
 brew bundle # macOS; Debian/Ubuntu: sudo apt-get install parallel
-helm hypothesis generate pkg/hypothesis_helm/benchmarking/assets/chart --output .cache/benchmarks/shard-suite --max-examples 10
+helm hypothesis generate pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/chart --output .cache/benchmarks/shard-suite --max-examples 10
 for shards in 1 2 3 4; do
   bash scripts/project-run.sh hypothesis-helm-benchmark shards --shards "$shards" .cache/benchmarks/shard-suite
 done
 ~~~
 
-The [wrapper](../../pkg/hypothesis_helm/benchmarking/scripts/shards.sh) launches `helm hypothesis run` with one
+The [wrapper](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/scripts/shards.sh) launches `helm hypothesis run` with one
 worker per shard and caching disabled. Logs and reports go to
 `.cache/benchmarks/local-shards/`. Pass additional run options after `--`.
 
@@ -361,7 +361,7 @@ hypothesis-helm-benchmark generate \
 
 ### Performance and scaling
 
-Run the [plotting benchmark](../../pkg/hypothesis_helm/benchmarking/studies/performance.py):
+Run the [plotting benchmark](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/studies/performance.py):
 
 ~~~sh
 hypothesis-helm-benchmark run \
@@ -375,29 +375,29 @@ outputs are checked against expected values calculated independently of Helm.
 Renders are skipped when the compiler proves they match an already validated output.
 Use each command's `--help` for options.
 
-The figures below use local Python workers and the [standard chart](../../studies/performance/standard-chart).
+The figures below use local Python workers and the standard chart (local run data).
 <!-- refresh:performance:start -->
-In this Helm 4 run, pruning completed **163,122 checks with 256 renders**, compared
-with **11,583 checks** without pruning, within each nine-minute budget.
+With Helm `v4.3.0+gbec5b06`, pruning completed **153,190 checks with 256 renders**, compared
+with **10,852 checks** without pruning. Each run had a **9-minute budget**; 1 run was measured per method.
 <!-- refresh:performance:end -->
-[Raw measurements](../../studies/performance/results.json), [CSV](../../studies/performance/results.csv), and
+Raw measurements (local run data), CSV (local run data), and
 [refresh provenance](refresh.md) include the host and run details.
 These are single-run measurements; they do not establish timing variability.
 
 The progressive plot follows one continuous run, recording progress at each input
 count. Dashed lines show targets the run did not finish before its time limit.
 
-![Measured permutation runtime and completed-work plateau](../../studies/performance/progressive.png)
+![Measured permutation runtime and completed-work plateau](<../../studies/performance/progressive.png>)
 
-![Observed Helm values and expected normal distribution](../../studies/performance/output-distribution.png)
+![Observed Helm values and expected normal distribution](<../../studies/performance/output-distribution.png>)
 
 **Strong scaling** keeps total work fixed. **Weak scaling** keeps work per worker fixed.
 
-![Strong scaling against permutation count and worker replicas](../../studies/performance/strong-scaling.png)
+![Strong scaling against permutation count and worker replicas](<../../studies/performance/strong-scaling.png>)
 
-![Weak scaling against permutation count and worker replicas](../../studies/performance/weak-scaling.png)
+![Weak scaling against permutation count and worker replicas](<../../studies/performance/weak-scaling.png>)
 
-![Parallel replica throughput and render skips](../../studies/performance/replicas.png)
+![Parallel replica throughput and render skips](<../../studies/performance/replicas.png>)
 
 ## Bug discovery by permutation strength
 
@@ -421,20 +421,20 @@ several faults, so 5% of triggers does not mean 5% of complete inputs fail.
 The x-axis is `--permutations` interaction strength. The chart, its 256 possible
 configurations, and its injected faults stay fixed. Runs use the application's
 planner and real Helm renders, with automatic enumeration and inferred groups
-disabled to isolate strength. [Raw results](../../studies/bug-density/results.json) retain the
+disabled to isolate strength. Raw results (local run data) retain the
 first failing case for each fault. These discovery rates describe the seeded fixture.
 
 The recorded 5% fixture contains 261 faults: pairs found 136, triples found 208,
 and strength five found all 261.
 
-![Known bugs discovered as permutation strength increases](../../studies/bug-density/bug-discovery.png)
+![Known bugs discovered as permutation strength increases](<../../studies/bug-density/bug-discovery.png>)
 
-![Discovery rate by fault interaction order](../../studies/bug-density/bug-order.png)
+![Discovery rate by fault interaction order](<../../studies/bug-density/bug-order.png>)
 
-The separate [Sparsity and Stochasticity study](../../studies/sparsity/README.md) measures distribution
+The separate [Sparsity and Stochasticity study](<../../studies/sparsity/README.md>) measures distribution
 coverage as the number of cases falls.
 
-[Structural sparsity](../../studies/structural-sparsity/README.md) holds the four variable fields and known failures fixed
+[Structural sparsity](<../../studies/structural-sparsity/README.md>) holds the four variable fields and known failures fixed
 while growing the surrounding values tree and moving those fields farther apart. Its plots compare loading time,
 compiler analysis, total runtime and missed errors for each filtering method.
 See [the study definition and commands](structural-sparsity.md).
@@ -456,11 +456,11 @@ normal-distribution output. The benchmark independently calculates expected outp
 for the added behavior and checks the rendered manifests against them.
 Fault injection (`--bug-percent`, `--bug-orders`, `--bug-seed`) remains available.
 
-The [topology preset](../../pkg/hypothesis_helm/benchmarking/assets/fixture/topology.yaml) has 1,024 possible inputs for
+The [topology preset](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/topology.yaml) has 1,024 possible inputs for
 complete comparisons. See [sampling controls and complexity](../execution/README.md#optional-trimming).
 
 ```sh
-hypothesis-helm-benchmark --parameters pkg/hypothesis_helm/benchmarking/assets/fixture/topology.yaml sparsity \
+hypothesis-helm-benchmark --parameters pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/topology.yaml sparsity \
   --count 1024 --levels 5 \
   --output .cache/benchmarks/structure-sparsity
 ```
@@ -471,7 +471,7 @@ error is assigned to unordered topology outcomes.
 
 ## Strategy matrix
 
-[Compare strategies across six structural cases](../../studies/matrix/README.md).
+[Compare strategies across six structural cases](<../../studies/matrix/README.md>).
 The matrix uses fully enumerable fixtures to measure exact outcome coverage,
 with a nine-minute execution ceiling for each independent run.
 The structural, stress, PCA, expansion and nesting comparisons include `--filter`
@@ -492,7 +492,7 @@ than assuming every parameter is Boolean.
 
 ## Output-space PCA
 
-[Before and after trimming, with 5% seeded errors](../../studies/pca/README.md).
+[Before and after trimming, with 5% seeded errors](<../../studies/pca/README.md>).
 Compare random trimming, topology trimming, and both across the six structural
 cases. Each category keeps fixed PCA axes and reports exact error recall and
 output coverage alongside the projection.
@@ -505,7 +505,7 @@ hypothesis-helm-benchmark pca \
 
 ## Failure expansion
 
-[Compare each strategy with and without `--expand-failures`](../../studies/expansion/README.md).
+[Compare each strategy with and without `--expand-failures`](<../../studies/expansion/README.md>).
 The paired matrix separates distinct erroneous outputs from erroneous inputs
 exercised, and records the additional physical renders.
 
@@ -517,13 +517,13 @@ hypothesis-helm-benchmark expansion \
 
 ## Topology distributions and trim depth
 
-[Generate mixed chart structures](../../studies/structure-mixtures/README.md) with seeded category
-weights and shared input wiring. [Compare trim depths 0–5](../../studies/structure-depth/README.md)
+[Generate mixed chart structures](<../../studies/structure-mixtures/README.md>) with seeded category
+weights and shared input wiring. [Compare trim depths 0–5](<../../studies/structure-depth/README.md>)
 with random trimming disabled and failure expansion enabled.
 
 ## Chart nesting at permutation strength eight
 
-[Matrix and shared-frame PCA](../../studies/nesting/README.md) compare shallow (1), deep (5),
+[Matrix and shared-frame PCA](<../../studies/nesting/README.md>) compare shallow (1), deep (5),
 and seeded random nesting depths (1–5). `--permutations 8` stays fixed; each
 chart retains 12 topology components. Shared PCA axes make depth profiles
 comparable within each topology family.
@@ -556,8 +556,16 @@ To redraw a completed run's plots without repeating Helm measurements:
 bash scripts/project-run.sh hypothesis-helm-benchmark calibration --plot-only --output .cache/benchmarks/calibration-sweep-<epoch>
 ```
 
-[Quadratic versus quartic comparison](../../studies/error-surface-quartic/polynomial-comparison/README.md)
+[Quadratic versus quartic comparison](<../../studies/error-surface-quartic/polynomial-comparison/README.md>)
 uses identical training data and reports errors on reserved settings and repeats.
 See [how to compare a completed surface](response-surface.md#quadratic-versus-quartic-comparison).
 
-The refresh also runs the [mutation sensitivity diagnostic](../../studies/sensitivity/README.md), retaining its inputs, measurements and plots.
+The refresh also runs the [mutation sensitivity diagnostic](<../../studies/sensitivity/README.md>), retaining its inputs, measurements and plots.
+
+The [sensitivity ordering study](<../../studies/sensitivity-ordering/README.md>) sweeps profiling order from zero through
+`--permutations` on a fixed chart, then compares bug discovery by iteration across six chart structures and all traversal strategies.
+It can run independently of refresh:
+
+```bash
+bash scripts/project-run.sh hypothesis-helm-benchmark sensitivity-ordering --inputs 8 --permutations 3 --repeats 5 --time-limit 9m
+```

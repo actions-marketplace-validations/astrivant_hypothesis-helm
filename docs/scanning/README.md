@@ -15,7 +15,7 @@
 helm hypothesis test ./charts --report
 helm hypothesis scan https://github.com/bitnami/charts.git --filter --report
 helm hypothesis scan git@github.com:my-org/charts.git --report
-helm hypothesis test ./charts --values ci/test-values.yaml --report reports/charts
+helm hypothesis test ./charts --values ci/test-values.yaml --report docs/reports/charts
 ```
 
 `test PATH` discovers charts in a local directory. `scan SOURCE` fetches remote charts
@@ -200,9 +200,9 @@ Filtering changes which inputs the generator tries, not which inputs the chart's
 schema allows. The original schema still validates every input. The generator
 keeps arbitrary keys available in empty maps, maps defined by schema rules or key
 patterns, and maps accessed through computed keys. If it cannot interpret a schema
-rule or template operation, that uncertainty is reported rather than used to rule
-out inputs. The inventory lists identifiable paths; it does not claim to list
-every possible computed key.<sup>[\[3\]](../inputs/README.md)</sup>
+rule or template operation, it reports that uncertainty and keeps the affected
+inputs available. The inventory lists identifiable paths and marks computed
+keys it cannot resolve.<sup>[\[3\]](../inputs/README.md)</sup>
 
 Inferred types guide generation; they do not become new validation requirements.
 Generation errors and budget exhaustion remain incomplete coverage, not chart bugs.
@@ -257,10 +257,25 @@ means the number of additional charts is unknown. Interrupting a scan likewise
 saves partial results and exits with **130**.
 
 `--report` writes `<directory-name>_<epoch>_report.md` and `.pdf` in the current
-working directory. An explicit stem or either filename extension overrides both
+`docs/reports/` directory. An explicit stem or either filename extension overrides both
 paths. Reusing an explicit output path replaces the previous report.
+The PDF opens with a clickable contents page, followed by one overview page containing
+two aligned matrices. Each cell represents one chart, in the same order as the chart sections.
+The first matrix uses the chart's highest observed finding category: red for violations,
+amber for warnings, and blue for diagnostics that need investigation. Green means no findings
+in the completed sample. Gray cells distinguish incomplete and untested charts; hatching also
+marks unfinished testing on cells that already have findings. These categories come from the
+[finding catalog](../rules/README.md), not an estimate of security or business impact.
+The second matrix colors the same cells by measured time. Missing timings show `--`, not zero.
+Cell numbers match the chart sections; clicking either matrix's cells in the PDF opens those details.
+Testing time excludes dependency preparation. Historical results without testing
+measurements show elapsed chart time instead; missing timings are marked unavailable.
+Zero recorded errors do not imply full coverage, especially for incomplete scans.
+PDF bookmarks link to every chart and diagnostic, and each page links back to contents.
+Markdown reports have linked contents and use the matching `<stem>-overview.png`;
+keep that image beside the Markdown file when sharing it. The PDF embeds the image.
 JSON statistics, lint/dependency logs, and failing values go under
-`reports/hypothesis-helm/` for local `test` and `reports/scans/` for remote `scan`;
+`.cache/hypothesis-helm/runs/` for local `test` and `.cache/hypothesis-helm/scans/` for remote `scan`;
 override that parent with `--artifact-dir`.
 
 Reports group failures by Helm chart. Each diagnostic appears once per chart,
@@ -271,6 +286,10 @@ Long values and diagnostics are shortened explicitly. These previews do not esta
 an independent or minimal cause. Complete inputs, diagnostics, and additional cases
 remain in JSON and linked artifacts; the Markdown and PDF are brief summaries.
 Missing reproducing values are reported explicitly.
+
+Use `--export-suppressions` to save a categorized, editable `suppressions.yaml` in each chart's artifact directory as soon as it finishes,
+including during recursive scans. Reports link to these drafts; they do not change the run's findings or active configuration.
+See [reviewing generated suppressions](<../rules/README.md#export-suppressions-from-a-run>) for their scope and how to apply selected entries.
 
 New failure artifacts include `changes.json`: DeepDiff comparisons of effective
 values and parsed manifests against the defaults, plus a replayable record of the
@@ -290,17 +309,17 @@ effective values, or `--section manifests --baseline reports/example/manifests-b
 for parsed output. Effective values describe the merged input; use the default
 `overrides` section to reproduce a Helm invocation, since omitted keys inherit chart defaults.
 Replay verifies the complete baseline and result checksums before writing output.
-Records use JSON, with a fixed set of scalar and container types, rather than pickle.
+Records use JSON, with a fixed set of scalar and container types.
 If a field delta cannot reproduce the exact JSON, the record explicitly stores a
 whole-document replacement. This handles signed zero and unusual quoted keys.
-These comparisons describe observed changes; they do not establish causality or
-authorize equivalence pruning. Existing render hashes and compiler proofs still govern reuse.
+These comparisons describe observed changes. Existing render hashes and compiler
+proofs govern reuse; causal attribution requires further analysis.
 
 `--filter` also recognizes supported explicit configuration rejections in templates.
 Reports list their requirements and related values separately from manifest errors.
 Counters distinguish excluded candidates, adjusted candidates, and real Helm
 verification renders; exclusions never count as passing tests. A property with no
-accepted generated inputs is `configuration-rejected`, not a pass. Unknown guards
+accepted generated inputs has status `configuration-rejected`. Unknown guards
 remain testable. Automatic exclusions apply to inferred inputs; rejections of
 inputs admitted by an authored values schema remain visible failures, with their
 recovered requirements. See [compiler passes](../compiler/selection.md#rejection-guided-generation).
@@ -310,7 +329,8 @@ called **witness checks**. Later exclusions use the supported compiler analysis.
 For charts with dependencies, Helm must confirm every predicted rejection before exclusion,
 because child defaults and imported values can change what a parent template sees.
 If Helm accepts a predicted rejection or returns a different error, that requirement is disabled
-for automatic exclusion. Witness checks are supporting evidence, not a proof about all inputs.
+for automatic exclusion. Witness checks validate specific predictions; later exclusions
+rely on the supported compiler analysis described above.
 
 Published Bitnami and Prometheus reports use absolute GitHub links targeting `main`.
 PDF links are blue, underlined, and clickable, including links within paragraphs.
@@ -333,20 +353,26 @@ available. See [Input inventory](../inputs/README.md) for the measurement contra
 Exit codes: **0** means every discovered chart passed property tests; **1** means
 invalid metadata, invalid execution, or test failures (also a sole chart missing
 values); **2** means incomplete/N/A coverage or no charts; **130** means interrupted.
-A successful sample is not a proof that all possible values work.
+
+Ctrl-C (SIGINT) and CI termination (SIGTERM) stop scheduling new paths and charts, stop owned Helm processes,
+and join workers before returning. Completed results and interrupted paths remain in the partial report;
+unstarted charts remain pending. This also applies when a worker handles the interrupt and returns a partial result.
+A successful sample establishes that its tested inputs passed the selected checks.
 
 ## Bitnami
 
 ```sh
 git submodule update --init --depth 1 third_party/bitnami-charts
-helm hypothesis test third_party/bitnami-charts --report reports/bitnami
+helm hypothesis test third_party/bitnami-charts --filter --disable-codes HH2006 --report docs/reports/bitnami
 ```
 
 The submodule pins the source revision. Locked dependencies are downloaded from
 the chart's declared repositories; inaccessible dependencies are reported as N/A.
+These report commands suppress HH2006 warnings for objects without a declared structure.
+Their values are still tested, and other findings remain enabled. Add comma-delimited codes to `--disable-codes` only when intended.
 
 The [retained Bitnami scan](../reports/bitnami.md) includes one combined PDF and
-all available per-chart measurements and logs.
+the findings and coverage status for each visited chart. Raw measurements and logs remain in the local run cache.
 
 The external chart sources are retained as submodules under
 `third_party/bitnami-charts` and `third_party/prometheus-community-helm-charts`.
@@ -354,7 +380,7 @@ Initialize the Prometheus source with:
 
 ```sh
 git submodule update --init third_party/prometheus-community-helm-charts
-helm hypothesis test third_party/prometheus-community-helm-charts/charts --filter --report
+helm hypothesis test third_party/prometheus-community-helm-charts/charts --filter --disable-codes HH2006 --report
 ```
 
 The [retained Prometheus Community scan](../reports/prometheus.md) includes all

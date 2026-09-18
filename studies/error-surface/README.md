@@ -6,9 +6,9 @@
 - [Error rate and filtering](#error-rate-and-filtering)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md)
+[Benchmarking](<../../docs/benchmarking/README.md>)
 
-Measured axes in this run: clustering. The default refresh runs all three axes.
+Measured axes in this run: depth, redundancy, clustering. The default refresh runs all three axes.
 
 Each surface changes error rate and one other parameter. Every method receives the same chart, assertion, and traversal seed.
 Errors are seeded, input-aware assertions checked against actual Helm output. Templates stay fixed across error rates and seeds.
@@ -26,11 +26,11 @@ The ledger records the fraction of single-switch neighbours of failing inputs th
 Error counts round down to whole assignments. Higher rates add failures to the same seeded ordering; actual rates are recorded.
 The oracle is independent of selection: a failure enters the scheduler only after its input is evaluated.
 
-Fixed settings: 8 Boolean fields, strength 2, 1 worker, 2 paired seeds, and 540 seconds per method's execution.
+Fixed settings: 8 Boolean fields, strength 2, 1 worker, 3 paired seeds, and 540.0 seconds per method's execution.
 Small domains are fully enumerated before filtering. Each method starts with fresh compiler and render caches; OS caches can be warm.
 Method order is shuffled within every paired comparison. Total time includes planning and execution.
 Chart generation, oracle-population construction, and independent reference enumeration are excluded from method timings.
-`filter` and `filter-aggressive` expand failed symbolic regions. The other methods retain their usual expansion-disabled behavior.
+`filter` and `filter-adaptive` expand failed symbolic regions. The other methods retain their usual expansion-disabled behavior.
 `sample-random` uses 70% with its 128-case floor. Aggressive sampling falls back when calibration cannot support it; the CSV records why.
 
 Colours share a scale across methods within each figure. Cells show mean ±1 sample SD across completed paired runs; CSV includes ±2 SD endpoints.
@@ -38,7 +38,7 @@ Cells are discrete parameter settings; the heatmaps do not interpolate between s
 T = an incomplete execution; N/A = no erroneous inputs; blank = no measurement. No partial timing is shown as a completed runtime.
 The CSV includes sample SD and observed ranges. These describe seed variation, not confidence intervals. These synthetic assertions do not establish recall for arbitrary charts.
 
-[Individual measurements](results.csv) · [Means and ranges](summary.csv) · [Oracle populations and provenance](results.json)
+Individual measurements (local run data) · Means and ranges (local run data) · Oracle populations and provenance (local run data)
 
 | Plot label | Filtering settings |
 | --- | --- |
@@ -48,10 +48,24 @@ The CSV includes sample SD and observed ranges. These describe seed variation, n
 | topology | `--trim-topology 2` |
 | combined | Both trim methods at 2 |
 | filter | `--filter` |
-| filter-aggressive | `--filter-aggressive`, including its calibration fallback |
+| filter-adaptive | `--filter-adaptive`, including its calibration fallback |
 | sample-random | `--sample-random 70`, with the default minimum |
 
-**Timing context:** Earlier refresh refresh-1789351962 remained active; regression tests also overlapped the beginning. Timings are exploratory under host contention; input/error counts remain deterministic. Full refresh runs studies sequentially after tests.
+![Total measured seconds by depth](depth-total-seconds.png)
+
+![Helm renders by depth](depth-render-invocations.png)
+
+![Erroneous inputs detected (%) by depth](depth-error-recall.png)
+
+![Additional inputs checked after failures by depth](depth-additional-executed.png)
+
+![Total measured seconds by redundancy](redundancy-total-seconds.png)
+
+![Helm renders by redundancy](redundancy-render-invocations.png)
+
+![Erroneous inputs detected (%) by redundancy](redundancy-error-recall.png)
+
+![Additional inputs checked after failures by redundancy](redundancy-additional-executed.png)
 
 ![Total measured seconds by clustering](clustering-total-seconds.png)
 
@@ -66,7 +80,5 @@ The CSV includes sample SD and observed ranges. These describe seed variation, n
 ![Measured clustering, independent of filter selection](clustering-observed.png)
 
 [Fitted response surfaces: measurements, quadratic predictions and residuals](quadratic-fits.md)
-
-[Symbolic equations versus quadratics on held-out data](symbolic/README.md)
 
 ![Failing inputs found, Helm renders and total runtime](errors-found-fast.png)

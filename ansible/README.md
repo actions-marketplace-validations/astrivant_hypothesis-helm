@@ -134,7 +134,7 @@ ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" ANSIBLE_CONFIG="$PWD/ansible/ansibl
 bash scripts/project-run.sh shfmt -d ansible/run.sh ansible/jobs
 ANSIBLE_LOCAL_TEMP="$PWD/.cache/ansible/tmp" ANSIBLE_CONFIG="$PWD/ansible/ansible.cfg" \
   ansible-playbook -i localhost, ansible/tests/collection.yml
-bash scripts/project-run.sh pytest pkg/hypothesis_helm/tests/test_remote_shards.py
+bash scripts/project-run.sh pytest pkg/hypothesis-helm/hypothesis_helm/tests/test_remote_shards.py
 ```
 
 The collection test uses temporary local files and a fake systemd status; it verifies failed/interrupted collection and recovery.

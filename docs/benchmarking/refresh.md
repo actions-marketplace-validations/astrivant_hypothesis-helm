@@ -4,14 +4,13 @@
 **Table of contents**
 
 - [Recovering an interrupted refresh](#recovering-an-interrupted-refresh)
-  - [Recovery after measurement verification failed](#recovery-after-measurement-verification-failed)
 - [Parallel refresh on GitHub Actions](#parallel-refresh-on-github-actions)
 <!-- toc:end -->
 
-[Full refresh command](README.md#reproduce-the-full-project-run) · [Benchmark results](../../studies/README.md)
+[Full refresh command](README.md#reproduce-the-full-project-run) · [Benchmark results](<../../studies/README.md>)
 
 These scripts prepare charts, run measurements, generate plots and publish reports.
-The operation inventory lives in `pkg/hypothesis_helm/benchmarking/refresh/plan.py`.
+The operation inventory lives in `pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/refresh/plan.py`.
 
 Refresh workspaces and internal records live under `.cache/refresh/refresh-<epoch>/`.
 That includes logs, timestamps, process journals, verification results, source snapshots and checksum inventories.
@@ -21,38 +20,37 @@ The terminal shows each operation's stdout and stderr as it runs, prefixed with 
 The complete, unprefixed output is also saved in `logs/<operation>.log`. Repository scans forward chart diagnostics while keeping
 their JSON results in separate files. CI uses the same live output without progress bars.
 
-Published measurements, plots and chart recipes remain under `studies/` and `pkg/hypothesis_helm/benchmarking/assets/fixture/`.
-Repository scan reports remain under `docs/reports/`.
+Final chart scan reports are published under `docs/reports/`; benchmark studies and plots live in top-level `studies/`.
+Raw measurements, generated charts, logs, profiles and verification records stay inside the refresh workspace under `.cache/refresh/`.
+Repository workers also use that workspace, under `repositories/`; they never write into the published report directory.
+Reusable chart definitions remain in the benchmarking package's `assets/fixture/`.
+Every fresh refresh runs Bitnami, then Prometheus, after the synthetic studies and diagrams finish.
+Both scans use `--filter --disable-codes HH2006 --jobs 6 --chart-timeout 5m --max-examples 10 --seed 0 --no-cache --shard none`.
+Charts run sequentially, with six path workers per chart; CI shard variables do not partition these scans.
+Successful report verification updates both Markdown/PDF reports and the root README's counts and links.
+`HH2006` suppression hides opaque-object warnings while leaving their inputs testable and all other findings enabled.
+Saved runs retain their recorded policy when resumed.
 
 ## Recovering an interrupted refresh
 
 Refresh keeps completed measurements in its workspace after a failure. Keep that directory, including its
-`operations.json`, logs, frozen source and checksum records. The CLI currently has no general `--resume` option;
-starting it again does not continue the previous queue, and an unfinished run blocks a fresh refresh.
-
-### Recovery after measurement verification failed
-
-A recovery script was prepared locally for `refresh-1789617223`, where all measurements completed but the verifier
-expected an obsolete clustering grid. From the project root, preview its remaining work, then resume:
+`operations.json`, logs, frozen source and checksum records. Resume from the journal of the latest failed attempt:
 
 ```sh
-bash scripts/project-run.sh python .cache/refresh/refresh-1789617223/resume.py --dry-run
-bash scripts/project-run.sh python .cache/refresh/refresh-1789617223/resume.py
+hypothesis-helm-refresh --resume .cache/refresh/refresh-<epoch>/operations.json --dry-run
+hypothesis-helm-refresh --resume .cache/refresh/refresh-<epoch>/operations.json
 ```
 
-This script belongs to that saved workspace; it is not installed with the package or generated for new runs.
-It preserves the 22 completed stages and starts the remaining 23 at `verify-measurements`, using the corrected verifier.
-Successful verification allows profiling, diagrams, publication, and the Bitnami and Prometheus scans to continue.
-It does not repeat completed benchmark measurements or resume partway through an individual measurement.
+Completed operations are preserved. Failed and unstarted operations run again in dependency order, under the refresh lock.
+Each continuation writes a new `resumed-<timestamp>/operations.json` and logs. If that continuation fails, pass **its** journal
+on the next attempt. Recovery verifies the frozen source hashes; it does not resume inside an individual benchmark.
+Fix the cause of the failure before resuming. Starting a fresh refresh still refuses an unfinished workspace.
 
-Before proceeding, it acquires the refresh lock, checks the recorded prerequisite results, and verifies the frozen source
-and repaired verifier checksums. The original failed journal and logs remain available. Recovery writes its own progress
-to `resumed/operations.json` and terminal output to `resumed/logs/` inside the same workspace.
-
-The script refuses another attempt once `resumed/` exists. If recovery fails or is interrupted, inspect that journal and
-its logs before planning another continuation; stages may already have published results or started repository scans.
-Do not delete the recovery directory or mark failed stages complete to bypass this check. Other failure points need a
-recovery plan based on their saved state, including whether the failed operation can safely run again.
+The refresh workspace owns all files needed for recovery, including repository scans under `repositories/`.
+Published reports are replaceable outputs; keep the workspace if you want to resume or redraw a run.
+During the repository cleanup, historical raw data was moved into `.cache/benchmarks/` and `.cache/repository-scans/`.
+The local `.cache/publication-relocations.json` records its former and current locations. Historical recipes retain their
+original paths; use the latest completed journal when inspecting those archived runs.
 
 ## Parallel refresh on GitHub Actions
 
@@ -63,8 +61,9 @@ There is no `max-parallel` setting: GitHub schedules as many jobs as the account
 See [GitHub's matrix concurrency documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstrategymax-parallel).
 
 Each study owns its output directory, status file and process journal. A failed study retains diagnostics without cancelling
-other studies. The final job requires every study to succeed, verifies the merged measurements, publishes plots under `studies/`,
-then runs Bitnami followed by Prometheus. Reports and logs are retained as workflow artifacts for 30 days.
+other studies. The final job requires every study to succeed, verifies the merged measurements, and publishes pages and plots
+under `studies/`, then runs Bitnami followed by Prometheus. Reports, studies, and the separate `refresh-resume-data` artifact
+are retained for 30 days.
 Set `HH_CI_RUNNER` to override the default `ubuntu-latest-8-cores` runner label.
 
 After pushing the workflow changes, launch it with:
@@ -79,6 +78,6 @@ machines for concurrent studies. Each GitHub study job has a six-hour execution 
 
 Sensitivity measures 48 input changes and all 1,128 pairs on the shared benchmark chart, with 64 structural components and a nine-minute budget.
 It retains the chart sources and mutation inputs, before publication and repository scans.
-Publication updates studies/sensitivity/ while preserving personal runs in studies/sensitivity/runs/.
+Publication updates `studies/sensitivity/`; raw sensitivity runs remain under `.cache/benchmarks/sensitivity/`.
 The standalone `hypothesis-helm-benchmark sensitivity` command also updates that study automatically after a successful run.
 Supplying `--output` keeps its results separate; refresh uses this option and publishes after verification.

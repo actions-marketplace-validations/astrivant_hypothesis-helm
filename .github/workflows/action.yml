@@ -66,11 +66,11 @@ jobs:
           HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.kubernetes }}
         run: |
           cat downloaded/*/report.json | hypothesis-helm aggregate \
-            --shards 3 --run-id "$HH_RUN_ID" --output-dir reports/final
+            --shards 3 --run-id "$HH_RUN_ID" --output-dir docs/reports/final
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: hypothesis-helm-final-${{ matrix.kubernetes }}
-          path: reports/final/
+          path: docs/reports/final/
           if-no-files-found: error
           retention-days: 30

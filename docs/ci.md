@@ -56,7 +56,7 @@ bridge them in the workflow yourself:
 The default `auto` mode runs the full suite locally when no coordinates exist.
 `--shard 2/4` overrides detection; `--shard none` disables it, including in
 parallel CI jobs. Incomplete, invalid, or conflicting provider coordinates fail
-with a setup error rather than silently running the wrong partition. Use
+with a setup error before partition execution. Use
 `--shard none` for whole-chart or exhaustive modes in parallel CI jobs.
 
 All shards must use the same revision, selection, shard total, and seed. Keep
@@ -121,12 +121,12 @@ jobs:
           HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           cat downloaded/*/report.json | hypothesis-helm aggregate \
-            --shards 4 --run-id "$HH_RUN_ID" --output-dir reports/final
+            --shards 4 --run-id "$HH_RUN_ID" --output-dir docs/reports/final
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
           name: hypothesis-helm-final
-          path: reports/final/
+          path: docs/reports/final/
           if-no-files-found: error
           retention-days: 30
 ```
@@ -152,7 +152,7 @@ or versions and want full coverage for each combination, pass an explicit
 | `seed` | `0` | Hypothesis seed |
 | `timeout` | `30` | Seconds per Helm render |
 | `match` | Empty | Keyword selection before partitioning |
-| `artifact-dir` | `reports/hypothesis-helm` | Root for generated tests and reports |
+| `artifact-dir` | `.cache/hypothesis-helm/runs` | Root for generated tests and reports |
 | `upload-artifacts` | `true` | Upload the resulting directory |
 | `artifact-name` | `hypothesis-helm` | Upload prefix; job and shard IDs are appended |
 | `artifact-retention-days` | `30` | Report retention, subject to repository policy; independent of cache lifetime |
@@ -272,7 +272,7 @@ With `kubesec: true`, supported workloads receive schema and security validation
 through Kubesec; remaining resources go to Kubeconform. This routing also applies
 when the separate `kubeconform` input is false. Security runs force `--rerun all`
 to produce the manifests needed for validation. Validator failures fail the job
-and appear in scan artifacts rather than the Helm JUnit report.
+and appear in scan artifacts. Helm JUnit records the Helm tests.
 
 ### Minimal values and aggregation
 

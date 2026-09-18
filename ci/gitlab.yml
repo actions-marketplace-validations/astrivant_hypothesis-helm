@@ -87,7 +87,7 @@ helm-properties:
     - PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm --version "$HYPOTHESIS_HELM_REF"
     - helm hypothesis schemas --schema-version "$K8S_VERSION" --schema-cache-dir "$SCHEMA_CACHE_DIR"
   script:
-    - export HH_ARTIFACT_DIR="reports/hypothesis-helm/${K8S_VERSION}/${SHARD_INDEX}"
+    - export HH_ARTIFACT_DIR=".cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}"
     - mkdir -p "$HH_ARTIFACT_DIR"
     - |
       test_status=0
@@ -127,9 +127,9 @@ helm-properties:
     expire_in: 30 days
     name: "helm-properties-${K8S_VERSION}-${SHARD_INDEX}"
     paths:
-      - reports/hypothesis-helm/${K8S_VERSION}/${SHARD_INDEX}/
+      - .cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}/
     reports:
-      junit: reports/hypothesis-helm/${K8S_VERSION}/${SHARD_INDEX}/shards/*/junit.xml
+      junit: .cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}/shards/*/junit.xml
 
 helm-report:
   image: python:3.13-slim
@@ -147,15 +147,15 @@ helm-report:
     - pip install "git+https://github.com/astrivant/hypothesis-helm.git@${HYPOTHESIS_HELM_REF}"
   script:
     - |
-      cat reports/hypothesis-helm/"$K8S_VERSION"/*/shards/*/report.json |
+      cat .cache/hypothesis-helm/runs/"$K8S_VERSION"/*/shards/*/report.json |
         hypothesis-helm aggregate --shards "$SHARD_TOTAL" \
           --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
-          --output-dir "reports/final/${K8S_VERSION}"
+          --output-dir "docs/reports/final/${K8S_VERSION}"
   artifacts:
     when: always
     expire_in: 30 days
     name: "helm-final-${K8S_VERSION}"
     paths:
-      - reports/final/${K8S_VERSION}/
+      - docs/reports/final/${K8S_VERSION}/
     reports:
-      junit: reports/final/${K8S_VERSION}/junit.xml
+      junit: docs/reports/final/${K8S_VERSION}/junit.xml

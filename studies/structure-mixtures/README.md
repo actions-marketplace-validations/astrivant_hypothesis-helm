@@ -6,7 +6,7 @@
 - [Nesting-depth distributions](#nesting-depth-distributions)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md) · [Depth sweep](../structure-depth/README.md)
+[Benchmarking](<../../docs/benchmarking/README.md>) · [Depth sweep](../structure-depth/README.md)
 
 Generate multiple structural components distributed throughout one chart:
 

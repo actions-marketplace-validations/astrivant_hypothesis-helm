@@ -26,7 +26,7 @@ flowchart TD
 
 ## Representation and operations
 
-[`asts/lattice.py`](../../pkg/hypothesis_helm/compiler/asts/lattice.py) represents each field as a finite set of strings or Booleans,
+[`asts/lattice.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/lattice.py) represents each field as a finite set of strings or Booleans,
 or an explicit unknown value. An empty set means no configuration can reach that branch.
 The ordering is set inclusion: fewer possible values means more precise knowledge.
 
@@ -39,7 +39,7 @@ The ordering is set inclusion: fewer possible values means more precise knowledg
 
 [`immutables.Map`](https://github.com/MagicStack/immutables) stores the field environments and shares unchanged entries between branches.
 It is a runtime dependency. The Helm-specific lattice and transfer rules live in this project.
-We construct only the states needed while walking the template, rather than allocating every subset in a lattice diagram.
+We construct states as the template walk needs them.
 
 ## Supported deductions
 

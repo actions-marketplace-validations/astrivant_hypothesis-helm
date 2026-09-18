@@ -94,9 +94,12 @@ jobs:
       - name: Run every pre-commit hook
         run: pre-commit run --all-files --show-diff-on-failure
       - name: Run framework checks and parallel tests
-        run: bash scripts/check.sh --junitxml=reports/pytest.xml
+        run: bash scripts/check.sh --junitxml=.cache/tests/pytest.xml
       - name: Exercise the shared benchmark chart and stress plots
         run: bash scripts/project-run.sh hypothesis-helm-benchmark smoke
+      - name: Verify bundled input domains before a release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: poetry run hypothesis-helm-catalog --check
       - name: Build wheel and source distribution
         run: poetry build
       - name: Verify end-user Helm testing commands
@@ -111,7 +114,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: python-test-results
-          path: reports/
+          path: .cache/tests/
+          include-hidden-files: true
           retention-days: 30
       - name: Upload distributions
         if: ${{ always() }}

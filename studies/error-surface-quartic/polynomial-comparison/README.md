@@ -13,7 +13,7 @@ Timing reflects the host's load during collection; this small comparison does no
 A full quartic needs 15 identifiable coefficients and more than 15 training cells, including at least five settings per axis.
 Unavailable fits remain blank. No extra measurements are inferred, and existing quadratic and symbolic results are unchanged.
 
-[Splits, coefficients and scores](results.json)
+Splits, coefficients and scores (local run data)
 
 | Surface / method / response | Model | Held-out cells RMSE | Held-out repeat RMSE | Both held out RMSE |
 | --- | --- | ---: | ---: | ---: |

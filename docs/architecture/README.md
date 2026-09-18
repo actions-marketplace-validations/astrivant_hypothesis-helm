@@ -90,7 +90,7 @@ See [execution and coverage](../execution/README.md), the
 
 ## Cooperative workload balancing
 
-[The preserved local scheduler](../../pkg/workbalance/README.md) builds on workload contracts to update runtime estimates,
+[The preserved local scheduler](../../pkg/pipeline/README.md) builds on workload contracts to update runtime estimates,
 reorder ready work, and request checkpoint/resume at safe boundaries. It logs graph mutations and scheduling decisions and
 can export Mermaid snapshots. Existing subprocess operations remain non-preemptible unless adapted to the cooperative contract.
 

@@ -1,0 +1,17 @@
+# synthetic/structure-depth/charts/control-flow
+
+<!-- toc:start -->
+**Table of contents**
+
+- [synthetic/structure-depth/charts/control-flow](#syntheticstructure-depthchartscontrol-flow)
+<!-- toc:end -->
+
+[All chart topologies](../../../../README.md)
+
+Status: **rendered**. Source: `.cache/refresh/refresh-1789617223/outputs/structure-depth/cases/control-flow.yaml`.
+Potential references identify inputs to investigate for causal effects on output.
+Baseline-unavailable graphs contain static evidence only.
+
+![Full directed dependency multigraph](topology.png)
+
+[Vector graph](topology.svg) · Graph JSON (local run data) · DOT (local run data) · Coordinates (local run data) · Invariants (local run data)

@@ -6,7 +6,7 @@
 - [Failure expansion](#failure-expansion)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md)
+[Benchmarking](<../../docs/benchmarking/README.md>)
 
 Topology trimming previously exercised 47 of 51 erroneous inputs in three cases. The remaining four each produced the same complete manifests as a retained failing input. The 51 erroneous inputs occupied 43 singleton regions and four two-input regions. All distinct erroneous outputs were already covered.
 
@@ -23,7 +23,7 @@ Expansion continues the initial selection after failures and schedules each omit
 
 Cells below show **erroneous inputs found before → after expansion (extra executions)**. The figure also shows the exact percentage missed.
 
-| Structure | Untrimmed | Random | Topology | Both trims | --filter | --filter-aggressive |
+| Structure | Untrimmed | Random | Topology | Both trims | --filter | --filter-adaptive |
 |---|---|---|---|---|---|---|
 | constraints | 25/25 (0.0% missed) → 25/25 (0.0% missed) (+0) | 2/25 (92.0% missed) → 2/25 (92.0% missed) (+0) | 25/25 (0.0% missed) → 25/25 (0.0% missed) (+0) | 25/25 (0.0% missed) → 25/25 (0.0% missed) (+0) | 25/25 (0.0% missed) → 25/25 (0.0% missed) (+0) | 25/25 (0.0% missed) → 25/25 (0.0% missed) (+0) |
 | control-flow | 51/51 (0.0% missed) → 51/51 (0.0% missed) (+0) | 5/51 (90.2% missed) → 5/51 (90.2% missed) (+0) | 51/51 (0.0% missed) → 51/51 (0.0% missed) (+0) | 51/51 (0.0% missed) → 51/51 (0.0% missed) (+0) | 51/51 (0.0% missed) → 51/51 (0.0% missed) (+0) | 51/51 (0.0% missed) → 51/51 (0.0% missed) (+0) |
@@ -34,7 +34,7 @@ Cells below show **erroneous inputs found before → after expansion (extra exec
 
 **Distinct erroneous outputs covered, before → after:**
 
-| Structure | Untrimmed | Random | Topology | Both trims | --filter | --filter-aggressive |
+| Structure | Untrimmed | Random | Topology | Both trims | --filter | --filter-adaptive |
 |---|---|---|---|---|---|---|
 | constraints | 8/8 → 8/8 | 2/8 → 2/8 | 8/8 → 8/8 | 8/8 → 8/8 | 8/8 → 8/8 | 8/8 → 8/8 |
 | control-flow | 14/14 → 14/14 | 4/14 → 4/14 | 14/14 → 14/14 | 14/14 → 14/14 | 14/14 → 14/14 | 14/14 → 14/14 |
@@ -49,16 +49,16 @@ Each category has a fresh complete Helm reference checked against the independen
 
 Reference execution plus all added renders share a 540s ceiling per category. Planning and analysis are excluded. Policy check counts are not independent full-run timing measurements. The synthetic assertion rejects the error ConfigMap's incorrect status; ordinary Helm rendering alone accepts that YAML.
 
-[Raw references and execution records](results.json) · [CSV](results.csv)
+Raw references and execution records (local run data) · CSV (local run data)
 
 ```sh
 hypothesis-helm-benchmark expansion \
   --input-complexity 10 --error-percent 5 --error-seed 1729 \
-  --seed 2026 --trim-level 2 --time-limit 9m --output reports/expansion
+  --seed 2026 --trim-level 2 --time-limit 9m --output .cache/benchmarks/expansion
 ```
 
 
-`--filter` and `--filter-aggressive` use topology level 2 and enable failure expansion. Aggressive sampling recomputes chart complexity, protects structural regions and applies the packaged calibration. An unmatched or unsupported chart keeps the ordinary filtered selection; 70% retention is not forced. Expansion-off columns are controlled ablations of these presets.
+`--filter` and `--filter-adaptive` use topology level 2 and enable failure expansion. Aggressive sampling recomputes chart complexity, protects structural regions and applies the packaged calibration. An unmatched or unsupported chart keeps the ordinary filtered selection; 70% retention is not forced. Expansion-off columns are controlled ablations of these presets.
 
 **Aggressive sampling decisions.** Counts below exclude the always-retained default configuration and precede failure expansion. Case and field floors apply only to matched calibrations.
 

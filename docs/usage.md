@@ -10,8 +10,11 @@
 - [Audit and rendering limits](#audit-and-rendering-limits)
 - [Whole-chart modes](#whole-chart-modes)
   - [Interaction coverage](#interaction-coverage)
+    - [Targeted exhaustive groups](#targeted-exhaustive-groups)
+    - [Counts, timing and previous-run comparisons](#counts-timing-and-previous-run-comparisons)
   - [Sampling and full enumeration](#sampling-and-full-enumeration)
 - [Examples and Astrivant](#examples-and-astrivant)
+- [Live logs](#live-logs)
 - [Stream rendered manifests](#stream-rendered-manifests)
 - [Adaptive parallel test execution](#adaptive-parallel-test-execution)
 - [Progress and interruption](#progress-and-interruption)
@@ -22,7 +25,7 @@
   - [Preparing schemas independently](#preparing-schemas-independently)
   - [Timing estimates](#timing-estimates)
 - [Cache-aware dry runs](#cache-aware-dry-runs)
-- [Strict source values](#strict-source-values)
+- [Stop on findings](#stop-on-findings)
   - [In-memory rendered-output comparison](#in-memory-rendered-output-comparison)
   - [Shared typed values model](#shared-typed-values-model)
   - [Exact-equivalence pruning](#exact-equivalence-pruning)
@@ -64,16 +67,15 @@ in templates to the working input model, generates one Python test per values pa
 suite. Collection and distributed sharding also select this workflow. Recursive
 repository tests support `--jobs N` directly: charts run in sequence, with N workers
 sharing the current chart's path queue and timeout.
-`--max-examples` defaults to **10 per property** for `test` and `scan`, not a total across the chart.
+`--max-examples` defaults to **10 per property** for `test` and `scan`.
 Shrinking a failure can require additional attempts. `--match` selects
 Python test names with a pytest keyword expression; path segments are included in
 those names. `--collect-only` generates and lists the tests without rendering.
-An empty selection returns a nonzero status rather than reporting success.
+An empty selection returns a nonzero status.
 
 Progress is logged for each path as it is added to the input model, assigned a generated test,
 and tested. Generation messages go to stderr so `generate` keeps its JSON output
-on stdout. Test progress appears live, once per selected property rather than once
-per Hypothesis example:
+on stdout. Test progress appears live, once per selected property:
 
 ```text
 [INFO] Coalescing path $.image.tag
@@ -84,7 +86,7 @@ per Hypothesis example:
 `audit` similarly logs each audited path. Wildcard items appear as `[*]`; unusual
 keys use quoted bracket notation.
 `--match` limits test execution logs to selected properties. `--collect-only`
-logs generation and lists tests without claiming to execute them.
+logs generation and lists the tests selected for execution.
 
 The plugin invokes pytest with its own Python interpreter, pins the invocation's
 Hypothesis seed, and streams failures and progress to the Helm console. Ambient
@@ -95,7 +97,7 @@ and editable.
 Use a dedicated artifact directory for each chart/run:
 
 ```sh
-helm hypothesis test ./chart --artifact-dir reports/my-chart \
+helm hypothesis test ./chart --artifact-dir .cache/hypothesis-helm/my-chart \
   --release example --namespace testing --kube-version 1.31.0 --timeout 30
 ```
 
@@ -130,7 +132,7 @@ suite or edit the saved Python. Both commands use the plugin's bundled dependenc
 | `report.json` | Run status, pytest exit code, seed, selection and result location |
 | `hypothesis-helm.pytest.ini` | Dedicated pytest configuration for the plugin invocation |
 
-`test` writes these beneath `--artifact-dir` (default `reports/hypothesis-helm`).
+`test` writes these beneath `--artifact-dir` (default `.cache/hypothesis-helm/runs`).
 `run` writes results beside the saved suite. Reusing a directory overwrites its
 artifacts; regenerate after chart changes. Generated chart paths are relative to
 the suite directory. Keep that relationship when moving the repository.
@@ -183,7 +185,7 @@ then use `helm hypothesis run` to execute it.
 
 ```sh
 helm hypothesis audit ./chart
-helm hypothesis audit ./chart --strict
+helm hypothesis audit ./chart --fail
 ```
 
 The template AST resolves direct values, root access, simple aliases, lexical
@@ -208,9 +210,10 @@ Recursive schema paths are rejected instead of reported as covered.
 
 Rendered YAML must contain resource envelopes with nonempty `apiVersion`, `kind`
 and `metadata.name`; duplicate identities are rejected and `List` items checked
-recursively. This is not Kubernetes admission or application behavior validation.
-JSON null follows Helm's deletion semantics. Path coverage does not prove that
-all template guards were activated or every execution branch was reached.
+recursively. Kubernetes admission and application behavior require their own
+validation stages. JSON null follows Helm's deletion semantics. Path coverage
+records exercised input paths; branch coverage requires tracking template guards
+and execution branches.
 
 ## Whole-chart modes
 
@@ -243,9 +246,8 @@ Small spaces are promoted to full enumeration even with an explicit interaction
 strength. `--exhaustive-threshold 10000` is the default: **multiply the number of
 choices for each factor**, including choices that constraints may later rule out.
 That count must be strictly smaller than the threshold and fit `--max-cases`.
-This is a conservative affordability decision,
-not a count of schema-valid inputs. A heavily constrained larger space is not
-automatically classified as small. Set `--exhaustive-threshold 0` to disable
+This affordability decision uses the unconstrained product. A heavily constrained
+larger space still exceeds the threshold even when few inputs satisfy the schema. Set `--exhaustive-threshold 0` to disable
 promotion and retain the requested interaction strength. If the strength already
 includes every factor, full enumeration is required regardless of the threshold.
 
@@ -390,8 +392,8 @@ the other whole-chart modes, they do not support per-path filtering, collection,
 per-path cache estimates, or distributed sharding. `--seed` does not change the
 deterministic coverage plan. Use `--shard none` when CI would otherwise enable
 automatic sharding. Kubernetes validation and manifest streaming remain available.
-Complete interaction coverage does not prove template branch coverage or correct
-application behavior.
+Interaction coverage records combinations of input values. Template branch coverage
+and application behavior require separate checks.
 
 ### Sampling and full enumeration
 
@@ -407,10 +409,10 @@ not generate a per-path suite and do not accept `--match` or `--collect-only`.
 Failures save `values.json` and `report.json` for replay:
 
 ```sh
-helm template hypothesis ./chart --values reports/hypothesis-helm/values.json
+helm template hypothesis ./chart --values .cache/hypothesis-helm/runs/values.json
 ```
 
-Sampling is evidence from tested inputs, not a proof of totality. Exhaustive
+Sampling provides evidence from the tested inputs. Exhaustive
 coverage is limited to the declared finite input domain and rendering environment.
 
 ## Examples and Astrivant
@@ -421,7 +423,7 @@ helm hypothesis test examples/configmap
 helm hypothesis test examples/broken
 helm hypothesis test examples/hidden-levers
 helm hypothesis test ../astrivant/helm/astrivant --collect-only \
-  --artifact-dir reports/astrivant
+  --artifact-dir .cache/hypothesis-helm/astrivant
 helm hypothesis run reports/astrivant --match networkPolicy
 ```
 
@@ -429,15 +431,31 @@ The broken chart intentionally fails on `replicas: 0`. The hidden-lever chart
 exercises recovered template fallbacks. Astrivant has incomplete schema entries
 and dynamic references; its generated tests may expose real chart failures.
 
+## Live logs
+
+Local commands log progress at INFO and findings at WARNING, to stdout by default. Each finding includes the chart,
+values path, code and a short preview of the triggering overrides. The final counterexample is logged at WARNING after shrinking;
+full evidence remains in the report artifacts. Repeated shrink attempts do not repeat the same finding announcement.
+
+Use `--log-file ./logs/chart.log` to append logs to a file instead. For a JSON report on stdout, send logs elsewhere:
+
+```sh
+helm hypothesis test ./chart --filter --log-file /dev/stderr > report.json
+```
+
+Repository refresh jobs tee live diagnostics to the terminal and their per-job log files while saving report JSON separately.
+With manifest streaming enabled, console logs and reports go to stderr so stdout remains suitable for downstream tools.
+
 ## Stream rendered manifests
 
-Use `helm hypothesis test ./chart --output json` (or `-o json`) to emit
+Use `helm hypothesis test ./chart --output-format json` (or `-o json`) to emit
 newline-delimited JSON: one compact Kubernetes resource per line, flushed as
 each render reaches coordinator verification. Parallel exhaustive runs preserve seeded order and emit complete records from one coordinator.
 The same flag works with `helm hypothesis run
-reports/hypothesis-helm`, `--whole-chart`, and `--exhaustive`. Progress,
+.cache/hypothesis-helm/runs`, `--whole-chart`, and `--exhaustive`. Progress,
 pytest output, reports, and errors go to stderr; stdout contains only manifests.
-Collection-only runs emit no manifests.
+The flag also works with remote `scan` commands. Use `--output-format yaml` (or `-o yaml`) for YAML documents separated by `---`.
+Collection-only runs emit no manifests. Parallel path workers serialize complete documents through a shared lock.
 
 Every rendered example is included, including repeated examples during shrinking.
 Documents are emitted before resource-envelope checks, so a JSON-serializable
@@ -481,8 +499,8 @@ Use `--jobs N` / `-j N` for fixed concurrency, or `--jobs 1` for serial executio
 ```sh
 helm hypothesis test ./chart
 helm hypothesis test ./chart --jobs auto -o json
-helm hypothesis run reports/hypothesis-helm --jobs 4
-helm hypothesis run reports/hypothesis-helm -j 1
+helm hypothesis run .cache/hypothesis-helm/runs --jobs 4
+helm hypothesis run .cache/hypothesis-helm/runs -j 1
 ```
 
 The controller measures completed tests per second, including interpreter startup,
@@ -497,8 +515,8 @@ levels and estimates the marginal throughput change per worker. A PID controller
 uses that gradient to approach zero marginal gain, with a filtered derivative,
 integral anti-windup, and a one-worker adjustment limit per measurement window.
 Periodic probes allow further exploration; flat throughput favors fewer workers.
-This seeks a local throughput maximum within the bounds, rather than guaranteeing
-an optimum for heterogeneous tests or changing host load. Short suites may finish
+This seeks a local throughput maximum within the bounds. Heterogeneous tests
+and changing host load can shift that maximum. Short suites may finish
 before enough measurements exist to adjust concurrency.
 
 A thread pool dispatches one selected property at a time into an isolated pytest
@@ -558,7 +576,7 @@ helm hypothesis test ./chart --shard 3/3 --jobs auto --seed 42
 helm hypothesis test ./chart --shard 1/3 --match image --collect-only
 
 # Partition an existing suite, with reports in a separate location:
-helm hypothesis run generated-tests --shard 1/3 --artifact-dir reports/distributed
+helm hypothesis run generated-tests --shard 1/3 --artifact-dir .cache/hypothesis-helm/distributed
 ```
 
 The partition algorithm (`sha256-nodeid-v1`) hashes the UTF-8 pytest node ID
@@ -724,9 +742,11 @@ schema caching remains active. `--collect-only` does not fetch schemas or run th
 Validation uses local schema files, strict mode, and one kubeconform worker per
 property worker to avoid nested concurrency. Invalid resources, unsupported API
 versions, and missing schemas fail the property and participate in Hypothesis shrinking.
-Custom resources require schemas beyond the upstream Kubernetes catalog and currently
-fail as missing schemas. This checks API structure, not admission policies or live
-cluster behavior. Manifests still stream through `--output json` before validation,
+Custom resources require [explicit resource schemas](input-domains/README.md#custom-resources)
+beyond the upstream Kubernetes catalog. Supplied schemas validate those resources locally;
+kubeconform continues to check built-in resources. Missing custom schemas fail validation.
+This checks API structure, not admission policies or live cluster behavior.
+Manifests still stream through `--output-format json` before validation,
 including failing examples. Use `--kubeconform-binary PATH` for a specific executable.
 
 Path-result cache keys include the schema content identity, resolved Kubernetes
@@ -771,9 +791,9 @@ execution. `selected_properties` counts properties after filtering and sharding;
 cached successes omitted by the rerun policy. Each property includes its prior
 outcome, planned action, and literal `max_examples` setting when known.
 
-`successful_example_budget` sums those settings for scheduled properties. It is
-not an exact render count or an exhaustive count of the value domain: Hypothesis
-may stop early or do additional work for rejection, replay, and shrinking. If a
+`successful_example_budget` sums those settings for scheduled properties.
+Actual render counts depend on early stopping and additional work for rejection,
+replay and shrinking. The selected strategy determines input-domain coverage. If a
 hand-edited test has an unknown budget, the aggregate is `null`. All cached
 successes produce zero scheduled properties and a zero budget locally; CI or
 `--rerun all` still schedules the full selected suite. Cache files do not contain
@@ -794,23 +814,27 @@ for these per-path cache estimates; automatic finite plans have their own
 [iteration statistics](#counts-timing-and-previous-run-comparisons).
 Dry runs cannot combine with `--collect-only`, `--whole-chart`, or `--exhaustive`.
 
-## Strict source values
+## Stop on findings
 
-`--strict` requires every configurable path declared by the schema or resolved from
-templates to be explicitly present in the chart's original `values.yaml`. Optional
+`--fail` stops on any unsuppressed finding and returns `1`, including schema-documentation warnings and unresolved template accesses.
+Without it, scans report audit warnings and continue; actual test failures can still make the completed scan return `1`.
+The earlier `--strict` option has been removed. Use [finding controls](rules/README.md) for intentional exceptions.
+
+The audit checks that every configurable path declared by the schema or resolved from
+templates is explicitly present in the chart's original `values.yaml`. Optional
 schema fields count too, even if no template currently references them. A schema
 `default`, Helm `default`/`dig` fallback, or value inserted into the in-memory
 coalesced document does not satisfy this requirement.
 
 ```sh
-helm hypothesis audit ./chart --strict
-helm hypothesis test ./chart --strict
-helm hypothesis generate ./chart --strict --output generated-tests
-helm hypothesis run generated-tests --strict
+helm hypothesis audit ./chart --fail
+helm hypothesis test ./chart --fail
+helm hypothesis generate ./chart --fail --output generated-tests
+helm hypothesis run generated-tests --fail
 ```
 
 Missing fields produce `no-default` findings with their paths and available template
-locations. Strict commands exit with status 1 before generation, rendering, or schema
+locations. Commands using `--fail` exit with status 1 before generation, rendering, or schema
 downloads when the audit has findings or unresolved accesses. Existing checks for
 undocumented or untyped fields and missing descriptions still apply. A cached passing
 test result cannot bypass this preflight, including during `--dry-run`.
@@ -819,12 +843,11 @@ Presence is checked by key, so an explicit `null` leaf is present; it must still
 satisfy the schema and render successfully when tested. A null parent does not
 supply nested keys. Named fields inside arrays or dynamic maps must appear in every
 entry. Empty collections are acceptable for scalar item values, but cannot demonstrate
-nested named fields: strict mode requires representative entries containing those
+nested named fields: `--fail` requires representative entries containing those
 fields. Fixed array positions must exist as well.
 
-Saved suites use `chart-source.json` to audit their original chart rather than the
-coalesced snapshot. Regenerate older suites without this metadata before using
-`run --strict`. Strict checks never modify the source `values.yaml`.
+Saved suites use `chart-source.json` to audit their original chart. Regenerate older suites without this metadata before using
+`run --fail`. Audit checks never modify the source `values.yaml`.
 
 ### In-memory rendered-output comparison
 

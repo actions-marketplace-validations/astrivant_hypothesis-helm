@@ -7,7 +7,7 @@
 - [Recorded fixture depths](#recorded-fixture-depths)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md)
+[Benchmarking](<../../docs/benchmarking/README.md>)
 
 **8 is permutation interaction strength, not component count.** This study holds
 `--permutations 8` fixed and varies additional Boolean gate depth:
@@ -69,14 +69,14 @@ These are matched coverage comparisons, not independent end-to-end timings.
 Exact output coverage, input recall, additional renders and remaining work are in the CSV.
 One fixed seed does not establish a universal best topology or filtering setting.
 
-[Raw observations and pooled PCA bases](results.json) · [CSV](results.csv)
+Raw observations and pooled PCA bases (local run data) · CSV (local run data)
 
 ```sh
 hypothesis-helm-benchmark nesting --permutations 8 \
-  --time-limit 9m --output reports/nesting
+  --time-limit 9m --output .cache/benchmarks/nesting
 ```
 
-`--filter` and `--filter-aggressive` use topology level 2 and enable failure expansion. Aggressive sampling recomputes chart complexity, protects structural regions and applies the packaged calibration. An unmatched or unsupported chart keeps the ordinary filtered selection; 70% retention is not forced. Expansion-off columns are controlled ablations of these presets.
+`--filter` and `--filter-adaptive` use topology level 2 and enable failure expansion. Aggressive sampling recomputes chart complexity, protects structural regions and applies the packaged calibration. An unmatched or unsupported chart keeps the ordinary filtered selection; 70% retention is not forced. Expansion-off columns are controlled ablations of these presets.
 
 **Aggressive sampling decisions.** Counts below exclude the always-retained default configuration and precede failure expansion. Case and field floors apply only to matched calibrations.
 

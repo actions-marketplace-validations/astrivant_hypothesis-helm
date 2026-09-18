@@ -10,7 +10,7 @@
 Status: **complete**. Helm render attempts: **1223**.
 
 Distance counts added and removed JSON path/value indicators. A changed value counts twice.
-Document and array order matter. These measurements do not prove equivalence or authorize pruning.
+Document and array order matter. These measurements describe observed changes; the compiler's equivalence contract governs pruning.
 Distances assume deterministic rendering with fixed chart dependencies, release, namespace and Kubernetes version.
 
 ![Sensitivity, interaction and sequence measurements](sensitivity.png)
@@ -72,17 +72,16 @@ Pairs with order-dependent inputs are excluded from this measure. Render failure
 The ordered sequence in results.json records both cumulative path length and displacement from the baseline.
 They differ when later mutations reverse earlier changes. The sequence stops at its first invalid or failed step.
 
-[Full measurements and render errors](results.json)
+Full measurements and render errors (local run data)
 
 ## Reproduce this study
 
 Shared benchmark chart: 48 Boolean inputs, 64 structural components, seed 2026. The baseline alternates true and false; each mutation flips one distinct path. This measures one baseline, not the entire configuration space.
 
-Exact chart sources are retained in [chart-inputs.json](chart-inputs.json).
+Exact chart sources are retained in chart-inputs.json (local run data).
 
-This command updates the published study automatically after a successful run.
-Use `--output` to keep results separate; incomplete runs do not replace the published study.
+This command updates the published study automatically after a successful run. Use --output to keep results separate; incomplete runs do not replace the published study.
 
 ```bash
-bash scripts/project-run.sh hypothesis-helm-benchmark sensitivity --inputs 48 --components 64 --seed 2026 --time-limit 540
+bash scripts/project-run.sh hypothesis-helm-benchmark sensitivity --inputs 48 --components 64 --seed 2026 --time-limit 540.0
 ```

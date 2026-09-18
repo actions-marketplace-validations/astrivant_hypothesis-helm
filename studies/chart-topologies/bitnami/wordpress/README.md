@@ -9,9 +9,9 @@
 [All chart topologies](../../README.md)
 
 Status: **rendered**. Source: `third_party/bitnami-charts/bitnami/wordpress`.
-Potential references are not proof of exact input-to-output causality.
+Potential references identify inputs to investigate for causal effects on output.
 Baseline-unavailable graphs contain static evidence only.
 
 ![Full directed dependency multigraph](topology.png)
 
-[Vector graph](topology.svg) · [Graph JSON](graph.json.gz) · [DOT](graph.dot.gz) · [Coordinates](positions.csv.gz) · [Invariants](metrics.json)
+[Vector graph](topology.svg) · Graph JSON (local run data) · DOT (local run data) · Coordinates (local run data) · Invariants (local run data)

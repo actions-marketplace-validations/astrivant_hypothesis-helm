@@ -4,6 +4,7 @@
 **Table of contents**
 
 - [Value-path traversal](#value-path-traversal)
+  - [Sensitivity-guided permutation traversal](#sensitivity-guided-permutation-traversal)
 - [Parallel execution](#parallel-execution)
   - [Input memory](#input-memory)
   - [Runtime estimates](#runtime-estimates)
@@ -27,7 +28,7 @@ rules apply inside nested values and generated object keys.
 This applies to whole-chart sampling and newly generated per-path suites; regenerate
 saved suites to update their strategies. Explicit finite domains and chart defaults
 are unchanged. If a schema requires only excluded strings, sampling cannot satisfy
-that schema; an empty or unsatisfiable sample is not a successful test.
+that schema, and reports the empty or unsatisfiable sample as unsuccessful.
 
 ## Value-path traversal
 
@@ -43,6 +44,7 @@ many values and, on failure, simplify the input to a smaller reproducing example
 | `linear` | Original path order. Scans follow supplied values before additional discovered paths. |
 | `root-first` | Increasing path depth: `.global` before `.global.configMaps`. |
 | `leaf-first` | Decreasing path depth: deepest leaves before their parent containers. |
+| `sensitivity-first` | Finite permutation tests: measure retained references, then prioritize larger and more numerous interactions. |
 
 ```sh
 helm hypothesis test ./charts --filter --seed 42 --traversal-strategy random --chart-timeout 3m
@@ -65,7 +67,7 @@ root-first uses the shallowest changed field and leaf-first the deepest, relativ
 A render can be skipped as equivalent only after another input has passed validation
 and the compiler has established that both inputs produce exactly the same output.
 
-Ordering costs O(P) for linear traversal and O(P log P) for the other strategies,
+Ordering costs O(P) for linear traversal and O(P log P) for random and depth-based strategies,
 with O(P) storage, excluding path encoding and finite-case comparisons. P counts
 the paths or configurations selected for execution. Changing traversal strategy
 changes their order; it does not add or remove tests. Testing every path does not
@@ -75,13 +77,58 @@ Scan reports retain the seed, strategy, visited order, completed and incomplete 
 counts, and remaining order. `path-inventory.json` records the planned sequence.
 Per-path dry runs list the same ordered properties without executing them.
 
+### Sensitivity-guided permutation traversal
+
+Use `sensitivity-first` when you want measured interactions to determine which retained configurations run first:
+
+```sh
+helm hypothesis test ./chart --permutations 3 --traversal-strategy sensitivity-first --sensitivity-order 2 --seed 42
+```
+
+Here the tests cover triples, while sensitivity analysis considers individual changes and pairs. `--sensitivity-order N`
+sets the maximum number of changed paths in an analyzed group, independently of coverage. It must be between 1 and
+`--permutations`; the default is the smaller of 2 and the requested permutation strength. Increasing it never authorizes
+analysis above the interaction order selected for bug testing.
+
+Filtering and sampling select the configurations first. The scheduler then finds baseline-relative groups whose reference
+configurations survived selection. Measuring a pair requires the baseline, each change separately, and both changes together.
+Larger groups similarly require every subset of their changes. Missing references remain unknown; the scheduler does not
+restore filtered cases to fill these gaps.
+
+Reference configurations run first as ordinary bug tests, within the chart's execution deadline. Their successful manifest
+outputs supply the measurements, and those configurations are not tested again during the remaining traversal. A failure
+during this phase is a normal test failure; failure expansion still follows the configured policy.
+
+Remaining configurations are prioritized by:
+
+1. The largest measured interacting group among their changed paths.
+2. The number of distinct measured interactions among those paths. More interactions rank higher.
+3. The magnitude of those interactions, then individual output changes.
+4. The existing seeded order for ties or configurations without measured effects.
+
+An interaction is a nonzero mixed finite difference of the manifest path/value indicators used by the
+[sensitivity study](<../../studies/sensitivity/README.md>). It measures how joint changes differ from the separate changes.
+Different tested values for the same group of paths count as one interaction; the largest observed magnitude is retained.
+These measurements describe the tested baseline and values. They neither prove that an unmeasured region is harmless nor
+guarantee earlier bug discovery. The report's `sensitivity` object includes path scores and missing-reference counts.
+
+This strategy is available for finite `test` and `scan` runs with explicit `--permutations`, including recursive chart discovery.
+It does not apply to saved per-path suites, unbounded domains, or `--exhaustive`. A dry run describes the requested bound;
+it cannot produce measured priorities without executing tests. Finite interaction execution remains serial.
+
+For G candidate groups of at most K paths, checking their reference sets takes up to O(G × 2^K) subset visits, plus mutation
+encoding. Computing their finite differences takes O(G × 2^K × F) work when each output has at most F manifest features.
+Ranking P remaining cases against I measured interactions takes O(P × I × K + P log P), excluding input comparison costs.
+Profiling adds no test configurations, but may front-load a large fraction of the retained tests; a timeout can occur before
+the ranked remainder starts. Feature storage scales with the number of retained reference outputs, rather than every output
+in the full plan. Measurement evidence is local to the invocation; no cross-run sensitivity cache is used.
+
 ## Parallel execution
 
 Repository tests process one chart at a time. With `--jobs 6`, six Python workers
 share that chart's ordered queue of value paths. Each path is claimed once and
 receives up to **10 generated examples** by default (`--max-examples` overrides this).
-Workers share one `--chart-timeout` deadline, rather than receiving a separate chart
-budget each. They stop and are joined before the next chart starts. Dependency
+Workers share one `--chart-timeout` deadline. They stop and are joined before the next chart starts. Dependency
 preparation happens before testing and is excluded from this budget.
 
 `--jobs auto` uses the available CPU count for this repository path queue. Results
@@ -112,14 +159,14 @@ inputs, independently of tests for other paths, so several workers can run at on
 Custom tests must preserve this independence: shared mutable files or external
 resources can introduce interference. Process and fixture startup add overhead,
 so small suites may benefit less from parallelism. Automatic tuning seeks higher
-throughput within its bounds; it does not guarantee a global optimum. Use
+throughput by probing nearby concurrency levels within its bounds. Use
 `--jobs N` for fixed concurrency or `--jobs 1` for serial execution. The explicit
 whole-chart sampling and finite interaction modes remain serial. Explicit `--exhaustive --jobs N` runs up to N Helm processes concurrently.
 
 ### Input memory
 
 Finite plans store assignment IDs and reconstruct values when needed. Filtering and
-traversal retain selected positions rather than copies of every configuration. Planning
+traversal retain selected positions and reconstruct configurations on demand. Planning
 still validates candidate inputs before claiming coverage; replay trades some repeated
 construction work for lower memory use. The seed, case order and coverage rules are unchanged.
 
@@ -223,9 +270,10 @@ The progress bar shows a live ETA based on completed properties. It starts unkno
 and updates as measurements arrive; JUnit reports record each property's duration.
 Schema types alone cannot predict runtime: Helm branches and resource counts,
 Hypothesis input rejection and shrinking, and runner contention all affect cost.
-`--max-examples` is a sampling budget, not an exact render count. Treat the ETA as a
+`--max-examples` sets the sampling budget; rejection, replay and shrinking affect
+the actual render count. Treat the ETA as a
 rough estimate, particularly while automatic worker concurrency changes or a failing
-property is shrinking. No reliable time estimate is claimed before tests execute.
+property is shrinking. The ETA remains unknown until execution provides timings.
 
 ## Distributed sharding
 
@@ -243,7 +291,7 @@ helm hypothesis test ./chart --shard 3/3 --jobs auto
 Shards use a stable hash of each property identifier, after `--match` filtering.
 Running every shard against the same suite and selection covers each property
 exactly once. Reports and generated files are isolated under
-`reports/hypothesis-helm/shards/INDEX-of-TOTAL/`. Saved suites also support
+`.cache/hypothesis-helm/runs/shards/INDEX-of-TOTAL/`. Saved suites also support
 `helm hypothesis run generated-tests --shard 1/3`.
 
 Each runner reports its own status; CI must require all shards to succeed.
@@ -258,17 +306,17 @@ For three local shards with two worker processes each:
 
 ```sh
 run_id="$(date +%s)-$$"
-artifacts="reports/sharded-$run_id"
+artifacts=".cache/hypothesis-helm/sharded-$run_id"
 parallel --jobs 3 --halt never --quote \
   helm hypothesis run generated-tests --shard {}/3 --jobs 2 \
   --run-id "$run_id" --artifact-dir "$artifacts" \
   --cache-dir .cache/hypothesis-helm/results ::: 1 2 3 || true
 cat "$artifacts"/shards/*/report.json |
-  helm hypothesis aggregate --shards 3 --run-id "$run_id" --output-dir "$artifacts/final"
+  helm hypothesis aggregate --shards 3 --run-id "$run_id" --output-dir "docs/reports/sharded-$run_id"
 ```
 
-`aggregate` writes one `final/` bundle containing `report.pdf`, `report.md`,
-`report.json`, and `junit.xml`. `--output-dir` selects another new directory.
+`aggregate` writes one final bundle containing `report.pdf`, `report.md`,
+`report.json`, and `junit.xml`. The default is `docs/reports/aggregate`; `--output-dir` selects another new directory.
 The merge returns a failure status when any shard fails. Missing, stale, or incompatible shards prevent publication. Suite fingerprints, collection
 identities, shard ownership, and JUnit checksums must agree. Repeating the merge
 with identical inputs reuses the same final bundle; concurrent mergers targeting
@@ -291,13 +339,13 @@ values-structure markers use atomic replacement. Duplicate invocations targeting
 the same shard directory serialize through a per-shard lock.
 
 A shared filesystem must support process locks and atomic renames. CI cache restores
-on separate machines are independent snapshots, not shared memory. Upload shard
+on separate machines provide independent snapshots. Upload shard
 artifacts for aggregation; do not rely on concurrent CI cache uploads to merge data.
 Cached successes appear as reused properties, separately from executed JUnit cases.
 An idle shard exits successfully with zero test workers and still publishes its report,
 whether it owns no properties or all its properties have cached successes. Include that
 report in aggregation, even when every shard is idle. For two pending properties across
-three shards, unused capacity is expected; hash assignment does not guarantee equal loads.
+three shards, unused capacity is expected. Hash assignment can produce uneven loads.
 An unmatched `--match` expression remains an error. Cache reuse requires a compatible
 suite fingerprint; changing chart contents can invalidate the full cached selection.
 Elapsed time spans the timestamps reported by the shards; cross-host clock skew can
@@ -331,9 +379,9 @@ from this execution budget. Generated per-path suites do not use this option.
 At the deadline, the CLI stops the active iteration and returns `status: time-limit`
 with exit code 124. Completed, attempted and remaining iteration counts, elapsed
 time, render hashes, pruning statistics and measured history are retained, along
-with an incomplete JUnit result. A budget stop does not create a chart
-counterexample or claim complete coverage. Starting another run currently starts
-its planned inputs again; retained statistics are not a resume checkpoint.
+with an incomplete JUnit result. A budget stop records unfinished work.
+Starting another run begins its planned inputs again; retained statistics
+describe the previous run.
 
 The dry-run plot recommends the highest completed strength whose predicted
 execution time fits the budget. It evaluates higher strengths where the planning
@@ -364,7 +412,7 @@ The shutdown regression tests cover these boundaries:
 | Shared process owner → multiple children | One cleanup failure or repeated cancellation does not skip sibling joins |
 
 Benchmark results retain completed and remaining counts when stopped. A timeout is
-incomplete work, not a chart defect or complete coverage. Cleanup can extend elapsed
+recorded as incomplete work. Cleanup can extend elapsed
 time beyond the testing budget. GNU Parallel wrappers allow ten seconds between
 termination and forced killing so Python workers can finish cleanup and reporting.
 SIGKILL, machine loss and CI runners that forcibly destroy the job cannot run Python
@@ -393,8 +441,8 @@ become 5 at level 1, then 2 at level 2. With the same planned cases, seed, and
 other options, increasing the trim level only removes cases. For example, every
 case kept by `--trim-random 2` is also kept by `--trim-random 1`.
 
-Topology groups come from template analysis before testing. Membership does not
-mean an input has passed a test. If the compiler cannot analyze an expression or
+Topology groups come from template analysis before testing. Execution determines
+whether their inputs pass the selected checks. If the compiler cannot analyze an expression or
 establish the renderer's behavior, it keeps the affected cases. Reports show which
 inputs affect each template, branch choices, group sizes, and omitted cases.
 Sampling within groups preserves examples of different outputs, but it can change
@@ -437,9 +485,9 @@ failing inputs found every distinct faulty output produced by 51 known failing
 inputs. The other four inputs produced faulty outputs already seen. Expansion
 can test those four as well. It cannot discover a group whose first failing case
 was never tested, or assume an untested input will fail. Cases the compiler cannot
-group are not automatically added through expansion.<sup>[\[2\]](../../studies/expansion/README.md)</sup>
+group are not automatically added through expansion.<sup>[\[2\]](<../../studies/expansion/README.md>)</sup>
 
-See the [paired failure-expansion matrix](../../studies/expansion/README.md).
+See the [paired failure-expansion matrix](<../../studies/expansion/README.md>).
 Dry runs report a bound on additional work; the actual count depends on failures.
 
 ## Percentage sampling
@@ -448,7 +496,8 @@ Dry runs report a bound on additional work; the actual count depends on failures
 filters, rounded up to a whole case. It keeps at least 128, or all cases if fewer
 than 128 remain. For example, it keeps 700 of 1,000 cases and all 100 of 100 cases.
 The default is `--sample-random 100`, which disables this reduction. The minimum
-test count does not guarantee how many bugs will be found.<sup>[\[3\]](../adaptive-filtering/README.md#what-determines-the-minimum)</sup>
+test count sets the sampling floor. Bug discovery depends on which inputs
+trigger defects and which inputs the sample contains.<sup>[\[3\]](../adaptive-filtering/README.md#what-determines-the-minimum)</sup>
 
 ```sh
 helm hypothesis test ./chart --filter --sample-random 70 --sample-min-cases 128 --seed 2026
@@ -480,7 +529,7 @@ eligible, retained, omitted, and protected counts. Omissions are not successful 
 For N eligible cases, sampling uses O(N log N) time to rank stable case identities
 and O(N) memory. When every case is retained, it skips ranking and takes O(N) time.
 
-See the [measured sample-size study](../../studies/sampling/README.md). Repeated
+See the [measured sample-size study](<../../studies/sampling/README.md>). Repeated
 bugs can be found from a small sample. An error that occurs for only one input
 requires sampling most of the population to obtain a high discovery probability.
 

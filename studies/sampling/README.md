@@ -6,7 +6,7 @@
 - [Random sampling and defect discovery](#random-sampling-and-defect-discovery)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md)
+[Benchmarking](<../../docs/benchmarking/README.md>)
 
 The shared stress chart has 1024 valid inputs and six known defect families. Every input was rendered with Helm; 500 seeded samples were evaluated at each size.
 
@@ -28,12 +28,12 @@ The shared stress chart has 1024 valid inputs and six known defect families. Eve
 | 1023 + 1 | 100.0% | 6.00 / 6 | 100.0% | 100.0% | 100.0% |
 
 The first measured sample size reaching 96% defect recall in at least 95% of these seeds is **32**.
-This is a fixture-specific observation, not a confidence bound or a minimum valid for arbitrary charts.
+This sample size reached the target in the measured fixture and seeds. Other charts require their own recall measurements.
 
 With uniform sampling, a defect triggered by only one eligible input is found with probability sample_size / population_size. Testing 70% gives a 70% chance of finding that defect, regardless of how large the population is.
 
-The CLI policy is opt-in: `--sample-random 70 --sample-min-cases 128` keeps at least 128 eligible cases, or all of them when fewer exist. Defaults and protected topology representatives are additional safeguards. The default floor is a conservative policy choice, not a derived 96% guarantee.
+The CLI policy is opt-in: `--sample-random 70 --sample-min-cases 128` keeps at least 128 eligible cases, or all of them when fewer exist. Defaults and protected topology representatives are additional safeguards. The default floor sets a conservative minimum case count. Recall depends on the chart's defect-triggering inputs.
 
 Timing covers the complete reference render, not separate executions of every sampled subset. Samples use the production selector and preserve the same ranking as sample size increases.
 
-[Measurements](results.csv) · [Reference and provenance](results.json) · [Chart recipe](chart-parameters.yaml)
+Measurements (local run data) · Reference and provenance (local run data) · Chart recipe (local run data)

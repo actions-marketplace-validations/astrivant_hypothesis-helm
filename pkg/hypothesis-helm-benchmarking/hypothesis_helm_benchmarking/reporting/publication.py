@@ -1,0 +1,139 @@
+"""
+Publish finished study documents and figures while retaining run data in the cache.
+"""
+
+import hashlib
+import os
+import re
+import shutil
+from collections.abc import Iterator
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+from hypothesis_helm.reporting.links import link_matches
+
+STUDIES = Path("studies")
+FINAL_SUFFIXES = frozenset({".md", ".pdf", ".png", ".svg"})
+WORK_DIRECTORIES = frozenset({"runs", "cases", "reports", "logs", "helm", "frozen-source", "__pycache__"})
+
+
+def final_files(directory: Path) -> Iterator[Path]:
+    """
+    Visit finished documents and plots without descending into run or chart workspaces.
+
+    Args:
+        directory (Path): One study's output directory.
+
+    Yields:
+        Path: Final documents and images; measurements, fixtures and worker state are excluded.
+    """
+    for parent, directories, filenames in os.walk(directory):
+        base = Path(parent)
+        if "Chart.yaml" in filenames:
+            directories.clear()
+            continue
+        directories[:] = sorted(name for name in directories if name not in WORK_DIRECTORIES and not name.startswith("."))
+        for name in sorted(filenames):
+            path = base / name
+            if path.suffix.lower() in FINAL_SUFFIXES and not path.is_symlink():
+                yield path
+
+
+def document_links(content: str, original: Path, destination: Path) -> str:
+    """
+    Relocate study links and describe private run data without publishing cache URLs.
+
+    Args:
+        content (str): Study Markdown before publication.
+        original (Path): Previous published location used to resolve relative links.
+        destination (Path): New published document location.
+
+    Returns:
+        str: Markdown linking final results and documentation, with raw artifacts labelled local.
+    """
+    project = Path.cwd().resolve()
+    legacy = project / "studies"
+    published = project / STUDIES
+    lines = []
+    fence = ""
+    for line in content.splitlines():
+        marker = line.lstrip()
+        if marker.startswith(("```", "~~~")):
+            fence = "" if fence else marker[:3]
+        if not fence and not marker.startswith(("```", "~~~")):
+            for match in reversed(list(link_matches(line))):
+                target = match[2] or match[3]
+                parsed = urlsplit(target)
+                if parsed.scheme or parsed.netloc or not parsed.path:
+                    continue
+                path = (original.parent / unquote(parsed.path)).resolve()
+                if path.is_relative_to(legacy):
+                    path = published / path.relative_to(legacy)
+                study_artifact = path.is_relative_to(published)
+                private = (
+                    path.is_relative_to(project / ".cache") or any(part.endswith("-runs") for part in path.relative_to(project).parts)
+                    if path.is_relative_to(project)
+                    else False
+                )
+                if (
+                    private
+                    or study_artifact
+                    and (
+                        path.suffix.lower() not in FINAL_SUFFIXES
+                        or any(part in WORK_DIRECTORIES for part in path.relative_to(published).parts)
+                    )
+                ):
+                    replacement = f"{match[1]} (local run data)"
+                else:
+                    relative = os.path.relpath(path, destination.parent.resolve())
+                    fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+                    replacement = match[0] if relative + fragment == target else f"[{match[1]}](<{relative}{fragment}>)"
+                line = line[: match.start()] + replacement + line[match.end() :]
+            # Image links and escaped superscript labels can wrap a link parsed above.
+            for match in reversed(list(re.finditer(r"\]\((?:<([^>]+)>|([^\s)]+))\)", line))):
+                target = match[1] or match[2]
+                parsed = urlsplit(target)
+                if parsed.scheme or parsed.netloc or not parsed.path:
+                    continue
+                path = (original.parent / unquote(parsed.path)).resolve()
+                if path.is_relative_to(legacy):
+                    relative = os.path.relpath(published / path.relative_to(legacy), destination.parent.resolve())
+                    fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+                    line = line[: match.start()] + f"](<{relative}{fragment}>)" + line[match.end() :]
+        lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
+def publish_study(source: Path, destination: Path) -> dict[str, str]:
+    """
+    Replace one study's published files with its finished documents and figures.
+
+    Args:
+        source (Path): Cached run containing raw measurements and finished plots.
+        destination (Path): Dedicated final study directory under studies.
+
+    Returns:
+        dict[str, str]: SHA-256 checksums of the published files, keyed by destination path.
+    """
+    sources = tuple(final_files(source))
+    if not sources:
+        raise ValueError(f"No final documents or plots to publish in {source}")
+    if source.resolve() == destination.resolve() or source.resolve().is_relative_to(destination.resolve()):
+        raise ValueError("Study measurements must be outside the final publication directory")
+    expected = {path.relative_to(source) for path in sources}
+    checksums = {}
+    for path in sources:
+        relative = path.relative_to(source)
+        output = destination / relative
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if path.suffix.lower() == ".md":
+            original = Path("studies") / destination.name / relative
+            output.write_text(document_links(path.read_text(), original, output))
+        else:
+            shutil.copy2(path, output)
+        checksums[str(output)] = hashlib.sha256(output.read_bytes()).hexdigest()
+    # Only publication-owned files are replaced. Raw run evidence remains at source.
+    for path in tuple(final_files(destination)):
+        if path.relative_to(destination) not in expected:
+            path.unlink()
+    return checksums

@@ -25,7 +25,7 @@ input rejection, and an input omitted by sampling.
 
 ## Topology trimming
 
-[`topology.py`](../../pkg/hypothesis_helm/compiler/passes/topology.py) specializes
+[`topology.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/topology.py) specializes
 supported templates for each candidate. Inputs with the same symbolic output and
 executed branch decisions form a **region**. Selection keeps at least one member
 of each region and applies seeded thinning within it.
@@ -41,21 +41,22 @@ sampling policies are coordinated by the planner.<sup>[\[1\]](../execution/READM
 
 ## Exact-equivalence pruning
 
-[`pruning.py`](../../pkg/hypothesis_helm/compiler/passes/pruning.py) admits a
+[`pruning.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/pruning.py) admits a
 restricted deterministic chart and schema subset, snapshots its source, and
 compiles supported templates. For each schema-valid candidate it constructs a
 witness from symbolic output, branch decisions, and the fixed render context.
 
 A matching witness from a previously successful candidate establishes equality
 bounds `[0, 0]`. No match, unsupported behavior, or changed source means that Helm
-must run. The unproved comparison has bounds `[0, 1]`; different symbolic text
-does not prove different parsed manifests.
+must run. The unproved comparison has bounds `[0, 1]`, because different symbolic text
+can produce identical parsed manifests.
 
 A representative becomes reusable only after rendering, validation, empty-output
 checks, and custom assertions succeed. Reuse supplies fresh copies of its
 manifests, replays candidate assertions, and emits the manifest stream. Failures
 and pending work cannot authorize reuse. Certificates describe these decisions;
-they are local to the run and are not a machine-checked proof of Helm.
+they are local to the run and record the compiler's assumptions and evidence.
+See the [soundness argument](../safe-pruning.md#soundness-argument-and-assumptions).
 
 The [full contract](../safe-pruning.md) documents schema restrictions, source and
 environment checks, bounds, and soundness assumptions. `--prune-equivalent` is
@@ -63,7 +64,7 @@ separate from the `--filter` presets.
 
 ## Rejection-guided generation
 
-[`rejections.py`](../../pkg/hypothesis_helm/compiler/passes/rejections.py) applies
+[`rejections.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/rejections.py) applies
 the conditions found by the [rejection analysis](analysis.md#explicit-rejection-discovery).
 With filtering enabled, the first two distinct predicted rejections for each
 requirement are checked against Helm. Dependency charts require confirmation for
@@ -84,7 +85,7 @@ their own counters. Unknown conditions remain eligible for ordinary testing.
 
 ## Failure expansion
 
-[`expansion.py`](../../pkg/hypothesis_helm/compiler/passes/expansion.py) records
+[`expansion.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/expansion.py) records
 region memberships and already scheduled candidate indices. After a real failure,
 `FailureExpansion.failed` schedules every omitted member of that region once.
 Membership does not imply that those additional inputs will also fail.
@@ -95,13 +96,13 @@ initially selected work from additional cases.<sup>[\[2\]](../execution/README.m
 
 ## Where the passes run
 
-[`charts/planning.py`](../../pkg/hypothesis_helm/charts/planning.py) assembles finite
+[`charts/planning.py`](../../pkg/hypothesis-helm/hypothesis_helm/charts/planning.py) assembles finite
 plans using the schema, dependency interactions, trimming, and sampling policies.
 The planner applies the requested seeded traversal after selection. Per-path
 repository testing uses its own planning route; finite topology regions require a
 supported finite domain.
 
-[`charts/candidates.py`](../../pkg/hypothesis_helm/charts/candidates.py) coordinates
+[`charts/candidates.py`](../../pkg/hypothesis-helm/hypothesis_helm/charts/candidates.py) coordinates
 schema checks, rejection verification, equivalence lookup, actual rendering, and
 assertions. The [execution guide](../execution/README.md) describes mode-specific
 parallelism and time limits. Enabling one analysis does not enable every policy

@@ -7,7 +7,7 @@
 - [clustering: combined, Erroneous inputs missed](#clustering-combined-erroneous-inputs-missed)
 <!-- toc:end -->
 
-[Measurements](README.md) · [Model definition](../../docs/benchmarking/response-surface.md)
+[Measurements](README.md) · [Model definition](<../../docs/benchmarking/response-surface.md>)
 
 Quadratics fitted to collected cell means, separately for each method and response. Coefficients are not theoretical predictions.
 Only cells with every requested repeat completed enter the fit. Missing or timed-out cells remain blank.
@@ -17,7 +17,7 @@ Continuous predictions between discrete settings describe the model, not additio
 Negative predictions remain visible; neither nonnegative runtime nor bounded error counts are enforced by this polynomial.
 RMSE and R² measure agreement with the training cells, not performance on unseen charts. No global worst-case claim is made.
 
-[Coefficients, bounds and diagnostics](quadratic-fits.json)
+Coefficients, bounds and diagnostics (local run data)
 
 ## clustering: combined, Total runtime (seconds)
 

@@ -112,7 +112,7 @@ inputs:
     default: auto
   artifact-dir:
     description: Artifact root; sharded runs append shards/INDEX-of-TOTAL.
-    default: reports/hypothesis-helm
+    default: .cache/hypothesis-helm/runs
   upload-artifacts:
     description: Upload the generated suite, reports, and JSON manifests, including on failure.
     default: 'true'
@@ -366,7 +366,7 @@ runs:
         HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: ${{ inputs.schema-memory-dir }}
         HH_COMMIT_MINIMAL_VALUES: ${{ inputs.commit-minimal-values }}
         HH_COMMIT_BRANCH: ${{ github.ref_type == 'branch' && github.ref_name || '' }}
-      run: bash "$ACTION_PATH/pkg/hypothesis_helm/integrations/minimal_values.sh"
+      run: bash "$ACTION_PATH/pkg/hypothesis-helm/hypothesis_helm/integrations/minimal_values.sh"
     - name: Save Kubernetes schemas
       if: ${{ always() && (inputs.kubeconform == 'true' || inputs.kubesec == 'true') && inputs.schema-cache == 'true' && steps.schemas.outputs.cache-primary-key != '' && steps.schemas.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v5
@@ -377,6 +377,7 @@ runs:
       if: ${{ always() && inputs.upload-artifacts == 'true' && steps.test.outputs.report-dir != '' }}
       uses: actions/upload-artifact@v7
       with:
+        include-hidden-files: true
         name: ${{ inputs.artifact-name }}-${{ github.job }}-${{ steps.test.outputs.shard-id }}
         path: ${{ steps.test.outputs.report-dir }}
         if-no-files-found: warn
@@ -385,6 +386,7 @@ runs:
       if: ${{ always() && inputs.upload-artifacts == 'true' && steps.test.outputs.kubesec-report-dir != '' }}
       uses: actions/upload-artifact@v7
       with:
+        include-hidden-files: true
         name: ${{ inputs.artifact-name }}-kubesec-${{ github.job }}-${{ steps.test.outputs.shard-id }}
         path: ${{ steps.test.outputs.kubesec-report-dir }}
         if-no-files-found: warn

@@ -28,15 +28,14 @@ candidates. Per-path suites do not enable this compiler.
 ## Contract and distance
 
 Here, **distance** answers one question: are the complete parsed outputs equal?
-Equal outputs have distance 0; different outputs have distance 1. This is not a
-percentage similarity score. The rule applies to the configurations selected for
-this run; it does not expand that selection to cover other allowed inputs.<sup>[\[2\]](usage.md#interaction-coverage)</sup>
+Equal outputs have distance 0; different outputs have distance 1.
+The rule applies to the configurations selected for this run.<sup>[\[2\]](usage.md#interaction-coverage)</sup>
 
 For the generated candidate set D, let R(x) be the complete parsed manifest bundle
 from a successful Helm invocation in a fixed chart and renderer environment.
 The distance is discrete: d(a,b) = 0 if the bundles are exactly equal, and 1
 otherwise. The threshold is fixed at epsilon = 0.5, so no distinct output may be
-intentionally discarded. This is not a weighted similarity metric.
+intentionally discarded.
 
 The runtime retains a subset S of **actually rendered, successful** candidates.
 A candidate may skip Helm only when its symbolic equality key matches a member
@@ -45,9 +44,9 @@ of S. The resulting guarantee is:
     for every successfully covered x in D,
     there exists a successfully rendered s in S with R(x) = R(s).
 
-This does not claim coverage of inputs outside D. Testing every pair of input
-choices does not necessarily produce every possible output. Full finite
-enumeration supplies every configuration in the supported finite input space.
+The guarantee applies to D. Pairwise testing covers pairs of input choices;
+additional combinations may produce other outputs. Full finite enumeration
+supplies every configuration in the supported finite input space.
 
 ## Compiler stages
 
@@ -59,7 +58,7 @@ is code this analysis cannot interpret; reaching it forces a render.<sup>[\[3\]]
 
 1. **Parse/lower:** a separate text-preserving lexer and balanced-block IR retain
    literal output, source locations, Go whitespace trimming and opaque actions.
-   The existing discovery AST is not used as a proof of execution behavior.
+   Execution reasoning uses this IR; the discovery AST identifies input references.
 2. **Constant propagation and dead branches:** literal `true`/`false` conditions
    select their reachable branch. Candidate specialization binds supported field
    references and eliminates only branches proved inactive for that candidate.
@@ -71,18 +70,16 @@ is code this analysis cannot interpret; reaching it forces a render.<sup>[\[3\]]
    signatures. Representatives are compared within the same signature.
 5. **Symbolic output:** literal text, typed scalar identities and fixed context
    references form an output sequence. This avoids reimplementing Go scalar
-   formatting: equal typed scalars necessarily print identically. The compiler
-   does not predict or parse approximate YAML output.
+   formatting: equal typed scalars necessarily print identically.
 6. **Influence matrix:** shared `ValuesModel` nodes map input paths to surviving
    template output spans, annotated as control or scalar-copy influences. These
-   are source spans, not guessed Kubernetes JSON pointers. The matrix is partial
+   spans identify locations in the chart source. The matrix is partial
    where code is opaque and cannot authorize pruning on its own.
 7. **Bounds:** a matching successful witness yields [L,U] = [0,0]. Otherwise the
    compiler returns the sound but uninformative interval [0,1]. U < epsilon
    discards the Helm invocation; all unproved comparisons render. The bounds
-   dispatcher also supports L > epsilon, but this first compiler does not claim
-   positive separation merely because symbolic text differs: distinct YAML text
-   can still describe identical manifests.
+   dispatcher also supports L > epsilon. This compiler leaves differing symbolic
+   text at [0,1], because distinct YAML text can describe identical manifests.
 
 The current subset supports literal text, direct declared `.Values.a.b` scalar
 lookups (Boolean, integer, string), Boolean `if`/`else`, Boolean constants, `not` on Boolean paths,
@@ -99,7 +96,7 @@ values produce equal Go template output. Fixed context nodes have equal renderer
 inputs. Equal Boolean branch decisions select the same inductively equivalent
 subtrees. Supported same-type string/Boolean equality and Boolean negation have the same deterministic predicate results.
 Before specialization, the [branch knowledge pass](compiler/lattice.md) narrows schema-admitted possibilities,
-removes contradictory alternatives and merges branch exits. Unknown operations discard facts rather than preserving stale assumptions.
+removes contradictory alternatives and merges branch exits. Unknown operations discard facts that may no longer hold.
 Concatenation and lexical whitespace trimming preserve equality.
 Consequently, equal per-file output witnesses imply the same complete manifest
 bundle under the fixed Helm renderer. An opaque executed node prevents the
@@ -120,7 +117,7 @@ hidden by output equivalence.
 Subcharts, library charts, `.helmignore`, symlinks, parse-global named definitions
 and oversized chart snapshots are outside the proof contract. Executed loops,
 `with`, function pipelines, `include`, `tpl`, mutation, randomness, time and
-`lookup` are opaque. These restrictions reduce pruning opportunities, not the
+`lookup` are opaque. These restrictions force affected candidates to render, preserving
 candidate coverage. Safely inactive ordinary opaque expressions may be eliminated;
 parse-global definitions are rejected even in apparently dead code.
 
@@ -132,12 +129,11 @@ are part of the equality key. Changed observed inputs invalidate reuse. The
 fingerprint in the report is for auditing; hash collisions cannot authorize a
 prune because equality decisions use complete canonical keys and exact source bytes.
 
-This is a handwritten conservative semantic model with differential Helm tests,
-not a machine-checked proof of Helm or its dependencies. Reports explicitly set
+The semantic model is handwritten and checked with differential Helm tests.
+Its formal verification status is recorded in reports as
 `formally_verified: false`. OS failures, resource exhaustion, nondeterministic
 custom binaries, concurrent mutation and compiler implementation bugs are outside
-the mathematical equality argument. Unsupported behavior is never estimated with
-embeddings or probabilistic rejection.
+the mathematical equality argument. Unsupported behavior forces rendering.
 
 ## Runtime behavior and evidence
 
@@ -158,9 +154,9 @@ can still fail; callback mutation cannot contaminate later candidates.
   live inputs and eliminated inputs.
 
 Ordinary progress counts completed **candidate checks**, including equivalence
-proofs, rather than only Helm invocations. Render-hash counters count actual
+proofs and Helm invocations. Render-hash counters count actual
 rendered bundles. The original input interaction plan is retained. Dry runs
-compile and report the static contract but neither render nor claim certificates.
+compile and report the static contract; certificates require successful renders.
 Certificates remain run-local and are not restored as successes from history.
 
 The lexical and evaluation rules are based on the [Go text/template contract](https://pkg.go.dev/text/template).

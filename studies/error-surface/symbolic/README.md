@@ -30,7 +30,7 @@ Only the last source repeat is reserved, so these results do not establish gener
 Colours share a scale within each figure; predictions are not clipped to physical bounds. Cells are equally spaced.
 Outlined cells were withheld from training; all observed values come from the reserved repeat.
 
-[Raw equations, training splits, predictions and provenance](results.json)
+Raw equations, training splits, predictions and provenance (local run data)
 Search limits: 20 iterations, 15.0 seconds per search, expression complexity 20; seed 2026, serial execution.
 Search timeout excludes initialization and can affect reproducibility. Operators: +, -, *, /, square, exp.
 [PySR](https://github.com/astroautomata/PySR) supplies the equation search; holdouts are not used to tune it.

@@ -19,17 +19,17 @@ A named helper is a reusable template declared with `define`, often in
 `templates/_helpers.tpl`. When a resource template calls it with a statically
 named `include`, the analysis records a call edge from the caller to that helper.
 Two resource templates can call the same helper, so their separate syntax trees
-form a graph with a shared destination rather than one larger tree. Dynamic names
+form a graph with a shared destination. Dynamic names
 and ambiguous definitions remain unresolved.
 
 The analysis also retains where an expression occurred. A requirement discovered
 inside a helper can therefore point to `templates/_helpers.tpl` and its line
 number, while the call relationship explains which resource template reaches it.
-The filename and line identify chart source, not a line in the rendered manifest.
+The filename and line identify the expression in the chart source.
 
 ## Shared lexer, different representations
 
-[`lexing.py`](../../pkg/hypothesis_helm/compiler/asts/lexing.py) separates literal
+[`lexing.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/lexing.py) separates literal
 text from template actions while respecting quoted delimiters, comments, and Go
 whitespace trimming. Two consumers use that token stream:
 
@@ -38,8 +38,8 @@ whitespace trimming. Two consumers use that token stream:
 | `Action` | Action text, tokens, source lines, and branches. | Scope-aware values discovery. |
 | `Node` | Literal output, expressions, branches, and unsupported blocks. | Output analysis and rejection evaluation. |
 
-These types live in [`actions.py`](../../pkg/hypothesis_helm/compiler/asts/actions.py)
-and [`templates.py`](../../pkg/hypothesis_helm/compiler/asts/templates.py), respectively.
+These types live in [`actions.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/actions.py)
+and [`templates.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/templates.py), respectively.
 
 The action tree omits literal output. It can help locate a value without proving
 what Helm would print. Output analysis needs the text-preserving representation,
@@ -47,7 +47,7 @@ called an **intermediate representation (IR)**. A node marked **opaque** contain
 an operation that the output evaluator cannot interpret.
 
 The rejection evaluator in
-[`contracts.py`](../../pkg/hypothesis_helm/compiler/asts/contracts.py) parses
+[`contracts.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/contracts.py) parses
 expressions and follows supported, statically named helper calls. Its supported
 operations differ from those admitted for output-equivalence proofs. Understanding
 a `fail` condition does not establish the complete output of its template.
@@ -98,12 +98,11 @@ and the supported language subset.
 
 ## Shared values model
 
-[`ValuesModel`](../../pkg/hypothesis_helm/schemas/model.py) builds a tree from the
+[`ValuesModel`](../../pkg/hypothesis-helm/hypothesis_helm/schemas/model.py) builds a tree from the
 schema. Each node has a values path, constraints, and a type. Object nodes can
 produce dynamic attrs classes; cattrs converts between these records and values
 documents while preserving missing entries separately from explicit nulls.
 
 Passes use references to this model to describe the same field consistently.
-An unresolved reference remains unresolved rather than acquiring an invented
-type. The model supports generation and analysis; schema validation still checks
+An unresolved reference keeps its type marked as unknown. The model supports generation and analysis; schema validation still checks
 complete candidates and relationships between fields.

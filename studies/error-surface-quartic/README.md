@@ -6,7 +6,7 @@
 - [Error rate and filtering](#error-rate-and-filtering)
 <!-- toc:end -->
 
-[Benchmarking](../../docs/benchmarking/README.md)
+[Benchmarking](<../../docs/benchmarking/README.md>)
 
 Measured axes in this run: clustering. The default refresh runs all three axes.
 
@@ -38,7 +38,7 @@ Cells are discrete parameter settings; the heatmaps do not interpolate between s
 T = an incomplete execution; N/A = no erroneous inputs; blank = no measurement. No partial timing is shown as a completed runtime.
 The CSV includes sample SD and observed ranges. These describe seed variation, not confidence intervals. These synthetic assertions do not establish recall for arbitrary charts.
 
-[Individual measurements](results.csv) · [Means and ranges](summary.csv) · [Oracle populations and provenance](results.json)
+Individual measurements (local run data) · Means and ranges (local run data) · Oracle populations and provenance (local run data)
 
 | Plot label | Filtering settings |
 | --- | --- |

@@ -9,7 +9,7 @@
 Can filtering avoid irrelevant structure without missing interactions between distant values?
 
 Every case has four variable Boolean fields, 16 valid assignments, two pairwise defects and seven erroneous assignments.
-All other leaves are constrained to false. The study isolates structural size, not an exponentially growing variable domain.
+All other leaves are constrained to false. The study varies structural size while holding the 16-assignment input domain fixed.
 Breadth counts root branches; depth counts intermediate maps in each branch. Every branch ends in four Boolean leaves.
 The tree has 1 + breadth × (depth + 5) nodes. Relevant-node density is 4 divided by this count.
 Within each size, every placement has the same values-tree shape, node count, input domain and fault conditions.
@@ -29,7 +29,7 @@ Each render is checked against an independent oracle. Error counts refer to erro
 Cells show mean ±1 sample standard deviation across repeats, not confidence intervals. Blank cells include incomplete runs.
 Execution timeouts are per method and do not bound planning. Timed-out observations remain in the raw ledger.
 
-[Measurements](results.json) · [CSV](results.csv) · [Replayable chart recipes](cases)
+Measurements (local run data) · CSV (local run data) · Replayable chart recipes (local run data)
 
 ![Input-to-resource graph](structural-sparsity-connectivity.png)
 

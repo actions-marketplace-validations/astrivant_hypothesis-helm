@@ -10,7 +10,7 @@
 
 Run repository command examples from the checkout root unless stated otherwise.
 
-- [Getting started](getting-started/README.md): installation, chart testing, and saved suites.
+- [Getting started](getting-started/README.md): a first test, ten practical options, and reading the results.
 - [Bitnami scan report](reports/bitnami.md): combined PDF, per-chart findings, and retained data.
 - [Prometheus Community scan report](reports/prometheus.md): combined PDF, per-chart findings, and retained data.
 - [Repository scanning](scanning/README.md): local testing, remote fetching, recursive discovery, and Markdown/PDF reports.
@@ -31,3 +31,5 @@ Run repository command examples from the checkout root unless stated otherwise.
 - [CI integration](ci.md): provider detection, action inputs, artifacts, and publishing.
 - [Safe pruning](safe-pruning.md): supported templates and exact-equivalence proofs.
 - [Generated suite](../examples/generated-workload/test_chart_values.py): emitted Python tests.
+
+[Input domains and destination catalog](input-domains/README.md) explains generation constraints and custom resource schemas.

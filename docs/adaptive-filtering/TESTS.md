@@ -8,11 +8,11 @@
 - [Empirical matrix](#empirical-matrix)
 <!-- toc:end -->
 
-[Policy](README.md) · [Measured matrix and graphs](../../studies/calibration-variation/MATRIX.md)
+[Policy](README.md) · [Measured matrix and graphs](<../../studies/calibration-variation/MATRIX.md>)
 
-These checks establish selector behavior. They do not prove that omitted inputs cannot reveal a bug.
-The empirical matrix measures that separate question on generated charts with known defects.
-The [load test](../../studies/filtering/README.md) separately measures runtime against input count and nested template conditions.
+These checks establish selector behavior. Omitted inputs may contain additional defects;
+the empirical matrix measures that effect on generated charts with known defects.
+The [load test](<../../studies/filtering/README.md>) separately measures runtime against input count and nested template conditions.
 
 ## Deterministic argument
 
@@ -22,10 +22,10 @@ The initial selected set contains `P`. It adds unique case identities from a see
 
 This construction preserves protected cases, avoids duplicates, meets the case quota whenever possible, and either meets the
 field floor or keeps every eligible case. Permuting the input list changes presentation order but cannot change membership.
-An empty eligible set remains empty. It does not prove that every branch is represented: the compiler determines `P`, and unresolved
+An empty eligible set remains empty. Branch representation depends on the compiler's protected set `P`; unresolved
 analysis disables the extra percentage sampling.
 
-Nearby lookup imposes range and compatibility checks; these are policy boundaries, not a mathematical bound on bug recall.
+Nearby lookup enforces range and compatibility policies. Bug recall depends on the defect-triggering inputs retained.
 Maximum output complexity alone cannot bound the probability of a rare defect.
 
 ## Regression matrix
@@ -55,13 +55,13 @@ Maximum output complexity alone cannot bound the probability of a rare defect.
 | A deadline cannot hide a cleanup failure | `test_deferred_deadline_preserves_cleanup_failure` | Failed join retained alongside the deferred deadline |
 | Publication rejects missing presets, duplicated runs and inconsistent timing phases | `test_refresh_requires_complete_stress_matrix` | Damaged structural, PCA, expansion, nesting, stress, calibration and load-test ledgers |
 
-Tests live in [test_aggressive.py](../../pkg/hypothesis_helm/tests/test_aggressive.py) and
-[test_calibration_matrix.py](../../pkg/hypothesis_helm/tests/test_calibration_matrix.py).
-Runtime checks are in [test_filtering_load.py](../../pkg/hypothesis_helm/tests/test_filtering_load.py), with publication checks in
-[test_refresh.py](../../pkg/hypothesis_helm/tests/test_refresh.py).
+Tests live in [test_aggressive.py](../../pkg/hypothesis-helm/hypothesis_helm/tests/test_aggressive.py) and
+[test_calibration_matrix.py](../../pkg/hypothesis-helm/hypothesis_helm/tests/test_calibration_matrix.py).
+Runtime checks are in [test_filtering_load.py](../../pkg/hypothesis-helm/hypothesis_helm/tests/test_filtering_load.py), with publication checks in
+[test_refresh.py](../../pkg/hypothesis-helm/hypothesis_helm/tests/test_refresh.py).
 
 ```sh
-pytest pkg/hypothesis_helm/tests/test_aggressive.py pkg/hypothesis_helm/tests/test_calibration_matrix.py
+pytest pkg/hypothesis-helm/hypothesis_helm/tests/test_aggressive.py pkg/hypothesis-helm/hypothesis_helm/tests/test_calibration_matrix.py
 ```
 
 ## Empirical matrix

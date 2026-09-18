@@ -41,8 +41,8 @@ The wrapper uses this checkout's .venv even when your shell has another environm
 into your active environment, you can invoke hypothesis-helm-sensitivity directly. New console commands require reinstalling
 the project in that environment; an editable source checkout alone does not create new command launchers.
 
-Reports default to studies/sensitivity/runs/ with a unique timestamp. Use --output to choose another fresh directory.
-[The published study and plots](../../studies/sensitivity/README.md) include the mutation input file. The optional plots require the benchmarking extra.
+Reports default to .cache/benchmarks/sensitivity/ with a unique timestamp. Use --output to choose another fresh directory.
+[The published study and plots](<../../studies/sensitivity/README.md>) show the measured effects; the mutation input file remains in the local run cache. The optional plots require the benchmarking extra.
 The command writes README.md, results.json and, with --plot, sensitivity.png and sensitivity.svg.
 
 To reproduce the denser study on the shared benchmark chart:
@@ -53,7 +53,7 @@ bash scripts/project-run.sh hypothesis-helm-benchmark sensitivity --inputs 48 --
 
 This measures 48 distinct input flips, all 1,128 unordered pairs, and a 48-step sequence at one baseline.
 Successful benchmark runs automatically replace the published results and plots in `studies/sensitivity/`.
-Every run is also retained under `studies/sensitivity/runs/`. Incomplete or invalid measurements leave the published study unchanged.
+Every run is also retained under `.cache/benchmarks/sensitivity/`. Incomplete or invalid measurements leave the published study unchanged.
 Use `--output` to save a separate run without updating the published study.
 Increase `--inputs` for more points; pair checks grow as `n(n-1)/2`. `--components` controls how many chart structures share
 those inputs. The seed fixes their wiring, and the baseline alternates true and false in field order.

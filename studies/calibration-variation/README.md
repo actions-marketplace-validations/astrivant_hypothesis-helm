@@ -6,12 +6,12 @@
 - [Breadth and depth sweep](#breadth-and-depth-sweep)
 <!-- toc:end -->
 
-Generated-chart calibration only. No held-out validation or arbitrary-chart recall guarantee.
+Calibration uses generated charts. The same fixtures supply calibration and evaluation observations.
 
 Every input was rendered with Helm and compared with an independent defect-trigger oracle.
 Floors include protected symbolic regions. Field coverage counts changed paths separately from configurations.
 Measured maximum output scores: **24, 40, 56, 60, 100, 108, 140, 180, 252**. Other scores are outside this calibration's range.
-[Comparison matrix and graphs](MATRIX.md) · [Proof obligations and tests](../../docs/adaptive-filtering/TESTS.md)
+[Comparison matrix and graphs](MATRIX.md) · [Proof obligations and tests](<../../docs/adaptive-filtering/TESTS.md>)
 
 ![Measured sample floors and recall](calibration.png)
 
@@ -79,10 +79,10 @@ Measured maximum output scores: **24, 40, 56, 60, 100, 108, 140, 180, 252**. Oth
 Sibling ConfigMap copies vary breadth; nested List envelopes vary output depth. Axis labels are measured tree dimensions.
 Each panel holds input count and defect-trigger depth fixed. Every shape uses the same paired defect placements and sampling seeds.
 Copies preserve the same defect triggers: a flat surface means increasing output size alone did not increase the measured floor.
-Cells show mean ±1 sample standard deviation across placements, not a confidence interval or a recall guarantee.
-[Sweep measurements](complexity-sweep.csv)
+Cells show mean ±1 sample standard deviation across placements, describing variation within the generated fixtures.
+Sweep measurements (local run data)
 
 
 Complete recall here can follow from preserving every symbolic output region. It does not validate random sampling alone.
 
-[Calibration JSON](calibration.json) · [Measurements](results.csv)
+Calibration JSON (local run data) · Measurements (local run data)
