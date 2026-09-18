@@ -41,7 +41,8 @@ equivalent configurations reuse a rendered manifest. [See the synthetic error st
 - Show changed values and manifest fields in failure reports, with verified JSON replay of saved changes.
 - Preview coverage and runtime estimates; set execution budgets and shard tests across workers.
 - Test local chart trees or scan remote Git and authenticated Helm repositories; build dependencies and export Markdown/PDF reports.
-- Integrate Kubernetes schema validation and optional security checks into CI with [kubesec](https://github.com/controlplaneio/kubesec) and the built-in schema validator.
+- Validate Kubernetes API schemas from a versioned local cache, with optional
+  [Kubesec](https://github.com/controlplaneio/kubesec) security checks in CI.
 
 Choose coverage for a single chart at each stage of development:
 
@@ -167,11 +168,12 @@ See [Repository scanning](docs/scanning/README.md) for authentication, public in
 ## Production validation
 
 For large production deployments, catch inexpensive failures before committing cluster resources.
+Use hypothesis-helm's built-in schema validation and enable Kubesec for security checks.
 Build confidence through successive checks, then promote the tested release:
 
 ```mermaid
 flowchart TD
-    tests["hypothesis-helm + optional Kubesec<br/>Generated inputs, API schemas and security checks"]
+    tests["hypothesis-helm + Kubesec<br/>Generated inputs, cached API schemas and security checks"]
     admission["Server-side dry-run<br/>vcluster or staging cluster"]
     staging["Deploy to staging<br/>Rollout, smoke and integration tests"]
     production["Promote the tested release to production<br/>Monitor rollout and application health"]

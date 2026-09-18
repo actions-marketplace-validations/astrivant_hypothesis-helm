@@ -88,15 +88,16 @@ to your delivery pipeline, requiring each preceding gate to pass.
 
 | Gate | Question it answers | Evidence required to continue |
 | --- | --- | --- |
-| hypothesis-helm with Kubesec and the built-in schema validator | Do tested inputs produce acceptable manifests? | Passing tests, reviewed coverage and scanner results. |
+| hypothesis-helm + Kubesec | Do tested inputs produce acceptable manifests? | Passing tests, reviewed coverage and scanner results. |
 | Server-side dry-run in a vcluster or staging cluster | Will that API server admit the release configuration? | Successful admission and validation. |
 | Actual staging deployment | Does the application work when its resources are created? | Successful rollout, smoke tests and integration tests. |
 | Production promotion | Does the tested release remain healthy under production conditions? | Monitored rollout and application health. |
 
 Run hypothesis-helm with the [coverage appropriate to the release stage](#recommended-workflow),
-and enable the optional Kubesec integration. [Kubesec](https://kubesec.io/) checks security-sensitive manifest settings;
-the built-in schema validator checks API schemas.
-The examples [route resources between these scanners](#validation-and-caches).
+and enable [Kubesec](https://kubesec.io/) for security checks. Hypothesis-helm prepares and caches the Kubernetes
+API schemas, and includes its own schema validator. Kubesec is the only external validator recommended for this pipeline.
+Both use the prepared schemas; the examples
+[route supported workloads to Kubesec and other resources to the built-in validator](#validation-and-caches).
 Require the configured security policy and schema checks to pass, and review incomplete coverage or unsupported resources.
 Use schemas for the target Kubernetes version, including any required custom resources.
 
