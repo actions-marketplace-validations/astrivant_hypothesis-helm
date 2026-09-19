@@ -180,6 +180,12 @@ an enabled context and keeps the original context eligible. It preserves the sel
 value and parent-schema constraints; it does not force activation when those conflict.
 Nested dependencies include their ancestor controls. This applies to path testing
 with or without `--filter`, including generated suites.
+If the parent values file omits a dependency's settings, path tests reuse the installed
+child's defaults. Testing `redis.sentinel.service.headless`, for example, does not
+randomly change sibling settings such as Sentinel's timeout or volume mounts.
+Changing an array entry preserves its other entries because Helm replaces arrays.
+Additional values are generated only when the existing context cannot accommodate
+the selected input or satisfy the schema.
 When testing a fallback condition or tag, generation also tries removing earlier
 conditions that would mask it, provided the parent schema allows that change.
 

@@ -3,6 +3,7 @@ Verify templates.
 """
 
 from pathlib import Path
+from textwrap import dedent
 
 from hypothesis_helm.charts.templates import Diagnostic, Reference, discover, parse
 
@@ -87,10 +88,15 @@ def test_unresolved_is_visible(tmp_path: Path) -> None:
     """
     _, warnings = scan(
         tmp_path,
-        '{{ index .Values $key }}{{ tpl .Values.content . }}{{ define "x" }}{{ .thing }}{{ end }}',
+        dedent("""
+            {{ index .Values $key }}{{ tpl .Values.content . }}
+            {{ include "x" (printf "%s" .Values.dynamic) }}
+            {{ with (printf "%s" .Values.dynamic) }}{{ .thing }}{{ end }}
+            {{ define "x" }}{{ .thing }}{{ end }}
+            """),
     )
     assert any("dynamic key" in w.message for w in warnings)
-    assert any("named template" in w.message for w in warnings)
+    assert any("helper context" in w.message for w in warnings)
     assert any("unresolved dot" in w.message for w in warnings)
 
 

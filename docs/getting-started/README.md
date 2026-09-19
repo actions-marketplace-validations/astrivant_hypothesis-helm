@@ -67,7 +67,7 @@ See the [sizing observations](../../studies/resource-sizing/README.md).
 
 Our [sampling study](../../studies/sampling/README.md) found common bugs quickly; rare failures remain easy to miss.
 Use adaptive filtering for PRs, ordinary filtering on main, and a
-[full release check](../ci/README.md#recommended-release-check) before tagging.
+[full release check](../coverage.md#release-checks) before tagging.
 Exhaustive coverage requires finite inputs and a completed run.
 
 ## Read the result

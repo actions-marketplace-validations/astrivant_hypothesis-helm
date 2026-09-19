@@ -40,5 +40,69 @@
     ],
     "profile": "dns1123-subdomain",
     "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/mongodb"
+  },
+  {
+    "chart": "cilium",
+    "destination": "apps/v1/DaemonSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "989d10d61517ac92a044dfdf07dcf20f6916dfcad74d2af2c01966d5ef535a9c",
+      "templates/agent/daemonset.yaml": "377db453ce84259e411e39755e3113192f8a4554929da2e35f0a42bc8aaf9bf8",
+      "templates/configmap.yaml": "1f0ee403ef75a801f9f864860be62bba68de0f1d3baa49489b3d46c739383324",
+      "templates/operator/deployment.yaml": "5a449d2602713c9a7fdd1625806b8f3b51a5c68807ca33fa10d272a65f6a4988"
+    },
+    "path": [
+      "existingConfigmap"
+    ],
+    "profile": "dns1123-subdomain",
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cilium"
+  },
+  {
+    "chart": "cilium",
+    "destination": "apps/v1/DaemonSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "989d10d61517ac92a044dfdf07dcf20f6916dfcad74d2af2c01966d5ef535a9c",
+      "templates/agent/daemonset.yaml": "377db453ce84259e411e39755e3113192f8a4554929da2e35f0a42bc8aaf9bf8",
+      "templates/envoy/configmap.yaml": "010a9053f16479cfc4d9b580bdcb1847fca5d6f9f409febca7d0f8ebed540c21",
+      "templates/envoy/daemonset.yaml": "e0269de2339327b2d094b021c1785c85eeffdcffb90a2a8faf1347fdc1f5e9ad"
+    },
+    "path": [
+      "envoy",
+      "existingConfigmap"
+    ],
+    "profile": "dns1123-subdomain",
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cilium"
+  },
+  {
+    "chart": "cilium",
+    "destination": "apps/v1/Deployment:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "989d10d61517ac92a044dfdf07dcf20f6916dfcad74d2af2c01966d5ef535a9c",
+      "templates/hubble-relay/configmap.yaml": "9646f733e2018689a44998c3b06137586be649ccead9ae865efaaa94fdc1092b",
+      "templates/hubble-relay/deployment.yaml": "758ef2e8768ac4f65edc3d5ec32956926c606183fe81382a0ea0dd073722d346"
+    },
+    "path": [
+      "hubble",
+      "relay",
+      "existingConfigmap"
+    ],
+    "profile": "dns1123-subdomain",
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cilium"
+  },
+  {
+    "chart": "cilium",
+    "destination": "apps/v1/Deployment:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "989d10d61517ac92a044dfdf07dcf20f6916dfcad74d2af2c01966d5ef535a9c",
+      "templates/hubble-ui/configmap.yaml": "7840f31eb38bc5ddd84eaa62cb73753d08ddf25f59d88dc1b484cc1819341a27",
+      "templates/hubble-ui/deployment.yaml": "e0ca9f81d6bf800d1e08326700e79cb7a4d33f015cef89f27a310d9b36e739e0"
+    },
+    "path": [
+      "hubble",
+      "ui",
+      "frontend",
+      "existingServerBlockConfigmap"
+    ],
+    "profile": "dns1123-subdomain",
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cilium"
   }
 ]

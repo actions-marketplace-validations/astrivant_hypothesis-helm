@@ -23,7 +23,7 @@ from jsonschema import validators
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart, merge_values
 from hypothesis_helm.charts.rendering import RenderFailure, render
-from hypothesis_helm.compiler.passes.dependencies import Dependencies
+from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.rules import check, ignored
 from hypothesis_helm.schemas.characters import SUITE_CHARACTER_SETS, validate_character_sets
@@ -115,6 +115,7 @@ def _replace(
     schema: dict[str, object] | None = None,
     data: DataObject | None = None,
     generation: dict[str, object] | None = None,
+    context_defaults: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """
     Replace one concrete leaf while preserving the rest of the YAML document.
@@ -127,6 +128,7 @@ def _replace(
         data (DataObject | None): Hypothesis draw context for dependent values and parent
             containers.
         generation (dict[str, object] | None): Branch text settings for generated sibling values.
+        context_defaults (dict[str, object] | None): Installed child defaults available through Helm's map merging.
 
     Returns:
         dict[str, object]: Resulting schema, values mapping, or structured report.
@@ -145,6 +147,13 @@ def _replace(
         Returns:
             object: Parsed or generated value at the requested boundary.
         """
+        installed = lookup(context_defaults, prefix)
+        if isinstance(installed, dict) and not isinstance(next_segment, int):
+            # Helm fills omitted map siblings; do not generate or redundantly override them.
+            return {}
+        if isinstance(installed, list) and isinstance(next_segment, int):
+            # Helm replaces arrays, so retain existing entries when changing a selected item.
+            return copy.deepcopy(installed)
         if data is not None and schema is not None:
             from hypothesis_helm.charts.model import _schema_nodes
 
@@ -282,19 +291,40 @@ def path_values(
         dict[str, object]: Complete values satisfying the original merged contract.
     """
     context_schema = generation_schema if generation_schema is not None else chart.generation_schema()
-    path = _concrete_path(path, chart.defaults, context_schema, data, chart.input_domains().generation)
+    domains = chart.input_domains()
+    dependencies = chart.dependency_model
+    baseline = dependencies.context(chart.defaults, {}) if dependencies is not None and dependencies.nodes else chart.defaults
+    path = _concrete_path(path, baseline, context_schema, data, domains.generation)
     validator = validators.validator_for(chart.generation_schema())(chart.generation_schema())
+
+    def effective(candidate: dict[str, object]) -> dict[str, object]:
+        """
+        Validate supplied overrides with the installed defaults Helm will make available.
+
+        Args:
+            candidate (dict[str, object]): Overrides being tested for schema compatibility.
+
+        Returns:
+            dict[str, object]: Candidate context including dependency defaults when present.
+        """
+        if dependencies is not None and dependencies.nodes:
+            return merge_values(dependencies.context(chart.defaults, candidate), candidate)
+        return merge_values(chart.defaults, candidate)
+
+    needs_context = False
     try:
-        values = _replace(chart.defaults, path, value, schema=context_schema, data=data, generation=chart.input_domains().generation)
+        values = _replace(
+            chart.defaults, path, value, schema=context_schema, data=data, generation=domains.generation, context_defaults=baseline
+        )
     except (TypeError, ValueError):
         values = {}
-    if not validator.is_valid(json_value(values)):
+        needs_context = True
+    if needs_context or not validator.is_valid(json_value(effective(values))):
         constrained = copy.deepcopy(context_schema)
         sequence(constrained.setdefault("allOf", [])).append(_constraint(path, value))
         # Retain definitions at the root so existing local references still resolve.
-        values = mapping(data.draw(schema_strategy(constrained, generation=chart.input_domains().generation), label="schema-valid context"))
-    effective = merge_values(chart.defaults, values)
-    assume(validator.is_valid(json_value(effective)))
+        values = mapping(data.draw(schema_strategy(constrained, generation=domains.generation), label="schema-valid context"))
+    assume(validator.is_valid(json_value(effective(values))))
     note(f"value path: {path!r}")
     note("values override:\n" + yamlio.dump(values))
     return values
@@ -330,7 +360,10 @@ def check_path(
     if dependencies.nodes:
         validator = validators.validator_for(chart.generation_schema())(chart.generation_schema())
         contexts = dependencies.contexts(
-            chart.defaults, values, path, lambda candidate: validator.is_valid(json_value(merge_values(chart.defaults, candidate)))
+            chart.defaults,
+            values,
+            path,
+            lambda candidate: validator.is_valid(json_value(merge_values(dependencies.context(chart.defaults, candidate), candidate))),
         )
         values = data.draw(st.sampled_from(contexts), label="dependency context")
         note("dependency-aware overrides:\n" + yamlio.dump(values))

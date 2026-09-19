@@ -15,8 +15,9 @@ from jsonschema import validators
 
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.rendering import RenderFailure, render
 from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings
-from hypothesis_helm.schemas.contracts import json_value, mapping
+from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT
 
 
@@ -196,3 +197,54 @@ def test_changed_helper_disables_certificate_and_reports_reason(bound_chart: Pat
     file.write_text(file.read_text() + "\n{{/* changed */}}\n")
     rules, notes = reviewed_bindings(bound_chart)
     assert not rules and "source changed" in str(notes)
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_bitnami_cilium_configmap_domains_and_native_render(tmp_path: Path) -> None:
+    """
+    Reproduce the Cilium reference failure and constrain its four reviewed ConfigMap inputs.
+
+    Args:
+        tmp_path (Path): Isolated chart copy and locally supplied dependencies.
+
+    Returns:
+        None: Invalid names are outside generation; real names and empty fallbacks retain native behavior.
+    """
+    source = Path(__file__).resolve().parents[3] / "third_party/bitnami-charts/bitnami"
+    if not all((source / name / "Chart.yaml").is_file() for name in ("cilium", "common", "etcd")):
+        pytest.skip("requires the pinned Bitnami submodule")
+    target = tmp_path / "cilium"
+    shutil.copytree(source / "cilium", target)
+    for dependency in ("common", "etcd"):
+        shutil.copytree(source / dependency, target / "charts" / dependency)
+    chart = Chart(target, {"type": "object"}, mapping(yamlio.load((target / "values.yaml").read_text())))
+    before = yamlio.dump(chart.defaults)
+    domains = chart.input_domains()
+    paths = {
+        ("existingConfigmap",),
+        ("envoy", "existingConfigmap"),
+        ("hubble", "relay", "existingConfigmap"),
+        ("hubble", "ui", "frontend", "existingServerBlockConfigmap"),
+    }
+    reviewed = [rule for rule in domains.rules if rule["source"] == "reviewed-chart-binding"]
+    assert {tuple(sequence(rule["path"])) for rule in reviewed} == paths
+    restriction = domains.apply({})
+    validator = validators.validator_for(restriction)(restriction)
+    for path in paths:
+        for value in ("", "existing-config", "config.v1", "0", "I\n&", ">0", "invalid\tname", "a\n", "A"):
+            candidate: dict[str, object] = {}
+            current = candidate
+            for key in path[:-1]:
+                child: dict[str, object] = {}
+                current[key] = child
+                current = child
+            current[path[-1]] = value
+            assert validator.is_valid(json_value(candidate)) == (value in {"", "existing-config", "config.v1", "0"}), (path, value)
+    assert validator.is_valid({"unrelatedConfig": "I\n&"})
+    assert yamlio.dump(chart.defaults) == before
+    with pytest.raises(RenderFailure) as failure:
+        render(chart, {"envoy": {"existingConfigmap": "I\n&"}})
+    assert failure.value.code == "HH1101"
+    resources = render(chart, {"envoy": {"existingConfigmap": "existing-config"}})
+    assert "existing-config" in yamlio.dump(resources)
+    assert render(chart, {})

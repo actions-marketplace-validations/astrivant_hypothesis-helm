@@ -37,6 +37,7 @@ from hypothesis_helm.execution.signals import Termination
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
 from hypothesis_helm.reporting.errors import chart_errors, deduplicate_errors
+from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.reporting.repository import write_reports
 from hypothesis_helm.rules import ignored, ignored_codes, record_ignored
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -118,15 +119,23 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
     except (ValueError, OSError) as exc:
         return {"status": "unsupported-schema", "error": str(exc), "coverage": "audit unavailable"}
     observed = [mapping(item) for item in [*sequence(findings["findings"]), *sequence(findings["unresolved"])]]
+    seen: set[tuple[str, str, str]] = set()
     for finding in observed:
-        LOGGER.warning(
-            "[%s] Audit finding: %s; path=%s", finding["code"], finding.get("message", finding.get("issue")), finding.get("path", [])
+        location = (
+            f"{finding['file']}:{finding.get('line', 1)}"
+            if finding.get("file")
+            else format_path(tuple(str(part) if not isinstance(part, int) else part for part in sequence(finding.get("path", []))))
         )
+        message = str(finding.get("message", finding.get("issue", "Unresolved value access")))
+        identity = (str(finding["code"]), location, message)
+        if identity not in seen:
+            LOGGER.warning("[%s] Audit finding: chart=%s; %s; at=%s", finding["code"], path.name, message, location)
+            seen.add(identity)
         if args.fail:
             return {
                 "status": "failed",
                 "code": finding["code"],
-                "error": f"[{finding['code']}] Input audit finding at {finding.get('path', [])} (--fail)",
+                "error": f"[{finding['code']}] Input audit finding at {location} (--fail)",
                 "audit": findings,
                 "coverage": "audit only",
             }

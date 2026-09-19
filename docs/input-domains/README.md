@@ -60,7 +60,7 @@ The rebuild combines pinned OpenAPI schemas, supported Go validation annotations
 With `--validate-schemas`, generation also uses the selected cached schema version. A locally rebuilt catalog in the same
 cache supplements that version; its digest becomes part of the test cache identity.
 
-The compiler follows `.Values.field` references through direct output and pure helper wrappers with named arguments
+The compiler follows `.Values.field` references through direct output and pure `include`/`template` helper calls with named arguments
 and local aliases. It handles string `quote` and collection `toYaml`, including `indent` and `nindent`. Collection
 constraints retain object fields, required members, array item types and typed additional properties from the schema.
 The catalog includes fields that declare only a type, such as annotation values that must be strings.
@@ -79,10 +79,14 @@ rendering limits. Unresolved cases remain ordinary tests; see
 [compiler analysis budgets](../compiler/analysis.md#explicit-rejection-discovery).
 
 Reviewed chart bindings can bridge an opaque helper when the relevant template files match recorded SHA-256 hashes.
-The bundled MongoDB bindings cover `existingConfigmap`, `arbiter.existingConfigmap` and `hidden.existingConfigmap`, including
-installed dependencies and their aliases. Generated nonempty references then follow ConfigMap naming rules; the empty fallback
-remains available. Supplied values and `tpl` expressions are preserved. Changed templates disable that binding and produce a
-diagnostic. This is a source-specific certificate, not general analysis of arbitrary helpers.
+The bundled bindings cover MongoDB's `existingConfigmap`, `arbiter.existingConfigmap` and `hidden.existingConfigmap`,
+plus Cilium's `existingConfigmap`, `envoy.existingConfigmap`, `hubble.relay.existingConfigmap` and
+`hubble.ui.frontend.existingServerBlockConfigmap`. They also apply through installed dependencies and aliases.
+Generated nonempty references follow ConfigMap naming rules; the empty fallback remains available.
+For example, Cilium's `envoy.existingConfigmap` can be `existing-config` or `""`, but cannot be `"I\n&"`.
+Multiline strings remain available for unrelated fields that accept configuration text.
+Supplied values and `tpl` expressions are preserved. Changed templates disable that binding and produce a
+diagnostic. These are reviewed mappings for the recorded sources, not general analysis of arbitrary helpers.
 
 The catalog imports explicit scalar constraints and integer format limits. It also includes these reviewed supplements:
 

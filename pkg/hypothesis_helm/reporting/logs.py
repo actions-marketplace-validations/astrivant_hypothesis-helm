@@ -4,6 +4,7 @@ Present live findings and relay structured worker logs through the coordinator.
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from attrs import define, field
@@ -64,6 +65,23 @@ def compact(value: str, limit: int = 320) -> str:
     """
     text = " ".join("".join(char if char.isprintable() else " " for char in value).split())
     return text if len(text) <= limit else text[:limit] + "..."
+
+
+def diagnostic_line(message: str) -> str:
+    """
+    Prefer Helm's error over preceding merge warnings while keeping multiline evidence in artifacts.
+
+    Args:
+        message (str): Complete diagnostic, possibly prefixed with a finding code.
+
+    Returns:
+        str: First explicit error line, or the original first nonempty line as a fallback.
+    """
+    lines = [re.sub(r"^\[HH\d+\]\s*", "", line.strip()) for line in message.splitlines() if line.strip()]
+    return next(
+        (line for line in lines if line.lower().startswith(("error:", "fatal:")) or re.search(r"\blevel=ERROR\b", line)),
+        lines[0] if lines else "",
+    )
 
 
 def chart_name(directory: Path) -> str:
@@ -154,7 +172,7 @@ class FindingLog:
         if not LOGGER.isEnabledFor(logging.WARNING):
             return
         title = CATALOG[code].title if code in CATALOG else code
-        diagnostic = next((line.strip() for line in message.splitlines() if line.strip()), "")
+        diagnostic = diagnostic_line(message)
         selected = ", ".join(format_path(path) for path in self.paths) or "chart"
         preview = "input not recorded"
         if values is not None:

@@ -22,7 +22,7 @@ selection.<sup>[\[1\]](#what-determines-the-minimum)</sup>
 
 Recommended workflow: use `--filter-adaptive` on **MRs/PRs**, `--filter` on **main**, and
 an unfiltered `--exhaustive` search **before tagging**. The pre-tag run must complete its supported
-finite domain; see the [CI workflow](../ci/README.md#recommended-workflow) for commands and coverage requirements.
+finite domain; see the [CI workflow](../coverage.md#development-stages) for commands and coverage requirements.
 
 ```sh
 helm hypothesis test ./charts --filter-adaptive --seed 2026

@@ -27,6 +27,26 @@ inside a helper can therefore point to `templates/_helpers.tpl` and its line
 number, while the call relationship explains which resource template reaches it.
 The filename and line identify the expression in the chart source.
 
+Values discovery follows literal `include`, `template`, and `block` calls through
+unique helper definitions, including installed dependency archives. A helper receives
+the context passed by its caller: both `.` and `$` start at that argument, and the
+caller's local variables are unavailable. Literal `dict` arguments preserve the
+origin of each field, so `(dict "value" .Values.worker)` lets discovery map
+`.value.livenessProbe` in the helper to `$.worker.livenessProbe`.
+
+An `else if` keeps the surrounding `.` context. An `else with` changes `.` only
+inside its own body. Each alternative has its own subtree, including its final
+`else`, so literal branch pruning retains the correct statements.
+
+Unknown helper names, conflicting definitions, unsupported argument transformations,
+recursion and exhausted analysis budgets still produce `HH2005` diagnostics.
+Helper traversal respects `compiler.max_call_depth`; discovery also stops after
+10,000 visited actions and reports that limit. Uncalled helper definitions do not
+execute and are not treated as root templates. These are discovery rules, not
+proofs of equivalent rendered output. Scans show remaining diagnostics with their
+template filename and line number, deduplicated per chart, and still honor
+[`--fail` and suppression rules](../rules/README.md).
+
 ## Shared lexer, different representations
 
 [`lexing.py`](../../pkg/hypothesis_helm/compiler/asts/lexing.py) separates literal

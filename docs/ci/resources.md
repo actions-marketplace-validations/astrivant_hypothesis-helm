@@ -8,7 +8,7 @@
 - [Adjust after the first run](#adjust-after-the-first-run)
 <!-- toc:end -->
 
-[Recommended workflow](README.md#recommended-workflow)
+[Recommended workflow](../coverage.md#development-stages)
 
 For a single chart, start with **2 vCPU / 4 GiB and two workers** for filtered MR/PR and main-branch checks.
 For exhaustive release checks, use **4 vCPU / 8 GiB and four workers**. Each mode uses **one CI job**.

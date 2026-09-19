@@ -44,10 +44,6 @@ equivalent configurations reuse a rendered manifest. [See the synthetic error st
 - Validate Kubernetes API schemas from a versioned local cache, with optional
   [Kubesec](https://github.com/controlplaneio/kubesec) security checks in CI.
 
-Run the pre-tag check manually on the release commit and review its coverage report before tagging.
-Exhaustive coverage requires a finite domain and a completed run; time-limited runs remain incomplete.
-See the [CI workflow and release-check requirements](docs/ci/README.md#recommended-workflow).
-
 ## Install
 
 Requires Helm 4 and Python 3.13+.
@@ -186,6 +182,7 @@ Generate the same template with `helm hypothesis --generate-config > .hypothesis
 | [Architecture](docs/architecture/README.md) | Input discovery, test generation, rendering, and validation. |
 | [Compiler](docs/compiler/README.md) | Pass flow, syntax trees, and illustrated compiler decisions. |
 | [Execution](docs/execution/README.md) | Parallel workers, sharding, estimates, and time limits. |
+| [Choosing test coverage](docs/coverage.md) | Filtering modes, worker counts, and release checks. |
 | [CI examples](docs/ci/README.md) | GitHub Action, CircleCI, and GitLab setup. |
 | [Benchmarking](docs/benchmarking/README.md) | Local shard commands, chart generation, and measured plots. |
 | [CLI reference](docs/cli/README.md) | Generated command and option reference. |

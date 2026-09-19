@@ -15,6 +15,9 @@ from attrs import define
 from hypothesis_helm.charts import tpl, yamlio
 from hypothesis_helm.compiler.asts.actions import Action as Action
 from hypothesis_helm.compiler.asts.actions import parse as parse
+from hypothesis_helm.compiler.asts.origins import Literal, Origin, identity, select
+from hypothesis_helm.compiler.limits import call_depth
+from hypothesis_helm.compiler.passes.discovery_sources import DiscoverySources
 
 
 @define(frozen=True)
@@ -65,22 +68,18 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
     values_file = path / "values.yaml"
     defaults = yamlio.load(values_file.read_text()) if values_file.is_file() else {}
     active_tpl: set[tuple[str, tuple[str, ...] | None]] = set()
+    active_helpers: list[str] = []
+    visited_helpers: set[tuple[object, ...]] = set()
+    remaining = 10000
+    sources = DiscoverySources.build(path)
     refs: list[Reference] = []
-    diagnostics: list[Diagnostic] = []
-    for file in sorted((path / "templates").rglob("*")):
-        if not file.is_file():
-            continue
-        name = str(file.relative_to(path))
-        try:
-            nodes = parse(file.read_text())
-        except ValueError as exc:
-            diagnostics.append(Diagnostic(name, 1, str(exc)))
-            continue
+    diagnostics = [Diagnostic(*item) for item in sources.diagnostics]
+    for name, nodes in sources.roots.items():
 
         def walk(
             nodes: list[Action],
-            dot: tuple[str, ...] | None,
-            env: dict[str, tuple[str, ...] | None],
+            dot: Origin,
+            env: dict[str, Origin],
             source_name: str = name,
         ) -> None:
             """
@@ -88,18 +87,23 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
 
             Args:
                 nodes (list[Action]): Template actions to inspect in lexical order.
-                dot (tuple[str, ...] | None): Current template dot context, or an unresolved
-                    context.
-                env (dict[str, tuple[str, ...] | None]): Variable aliases available in the current
-                    lexical scope.
+                dot (Origin): Current dot origin, literal dictionary, or unresolved context.
+                env (dict[str, Origin]): Variable aliases available in the current lexical scope.
                 source_name (str): Filename captured for this traversal.
 
             Returns:
                 None: None. The operation completes through its documented side effects.
             """
+            nonlocal remaining
             env = dict(env)
             for node in nodes:
+                if remaining <= 0:
+                    diagnostics.append(Diagnostic(source_name, node.line, "template discovery statement budget exceeded"))
+                    return
+                remaining -= 1
                 tokens = node.tokens
+                if tokens[0] == "define":
+                    continue
                 if prune_literals and tokens in (["if", "true"], ["if", "false"]):
                     walk(
                         node.children if tokens[1] == "true" else node.otherwise,
@@ -124,7 +128,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     """
                     diagnostics.append(Diagnostic(filename, line, message))
 
-                def resolve(token: str) -> tuple[str, ...] | None:
+                def resolve(token: str) -> Origin:
                     """
                     Resolve a field token against dot and variable aliases.
 
@@ -132,7 +136,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         token (str): Template token to resolve.
 
                     Returns:
-                        tuple[str, ...] | None: Result of the documented operation.
+                        Origin: Selected input origin, literal, context dictionary, or unknown result.
                     """
                     if token == ".":
                         return dot
@@ -145,10 +149,10 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         return None
                     if base is None:
                         return None
-                    return base + tuple(suffix.split(".")) if suffix else base
+                    return select(base, tuple(suffix.split("."))) if suffix else base
 
                 def emit(
-                    value: tuple[str, ...] | None,
+                    value: Origin,
                     filename: str = source_name,
                     line: int = node.line,
                     has_fallback: bool = fallback,
@@ -157,8 +161,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     Record a resolved reference rooted in chart values.
 
                     Args:
-                        value (tuple[str, ...] | None): Candidate value supplied by the property
-                            strategy.
+                        value (Origin): Candidate input origin or helper context.
                         filename (str): Filename used by this operation.
                         line (int): Line used by this operation.
                         has_fallback (bool): Has fallback used by this operation.
@@ -166,7 +169,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     Returns:
                         None: None. The operation completes through its documented side effects.
                     """
-                    if value and value[0] == "Values":
+                    if isinstance(value, tuple) and value and value[0] == "Values":
                         refs.append(Reference(value[1:], filename, line, has_fallback))
 
                 def literal(token: str) -> str | None:
@@ -187,7 +190,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         return "*"
                     return None
 
-                def expression(ts: list[str], action_text: str = node.text) -> tuple[str, ...] | None:
+                def expression(ts: list[str], action_text: str = node.text) -> Origin:
                     """
                     Resolve literal lookups and simple template expressions.
 
@@ -196,20 +199,38 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         action_text (str): Action text used by this operation.
 
                     Returns:
-                        tuple[str, ...] | None: Result of the documented operation.
+                        Origin: Resolved path, dictionary or literal; unsupported expressions remain unknown.
                     """
                     if not ts:
                         return None
+                    nesting = 0
+                    for token in ts:
+                        if token == "|" and nesting == 0:
+                            return None
+                        nesting += (token == "(") - (token == ")")
                     if ts[0] == "(":
                         depth = 0
                         for j, t in enumerate(ts):
                             depth += (t == "(") - (t == ")")
                             if depth == 0:
                                 base = expression(ts[1:j])
-                                if base is not None and j + 1 < len(ts) and ts[j + 1].startswith("."):
-                                    return base + tuple(ts[j + 1][1:].split("."))
-                                return base
+                                if j + 2 == len(ts) and ts[j + 1].startswith("."):
+                                    return select(base, tuple(ts[j + 1][1:].split(".")))
+                                return base if j + 1 == len(ts) else None
                         return None
+                    if ts[0] == "dict":
+                        args = tpl.arguments(ts[1:])
+                        if len(args) % 2:
+                            return None
+                        bound: dict[str, Origin] = {}
+                        for key_tokens, item in zip(args[::2], args[1::2], strict=True):
+                            if len(key_tokens) != 1 or not key_tokens[0].startswith(('"', "`")):
+                                return None
+                            name = literal(key_tokens[0])
+                            if name is None:
+                                return None
+                            bound[name] = expression(item)
+                        return bound
                     if ts[0] in ("index", "get") and len(ts) >= 3:
                         base = resolve(ts[1])
                         if base is None:
@@ -225,18 +246,35 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                                 keys.append("*")
                             else:
                                 keys.append(key)
-                        return base + tuple(keys)
+                        return select(base, tuple(keys))
                     if ts[0] == "dig" and len(ts) >= 4:
                         ts = ts[: next((i for i, t in enumerate(ts) if t in ("|", ")")), len(ts))]
                         base = resolve(ts[-1])
                         dig_keys = [literal(t) for t in ts[1:-2]]
                         if base is not None and all(k is not None for k in dig_keys):
-                            return base + tuple(k for k in dig_keys if k is not None)
+                            return select(base, tuple(k for k in dig_keys if k is not None))
                         warn("unresolved dig: " + action_text)
                         return None
                     if len(ts) == 1:
+                        if ts[0].startswith(('"', "`")):
+                            return Literal(literal(ts[0]))
+                        if ts[0] in ("true", "false", "nil") or ts[0].lstrip("-").isdigit():
+                            return Literal(ts[0])
                         return resolve(ts[0])
                     return None
+
+                def origin_path(ts: list[str]) -> tuple[str, ...] | None:
+                    """
+                    Expose only path origins to concrete tpl source lookup.
+
+                    Args:
+                        ts (list[str]): Source or context expression tokens.
+
+                    Returns:
+                        tuple[str, ...] | None: Resolved path, excluding literals and constructed dictionaries.
+                    """
+                    value = expression(ts)
+                    return value if isinstance(value, tuple) else None
 
                 for t in tokens:
                     value = resolve(t)
@@ -247,7 +285,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         warn("unresolved variable context: " + t)
                 for j, t in enumerate(tokens):
                     if t in ("index", "get", "dig"):
-                        emit(expression(tokens[j:]))
+                        emit(expression([t, *(token for arg in tpl.arguments(tokens[j + 1 :]) for token in arg)]))
                     if t == "(":
                         emit(expression(tokens[j:]))
                     if t == "tpl":
@@ -255,15 +293,15 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                             args = tpl.arguments(tokens[j + 1 :])
                             if len(args) != 2 or (j > 0 and tokens[j - 1] == "|"):
                                 raise ValueError("tpl requires a resolvable string and context")
-                            content = tpl.source_text(args[0], path, defaults, expression)
-                            context = expression(args[1])
+                            content = tpl.source_text(args[0], path, defaults, origin_path)
+                            context = origin_path(args[1])
                             if context is None:
                                 raise ValueError("tpl context is dynamic or unsupported")
-                            identity = (content, context)
-                            if identity in active_tpl or len(active_tpl) >= 32:
+                            tpl_identity = (content, context)
+                            if tpl_identity in active_tpl or len(active_tpl) >= 32:
                                 raise ValueError("recursive tpl expansion requires review")
                             nested = parse(content)
-                            active_tpl.add(identity)
+                            active_tpl.add(tpl_identity)
                             try:
                                 walk(
                                     nested,
@@ -272,13 +310,37 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                                     f"{source_name}:{node.line} (tpl)",
                                 )
                             finally:
-                                active_tpl.remove(identity)
+                                active_tpl.remove(tpl_identity)
                         except ValueError as exc:
                             warn(str(exc))
+                    if t in ("include", "template", "block"):
+                        args = tpl.arguments(tokens[j + 1 :])
+                        helper = literal(args[0][0]) if args and len(args[0]) == 1 and args[0][0].startswith(('"', "`")) else None
+                        if helper is None or len(args) not in (1, 2) or (j > 0 and tokens[j - 1] == "|"):
+                            warn("helper name or call context is dynamic: " + node.text)
+                            continue
+                        if helper not in sources.helpers:
+                            warn(f"{t} helper is missing or ambiguous: {helper}")
+                            continue
+                        if helper in active_helpers or len(active_helpers) >= call_depth():
+                            warn("helper is recursive or exceeds compiler call depth: " + helper)
+                            continue
+                        bound_context = expression(args[1]) if len(args) == 2 else Literal(None)
+                        if bound_context is None:
+                            warn("helper context is dynamic or unsupported: " + helper)
+                            continue
+                        visit = (helper, identity(bound_context), tuple(active_helpers), frozenset(active_tpl))
+                        if visit in visited_helpers:
+                            continue
+                        helper_file, helper_nodes = sources.helpers[helper]
+                        active_helpers.append(helper)
+                        try:
+                            walk(helper_nodes, bound_context, {"$": bound_context}, helper_file)
+                        finally:
+                            active_helpers.pop()
+                        if remaining > 0:
+                            visited_helpers.add(visit)
                     if t in (
-                        "include",
-                        "template",
-                        "block",
                         "set",
                         "unset",
                         "merge",
@@ -301,23 +363,18 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     if head == "range" and len(names) == 2 and position == 0:
                         child_env[variable] = None
                         continue
-                    child_env[variable] = value + ("*",) if value is not None and head == "range" else value
+                    child_env[variable] = select(value, ("*",)) if head == "range" else value
                 if head not in ("if", "range", "with"):
                     env.update(child_env)
                 child_dot = dot
                 if head in ("with", "range"):
                     child_dot = value
                     if head == "range" and value is not None:
-                        child_dot = value + ("*",)
-                if head in ("define", "block"):
-                    child_dot, child_env = None, {"$": None}
-                    warn("named template context is resolved only at runtime")
+                        child_dot = select(value, ("*",))
+                if head == "block":
+                    continue
                 walk(node.children, child_dot, child_env, source_name)
-                if node.otherwise and node.otherwise[0].tokens[0] in ("if", "with"):
-                    warn("chained else context requires review")
-                    walk(node.otherwise, None, env, source_name)
-                else:
-                    walk(node.otherwise, dot, env, source_name)
+                walk(node.otherwise, dot, child_env, source_name)
 
         walk(nodes, (), {"$": ()})
     return list(dict.fromkeys(refs)), list(dict.fromkeys(diagnostics))

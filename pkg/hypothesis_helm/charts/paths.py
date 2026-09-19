@@ -75,7 +75,7 @@ def path_strategy(
                 chart.defaults,
                 values,
                 entry.path,
-                lambda candidate: validator.is_valid(json_value(merge_values(chart.defaults, candidate))),
+                lambda candidate: validator.is_valid(json_value(merge_values(dependencies.context(chart.defaults, candidate), candidate))),
             )
             values = draw(st.sampled_from(contexts))
         return values

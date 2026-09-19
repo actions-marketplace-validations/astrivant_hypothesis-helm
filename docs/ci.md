@@ -16,11 +16,11 @@
 <!-- toc:end -->
 
 Use `--filter-adaptive` on MRs/PRs, `--filter` on `main`, and an unfiltered exhaustive search before tagging.
-See the [recommended workflow](ci/README.md#recommended-workflow) for commands and release coverage requirements.
+See the [recommended workflow](coverage.md#development-stages) for commands and release coverage requirements.
 
 For cached property tests, use `--rerun all` to refresh results for every selected test.
 This does not turn a filtered run into an exhaustive search. See the [release check and cache retention
-policy](ci/README.md#recommended-release-check); tag the commit whose exhaustive coverage you reviewed.
+policy](coverage.md#release-checks); tag the commit whose exhaustive coverage you reviewed.
 
 `helm hypothesis test` and `helm hypothesis run` default to `--shard auto`.
 Parallel pipeline jobs automatically select a deterministic partition, while

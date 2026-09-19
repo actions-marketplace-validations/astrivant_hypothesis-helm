@@ -90,11 +90,26 @@ def rewrite(expr: object, context: object, variables: dict[str, object]) -> str:
             "(" + rewrite(item, context, variables) + ")" if isinstance(item, tuple) else rewrite(item, context, variables) for item in expr
         )
     if isinstance(expr, str) and expr.startswith((".", "$")):
-        value = argument(expr, context, variables)
-        if isinstance(value, Reference):
-            return value.text
-        return json.dumps(value)
+        return symbolic_argument(argument(expr, context, variables))
     return str(expr)
+
+
+def symbolic_argument(value: object) -> str:
+    """
+    Preserve input references inside helper dictionaries without JSON-encoding symbolic objects.
+
+    Args:
+        value (object): Supported literal, symbolic reference, or helper argument dictionary.
+
+    Returns:
+        str: A grouped Helm expression retaining each known input origin.
+    """
+    if isinstance(value, Reference):
+        return value.text
+    if isinstance(value, dict):
+        fields = " ".join(f"{json.dumps(key)} {symbolic_argument(child)}" for key, child in value.items())
+        return f"(dict {fields})"
+    return json.dumps(value)
 
 
 def inline(chart: Path, nodes: tuple[Node, ...], contracts: Contracts) -> tuple[Node, ...]:
@@ -159,7 +174,7 @@ def inline(chart: Path, nodes: tuple[Node, ...], contracts: Contracts) -> tuple[
             while isinstance(call, tuple) and call[0] in {"quote", "toYaml", "nindent", "indent"}:
                 wrappers.append(call[:-1])
                 call = call[-1]
-            if isinstance(call, tuple) and len(call) == 3 and call[0] == "include":
+            if isinstance(call, tuple) and len(call) == 3 and call[0] in {"include", "template"}:
                 name = argument(call[1], context, variables)
                 if not isinstance(name, str) or name not in contracts.helpers or name in stack:
                     raise Unknown("helper is missing, ambiguous or recursive")

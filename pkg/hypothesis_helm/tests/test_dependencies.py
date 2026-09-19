@@ -116,6 +116,163 @@ def test_inventory_discovers_metadata_controls_and_child_scopes(chart: Chart) ->
     assert any(group.source == "dependency:cache" and {("enableCache",), ("cache", "count")} <= set(group.paths) for group in groups)
 
 
+@pytest.mark.parametrize("packaged", [False, True])
+def test_missing_dependency_parent_keeps_installed_defaults(chart: Chart, packaged: bool) -> None:
+    """
+    Vary a nested child path without generating unrelated siblings absent from parent values.
+
+    Args:
+        chart (Chart): Parent with an aliased child and no supplied sentinel configuration.
+        packaged (bool): Load the installed child from a directory or archive.
+
+    Returns:
+        None: Candidate overrides contain only the selected subtree and preserve all child siblings.
+    """
+    child = chart.path / "charts/store"
+    defaults: dict[str, object] = {
+        "count": 1,
+        "sentinel": {
+            "annotations": {},
+            "extraVolumeMounts": [],
+            "failoverTimeout": 180000,
+            "enabled": False,
+            "service": {"headless": {"annotations": {}, "extraPorts": []}},
+        },
+    }
+    (child / "values.yaml").write_text(yamlio.dump(defaults))
+    schema: dict[str, object] = {
+        "type": "object",
+        "properties": {
+            "count": {"type": "integer"},
+            "sentinel": {
+                "type": "object",
+                "required": ["annotations", "extraVolumeMounts", "failoverTimeout", "enabled"],
+                "properties": {
+                    "annotations": {"type": ["object", "string"]},
+                    "extraVolumeMounts": {"type": ["array", "string"]},
+                    "failoverTimeout": {"type": "number"},
+                    "enabled": {"type": "boolean"},
+                    "service": {"type": "object", "properties": {"headless": {"type": "object"}}},
+                },
+            },
+        },
+    }
+    (child / "values.schema.json").write_text(json.dumps(schema))
+    if packaged:
+        with tarfile.open(chart.path / "charts/store-1.0.0.tgz", "w:gz") as archive:
+            archive.add(child, arcname="store")
+        shutil.rmtree(child)
+    original = copy.deepcopy(chart.defaults)
+    dependencies = Dependencies.build(chart.path)
+    chart.dependency_model = dependencies
+    model = coalesce(chart)
+    entry = ValuePath(("cache", "sentinel", "service", "headless"), {"const": {"annotations": {"example": "changed"}}})
+
+    @settings(max_examples=20, deadline=None, derandomize=True)
+    @given(path_strategy(chart, entry, model.schema))
+    def check(values: dict[str, object]) -> None:
+        """
+        Check overrides and the effective child configuration before any Helm render.
+
+        Args:
+            values (dict[str, object]): Generated overrides for the selected headless-service object.
+
+        Returns:
+            None: Only the selected nested annotations differ from the installed baseline.
+        """
+        expected = copy.deepcopy(original)
+        mapping(expected["cache"])["sentinel"] = {"service": {"headless": {"annotations": {"example": "changed"}}}}
+        assert values == expected
+        effective = mapping(mapping(dependencies.context(chart.defaults, values)["cache"])["sentinel"])
+        assert effective["annotations"] == {}
+        assert effective["extraVolumeMounts"] == []
+        assert effective["failoverTimeout"] == 180000
+        assert effective["enabled"] is False
+
+    check()
+    assert chart.defaults == original
+
+
+def test_missing_dependency_array_preserves_other_entries(chart: Chart) -> None:
+    """
+    Select an existing child array entry without discarding the other entries or fields.
+
+    Args:
+        chart (Chart): Parent chart that omits the installed child's array.
+
+    Returns:
+        None: Exactly one selected port changes and the complete array survives Helm replacement.
+    """
+    child = chart.path / "charts/store"
+    items = [{"name": "first", "port": 80}, {"name": "second", "port": 81}]
+    (child / "values.yaml").write_text(yamlio.dump({"count": 1, "items": items}))
+    schema = {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {"type": "object", "properties": {"name": {"type": "string"}, "port": {"type": "integer"}}},
+            }
+        },
+    }
+    (child / "values.schema.json").write_text(json.dumps(schema))
+    model = coalesce(chart)
+    entry = ValuePath(("cache", "items", "*", "port"), {"const": 90})
+
+    @settings(max_examples=10, deadline=None, derandomize=True)
+    @given(path_strategy(chart, entry, model.schema))
+    def check(values: dict[str, object]) -> None:
+        """
+        Compare the generated array with both original entries.
+
+        Args:
+            values (dict[str, object]): Overrides carrying the full changed array.
+
+        Returns:
+            None: The selected entry retains its name and the other entry is unchanged.
+        """
+        changed = sequence(mapping(values["cache"])["items"])
+        assert len(changed) == 2
+        assert [mapping(item)["name"] for item in changed] == ["first", "second"]
+        assert sum(mapping(item)["port"] == 90 for item in changed) == 1
+        assert sum(item == original for item, original in zip(changed, items, strict=True)) == 1
+
+    check()
+    assert "items" not in mapping(chart.defaults["cache"])
+
+
+def test_incompatible_parent_retains_selected_input(chart: Chart) -> None:
+    """
+    Generate compatible context instead of silently returning defaults when a parent has another allowed type.
+
+    Args:
+        chart (Chart): Root values contain a string where this property needs an object.
+
+    Returns:
+        None: Every generated example contains the requested nested input.
+    """
+    chart.defaults["setting"] = ""
+    chart.schema["properties"] = {"setting": {"type": ["string", "object"], "properties": {"port": {"type": "integer"}}}}
+    model = coalesce(chart)
+    entry = ValuePath(("setting", "port"), {"const": 90})
+
+    @settings(max_examples=5, deadline=None, derandomize=True)
+    @given(path_strategy(chart, entry, model.schema))
+    def check(values: dict[str, object]) -> None:
+        """
+        Verify the requested input survived replacement of an incompatible parent.
+
+        Args:
+            values (dict[str, object]): Schema-valid context drawn for the nested port.
+
+        Returns:
+            None: The target value is present and unchanged.
+        """
+        assert mapping(values["setting"])["port"] == 90
+
+    check()
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
     "selected,values", [(("features", "cache"), {"features": {"cache": True}}), (("tags", "backend"), {"tags": {"backend": True}})]

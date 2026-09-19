@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import time
+from argparse import Namespace
 from pathlib import Path
 from textwrap import dedent
 from typing import TextIO
@@ -20,13 +21,76 @@ from hypothesis_helm.charts.paths import check_paths
 from hypothesis_helm.charts.prioritized import check_prioritized
 from hypothesis_helm.charts.rendering import RenderFailure
 from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.scan import exercise_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.execution.path_queue import execute
 from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.reporting.logs import WORKER_PREFIX, WorkerLogFormatter, WorkerLogs
+from hypothesis_helm.reporting.logs import WORKER_PREFIX, FindingLog, WorkerLogFormatter, WorkerLogs
 from hypothesis_helm.rules import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.tests.test_path_workers import fixture_chart
+
+
+@pytest.mark.parametrize("fail", [False, True])
+def test_audit_logs_source_locations_without_duplicates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, fail: bool
+) -> None:
+    """
+    Show actionable template locations and retain fail-fast behavior for unresolved analysis.
+
+    Args:
+        tmp_path (Path): Isolated chart fixture.
+        monkeypatch (pytest.MonkeyPatch): Deterministic audit and execution results.
+        caplog (pytest.LogCaptureFixture): Warning log capture.
+        fail (bool): Whether the caller requests immediate failure.
+
+    Returns:
+        None: Repeated diagnostics log once; source locations appear in both logs and fail-fast errors.
+    """
+    chart = fixture_chart(tmp_path)
+    finding = {"code": "HH2005", "file": "templates/worker.yaml", "line": 188, "message": "helper context is unresolved"}
+    monkeypatch.setattr("hypothesis_helm.charts.scan.audit_findings", lambda chart: {"findings": [], "unresolved": [finding, finding]})
+    monkeypatch.setattr("hypothesis_helm.charts.scan._exercise_chart", lambda *args: {"status": "passed"})
+    with caplog.at_level(logging.WARNING):
+        result = exercise_chart(chart.path, Namespace(fail=fail), tmp_path / "results")
+    assert caplog.text.count("Audit finding:") == 1
+    assert "templates/worker.yaml:188" in caplog.text and "path=[]" not in caplog.text
+    assert result["status"] == ("failed" if fail else "passed")
+    if fail:
+        assert "templates/worker.yaml:188" in str(result["error"])
+
+
+@pytest.mark.parametrize(
+    "warning",
+    [
+        'level=INFO msg="warning: cannot overwrite table with non table for airflow.redis.sentinel.annotations (map[])"',
+        "warning: merge failed",
+    ],
+)
+def test_preview_prefers_native_error_over_merge_warning(caplog: pytest.LogCaptureFixture, warning: str) -> None:
+    """
+    Display the actual Helm failure when stderr starts with an unrelated coalescing warning.
+
+    Args:
+        caplog (pytest.LogCaptureFixture): Captured finding preview.
+        warning (str): Helm log or plain warning preceding the fatal diagnostic.
+
+    Returns:
+        None: Console output names the error while preserving bounded, single-line previews.
+    """
+    message = dedent(f"""
+        [HH1001] {warning}
+        Error: execution error at (airflow/charts/redis/templates/NOTES.txt:202:4): invalid settings
+        private details
+        """).strip()
+    findings = FindingLog("airflow", {})
+    with caplog.at_level(logging.WARNING):
+        findings.observed("HH1001", message, {})
+    assert "Error: execution error at" in caplog.text
+    assert "invalid settings" in caplog.text
+    assert warning not in caplog.text
+    assert "private details" not in caplog.text
+    assert message.startswith(f"[HH1001] {warning}")
 
 
 def test_observed_and_final_findings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture) -> None:

@@ -262,7 +262,9 @@ class Dependencies:
                                 syntax.append((logical, lower(template.read_text())))
                             except (ValueError, UnicodeError, RecursionError) as error:
                                 self.diagnostics.append({"file": logical, "message": f"Unsupported contract syntax: {error}"})
-                    self.diagnostics.extend({"file": child_source + warning.file, "message": warning.message} for warning in warnings)
+                    self.diagnostics.extend(
+                        {"file": child_source + warning.file, "line": warning.line, "message": warning.message} for warning in warnings
+                    )
                 except (OSError, ValueError, YAMLError) as error:
                     reason = reason or str(error)
             if item.get("import-values"):
