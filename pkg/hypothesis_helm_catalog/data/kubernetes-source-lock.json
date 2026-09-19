@@ -2,7 +2,9 @@
   "revision": "66452049f3d692768c39c797b21b793dce80314e",
   "sha256": {
     "api/openapi-spec/swagger.json": "483500149ee52ce5753d75f5639101d985bb4f5e902cc05b1ba7627465d62446",
+    "pkg/apis/apps/validation/validation.go": "6e492d4084d0ed181b5ba547cb031a0df2a20f98ad8a2643fd554b5ae67ff2ea",
     "pkg/apis/core/validation/validation.go": "198c94d7be6c76490b25d5b63bc90da7cb40c2a4446512e954a8c1a607711291",
+    "pkg/apis/policy/validation/validation.go": "c217f19e111611c9416b27128c45c4b55788caed321673e933d900d4787d0ffa",
     "staging/src/k8s.io/api/admission/v1/types.go": "4f572ef67945db0557d14ab09c7b3e76a8dbd11f6d2f65303c4ae2ca66c58ef2",
     "staging/src/k8s.io/api/admission/v1beta1/types.go": "8ba3867bd464ec16346eb7fbe2a2a2ce1acb5f547f44449599b09825d1aaec48",
     "staging/src/k8s.io/api/admissionregistration/v1/types.go": "072a23ebc67601980cceb101ef067b6a99e35b509d9c74bdbb39ddb0fedda558",
@@ -63,6 +65,7 @@
     "staging/src/k8s.io/api/storage/v1alpha1/types.go": "babb18f79c8127694f13b3ffeaaac8ab221d811bd092920a2630bcea7a6df8a3",
     "staging/src/k8s.io/api/storage/v1beta1/types.go": "a8be2fd725164bd1b79d458d8b8b3d4b055f278f3faa2896ad3dffa776ad8826",
     "staging/src/k8s.io/api/storagemigration/v1beta1/types.go": "d5a3fdea5ade6ea7e0d6f1be175b1cfabe37847000f4d65c1eaa686bf8bb3936",
+    "staging/src/k8s.io/apimachinery/pkg/util/intstr/intstr.go": "4910c37eb257acedfb28310c788a6be3ece18fe8fa1f7b1b6856ab34eecce1bf",
     "staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go": "5f4d8a4753853905faa387c0e8009a8d72900db24bb6b535de2eefcaeb30d8e2"
   },
   "version": "1.35.0"

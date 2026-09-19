@@ -66,7 +66,7 @@ def parse(source: str) -> list[Action]:
             if len(tokens) > 1:
                 if tokens[1] not in ("if", "with"):
                     raise ValueError(f"unsupported else at line {node.line}")
-                branch = Action(" ".join(tokens[1:]), node.line, tokens[1:])
+                branch = Action(text.split(None, 1)[1], node.line, tokens[1:])
                 current.append(branch)
                 # Chained branches share the original block's single end action.
                 stack[-1] = (branch, stack[-1][1])

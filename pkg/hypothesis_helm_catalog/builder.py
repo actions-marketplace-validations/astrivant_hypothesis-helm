@@ -35,6 +35,41 @@ KEYWORDS = {
 }
 
 
+def scalar_domain(node: dict[str, object]) -> dict[str, object]:
+    """
+    Preserve self-contained scalar alternatives without moving unresolved references into input schemas.
+
+    Args:
+        node (dict[str, object]): Destination field schema or one of its scalar alternatives.
+
+    Returns:
+        dict[str, object]: Scalar bounds and supported composition; opaque compositions remain unrestricted.
+    """
+    result = {key: value for key, value in node.items() if key in KEYWORDS}
+    compositions = {"allOf", "anyOf", "oneOf"}
+    allowed = KEYWORDS | compositions | {"description", "title", "default", "examples", "format"}
+
+    def supported(value: object) -> bool:
+        """
+        Require complete scalar alternatives so omission cannot change oneOf exclusivity.
+
+        Args:
+            value (object): Candidate alternative, including nested compositions.
+
+        Returns:
+            bool: Every validation keyword belongs to the supported scalar subset.
+        """
+        if not isinstance(value, dict) or value.keys() - allowed:
+            return False
+        return all(isinstance(value[key], list) and all(supported(child) for child in value[key]) for key in compositions & value.keys())
+
+    for key in compositions:
+        alternatives = node.get(key)
+        if isinstance(alternatives, list) and all(supported(child) for child in alternatives):
+            result[key] = [scalar_domain(mapping(child)) for child in alternatives]
+    return result
+
+
 def build(directory: Path, version: str, *, upstream: dict[str, object] | None = None) -> dict[str, object]:
     """
     Extract scalar bounds and attach reviewed rules only to matching source descriptions.
@@ -79,7 +114,7 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
             Returns:
                 None: Populate the shared deduplicated domain table and resource index.
             """
-            schema = {key: value for key, value in node.items() if key in KEYWORDS}
+            schema = scalar_domain(node)
             origins = ["json-schema"]
             if node.get("format") in {"int32", "int64"}:
                 bits = int(str(node["format"])[3:])

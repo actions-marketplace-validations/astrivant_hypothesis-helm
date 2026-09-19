@@ -85,7 +85,11 @@ class InputDomains:
         for rule in projected:
             path = tuple(str(part) for part in sequence(rule["path"]))
             nodes = _schema_nodes(schema, path, schema)
-            kinds = {str(node["type"]) for node in nodes if isinstance(node.get("type"), str)}
+            kinds = {
+                str(kind)
+                for node in nodes
+                for kind in ([node["type"]] if isinstance(node.get("type"), str) else sequence(node.get("type", [])))
+            }
             if rule["quoted"] and kinds != {"string"}:
                 diagnostics.append({"path": list(path), "reason": "quote converts a non-string or unknown input; domain unchanged"})
                 continue

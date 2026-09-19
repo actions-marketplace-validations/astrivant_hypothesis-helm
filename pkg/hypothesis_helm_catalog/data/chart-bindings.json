@@ -104,5 +104,165 @@
     ],
     "profile": "dns1123-subdomain",
     "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cilium"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.minAvailable",
+    "files": {
+      "templates/web/poddisruptionbudget.yaml": "c7d3dc755a2f3cbbc75d3cfa9eae985b5c8026ab2e60bbaf3b8c61b901af4add"
+    },
+    "path": [
+      "web",
+      "pdb",
+      "minAvailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.maxUnavailable",
+    "files": {
+      "templates/web/poddisruptionbudget.yaml": "c7d3dc755a2f3cbbc75d3cfa9eae985b5c8026ab2e60bbaf3b8c61b901af4add"
+    },
+    "path": [
+      "web",
+      "pdb",
+      "maxUnavailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.minAvailable",
+    "files": {
+      "templates/scheduler/poddisruptionbudget.yaml": "70024f7125b50cfc9d02b01432bd0516bfcad30823af1addd683fda3ccac08da"
+    },
+    "path": [
+      "scheduler",
+      "pdb",
+      "minAvailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.maxUnavailable",
+    "files": {
+      "templates/scheduler/poddisruptionbudget.yaml": "70024f7125b50cfc9d02b01432bd0516bfcad30823af1addd683fda3ccac08da"
+    },
+    "path": [
+      "scheduler",
+      "pdb",
+      "maxUnavailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.minAvailable",
+    "files": {
+      "templates/dag-processor/poddisruptionbudget.yaml": "720b846f386862951d7369b183053a38b8044e5d0a58f11cd6ac92b1e6795c24"
+    },
+    "path": [
+      "dagProcessor",
+      "pdb",
+      "minAvailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.maxUnavailable",
+    "files": {
+      "templates/dag-processor/poddisruptionbudget.yaml": "720b846f386862951d7369b183053a38b8044e5d0a58f11cd6ac92b1e6795c24"
+    },
+    "path": [
+      "dagProcessor",
+      "pdb",
+      "maxUnavailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.minAvailable",
+    "files": {
+      "templates/triggerer/poddisruptionbudget.yaml": "3dd4b593baf2ebf07298e6e415d17c8e125b1f62bdc392c94f069df02016e7c3"
+    },
+    "path": [
+      "triggerer",
+      "pdb",
+      "minAvailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.maxUnavailable",
+    "files": {
+      "templates/triggerer/poddisruptionbudget.yaml": "3dd4b593baf2ebf07298e6e415d17c8e125b1f62bdc392c94f069df02016e7c3"
+    },
+    "path": [
+      "triggerer",
+      "pdb",
+      "maxUnavailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.minAvailable",
+    "files": {
+      "templates/worker/poddisruptionbudget.yaml": "5d76a9e89bd2621f1701654ee5475943d11f8a34e6a1b976225ae95984acce10"
+    },
+    "path": [
+      "worker",
+      "pdb",
+      "minAvailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "airflow",
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.maxUnavailable",
+    "files": {
+      "templates/worker/poddisruptionbudget.yaml": "5d76a9e89bd2621f1701654ee5475943d11f8a34e6a1b976225ae95984acce10"
+    },
+    "path": [
+      "worker",
+      "pdb",
+      "maxUnavailable"
+    ],
+    "profile": "pdb-count-or-percent",
+    "quoted": false,
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
+    "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
   }
 ]

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -69,5 +70,26 @@ func TestChangedValidatorChangesCanonicalIdentity(t *testing.T) {
 	changed := write("package validation; func valid(port int) bool { return 0 <= port && port <= 65535 }")
 	if first != formatted || first == changed {
 		t.Fatal("validator identities must ignore formatting and detect changed bounds")
+	}
+}
+
+func TestPercentLimitComesFromSource(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "validation.go")
+	for _, maximum := range []string{"99", "100", "101"} {
+		source := `package validation
+func limit() {
+    errors := []string{}
+    value, isPercent := read()
+    if !isPercent || value <= ` + maximum + ` { return }
+    errors = append(errors, "too large")
+    return
+}`
+		if err := os.WriteFile(file, []byte(source), 0600); err != nil {
+			t.Fatal(err)
+		}
+		_, functions := declarations(file)
+		if got := percentLimit(functions["limit"]); fmt.Sprint(got) != maximum {
+			t.Fatalf("wrong source-derived limit: %d", got)
+		}
 	}
 }

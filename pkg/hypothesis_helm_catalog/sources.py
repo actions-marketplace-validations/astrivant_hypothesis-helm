@@ -32,6 +32,10 @@ BINDINGS = {
     "io.k8s.api.core.v1.SecretProjection/name": "dns1123-subdomain",
     "io.k8s.api.core.v1.ContainerPort/containerPort": "port-number",
     "io.k8s.api.core.v1.ServicePort/port": "port-number",
+    "io.k8s.api.policy.v1.PodDisruptionBudgetSpec/minAvailable": "pdb-count-or-percent",
+    "io.k8s.api.policy.v1.PodDisruptionBudgetSpec/maxUnavailable": "pdb-count-or-percent",
+    "io.k8s.api.policy.v1beta1.PodDisruptionBudgetSpec/minAvailable": "pdb-count-or-percent",
+    "io.k8s.api.policy.v1beta1.PodDisruptionBudgetSpec/maxUnavailable": "pdb-count-or-percent",
 }
 
 
@@ -89,9 +93,14 @@ def verify(binary: Path, profiles: dict[str, object], owner: Processes) -> dict[
     cases: list[dict[str, object]] = []
     for name, raw in sorted(profiles.items()):
         schema = mapping(mapping(raw)["schema"])
-        if schema.get("type") == "integer":
+        if name == "pdb-count-or-percent":
+            values: list[object] = [-1, 0, 1, 2**31 - 1, 2**31, 1.5, None, True, "", "#", "[Ma", "1", "-1%", "1.5%", "100%\n"]
+            values.extend(f"{value}%" for value in range(103))
+            values.extend(prefix + f"{value}%" for prefix in ("0", "00", "0" * 256) for value in (0, 1, 99, 100, 101))
+            values.extend(chr(char) + "%" for char in range(128))
+        elif schema.get("type") == "integer":
             lo, hi = int(str(schema["minimum"])), int(str(schema["maximum"]))
-            values: list[object] = [lo - 1, lo, lo + 1, hi - 1, hi, hi + 1, -1, 0]
+            values = [lo - 1, lo, lo + 1, hi - 1, hi, hi + 1, -1, 0]
         else:
             maximum = int(str(schema["maxLength"]))
             values = ["", "a", "0", "config-map", "config.map", "I\n&", ">0", "a\n", "a\r", "a\t", "é", "-a", "a-", ".a", "a.", "a..b"]
@@ -169,7 +178,8 @@ def destinations(source: Path, extracted: dict[str, object]) -> dict[str, object
                 if schema:
                     # Upstream nullable scalar fields are still intersected with the chart's own type.
                     if "type" in schema:
-                        schema["type"] = [schema["type"], "null"]
+                        kinds = schema["type"]
+                        schema["type"] = [kinds, "null"] if isinstance(kinds, str) else [*sequence(kinds), "null"]
                     target["/".join((*path, field))] = {"schema": schema, "evidence": rules}
                 walk(child, (*path, field), "", ancestry)
             if isinstance(node.get("items"), dict):

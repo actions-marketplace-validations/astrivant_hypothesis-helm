@@ -75,9 +75,11 @@ def configured(chart: Chart, kube_version: str = "1.35.0") -> Contracts:
     "guard",
     [
         'and (.Capabilities.APIVersions.Has "v1") (eq .Capabilities.KubeVersion.Minor "35")',
+        'and ((.Capabilities.APIVersions).Has "v1") (eq (.Capabilities.KubeVersion).Minor "35")',
         'semverCompare ">=1.35.0-0" .Capabilities.KubeVersion.Version',
         'not (.Capabilities.APIVersions.Has "example.invalid/v1/Missing")',
         'eq (.Files.Get "allowed.txt") "good\\nother\\n"',
+        'eq ((.Files).Get "allowed.txt") "good\\nother\\n"',
         'eq (.Files.Get "hidden.txt") ""',
         'eq (.Files.Get "values.yaml") ""',
         'eq (.Files.Get "templates/config.yaml") ""',

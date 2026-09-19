@@ -100,6 +100,8 @@ retain the source, conditions, original inputs, and choices under
 | Statically named `template` and `block` | Bind a fresh helper scope to the argument pipeline; an omitted argument supplies nil. Conflicting definitions remain unresolved. |
 | Literal `dict` + `hasKey`; literal string `list` + `has` / `mustHas` | Retain source-authored choices when membership fails on a rejecting branch. |
 | String-key `index` / `get` | Follow map lookups whose input path can be represented unambiguously. |
+| Parenthesized field access, such as `(.Values.global).imagePullSecrets` | Select a field from the enclosed expression; retain its original input path and distinguish field access from method calls. |
+| Forwarded dependency globals | Trace selected fields to the ancestor supplying them, including nested dependencies and aliases. Verify every resulting rejection with Helm. |
 | `keys`, `sortAlpha`, `join`, `printf` with string `%s` arguments | Construct rejection messages. Unsorted keys may occur in any order, but native verification requires every key exactly once. |
 | `eq`, `ne`, `lt`, `le`, `gt`, `ge` | Compare compatible strings, Booleans, or integers; ordered Boolean comparisons are unsupported. |
 | `required`, `fail`, `list`, `append`, `without` | Recognize explicit rejection and supported message assembly. |
@@ -187,6 +189,17 @@ an analysis instance. Workers retain their own diagnostics. An unknown expressio
 justifies discarding a candidate. A separate, explicit rejection may still exclude it after
 Helm verifies that rejection. Exact-equivalence analysis also emits this code when a candidate
 must fall back to rendering.
+
+If a helper assignment cannot be evaluated, later uses of that variable retain the original
+failure location and reason. They do not produce a new warning at each use. A genuinely missing
+variable still reports its name, and helper calls cannot access the caller's local variables.
+
+For dependency globals, a read of `.Values.global.mode` can originate at `$.global.mode`
+or at a child-specific override. The compiler follows ancestor precedence before naming an
+editable input. Merged maps can contain fields from different ancestors, so their members are
+traced individually. Incompatible containers or absent origins remain unresolved. Authored
+dependency schemas remain authoritative, and all predictions involving forwarded globals
+require native Helm verification, even after earlier candidates were confirmed.
 
 Clock, randomness and cluster lookups keep their normal Helm behavior; this change does not
 inject a clock, seed Helm's random functions or simulate a Kubernetes cluster.

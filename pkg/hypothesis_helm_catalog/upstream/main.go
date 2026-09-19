@@ -126,7 +126,50 @@ func profiles(root string) Record {
 		panic("unsupported port operand")
 	}
 	result["port-number"] = Record{"schema": Record{"type": "integer", "minimum": expression(lower.X, constants), "maximum": expression(upper.Y, constants)}, "function": "IsValidPortNum", "function_sha256": canonical(port)}
+	if funcs["IsValidPercent"] == nil || canonical(funcs["IsValidPercent"]) != canonical(compiled["IsValidPercent"]) {
+		panic("source and oracle percent validator differ")
+	}
+	_, apps := declarations(filepath.Join(root, "pkg/apis/apps/validation/validation.go"))
+	_, policy := declarations(filepath.Join(root, "pkg/apis/policy/validation/validation.go"))
+	bound := percentLimit(apps["IsNotMoreThan100Percent"])
+	values := make([]string, bound+1)
+	for value := range values {
+		values[value] = strconv.Itoa(value)
+	}
+	result["pdb-count-or-percent"] = Record{
+		"schema": Record{"type": []string{"integer", "string"}, "minimum": 0, "maximum": int64(1<<31 - 1), "pattern": "^0*(?:" + strings.Join(values, "|") + `)%(?![\s\S])`},
+		"functions": Record{
+			"IsValidPercent":                  canonical(funcs["IsValidPercent"]),
+			"ValidatePositiveIntOrPercent":    canonical(apps["ValidatePositiveIntOrPercent"]),
+			"IsNotMoreThan100Percent":         canonical(apps["IsNotMoreThan100Percent"]),
+			"ValidatePodDisruptionBudgetSpec": canonical(policy["ValidatePodDisruptionBudgetSpec"]),
+		},
+		"scope": "PDB replica counts and percentages; field exclusivity is a separate API rule",
+	}
 	return result
+}
+
+func percentLimit(function *ast.FuncDecl) int {
+	if function == nil || len(function.Body.List) != 5 {
+		panic("unsupported percentage bound validator")
+	}
+	guard, ok := function.Body.List[2].(*ast.IfStmt)
+	if !ok || guard.Else != nil {
+		panic("unsupported percentage guard")
+	}
+	disjunction, ok := guard.Cond.(*ast.BinaryExpr)
+	if !ok || disjunction.Op != token.LOR {
+		panic("unsupported percentage condition")
+	}
+	lower, ok := disjunction.Y.(*ast.BinaryExpr)
+	if !ok || lower.Op != token.LEQ || lower.X.(*ast.Ident).Name != "value" {
+		panic("unsupported percentage upper bound")
+	}
+	maximum := expression(lower.Y, nil).(int)
+	if maximum < 0 || maximum > 10000 {
+		panic("percentage bound exceeds the catalog expansion budget")
+	}
+	return maximum
 }
 func fields(root string) (Record, []Record, Record) {
 	rules := Record{}
@@ -240,7 +283,16 @@ func oracle() {
 		}
 		must(err)
 		valid := false
-		if test.Profile == "port-number" {
+		if test.Profile == "pdb-count-or-percent" {
+			var count int32
+			var text string
+			if json.Unmarshal(test.Value, &text) == nil && len(validation.IsValidPercent(text)) == 0 {
+				percent, err := strconv.Atoi(strings.TrimSuffix(text, "%"))
+				valid = err == nil && percent <= 100
+			} else if json.Unmarshal(test.Value, &count) == nil && string(test.Value) != "null" {
+				valid = count >= 0
+			}
+		} else if test.Profile == "port-number" {
 			var value int
 			must(json.Unmarshal(test.Value, &value))
 			valid = len(validation.IsValidPortNum(value)) == 0
@@ -274,7 +326,14 @@ func main() {
 		os.Exit(2)
 	}
 	rules, unresolved, hashes := fields(*root)
-	for _, path := range []string{"staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go", "pkg/apis/core/validation/validation.go", "api/openapi-spec/swagger.json"} {
+	for _, path := range []string{
+		"staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go",
+		"staging/src/k8s.io/apimachinery/pkg/util/intstr/intstr.go",
+		"pkg/apis/core/validation/validation.go",
+		"pkg/apis/apps/validation/validation.go",
+		"pkg/apis/policy/validation/validation.go",
+		"api/openapi-spec/swagger.json",
+	} {
 		data, err := os.ReadFile(filepath.Join(*root, path))
 		must(err)
 		hashes[path] = hash(data)

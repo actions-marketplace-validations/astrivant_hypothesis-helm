@@ -11,6 +11,7 @@ from pathlib import Path
 
 from attrs import define, field
 
+from hypothesis_helm.charts import yamlio
 from hypothesis_helm.compiler.asts.actions import Action, parse
 from hypothesis_helm.compiler.asts.renderer import archive_files
 from hypothesis_helm.compiler.limits import call_depth
@@ -37,12 +38,16 @@ class DiscoverySources:
     Attributes:
         roots (dict[str, list[Action]]): Root-chart templates eligible for direct execution.
         helpers (dict[str, tuple[str, list[Action]]]): Unique helper bodies with source filenames.
+        templates (dict[str, tuple[str, list[Action]]]): Root-chart files addressable by Helm template name.
+        base_path (str): Helm's chart-qualified template directory for root invocations.
         ambiguous (set[str]): Helper names whose installed definitions disagree.
         diagnostics (list[tuple[str, int, str]]): Source loading or parsing failures.
     """
 
     roots: dict[str, list[Action]] = field(factory=dict)
     helpers: dict[str, tuple[str, list[Action]]] = field(factory=dict)
+    templates: dict[str, tuple[str, list[Action]]] = field(factory=dict)
+    base_path: str = ""
     ambiguous: set[str] = field(factory=set)
     diagnostics: list[tuple[str, int, str]] = field(factory=list)
 
@@ -65,6 +70,8 @@ class DiscoverySources:
             return
         if root and not Path(source).name.startswith("_"):
             self.roots[source] = nodes
+        if root:
+            self.templates[f"{self.base_path}/{source.removeprefix('templates/')}"] = (source, nodes)
 
         def register(items: list[Action]) -> None:
             """
@@ -102,6 +109,9 @@ class DiscoverySources:
             DiscoverySources: Root trees, callable helpers, and explicit failures to inspect sources.
         """
         result = cls()
+        metadata = yamlio.load((chart / "Chart.yaml").read_text()) if (chart / "Chart.yaml").is_file() else {}
+        name = metadata.get("name", chart.name) if isinstance(metadata, dict) else chart.name
+        result.base_path = f"{name}/templates"
 
         def archive(data: bytes, source: str, depth: int) -> None:
             """

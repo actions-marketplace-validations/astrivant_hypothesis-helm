@@ -9,7 +9,7 @@ from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
-from hypothesis_helm_catalog.builder import KEYWORDS, LIBRARY
+from hypothesis_helm_catalog.builder import KEYWORDS, LIBRARY, scalar_domain
 from jsonschema import validators
 
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
@@ -169,7 +169,7 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
                 return None
             node = mapping(child)
         node = dereference(node, root)
-        result = {key: value for key, value in node.items() if key in KEYWORDS}
+        result = scalar_domain(node)
         kinds = node.get("type", [])
         kinds = [kinds] if isinstance(kinds, str) else kinds
         if isinstance(kinds, list) and any(kind in kinds for kind in ("object", "array")):

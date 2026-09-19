@@ -34,9 +34,32 @@ caller's local variables are unavailable. Literal `dict` arguments preserve the
 origin of each field, so `(dict "value" .Values.worker)` lets discovery map
 `.value.livenessProbe` in the helper to `$.worker.livenessProbe`.
 
+A missing key in a literal helper dictionary is known to be absent. An argument
+whose source cannot be resolved remains unknown. This distinction avoids warnings
+for omitted optional arguments such as `.skipQuote` without hiding uncertain
+inputs. Parenthesized selectors, such as `(.context.Values.global).apiVersions`,
+are resolved against their receiver rather than the surrounding `.` context.
+
+File-template calls such as `include (print $.Template.BasePath "/config.yaml") .`
+are followed when the chart name, suffix and calling context are known. The chart
+name comes from `Chart.yaml`. Names depending on arbitrary values remain unresolved.
+
+Discovery also tracks where computed values came from. For example,
+`$version := semver .Values.image.tag` makes `$version.Major` a derived field of
+the image tag, not a new `image.tag.Major` input. Certificate generation exposes
+`Cert` and `Key` result fields; `lookup` exposes an external result. Both still
+produce `HH2005` at the operation that generates or fetches the data. Their contents
+are left to Helm, and selecting result fields does not create repeated warnings.
+
 An `else if` keeps the surrounding `.` context. An `else with` changes `.` only
 inside its own body. Each alternative has its own subtree, including its final
 `else`, so literal branch pruning retains the correct statements.
+
+Assignments to an existing variable retain the possible input sources from every
+branch. A new local declaration shadows that variable only within its own block.
+Loop analysis includes the zero-iteration case and repeats until the set of input
+sources stops changing. If it has not stabilized after eight passes, discovery
+retains the known sources plus an unknown alternative and reports the limit.
 
 Unknown helper names, conflicting definitions, unsupported argument transformations,
 recursion and exhausted analysis budgets still produce `HH2005` diagnostics.

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from attrs import frozen
 
-from hypothesis_helm.compiler.asts.contracts import ASSIGNMENT, Contracts, Unknown, expression
+from hypothesis_helm.compiler.asts.contracts import ASSIGNMENT, Contracts, FieldAccess, Unknown, expression
 from hypothesis_helm.compiler.asts.templates import Node
 
 
@@ -25,6 +25,32 @@ class Reference:
     text: str
 
 
+def select(value: object, fields: tuple[str, ...]) -> object:
+    """
+    Follow a symbolic field chain through literal helper dictionaries and values references.
+
+    Args:
+        value (object): Resolved symbolic receiver.
+        fields (tuple[str, ...]): Consecutive field names.
+
+    Returns:
+        object: Selected literal or symbolic reference.
+
+    Raises:
+        Unknown: A field cannot be resolved without evaluating an unsupported operation.
+    """
+    for part in fields:
+        if isinstance(value, Reference):
+            value = Reference(value.text + "." + part)
+        elif isinstance(value, dict) and part in value:
+            value = value[part]
+        else:
+            raise Unknown("unresolved helper argument path")
+    if value is None:
+        raise Unknown("unresolved helper alias")
+    return value
+
+
 def argument(expr: object, context: object, variables: dict[str, object]) -> object:
     """
     Resolve literal dictionaries and direct aliases without evaluating Helm functions.
@@ -37,6 +63,8 @@ def argument(expr: object, context: object, variables: dict[str, object]) -> obj
     Returns:
         object: Literal argument or a symbolic reference preserving its source path.
     """
+    if isinstance(expr, FieldAccess):
+        return select(argument(expr.receiver, context, variables), expr.fields)
     if isinstance(expr, tuple):
         if expr and expr[0] == "dict" and len(expr) % 2 == 1:
             pairs = [
@@ -60,16 +88,7 @@ def argument(expr: object, context: object, variables: dict[str, object]) -> obj
             return context
         head, *parts = expr.split(".")
         value = context if head in {"", "$"} else variables.get(head)
-        for part in parts:
-            if isinstance(value, Reference):
-                value = Reference(value.text + "." + part)
-            elif isinstance(value, dict) and part in value:
-                value = value[part]
-            else:
-                raise Unknown("unresolved helper argument path")
-        if value is None:
-            raise Unknown("unresolved helper alias")
-        return value
+        return select(value, tuple(parts))
     raise Unknown("unsupported helper argument")
 
 
@@ -89,7 +108,7 @@ def rewrite(expr: object, context: object, variables: dict[str, object]) -> str:
         return " ".join(
             "(" + rewrite(item, context, variables) + ")" if isinstance(item, tuple) else rewrite(item, context, variables) for item in expr
         )
-    if isinstance(expr, str) and expr.startswith((".", "$")):
+    if isinstance(expr, FieldAccess) or (isinstance(expr, str) and expr.startswith((".", "$"))):
         return symbolic_argument(argument(expr, context, variables))
     return str(expr)
 

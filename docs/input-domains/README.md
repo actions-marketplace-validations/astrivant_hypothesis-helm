@@ -64,6 +64,7 @@ The compiler follows `.Values.field` references through direct output and pure `
 and local aliases. It handles string `quote` and collection `toYaml`, including `indent` and `nindent`. Collection
 constraints retain object fields, required members, array item types and typed additional properties from the schema.
 The catalog includes fields that declare only a type, such as annotation values that must be strings.
+It also retains scalar `oneOf`/`anyOf` alternatives, including fields that accept either integers or strings.
 
 Supported Boolean and string-equality conditions remain attached to each restriction, which applies only when that
 branch emits the field. Loops, transformed helper output, ambiguous types and more than 64 branch variants remain
@@ -85,6 +86,11 @@ plus Cilium's `existingConfigmap`, `envoy.existingConfigmap`, `hubble.relay.exis
 Generated nonempty references follow ConfigMap naming rules; the empty fallback remains available.
 For example, Cilium's `envoy.existingConfigmap` can be `existing-config` or `""`, but cannot be `"I\n&"`.
 Multiline strings remain available for unrelated fields that accept configuration text.
+Airflow's `web`, `scheduler`, `dagProcessor`, `triggerer` and `worker` PDB limits have reviewed bindings as well.
+Their `minAvailable` and `maxUnavailable` accept nonnegative replica counts or percentages from `0%` through `100%`;
+the chart's empty-string fallback remains available. For example, `"50%"` is eligible while `"#"` and `"[Ma"` are excluded.
+The source schema still controls the input type, so a field inferred as a string samples percentages and the empty fallback.
+This constrains individual fields; it does not enforce the separate API rule against setting both PDB limits.
 Supplied values and `tpl` expressions are preserved. Changed templates disable that binding and produce a
 diagnostic. These are reviewed mappings for the recorded sources, not general analysis of arbitrary helpers.
 
@@ -98,6 +104,7 @@ The catalog imports explicit scalar constraints and integer format limits. It al
 | Service port `protocol` | `TCP`, `UDP`, `SCTP` | Published supported protocols |
 | Pod `restartPolicy` | `Always`, `OnFailure`, `Never` | Published alternatives; a particular workload can require a subset |
 | Volume `mountPath` | Nonempty strings without `:` | Published mount-path restriction |
+| PDB `minAvailable` / `maxUnavailable` | Integers 0 through 2,147,483,647, or percentages 0% through 100% | Pinned PDB validation, `IntOrString` storage, and the API machinery percentage validator |
 
 Nullable upstream fields retain their nullable domain; a chart's narrower type still takes precedence.
 Unclear prose does not justify invented limits. There is no blanket punctuation ban and no guessing based on a values key's name.
@@ -106,6 +113,10 @@ and any known destination or explicit input policy.
 
 Kubernetes explains that [published validation schemas can be incomplete](https://kubernetes.io/docs/concepts/overview/kubernetes-api/).
 These domains do not replace schema validation, admission checks or a server-side dry run.
+The PDB supplement follows [Kubernetes' PDB validator](https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/policy/validation/validation.go)
+and its [count/percentage checks](https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/apps/validation/validation.go).
+Rebuilds check pinned source hashes, extract the percentage ceiling from the Go AST, and compare boundary cases using the upstream percentage
+validator plus the reviewed count/range checks. This is not a full execution of Kubernetes admission validation.
 See [Secret name constraints](https://kubernetes.io/docs/concepts/configuration/secret/#constraints-on-secret-names-and-data)
 and the [schema source repository](https://github.com/yannh/kubernetes-json-schema).
 

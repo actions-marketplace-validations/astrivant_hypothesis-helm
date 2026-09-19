@@ -13,10 +13,13 @@ from pathlib import Path
 from attrs import define
 
 from hypothesis_helm.charts import tpl, yamlio
+from hypothesis_helm.compiler.asts.actions import TOKEN
 from hypothesis_helm.compiler.asts.actions import Action as Action
 from hypothesis_helm.compiler.asts.actions import parse as parse
-from hypothesis_helm.compiler.asts.origins import Literal, Origin, identity, select
+from hypothesis_helm.compiler.asts.origins import Derived, Literal, Origin, identity, join, paths, select, unresolved
 from hypothesis_helm.compiler.limits import call_depth
+from hypothesis_helm.compiler.passes.discovery_functions import CERTIFICATES
+from hypothesis_helm.compiler.passes.discovery_functions import result as function_result
 from hypothesis_helm.compiler.passes.discovery_sources import DiscoverySources
 
 
@@ -81,7 +84,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
             dot: Origin,
             env: dict[str, Origin],
             source_name: str = name,
-        ) -> None:
+        ) -> dict[str, Origin]:
             """
             Resolve value references in the current lexical scope.
 
@@ -92,25 +95,19 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                 source_name (str): Filename captured for this traversal.
 
             Returns:
-                None: None. The operation completes through its documented side effects.
+                dict[str, Origin]: Assignments to variables declared outside this lexical block.
             """
             nonlocal remaining
             env = dict(env)
+            outward: dict[str, Origin] = {}
+            declared: set[str] = set()
             for node in nodes:
                 if remaining <= 0:
                     diagnostics.append(Diagnostic(source_name, node.line, "template discovery statement budget exceeded"))
-                    return
+                    return {}
                 remaining -= 1
                 tokens = node.tokens
                 if tokens[0] == "define":
-                    continue
-                if prune_literals and tokens in (["if", "true"], ["if", "false"]):
-                    walk(
-                        node.children if tokens[1] == "true" else node.otherwise,
-                        dot,
-                        env,
-                        source_name,
-                    )
                     continue
                 fallback = any(t in ("default", "coalesce", "dig") for t in tokens)
 
@@ -149,7 +146,10 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         return None
                     if base is None:
                         return None
-                    return select(base, tuple(suffix.split("."))) if suffix else base
+                    value = select(base, tuple(suffix.split("."))) if suffix else base
+                    if value == ("Template", "BasePath"):
+                        return Literal(sources.base_path)
+                    return value
 
                 def emit(
                     value: Origin,
@@ -169,8 +169,9 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     Returns:
                         None: None. The operation completes through its documented side effects.
                     """
-                    if isinstance(value, tuple) and value and value[0] == "Values":
-                        refs.append(Reference(value[1:], filename, line, has_fallback))
+                    for origin in paths(value):
+                        if origin and origin[0] == "Values":
+                            refs.append(Reference(origin[1:], filename, line, has_fallback))
 
                 def literal(token: str) -> str | None:
                     """
@@ -204,10 +205,21 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     if not ts:
                         return None
                     nesting = 0
+                    stages: list[list[str]] = [[]]
                     for token in ts:
                         if token == "|" and nesting == 0:
-                            return None
+                            stages.append([])
+                            continue
+                        stages[-1].append(token)
                         nesting += (token == "(") - (token == ")")
+                    if len(stages) > 1:
+                        value = expression(stages[0])
+                        for stage in stages[1:]:
+                            if not stage:
+                                return None
+                            arguments = [expression(arg) for arg in tpl.arguments(stage[1:])]
+                            value = function_result(stage[0], [*arguments, value])
+                        return value
                     if ts[0] == "(":
                         depth = 0
                         for j, t in enumerate(ts):
@@ -232,17 +244,22 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                             bound[name] = expression(item)
                         return bound
                     if ts[0] in ("index", "get") and len(ts) >= 3:
-                        base = resolve(ts[1])
+                        args = tpl.arguments(ts[1:])
+                        if len(args) < 2:
+                            return None
+                        base = expression(args[0])
                         if base is None:
                             warn("unresolved lookup target: " + action_text)
                             return None
                         keys = []
-                        for t in ts[2:]:
-                            if t in ("|", ")"):
-                                break
-                            key = literal(t)
+                        for argument in args[1:]:
+                            key_value = expression(argument)
+                            key = str(key_value.value) if isinstance(key_value, Literal) else None
+                            if len(argument) == 1 and argument[0].isdigit():
+                                key = "*"
                             if key is None:
-                                warn("dynamic key requires manual review: " + action_text)
+                                if not isinstance(base, Derived) or not base.external:
+                                    warn("dynamic key requires manual review: " + action_text)
                                 keys.append("*")
                             else:
                                 keys.append(key)
@@ -259,9 +276,10 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         if ts[0].startswith(('"', "`")):
                             return Literal(literal(ts[0]))
                         if ts[0] in ("true", "false", "nil") or ts[0].lstrip("-").isdigit():
-                            return Literal(ts[0])
-                        return resolve(ts[0])
-                    return None
+                            return Literal(None if ts[0] == "nil" else ts[0] == "true" if ts[0] in ("true", "false") else int(ts[0]))
+                        if ts[0].startswith((".", "$")):
+                            return resolve(ts[0])
+                    return function_result(ts[0], [expression(arg) for arg in tpl.arguments(ts[1:])])
 
                 def origin_path(ts: list[str]) -> tuple[str, ...] | None:
                     """
@@ -276,18 +294,39 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     value = expression(ts)
                     return value if isinstance(value, tuple) else None
 
-                for t in tokens:
+                token_matches = list(TOKEN.finditer(node.text))
+                selectors = {
+                    i
+                    for i in range(1, len(token_matches))
+                    if token_matches[i - 1][0] == ")"
+                    and token_matches[i][0].startswith(".")
+                    and token_matches[i - 1].end() == token_matches[i].start()
+                }
+                for i, t in enumerate(tokens):
+                    if i in selectors:
+                        continue  # The enclosing expression supplies this selector's receiver.
                     value = resolve(t)
                     emit(value)
-                    if t.startswith(".") and value is None:
+                    if t.startswith(".") and unresolved(value):
                         warn("unresolved dot context: " + t)
-                    if t.startswith("$") and "." in t and value is None:
+                    if t.startswith("$") and "." in t and unresolved(value):
                         warn("unresolved variable context: " + t)
                 for j, t in enumerate(tokens):
                     if t in ("index", "get", "dig"):
                         emit(expression([t, *(token for arg in tpl.arguments(tokens[j + 1 :]) for token in arg)]))
                     if t == "(":
-                        emit(expression(tokens[j:]))
+                        depth = 0
+                        for end in range(j, len(tokens)):
+                            depth += (tokens[end] == "(") - (tokens[end] == ")")
+                            if depth == 0:
+                                stop = end + 1
+                                if stop in selectors:
+                                    stop += 1
+                                selected = expression(tokens[j:stop])
+                                emit(selected)
+                                if stop - 1 in selectors and unresolved(selected):
+                                    warn("unresolved parenthesized context: " + " ".join(tokens[j:stop]))
+                                break
                     if t == "tpl":
                         try:
                             args = tpl.arguments(tokens[j + 1 :])
@@ -315,24 +354,26 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                             warn(str(exc))
                     if t in ("include", "template", "block"):
                         args = tpl.arguments(tokens[j + 1 :])
-                        helper = literal(args[0][0]) if args and len(args[0]) == 1 and args[0][0].startswith(('"', "`")) else None
+                        name_value = expression(args[0]) if args else None
+                        helper = name_value.value if isinstance(name_value, Literal) and isinstance(name_value.value, str) else None
                         if helper is None or len(args) not in (1, 2) or (j > 0 and tokens[j - 1] == "|"):
                             warn("helper name or call context is dynamic: " + node.text)
                             continue
-                        if helper not in sources.helpers:
+                        target = sources.helpers.get(helper) or sources.templates.get(helper)
+                        if target is None or helper in sources.ambiguous:
                             warn(f"{t} helper is missing or ambiguous: {helper}")
                             continue
                         if helper in active_helpers or len(active_helpers) >= call_depth():
                             warn("helper is recursive or exceeds compiler call depth: " + helper)
                             continue
                         bound_context = expression(args[1]) if len(args) == 2 else Literal(None)
-                        if bound_context is None:
+                        if bound_context is None or isinstance(bound_context, Derived) and not bound_context.external:
                             warn("helper context is dynamic or unsupported: " + helper)
                             continue
                         visit = (helper, identity(bound_context), tuple(active_helpers), frozenset(active_tpl))
                         if visit in visited_helpers:
                             continue
-                        helper_file, helper_nodes = sources.helpers[helper]
+                        helper_file, helper_nodes = target
                         active_helpers.append(helper)
                         try:
                             walk(helper_nodes, bound_context, {"$": bound_context}, helper_file)
@@ -347,13 +388,17 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         "mergeOverwrite",
                     ):
                         warn("dynamic template/context or mutation requires review: " + t)
+                    if t == "lookup":
+                        warn("lookup reads external cluster state; result left to Helm")
+                    if t in CERTIFICATES:
+                        warn(f"{t} generates certificate material; result left to Helm")
                 head = tokens[0]
                 rhs = tokens[1:] if head in ("if", "range", "with") else tokens
                 assignment = next((j for j, t in enumerate(rhs) if t in (":=", "=")), None)
                 names = []
+                operator = None
                 if assignment is not None:
-                    if rhs[assignment] == "=":
-                        warn("variable reassignment requires review: " + node.text)
+                    operator = rhs[assignment]
                     names = [t for t in rhs[:assignment] if t.startswith("$")]
                     rhs = rhs[assignment + 1 :]
                 value = expression(rhs)
@@ -361,11 +406,28 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                 child_env = dict(env)
                 for position, variable in enumerate(names):
                     if head == "range" and len(names) == 2 and position == 0:
-                        child_env[variable] = None
+                        child_env[variable] = Derived(paths(value))
                         continue
                     child_env[variable] = select(value, ("*",)) if head == "range" else value
                 if head not in ("if", "range", "with"):
+                    if operator == "=":
+                        for variable in names:
+                            if variable not in env:
+                                warn("assignment to undeclared variable: " + variable)
+                            elif variable not in declared:
+                                outward[variable] = child_env[variable]
                     env.update(child_env)
+                    if operator == ":=":
+                        declared.update(names)
+                elif operator == "=":
+                    for variable in names:
+                        if variable not in env:
+                            warn("assignment to undeclared variable: " + variable)
+                        else:
+                            if head != "range":
+                                env[variable] = child_env[variable]
+                                if variable not in declared:
+                                    outward[variable] = env[variable]
                 child_dot = dot
                 if head in ("with", "range"):
                     child_dot = value
@@ -373,8 +435,46 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         child_dot = select(value, ("*",))
                 if head == "block":
                     continue
-                walk(node.children, child_dot, child_env, source_name)
-                walk(node.otherwise, dot, child_env, source_name)
+                if head == "range":
+                    carried = dict(env)
+                    changed: set[str] = set(names if operator == "=" else ()) & env.keys()
+                    for _ in range(8):
+                        iteration = {**carried, **{key: child_env[key] for key in names}}
+                        updates = walk(node.children, child_dot, iteration, source_name)
+                        if operator == "=":
+                            for variable in names:
+                                updates.setdefault(variable, child_env[variable])
+                        updates = {key: item for key, item in updates.items() if key in env and not (operator == ":=" and key in names)}
+                        changed.update(updates)
+                        following = {**carried, **{key: join(carried[key], item) for key, item in updates.items()}}
+                        if all(identity(following[key]) == identity(carried[key]) for key in updates):
+                            break
+                        carried = following
+                    else:
+                        warn("loop input origins did not converge within 8 passes; unresolved alternatives retained")
+                        carried.update({key: join(carried[key], None) for key in changed})
+                    empty = walk(node.otherwise, dot, child_env, source_name)
+                    for variable in changed | (empty.keys() & env.keys()):
+                        if operator == ":=" and variable in names:
+                            continue
+                        env[variable] = join(carried[variable], empty.get(variable, env[variable]))
+                        if variable not in declared:
+                            outward[variable] = env[variable]
+                else:
+                    if prune_literals and tokens in (["if", "true"], ["if", "false"]):
+                        branches = [walk(node.children if tokens[1] == "true" else node.otherwise, dot, child_env, source_name)]
+                    else:
+                        branches = [
+                            walk(node.children, child_dot, child_env, source_name),
+                            walk(node.otherwise, dot, child_env, source_name),
+                        ]
+                    for variable in {key for branch in branches for key in branch} & env.keys():
+                        if operator == ":=" and variable in names:
+                            continue
+                        env[variable] = join(*(branch.get(variable, env[variable]) for branch in branches))
+                        if variable not in declared:
+                            outward[variable] = env[variable]
+            return outward
 
         walk(nodes, (), {"$": ()})
     return list(dict.fromkeys(refs)), list(dict.fromkeys(diagnostics))

@@ -103,6 +103,20 @@ class Unknown(ValueError):
 
 
 @frozen
+class FieldAccess:
+    """
+    Select fields from a parenthesized expression without treating them as call arguments.
+
+    Attributes:
+        receiver (object): Expression producing the selected context.
+        fields (tuple[str, ...]): Consecutive dot-separated field names.
+    """
+
+    receiver: object
+    fields: tuple[str, ...]
+
+
+@frozen
 class Rejection(Exception):
     """
     Retain an evaluated rejection and the input evidence used to reach it.
@@ -183,7 +197,8 @@ def expression(source: str) -> object:
     Raises:
         Unknown: Tokens or parentheses are malformed.
     """
-    tokens = TOKENS.findall(source)
+    matches = list(TOKENS.finditer(source))
+    tokens = [match[1] for match in matches]
     position = 0
 
     def pipeline() -> object:
@@ -205,6 +220,16 @@ def expression(source: str) -> object:
                     if position >= len(tokens) or tokens[position] != ")":
                         raise Unknown("unbalanced expression")
                     position += 1
+                    if (
+                        position < len(tokens)
+                        and matches[position - 1].end(1) == matches[position].start(1)
+                        and tokens[position].startswith(".")
+                    ):
+                        selector = tokens[position]
+                        if not re.fullmatch(r"(?:\.[A-Za-z_][A-Za-z_0-9]*)+", selector):
+                            raise Unknown("unsupported parenthesized field selector")
+                        item = FieldAccess(item, tuple(selector[1:].split(".")))
+                        position += 1
                     parts.append(item)
                 else:
                     parts.append(token)
@@ -233,6 +258,8 @@ def calls(expr: object) -> set[str]:
     Returns:
         set[str]: Function names and statically named helper-call edges.
     """
+    if isinstance(expr, FieldAccess):
+        return calls(expr.receiver)
     if isinstance(expr, str) and expr in NATIVE_STATE:
         return {expr}
     if not isinstance(expr, tuple) or not expr:
@@ -243,6 +270,8 @@ def calls(expr: object) -> set[str]:
             result.add("include:" + json.loads(expr[1]))
         except (ValueError, TypeError):
             pass
+    if isinstance(expr[0], FieldAccess):
+        result.update(calls(expr[0]))
     for argument in expr[1:]:
         result.update(calls(argument))
     return result
@@ -611,7 +640,7 @@ class Evaluation:
         depth (int): Bounded helper recursion depth.
         context (object): Current helper argument; dollar and dot reset together at each include.
         enums (dict[str, tuple[str, ...]]): Literal allowlists observed on active rejecting conditions.
-        scope (tuple[str, ...]): Chart namespace used to reject ambiguous global forwarding.
+        scope (tuple[str, ...]): Chart namespace retained across helper context changes.
         steps (int): Statements and iterations consumed by this bounded analysis.
         loops (int): Active lexical ranges in the current template invocation.
         needed (set[str]): Root aliases that can influence an explicit rejection.
@@ -619,6 +648,7 @@ class Evaluation:
         transformed (bool): Whether this prediction used modeled transformations.
         contextual (bool): Whether this prediction depends on native context or concrete tpl evaluation.
         incomplete (bool): An unrelated root output was left to Helm; later predictions require native verification.
+        declared_globals (bool): A forwarded global read is constrained by an authored dependency schema.
     """
 
     contracts: Contracts
@@ -636,6 +666,7 @@ class Evaluation:
     transformed: bool = False
     contextual: bool = False
     incomplete: bool = False
+    declared_globals: bool = False
 
     def context_value(self, value: object) -> object:
         """
@@ -678,8 +709,28 @@ class Evaluation:
             current = context
         else:
             current = variables.lookup(head)
+            if isinstance(current, Unknown):
+                cause = Unknown(str(current))
+                cause.source, cause.line = current.source, current.line
+                raise cause
             if current is UNRESOLVED:
-                raise Unknown("unbound or unresolved variable")
+                raise Unknown(f"unbound variable: {head}")
+        return self.select(current, tuple(parts))
+
+    def select(self, current: object, parts: tuple[str, ...]) -> object:
+        """
+        Follow a field chain with the same provenance rules for direct and parenthesized access.
+
+        Args:
+            current (object): Resolved receiver, including candidate-bound values and native context.
+            parts (tuple[str, ...]): Fields to select from the receiver.
+
+        Returns:
+            object: Selected value retaining input provenance.
+
+        Raises:
+            Unknown: A field or its receiver is outside the supported context model.
+        """
         for index, key in enumerate(parts):
             current = self.context_value(current)
             container = native(current)
@@ -688,11 +739,60 @@ class Evaluation:
             if key not in container and index != len(parts) - 1:
                 raise Unknown("missing parent context lookup")
             current = BoundValue(container.get(key), (*current.path, key)) if isinstance(current, BoundValue) else container.get(key)
-        if isinstance(current, BoundValue) and current.path:
-            if self.scope and current.path[: len(self.scope) + 1] == (*self.scope, "global"):
-                raise Unknown("forwarded global input origins are unresolved")
-            self.inputs["$." + ".".join(current.path)] = current.value
+        if isinstance(current, BoundValue):
+            current = self.observe(current)
         return self.context_value(current)
+
+    def observe(self, value: BoundValue) -> BoundValue:
+        """
+        Attribute forwarded scalar globals to the highest-priority ancestor supplying that field.
+
+        Args:
+            value (BoundValue): Logical field read from an effective dependency context.
+
+        Returns:
+            BoundValue: Actual input origin, or a deferred aggregate whose members may have different origins.
+
+        Raises:
+            Unknown: Global origin cannot be established without interpreting incompatible parent containers.
+        """
+        path = value.path
+        namespace = next(
+            (node.path for node in self.contracts.dependencies.nodes if path[: len(node.path) + 1] == (*node.path, "global")), None
+        )
+        if namespace is not None:
+            # Dependency coalescing remains native-verified for every predicted rejection.
+            self.contextual = True
+            self.declared_globals |= any(
+                path[: len(scope)] == scope and declares_path(schema, path[len(scope) :])
+                for scope, schema in self.contracts.schemas.items()
+            )
+            if isinstance(value.value, dict):
+                # A merged map has no single writable origin. Resolve each selected
+                # member later; whole-map observations can still be checked by Helm.
+                return value
+            suffix = path[len(namespace) + 1 :]
+            for depth in range(len(namespace) + 1):
+                origin = (*namespace[:depth], "global")
+                container = lookup(self.values, origin)
+                if not isinstance(container, dict):
+                    continue
+                for key in suffix:
+                    if not isinstance(container, dict):
+                        raise Unknown("forwarded global has incompatible ancestor containers")
+                    if key not in container:
+                        break
+                    container = container[key]
+                else:
+                    if type(container) is not type(value.value) or container != value.value:
+                        raise Unknown("forwarded global value differs from its candidate origin")
+                    value = BoundValue(value.value, (*origin, *suffix))
+                    break
+            else:
+                raise Unknown("forwarded global input origin is absent")
+        if value.path:
+            self.inputs["$." + ".".join(value.path)] = value.value
+        return value
 
     def evaluate(self, expr: object, source: str, line: int, variables: Scope) -> object:
         """
@@ -711,6 +811,8 @@ class Evaluation:
             Unknown: An expression, conversion, context, or function is unsupported.
             Rejection: An explicit fail or required call rejects this input.
         """
+        if isinstance(expr, FieldAccess):
+            return self.select(self.evaluate(expr.receiver, source, line, variables), expr.fields)
         if isinstance(expr, str):
             if expr.startswith((".", "$")):
                 return self.resolve(expr, variables)
@@ -773,9 +875,13 @@ class Evaluation:
                 return self.contracts.renderer.semver_compare(str(args[0]), str(args[1]))
             except (Unavailable, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, YAMLError) as exc:
                 raise Unknown(str(exc) if isinstance(exc, Unavailable) else "native version comparison unavailable") from exc
-        if isinstance(function, str) and function.startswith((".", "$")) and "." in function:
-            receiver, method = function.rsplit(".", 1)
-            target = self.resolve(receiver, variables)
+        if isinstance(function, FieldAccess) or (isinstance(function, str) and function.startswith((".", "$")) and "." in function):
+            if isinstance(function, FieldAccess):
+                method = function.fields[-1]
+                target = self.select(self.evaluate(function.receiver, source, line, variables), function.fields[:-1])
+            else:
+                receiver, method = str(function).rsplit(".", 1)
+                target = self.resolve(receiver, variables)
             if isinstance(target, APIVersions) and method == "Has" and len(args) == 1 and isinstance(args[0], str):
                 self.contextual = True
                 return args[0] in target.versions
@@ -819,6 +925,7 @@ class Evaluation:
                 tuple(self.conditions),
                 dict(self.enums),
                 text,
+                declared_schema=self.declared_globals,
                 transformed_domains=tuple(self.transformed_domains),
                 transformed=self.transformed,
                 contextual=self.contextual,
@@ -832,6 +939,7 @@ class Evaluation:
                     args[0],
                     dict(self.inputs),
                     tuple(self.conditions),
+                    declared_schema=self.declared_globals,
                     transformed_domains=tuple(self.transformed_domains),
                     transformed=self.transformed,
                     contextual=self.contextual,
@@ -892,11 +1000,8 @@ class Evaluation:
                 path = (*evaluated[0].path, args[1])
                 if not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9-]*", args[1]):
                     raise Unknown("input key cannot be represented by a dotted contract path")
-                if self.scope and path[: len(self.scope) + 1] == (*self.scope, "global"):
-                    raise Unknown("forwarded global input origins are unresolved")
                 value = args[0].get(args[1], "" if function == "get" else None)
-                self.inputs["$." + ".".join(path)] = value
-                return BoundValue(value, path)
+                return self.observe(BoundValue(value, path))
             return args[0].get(args[1], "" if function == "get" else None)
         if function == "append" and len(args) == 2 and isinstance(args[0], list):
             return [*args[0], args[1]]
@@ -1102,8 +1207,8 @@ class Evaluation:
                         if assignment:
                             try:
                                 self.pipeline(node.text, source, node.line, variables)
-                            except Unknown:
-                                variables.bind(assignment[1], UNRESOLVED, assign=assignment[2] == "=")
+                            except Unknown as exc:
+                                variables.bind(assignment[1], exc, assign=assignment[2] == "=")
                                 raise
                         elif node.text in {"break", "continue"}:
                             if not self.loops:

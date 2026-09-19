@@ -41,17 +41,23 @@ def reviewed_bindings(chart: Path) -> tuple[list[dict[str, object]], list[dict[s
             diagnostics.append({"path": binding["path"], "reason": "reviewed helper source changed; input binding not applied"})
             continue
         profile = mapping(mapping(mapping(library()["upstream"])["profiles"])[str(binding["profile"])])
+        quoted = bool(binding.get("quoted", True))
+        restriction: dict[str, object] = {"anyOf": [profile["schema"], {"const": ""}]}
+        if quoted:
+            restriction["type"] = "string"
         result.append(
             {
                 "path": binding["path"],
-                "schema": {"type": "string", "anyOf": [profile["schema"], {"const": ""}]},
+                "schema": restriction,
                 "source": "reviewed-chart-binding",
-                "quoted": True,
+                "quoted": quoted,
                 "profile": binding["profile"],
                 "destination": binding["destination"],
                 "files": files,
                 "reference": binding["reference"],
-                "scope": "generated literal references or the empty fallback; supplied tpl expressions remain unchanged",
+                "scope": binding.get(
+                    "scope", "generated literal references or the empty fallback; supplied tpl expressions remain unchanged"
+                ),
             }
         )
     return result, diagnostics
