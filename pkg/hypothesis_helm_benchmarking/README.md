@@ -5,6 +5,7 @@
 
 - [Install](#install)
 - [Develop and publish](#develop-and-publish)
+- [Plot notation](#plot-notation)
 <!-- toc:end -->
 
 An optional, separately published companion to `hypothesis-helm`. It contains the shared benchmark chart, studies,
@@ -36,3 +37,13 @@ Its version and release lifecycle are independent of the core package. Set its v
 the core PyPI workflow publishes only the core distribution.
 Its `pyproject.toml` uses standard project metadata and the setuptools backend to map this flat directory to
 the `hypothesis_helm_benchmarking` import package. Poetry still manages the repository environment and can invoke the build.
+
+## Plot notation
+
+Use Matplotlib mathtext alongside plain-language labels, for example `r"Interaction strength, $p$ (--permutations)"`.
+Mathtext renders equations in PNG and SVG files without an external LaTeX installation.
+
+Keep interaction strength ($p$) distinct from the number of test cases ($N$) and workers ($w$).
+For repeated measurements, $\bar{x}$ is the mean and $s$ is the sample standard deviation;
+bands at $\bar{x}\pm s$ and $\bar{x}\pm2s$ describe variation between runs, not confidence intervals.
+Give each plot a short question beneath its title so readers can interpret the notation in context.

@@ -195,7 +195,7 @@ def plot(output: Path, rows: list[dict[str, object]], policy: dict[str, object])
         depths = sorted({int(str(row["gate_depth"])) for row in subset})
         counts = [[float(str(row["mean_selected"])) for row in subset if int(str(row["gate_depth"])) == depth] for depth in depths]
         repeated_line(axis, depths, counts, f"{fields} input fields", f"C{index % 10}")
-    axis.set(xlabel="Maximum gate depth", ylabel="Selected cases after filtering and sampling")
+    axis.set(xlabel=r"Maximum nested-condition depth, $d_{\max}$", ylabel=r"Cases after filtering and sampling, $N_{\mathrm{selected}}$")
     axis.legend()
     axis.grid(alpha=0.2)
     finish(

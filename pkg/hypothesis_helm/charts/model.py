@@ -37,7 +37,7 @@ class Chart:
         path (Path): Resolved value path or chart location.
         schema (dict[str, object]): Schema describing accepted values.
         defaults (dict[str, object]): Values loaded from the source chart.
-        dependency_model (Dependencies | None): Optional dependency snapshot for an isolated generated suite.
+        dependency_model (Dependencies | None): Shared dependency snapshot for discovery, generation and child-default coalescing.
         domains (InputDomains | None): Lazily resolved generation policy, independent of the source schema.
         generated_schema (dict[str, object] | None): Cached default generation contract for this chart instance.
     """

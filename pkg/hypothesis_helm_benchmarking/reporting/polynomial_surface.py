@@ -51,13 +51,13 @@ def plot(output: Path, ledger: dict[str, object]) -> None:
         xs, ys = sorted({p[0] for p in observed}), sorted({p[1] for p in observed})
         models = mapping(record["models"])
         x_label = {
-            "clustering": "Failure clustering",
-            "failures": "Failure clustering",
-            "depth": "Nested conditions",
-            "redundancy": "Unused fields",
-            "structure": "Fields ignored by primary output",
+            "clustering": r"Failure clustering, $c$",
+            "failures": r"Failure clustering, $c$",
+            "depth": r"Nested conditions, $d$",
+            "redundancy": r"Unused fields, $n_{\mathrm{unused}}$",
+            "structure": r"Fields ignored by primary output, $n_{\mathrm{unused}}$",
         }.get(str(record["plane"]), "First factor")
-        y_label = "Nested conditions" if record["plane"] == "structure" else "Requested erroneous inputs (%)"
+        y_label = r"Nested conditions, $d$" if record["plane"] == "structure" else r"Requested error rate, $100\varepsilon$ (%)"
         arrays = [np.array([p[2] for p in observed]).reshape(len(xs), len(ys)).T]
         for name in ("quadratic", "quartic"):
             model = mapping(models[name])
@@ -74,7 +74,13 @@ def plot(output: Path, ledger: dict[str, object]) -> None:
         figure, axes = plt.subplots(1, 3, figsize=(17, 6))
         cursor = 0
         for panel, name in zip(axes, ("observed", "quadratic", "quartic"), strict=True):
-            panel.set_title("Held-out repeat" if name == "observed" else name.capitalize())
+            panel.set_title(
+                {
+                    "observed": r"Held-out repeat, $z$",
+                    "quadratic": r"Quadratic fit, $\hat{z}_2(u,v)$",
+                    "quartic": r"Quartic fit, $\hat{z}_4(u,v)$",
+                }[name]
+            )
             model = mapping(models[name]) if name != "observed" else {}
             if name != "observed" and model["status"] != "fitted":
                 panel.text(0.5, 0.5, f"Unavailable\n{model['reason']}", ha="center", va="center", wrap=True)

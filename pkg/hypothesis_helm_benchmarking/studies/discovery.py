@@ -98,12 +98,12 @@ def plot(output: Path, rows: list[dict[str, object]], defects: list[Fault]) -> N
         label="Defects found in this run",
     )
     axes[0].axhline(len(defects), linestyle="--", color="gray", label=f"{len(defects)} injected defects")
-    axes[0].set(ylabel="Distinct injected defects discovered", ylim=(0, len(defects) * 1.1))
+    axes[0].set(ylabel=r"Distinct injected defects found, $B_{\mathrm{found}}$", ylim=(0, len(defects) * 1.1))
     axes[0].legend()
     axes[1].plot(strengths, [row["completed"] for row in rows], "o-", color="#d97706")
-    axes[1].set(ylabel="Distinct test cases executed")
+    axes[1].set(ylabel=r"Distinct test cases executed, $N$")
     for axis in axes:
-        axis.set(xlabel="--permutations (interaction strength)", xticks=strengths)
+        axis.set(xlabel=r"Interaction strength, $p$ (--permutations)", xticks=strengths)
         axis.grid(alpha=0.2)
     figure.suptitle("Defect discovery as permutation strength increases")
     finish(
@@ -122,8 +122,8 @@ def plot(output: Path, rows: list[dict[str, object]], defects: list[Fault]) -> N
             label=f"{order}-factor faults",
         )
     axis.set(
-        xlabel="--permutations (interaction strength)",
-        ylabel="Injected faults discovered (%)",
+        xlabel=r"Interaction strength, $p$ (--permutations)",
+        ylabel=r"Bug recall, $100B_{\mathrm{found}}/B_{\mathrm{total}}$ (%)",
         xticks=strengths,
         ylim=(0, 105),
     )

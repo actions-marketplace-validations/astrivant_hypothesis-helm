@@ -39,9 +39,9 @@ def plot(output: Path, document: dict[str, object]) -> None:
     methods = [str(method) for method in sequence(metadata["methods"])]
     rates = [float(str(rate)) for rate in sequence(metadata["error_rates"])]
     labels = {
-        "depth": "Nested conditions",
-        "redundancy": "Unused input fields",
-        "clustering": "Failure clustering",
+        "depth": r"Nested conditions, $d$",
+        "redundancy": r"Unused input fields, $n_{\mathrm{unused}}$",
+        "clustering": r"Failure clustering, $c$",
     }
     metric_labels = {
         "total_seconds": "Total measured seconds",
@@ -173,7 +173,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
                     panel.text(x, y, annotation, ha="center", va="center", fontsize=8, color=color)
                 panel.set_xticks(range(len(rates)), [f"{rate:g}" for rate in rates])
                 panel.set_yticks(range(len(values)), [f"{value:g}" for value in values])
-                panel.set(title=method, xlabel="Requested erroneous inputs (%)", ylabel=labels[axis])
+                panel.set(title=method, xlabel=r"Requested error rate, $100\varepsilon$ (%)", ylabel=labels[axis])
             for panel in list(axes.flat)[len(methods) :]:
                 panel.set_visible(False)
             figure.suptitle(f"{metric_labels[metric]} vs error rate and {axis}")
@@ -232,7 +232,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
                 }
                 observations_by_rate.append(list(seed_observations.values()))
             repeated_line(panel, rates, observations_by_rate, f"Clustering {value:g}", f"C{index % 10}", upper=1)
-        panel.set(xlabel="Requested erroneous inputs (%)", ylabel="Failing neighbours / all neighbours of failing inputs", ylim=(0, 1))
+        panel.set(xlabel=r"Requested error rate, $100\varepsilon$ (%)", ylabel=r"Failing-neighbour fraction, $q$", ylim=(0, 1))
         panel.legend()
         panel.grid(alpha=0.2)
         figure.suptitle("Measured failure clustering")

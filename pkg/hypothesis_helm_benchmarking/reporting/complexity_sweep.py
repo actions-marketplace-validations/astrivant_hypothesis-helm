@@ -72,11 +72,11 @@ def plot(output: Path, document: dict[str, object]) -> bool:
             xticklabels=breadths,
             yticks=range(len(depths)),
             yticklabels=depths,
-            xlabel="Most manifest nodes at one level (breadth)",
-            ylabel="Longest root-to-value path (depth)",
+            xlabel=r"Largest manifest level (breadth), $B$",
+            ylabel=r"Longest root-to-value path (depth), $D$",
             title=f"{group[0]} input fields; {group[1]} condition{'s' if group[1] != 1 else ''} per defect",
         )
-        figure.colorbar(picture, ax=axis, label="Minimum configurations measured")
+        figure.colorbar(picture, ax=axis, label=r"Measured sample floor, $N_{\min}$")
     for axis in list(axes.flat)[len(groups) :]:
         axis.set_visible(False)
     finish(

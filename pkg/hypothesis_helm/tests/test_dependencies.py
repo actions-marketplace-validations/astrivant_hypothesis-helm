@@ -117,13 +117,15 @@ def test_inventory_discovers_metadata_controls_and_child_scopes(chart: Chart) ->
 
 
 @pytest.mark.parametrize("packaged", [False, True])
-def test_missing_dependency_parent_keeps_installed_defaults(chart: Chart, packaged: bool) -> None:
+@pytest.mark.parametrize("cached_domains", [False, True])
+def test_missing_dependency_parent_keeps_installed_defaults(chart: Chart, packaged: bool, cached_domains: bool) -> None:
     """
     Vary a nested child path without generating unrelated siblings absent from parent values.
 
     Args:
         chart (Chart): Parent with an aliased child and no supplied sentinel configuration.
         packaged (bool): Load the installed child from a directory or archive.
+        cached_domains (bool): Reconstruct the chart from a worker's saved generation domains.
 
     Returns:
         None: Candidate overrides contain only the selected subtree and preserve all child siblings.
@@ -166,6 +168,12 @@ def test_missing_dependency_parent_keeps_installed_defaults(chart: Chart, packag
     dependencies = Dependencies.build(chart.path)
     chart.dependency_model = dependencies
     model = coalesce(chart)
+    if cached_domains:
+        domains = chart.input_domains()
+        chart = Chart(chart.path, chart.schema, chart.defaults)
+        chart.domains = domains
+        inventory = InputInventory.build(chart)
+        dependencies = inventory.dependencies
     entry = ValuePath(("cache", "sentinel", "service", "headless"), {"const": {"annotations": {"example": "changed"}}})
 
     @settings(max_examples=20, deadline=None, derandomize=True)

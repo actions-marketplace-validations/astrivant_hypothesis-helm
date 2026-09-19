@@ -162,8 +162,8 @@ def plot(output: Path, document: dict[str, object]) -> None:
                     )
                     axis.set_xlim(low[0] - pad[0], high[0] + pad[0])
                     axis.set_ylim(low[1] - pad[1], high[1] + pad[1])
-                    axis.set_xlabel(f"PC1 ({100 * number(variance[0]):.1f}%)")
-                    axis.set_ylabel(f"PC2 ({100 * number(variance[1]):.1f}%)")
+                    axis.set_xlabel(rf"$\mathrm{{PC}}_1$ ({100 * number(variance[0]):.1f}%)")
+                    axis.set_ylabel(rf"$\mathrm{{PC}}_2$ ({100 * number(variance[1]):.1f}%)")
                     axis.grid(alpha=0.2)
                 axes[i, 0].annotate(
                     str(ref["profile"]),

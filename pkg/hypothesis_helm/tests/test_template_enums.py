@@ -94,6 +94,47 @@ def test_map_enum_guards_and_message_order(preset_chart: Chart) -> None:
     assert another is not None and another.key == rejection.key
 
 
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+@pytest.mark.parametrize("function", ["mergeOverwrite", "mustMergeOverwrite"])
+def test_enum_after_fresh_label_merge_and_formatting(preset_chart: Chart, function: str) -> None:
+    """
+    Reach an allowlist after the label merge and formatting patterns used by dependent charts.
+
+    Args:
+        preset_chart (Chart): Conditional preset helper with inferred input types.
+        function (str): Overwrite merge or its error-returning alias.
+
+    Returns:
+        None: The helper retains input provenance, Helm confirms rejection, and repair keeps the guarded resource enabled.
+    """
+    template = preset_chart.path / "templates/config.yaml"
+    body = template.read_text().replace('(dict "type" .Values.preset)', '(dict "type" $labels.mode)')
+    template.write_text(
+        dedent(f"""
+        {{{{- $labels := {function} (dict) (dict "mode" "old") (dict "mode" .Values.preset) -}}}}
+        {{{{- if ne ($labels.mode | quote | nindent 2) "" -}}}}
+        """)
+        + body
+        + "{{ end }}"
+    )
+    invalid = {**preset_chart.defaults, "preset": "PLL"}
+    contracts = Contracts.build(preset_chart.path)
+    rejection = contracts.predict(invalid)
+    assert rejection is not None and rejection.enums == {"$.preset": ("large", "nano", "small")}
+    assert rejection.transformed
+    assert not contracts.fallbacks
+    with pytest.raises(RenderFailure) as error:
+        render(preset_chart, invalid)
+    assert matches_rejection(str(error.value), rejection)
+    report = check_chart(
+        preset_chart, input_strategy=st.just(invalid), max_examples=1, filter_rejections=True, protected_paths=(("preset",),)
+    )
+    assert report["status"] == "passed", report
+    assert mapping(report["configuration_rejections"])["adjusted_candidates"] == 1
+    for overrides in ({"enabled": False}, {"resources": {"cpu": "2"}}, {"preset": "none"}):
+        assert contracts.predict({**invalid, **overrides}) is None
+
+
 @pytest.mark.parametrize("membership", ["has", "mustHas"])
 def test_literal_lists_nested_arguments_and_aliases(preset_chart: Chart, membership: str) -> None:
     """

@@ -17,6 +17,7 @@ from pathlib import Path
 from attrs import define, evolve, field, frozen
 from ruamel.yaml.error import YAMLError
 
+from hypothesis_helm.compiler.asts.contract_maps import fresh_merge, merge_flat_sources
 from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, LoopControl, Scope
 from hypothesis_helm.compiler.asts.contract_values import (
     BoundValue,
@@ -277,21 +278,40 @@ def calls(expr: object) -> set[str]:
     return result
 
 
-def context_effects(nodes: tuple[Node, ...]) -> bool:
+def context_effects(nodes: tuple[Node, ...], *, inspect_fresh_merges: bool = False) -> bool:
     """
     Detect direct operations that could change the context of a later rejection.
 
     Args:
         nodes (tuple[Node, ...]): Statements preceding the candidate rejection.
+        inspect_fresh_merges (bool): Permit bounded evaluation of fresh destinations, while checking nested calls for mutations.
 
     Returns:
         bool: Mutation or dynamic evaluation prevents a supported local prediction.
     """
+
+    def mutates(expr: object) -> bool:
+        """
+        Check every operand, exempting only the fresh merge operation itself.
+
+        Args:
+            expr (object): One expression tree, including parenthesized field selectors.
+
+        Returns:
+            bool: A write or dynamic call still requires an analysis barrier.
+        """
+        if isinstance(expr, FieldAccess):
+            return mutates(expr.receiver)
+        if not isinstance(expr, tuple) or not expr:
+            return isinstance(expr, str) and expr in MUTATIONS | {"call"}
+        if not (inspect_fresh_merges and fresh_merge(expr)) and str(expr[0]) in MUTATIONS | {"call"}:
+            return True
+        return isinstance(expr[0], FieldAccess) and mutates(expr[0]) or any(mutates(item) for item in expr[1:])
+
     for node in walk(nodes):
         if node.kind != "text":
             assignment = ASSIGNMENT.fullmatch(node.text)
-            functions = calls(expression(assignment[3] if assignment else node.text))
-            if functions & (MUTATIONS | {"call"}):
+            if mutates(expression(assignment[3] if assignment else node.text)):
                 return True
     return False
 
@@ -923,6 +943,13 @@ class Evaluation:
             return result
         evaluated = [self.evaluate(argument, source, line, variables) for argument in arguments]
         args = [native(value) for value in evaluated]
+        if fresh_merge(expr):
+            try:
+                merged = merge_flat_sources(evaluated[1:], self.contracts.limits["max_range_items"])
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
+            self.transformed = True
+            return merged
         if function == "lookup" and len(args) == 4 and all(isinstance(value, str) for value in args):
             if self.contracts.renderer is not None and self.contracts.renderer.offline:
                 self.contextual = True
@@ -1300,7 +1327,7 @@ class Evaluation:
                     elif node.kind == "opaque" and node.text.startswith("block "):
                         output.append(self.named_template(node.text, source, node.line, variables))
                     elif node.kind == "emit":
-                        if context_effects((node,)):
+                        if context_effects((node,), inspect_fresh_merges=True):
                             raise Unknown("template statement can mutate or dynamically evaluate its context")
                         if assignment:
                             try:

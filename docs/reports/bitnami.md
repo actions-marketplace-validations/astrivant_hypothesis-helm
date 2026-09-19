@@ -8,6 +8,7 @@
 - [Scan summary](#scan-summary)
 - [Status counts](#status-counts)
 - [Settings](#settings)
+- [Errors](#errors)
 - [Charts](#charts)
   - [bitnami/airflow](#bitnamiairflow)
   - [bitnami/apache](#bitnamiapache)
@@ -141,21 +142,21 @@ findings means none in the completed sample, not exhaustive coverage. Testing ti
 Git comparison unavailable; no charts skipped using previous test results.
 
 Directory: /Users/emmadoyle/projects/personal/hypothesis-helm/third_party/bitnami-charts
-Started (Unix epoch): 1789843116
-Elapsed (wall clock): 81.24 seconds
-Chart testing: 73.10 seconds
-Dependency preparation: 7.28 seconds (excluded from testing budgets)
+Started (Unix epoch): 1789854946
+Elapsed (wall clock): 658.39 seconds
+Chart testing: 634.74 seconds
+Dependency preparation: 22.46 seconds (excluded from testing budgets)
 Charts discovered: 115
 Scan status: interrupted
 Discovery complete: True
-Unstarted charts: 114
+Unstarted charts: 112
 
 Results record outcomes for the tested sample and selected checks.
 Baseline-only, skipped, blocked, and incomplete charts retain their respective statuses.
 
 ## Status counts
 
-1 interrupted; 114 pending.
+2 failed; 1 interrupted; 112 pending.
 
 ## Settings
 
@@ -168,37 +169,884 @@ supplied defaults are tested unchanged. The JSON report records constraints and 
 
 Disabled checks: HH2006
 
+## Errors
+
+36 distinct diagnostics across 61 occurrences; 25 repeats grouped.
+Diagnostics and their triggering inputs are grouped under each chart below.
+Up to two examples per diagnostic and six fields per example are shown. Long values and diagnostics are shortened.
+Full inputs, diagnostics, and remaining cases are retained in local run data.
+Selected fields identify the inputs varied by the test. Causal attribution requires further investigation.
+
 ## Charts
 
 ### bitnami/airflow
 
 Overview cell: 01
 
-Status: interrupted | Attempts: 43
+Status: failed | Attempts: 146
 
-Audit findings: 1282. Full paths and template references are retained in the JSON report.
+Audit findings: 1190. Full paths and template references are retained in the JSON report.
 
-- `HH2001` at `$[*][*]`: Undocumented values path
-- `HH2004` at `$[*][*]`: No supplied default for a values path
-- `HH2001` at `$[*][*][*]`: Undocumented values path
-- `HH2004` at `$[*][*][*]`: No supplied default for a values path
-- `HH2001` at `$[*][*][*][*]`: Undocumented values path
-- `HH2004` at `$[*][*][*][*]`: No supplied default for a values path
-- 1276 additional audit findings in JSON.
+- `HH2001` at `$.apiVersions`: Undocumented values path (warning)
+- `HH2001` at `$.auth.existingSecret`: Undocumented values path (warning)
+- `HH2001` at `$.auth.fernetKey`: Undocumented values path (warning)
+- `HH2001` at `$.auth.jwtSecretKey`: Undocumented values path (warning)
+- `HH2001` at `$.auth.password`: Undocumented values path (warning)
+- `HH2001` at `$.auth.secretKey`: Undocumented values path (warning)
+- 1184 additional audit findings in JSON.
 
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789843116/0000>)
+Configuration rejections: 0 excluded; 0 adjusted and tested; 0 Helm verification renders (separate from manifest-test attempts).
+
+The template rejected inputs admitted by the declared values schema; these remain reported failures.
+
+#### E013 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: redis 22.0.4 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ...  with non-standard containers is likely to cause degraded security and performance,
+broken chart features, and missing environment variables. Unrecognized images: - /)Xrjk;@X|:E If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.redis.metrics.containerPorts | Status: failed
+
+Changed overrides (used together):
+- `$.redis.metrics.resourcesPreset = "ks[Ma"`
+- `$.redis.metrics.containerSecurityContext.privileged = [null, null, null]`
+- `$.redis.metrics.startupProbe.failureThreshold = -3.642006609759936e+54`
+- `$.redis.metrics.startupProbe.enabled = false`
+- `$.redis.metrics.startupProbe.initialDelaySeconds = -2527976481271112.0`
+- `$.redis.metrics.startupProbe.timeoutSeconds = 5343706709371922.0`
+- 9 more paths; see full input.
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0000/paths/f78bb11087b66fe7a49f>)
+
+#### E014 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: redis 22.0.4 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ... rd containers is likely to cause degraded security and performance, broken chart
+features, and missing environment variables. Unrecognized images: - QNx_[[/ XTAhaL\S>S(g}K:aaLcv If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.redis.sentinel.service.headless | Status: failed
+
+Changed overrides (used together):
+- `$.redis.sentinel.extraVolumeMounts = "["`
+- `$.redis.sentinel.failoverTimeout = 6.204452962310167e+16`
+- `$.redis.sentinel.enabled = false`
+- `$.redis.sentinel.extraEnvVarsSecret = "ac"`
+- `$.redis.sentinel.annotations = "apiVersion"`
+- `$.redis.sentinel.externalAccess = {}`
+- 17 more paths; see full input.
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0000/paths/afbbf9ab6c6be5d414aa>)
+
+#### E015 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: redis 22.0.4 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ontainers is likely to cause degraded security and performance, broken chart features,
+and missing environment variables. Unrecognized images: - docker.io/OX:1.75.0-debian-12-r1 If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.redis.metrics.livenessProbe.periodSeconds | Status: failed
+
+Changed overrides (used together):
+- `$.redis.metrics.customStartupProbe["[Ma"].OaUaaaO = [true, null, {}]`
+- `$.redis.metrics.customStartupProbe["[Ma"][""] = {}`
+- `$.redis.metrics.customStartupProbe["[Ma"]["aaaaGaaaaaaaaa\n0"][""] = null`
+- `$.redis.metrics.customStartupProbe["3j$0"] = [[null, 1e-06], [[1.6367801640519733e+83]]]`
+- `$.redis.metrics.customStartupProbe.u_ = [[null], false, []]`
+- `$.redis.metrics.customStartupProbe["\raK{aMmaW"] = []`
+- 43 more paths; see full input.
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0000/paths/ca2ac8630025cdc22374>)
+
+[Chart artifacts](<bitnami-runs/bitnami-charts_1789854946/0000>)
 
 ### bitnami/apache
 
 Overview cell: 02
 
-Status: pending | Attempts: N/A
+Status: failed | Attempts: 3928
+
+Audit findings: 245. Full paths and template references are retained in the JSON report.
+
+- `HH2001` at `$.affinity`: Undocumented values path (warning)
+- `HH2001` at `$.args`: Undocumented values path (warning)
+- `HH2001` at `$.automountServiceAccountToken`: Undocumented values path (warning)
+- `HH2001` at `$.autoscaling.enabled`: Undocumented values path (warning)
+- `HH2001` at `$.autoscaling.maxReplicas`: Undocumented values path (warning)
+- `HH2001` at `$.autoscaling.minReplicas`: Undocumented values path (warning)
+- 239 additional audit findings in JSON.
+
+Configuration rejections: 0 excluded; 10 adjusted and tested; 10 Helm verification renders (separate from manifest-test attempts).
+
+The template rejected inputs admitted by the declared values schema; these remain reported failures.
+
+#### E001 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+```text
+[HH1001] Error: YAML parse error on apache/templates/deployment.yaml: error unmarshaling JSON: while decoding JSON: json: cannot unmarshal
+array into Go struct field .metadata.annotations. of type string
+```
+
+Phase: $.commonAnnotations | Status: failed
+
+Changed overrides (used together):
+- `$.commonAnnotations[""] = []`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/672041fcfe26907bc14c>)
+
+#### E002 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+```text
+[HH1001] Error: YAML parse error on apache/templates/extra-list.yaml: error unmarshaling JSON: while decoding JSON: json: cannot unmarshal
+array into Go value of type util.SimpleHead
+```
+
+Phase: $.extraDeploy | Status: failed
+
+Changed overrides (used together):
+- `$.extraDeploy = [[]]`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/90454abd7e30d38b69ee>)
+
+Phase: $.extraDeploy[*] | Status: failed
+
+Changed overrides (used together):
+- `$.extraDeploy = [[]]`
+Absent from overrides: $.extraDeploy["*"]. Defaults may still apply.
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/fbfea8b96e1bf6abb6fc>)
+
+#### E003 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+```text
+[HH1001] Error: YAML parse error on apache/templates/serviceaccount.yaml: error unmarshaling JSON: while decoding JSON: json: cannot
+unmarshal array into Go struct field .metadata.annotations. of type string
+```
+
+Phase: $.serviceAccount.annotations | Status: failed
+
+Changed overrides (used together):
+- `$.serviceAccount.annotations[""] = []`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/840a8a2bc50327388c2a>)
+
+Phase: $.serviceAccount | Status: failed
+
+Changed overrides (used together):
+- `$.serviceAccount.annotations[""] = []`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/7a010717afb4691aaeb8>)
+
+#### E004 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+```text
+[HH1001] Error: YAML parse error on apache/templates/svc.yaml: error unmarshaling JSON: while decoding JSON: json: cannot unmarshal array
+into Go struct field .metadata.annotations. of type string
+```
+
+Phase: $.service.annotations | Status: failed
+
+Changed overrides (used together):
+- `$.service.annotations[""] = []`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/98a2bca1991be60ae38a>)
+
+Phase: $.service | Status: failed
+
+Changed overrides (used together):
+- `$.service.annotations[""] = []`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/da628aa79e50e022e4ff>)
+
+#### E005 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: apache 11.4.30 / templates/NOTES.txt
+
+```text
+execution error at (apache/templates/NOTES.txt:45:4): VALUES VALIDATION: apache: htdocs-git-repository You did not specify a git repository
+to clone. Please set cloneHtdocsFromGit.repository apache: htdocs-git-branch You did not specify a branch to checkout in the git repository.
+Please set cloneHtdocsFromGit.branch
+```
+
+Phase: $.cloneHtdocsFromGit.enabled | Status: failed
+
+Changed overrides (used together):
+- `$.cloneHtdocsFromGit.enabled = true (was false)`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/2442d14cba32517cdd3b>)
+
+#### E006 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: apache 11.4.30 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ... kely to cause degraded security and performance, broken chart features, and missing
+environment variables. Unrecognized images: - 00/bitnami/apache-exporter:1.0.10-debian-12-r55 If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.metrics | Status: failed
+
+Changed overrides (used together):
+- `$.metrics.image.registry = "00" (was "docker.io")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/17d970eb96f24f23c2d5>)
+
+Phase: $.metrics.image.registry | Status: failed
+
+Changed overrides (used together):
+- `$.metrics.image.registry = "00" (was "docker.io")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/c96ecbfa425836596f7f>)
+
+1 additional occurrences are retained in the JSON report and chart artifacts.
+
+#### E007 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: apache 11.4.30 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ormance, broken chart features, and missing environment variables. Unrecognized images: -
+00/bitnami/apache:2.4.65-debian-12-r2 - 00/bitnami/apache-exporter:1.0.10-debian-12-r55 If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.global.imageRegistry | Status: failed
+
+Changed overrides (used together):
+- `$.global.imageRegistry = "00" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/fa90b40f46c6c70d8821>)
+
+Phase: $.global | Status: failed
+
+Changed overrides (used together):
+- `$.global.imageRegistry = "00" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/a8d13bfa12806deaf76c>)
+
+#### E008 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: apache 11.4.30 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ners is likely to cause degraded security and performance, broken chart features, and
+missing environment variables. Unrecognized images: - 00/bitnami/apache:2.4.65-debian-12-r2 If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.image.registry | Status: failed
+
+Changed overrides (used together):
+- `$.image.registry = "00" (was "docker.io")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/488624c1bd95bbae6f8b>)
+
+#### E009 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: apache 11.4.30 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ntainers is likely to cause degraded security and performance, broken chart features, and
+missing environment variables. Unrecognized images: - docker.io/00:1.0.10-debian-12-r55 If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.metrics.image.repository | Status: failed
+
+Changed overrides (used together):
+- `$.metrics.image.repository = "00" (was "bitnami/apache-exporter")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/4c4a07eb1c5214b3a409>)
+
+#### E010 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: apache 11.4.30 / templates/NOTES.txt
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ontainers is likely to cause degraded security and performance, broken chart features,
+and missing environment variables. Unrecognized images: - docker.io/00:2.4.65-debian-12-r2 If you are sure you want to proceed with
+non-standard containers, you can skip container image verification by setting the global parameter 'global.security.allowInsecureImages' to
+true. Further information can be obtained at https://github.com/bitnami/charts/issues/30850
+```
+
+Phase: $.image.repository | Status: failed
+
+Changed overrides (used together):
+- `$.image.repository = "00" (was "bitnami/apache")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/3f7165f1837241716c3c>)
+
+#### E016 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 173: found unexpected end of
+stream
+```
+
+Phase: $.readinessProbe.path | Status: failed
+
+Changed overrides (used together):
+- `$.readinessProbe.path = "'" (was "/")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/6e63684264db9d622def>)
+
+Phase: $.livenessProbe | Status: failed
+
+Changed overrides (used together):
+- `$.livenessProbe.port = "'" (was "http")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/4205bc059f894025d23f>)
+
+2 additional occurrences are retained in the JSON report and chart artifacts.
+
+#### E017 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 174: found unexpected end of
+stream
+```
+
+Phase: $.schedulerName | Status: failed
+
+Changed overrides (used together):
+- `$.schedulerName = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/57504c968732d9714f10>)
+
+#### E018 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 175: found unexpected end of
+stream
+```
+
+Phase: $.extraEnvVarsSecret | Status: failed
+
+Changed overrides (used together):
+- `$.extraEnvVarsSecret = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/e4b1fa53526f192b7184>)
+
+Phase: $.extraEnvVarsCM | Status: failed
+
+Changed overrides (used together):
+- `$.extraEnvVarsCM = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/95d9e80fea15aed87f2a>)
+
+#### E019 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 178: found unexpected end of
+stream
+```
+
+Phase: $.vhostsConfigMap | Status: failed
+
+Changed overrides (used together):
+- `$.vhostsConfigMap = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/be14993fbd1c228c36ce>)
+
+#### E020 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 179: found unexpected end of
+stream
+```
+
+Phase: $.htdocsConfigMap | Status: failed
+
+Changed overrides (used together):
+- `$.htdocsConfigMap = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/a84b1abe3a11000d364a>)
+
+Phase: $.htdocsPVC | Status: failed
+
+Changed overrides (used together):
+- `$.htdocsPVC = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/8fd174ce0cd7f4de3220>)
+
+1 additional occurrences are retained in the JSON report and chart artifacts.
+
+#### E021 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 31: did not find expected
+',' or ']'
+```
+
+Phase: $.image.pullSecrets | Status: failed
+
+Changed overrides (used together):
+- `$.image.pullSecrets = [[null, []]]`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/a4a0ea6ab697189bb963>)
+
+Phase: $.global.imagePullSecrets | Status: failed
+
+Changed overrides (used together):
+- `$.global.imagePullSecrets = [[null, []]]`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/097f6358a00dddbcdd83>)
+
+4 additional occurrences are retained in the JSON report and chart artifacts.
+
+#### E022 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 62: mapping values are not
+allowed in this context
+```
+
+Phase: $.image | Status: failed
+
+Changed overrides (used together):
+- `$.image.tag = "" (was "2.4.65-debian-12-r2")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/8e79b7dd85a286cfaddb>)
+
+Phase: $.image.tag | Status: failed
+
+Changed overrides (used together):
+- `$.image.tag = "" (was "2.4.65-debian-12-r2")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/7e365cc9986c8fb6c4ad>)
+
+#### E023 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 64: could not find expected
+':'
+```
+
+Phase: $.image.digest | Status: failed
+
+Changed overrides (used together):
+- `$.image.digest = "\n0" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/10293d402dd6d1dd34f5>)
+
+#### E024 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/deployment.yaml: error converting YAML to JSON: yaml: line 6: could not find expected
+':'
+```
+
+Phase: $.nameOverride | Status: failed
+
+Changed overrides (used together):
+- `$.nameOverride = "\n0" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/0ce120cfa523ba37df61>)
+
+#### E025 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/pdb.yaml: error converting YAML to JSON: yaml: line 13: block sequence entries are not
+allowed in this context
+```
+
+Phase: $.pdb | Status: failed
+
+Changed overrides (used together):
+- `$.pdb.maxUnavailable = "-" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/fcc268f7f5d701449828>)
+
+#### E026 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/pdb.yaml: error converting YAML to JSON: yaml: line 18: found unexpected end of stream
+```
+
+Phase: $.pdb.maxUnavailable | Status: failed
+
+Changed overrides (used together):
+- `$.pdb.maxUnavailable = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/d6baed3b8998a068f471>)
+
+Phase: $.pdb.minAvailable | Status: failed
+
+Changed overrides (used together):
+- `$.pdb.minAvailable = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/07d4854a45a9e7c1eb04>)
+
+#### E027 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/svc.yaml: error converting YAML to JSON: yaml: line 15: did not find expected ',' or
+']'
+```
+
+Phase: $.service.loadBalancerSourceRanges[*] | Status: failed
+
+Changed overrides (used together):
+- `$.service.loadBalancerSourceRanges = [{}]`
+Absent from overrides: $.service.loadBalancerSourceRanges["*"]. Defaults may still apply.
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/964773c98a041f080dd4>)
+
+Phase: $.service.loadBalancerSourceRanges | Status: failed
+
+Changed overrides (used together):
+- `$.service.loadBalancerSourceRanges = [{}]`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/60903c8f6383b493cf31>)
+
+#### E028 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/svc.yaml: error converting YAML to JSON: yaml: line 26: found unexpected end of stream
+```
+
+Phase: $.service.type | Status: failed
+
+Changed overrides (used together):
+- `$.service.type = "'" (was "LoadBalancer")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/6e931799d09f8182f34b>)
+
+#### E029 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/svc.yaml: error converting YAML to JSON: yaml: line 29: found unexpected end of stream
+```
+
+Phase: $.service.sessionAffinity | Status: failed
+
+Changed overrides (used together):
+- `$.service.sessionAffinity = "'" (was "None")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/12b3c4a215648c1d6dd7>)
+
+#### E030 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apache/templates/svc.yaml: error converting YAML to JSON: yaml: line 30: found unexpected end of stream
+```
+
+Phase: $.service.nodePorts.http | Status: failed
+
+Changed overrides (used together):
+- `$.service.nodePorts.http = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/c91d7fbded4704da55d3>)
+
+Phase: $.service.nodePorts | Status: failed
+
+Changed overrides (used together):
+- `$.service.nodePorts.http = "'" (was "")`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/afbac7d295ec4c0a2908>)
+
+2 additional occurrences are retained in the JSON report and chart artifacts.
+
+#### E033 (HH1105)
+
+**Missing resource name** (manifest / violation). Severity: **error**. Provide a name in each resource branch; ignore this check if your
+workflow intentionally uses generated names.
+
+```text
+[HH1105] resource has no metadata.name
+```
+
+Phase: $.serviceAccount.name | Status: failed
+
+Changed overrides (used together):
+- `$.serviceAccount.name = "0" (was "")`
+
+Manifest changes from rendered defaults (document and list order preserved):
+- `$[2].metadata.name: "hypothesis-apache" -> 0`
+- `$[4].spec.template.spec.serviceAccountName: "hypothesis-apache" -> 0`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/815bf9b751b356e044f0>)
+
+Phase: $.fullnameOverride | Status: failed
+
+Changed overrides (used together):
+- `$.fullnameOverride = "0" (was "")`
+
+Manifest changes from rendered defaults (document and list order preserved):
+- `$[0].metadata.name: "hypothesis-apache" -> 0`
+- `$[1].metadata.name: "hypothesis-apache" -> 0`
+- `$[2].metadata.name: "hypothesis-apache" -> 0`
+- `$[3].metadata.name: "hypothesis-apache" -> 0`
+- `$[4].metadata.name: "hypothesis-apache" -> 0`
+- `$[4].spec.template.spec.serviceAccountName: "hypothesis-apache" -> 0`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/e2f7761f901d86846684>)
+
+#### E034 (HH3001)
+
+**Template accesses a missing object** (template / violation). Severity: **error**. Guard or default the parent object, or require it in the
+values schema.
+
+```text
+[HH3001] Error: apache/templates/ingress.yaml:34:15 executing "apache/templates/ingress.yaml" at <.name>: nil pointer evaluating interface
+{}.name
+```
+
+Phase: $.ingress | Status: failed
+
+Changed overrides (used together):
+- `$.ingress.enabled = true (was false)`
+- `$.ingress.extraHosts = [null]`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/94ed38bb417a953196c3>)
+
+#### E035 (HH3002)
+
+**Incompatible value type in template** (template / violation). Severity: **error**. Align the template operation with the accepted input
+types, or narrow the schema.
+
+```text
+[HH3002] Error: apache/templates/networkpolicy.yaml:11:16 executing "apache/templates/networkpolicy.yaml" at <include
+"common.names.namespace" .>: error calling include: apache/charts/common/templates/_names.tpl:64:65 executing "common.names.namespace" at
+<63>: wrong type for value; expected string; got []interface {}
+```
+
+Phase: $.namespaceOverride | Status: failed
+
+Changed overrides (used together):
+- `$.namespaceOverride = [null]`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/835d62e0a3e46b72c904>)
+
+#### E036 (HH3003)
+
+**Undefined named template** (template / violation). Severity: **error**. Check the helper name, its definition and dependency availability.
+
+```text
+[HH3003] Error: apache/templates/svc.yaml:9:11 executing "apache/templates/svc.yaml" at <include "common.names.fullname" .>: error calling
+include: template: no template "common.names.fullname" associated with template "gotpl"
+```
+
+Phase: $.tags | Status: failed
+
+Changed overrides (used together):
+- `$.tags["bitnami-common"] = false`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/e2cac8a5225634937910>)
+
+Phase: $.tags["bitnami-common"] | Status: failed
+
+Changed overrides (used together):
+- `$.tags["bitnami-common"] = false`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0001/paths/2ff2aa2642f40d7be0f3>)
+
+[Chart artifacts](<bitnami-runs/bitnami-charts_1789854946/0001>)
 
 ### bitnami/apisix
 
 Overview cell: 03
 
-Status: pending | Attempts: N/A
+Status: interrupted | Attempts: 98
+
+Audit findings: 344. Full paths and template references are retained in the JSON report.
+
+- `HH2001` at `$.apiVersions`: Undocumented values path (warning)
+- `HH2002` at `$.controlPlane.args[*]`: Unspecified values type (warning)
+- `HH2001` at `$.controlPlane.automountServiceAccountToken`: Undocumented values path (warning)
+- `HH2003` at `$.controlPlane.autoscaling`: Missing values description (info)
+- `HH2003` at `$.controlPlane.autoscaling.hpa`: Missing values description (info)
+- `HH2003` at `$.controlPlane.autoscaling.vpa`: Missing values description (info)
+- 338 additional audit findings in JSON.
+
+#### E011 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: etcd 12.0.18 / templates/cronjob-snapshotter.yaml
+
+```text
+execution error at (etcd/templates/cronjob-snapshotter.yaml:132:29): ERROR: Preset key '%5a0aka9aaafo|n' invalid. Allowed values are
+nano,micro,small,medium,large,xlarge,2xlarge
+```
+
+Phase: $.etcd.disasterRecovery.cronjob.containerSecurityContext | Status: interrupted
+
+Changed overrides (used together):
+- `$.etcd.disasterRecovery.enabled = true`
+- `$.etcd.disasterRecovery.pvc.subPath = "9a"`
+- `$.etcd.disasterRecovery.pvc.storageClassName = ""`
+- `$.etcd.disasterRecovery.cronjob.tolerations = [{"]aaaaaaE": -6.296829526392782e+172, "4aaaaaz": "aaaaa", "": null}, false, {"aaa": {"aa\raa": {"g4aa": null, "/Qaaa": ... [value shortened]`
+- `$.etcd.disasterRecovery.cronjob.podLabels.a["aaaaaapha_a.aaaaFaaabaa"][""].azUaaaaaaaa = -22529`
+- `$.etcd.disasterRecovery.cronjob.podLabels.a["aaaaaapha_a.aaaaFaaabaa"][""]["av(o3Ia"] = false`
+- 54 more paths; see full input.
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0002/paths/7ace770b9f7e97b3eaab>)
+
+#### E012 (HH1001)
+
+**Unclassified template failure** (unclassified / diagnostic). Severity: **error**. Inspect the Helm diagnostic and reproducer; the exit
+alone does not establish a chart defect.
+
+Source: etcd 12.0.18 / templates/cronjob-snapshotter.yaml
+
+```text
+execution error at (etcd/templates/cronjob-snapshotter.yaml:132:29): ERROR: Preset key 'PLL' invalid. Allowed values are
+nano,micro,small,medium,large,xlarge,2xlarge
+```
+
+Phase: $.etcd.disasterRecovery.cronjob.replicaCount | Status: interrupted
+
+Changed overrides (used together):
+- `$.etcd.disasterRecovery.enabled = true`
+- `$.etcd.disasterRecovery.cronjob.podAnnotations["\"B*N^"] = [{"aSaaaa": "aaa"}]`
+- `$.etcd.disasterRecovery.cronjob.podAnnotations["W3D;R{aQcD)Xrjk;@X|"] = false`
+- `$.etcd.disasterRecovery.cronjob.podAnnotations[""] = {}`
+- `$.etcd.disasterRecovery.cronjob.command = []`
+- `$.etcd.disasterRecovery.cronjob.tolerations = [{"]aaaaaaE": -6.296829526392782e+172, "4aaaaaz": "aaaaa", "": null}, false, {"aaa": {"aa\raa": {"g4aa": null, "/Qaaa": ... [value shortened]`
+- 37 more paths; see full input.
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0002/paths/ec3a3876a481222d9bc3>)
+
+#### E031 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apisix/charts/etcd/templates/pdb.yaml: error converting YAML to JSON: yaml: line 14: did not find
+expected ',' or ']'
+```
+
+Phase: $.etcd.pdb | Status: interrupted
+
+Changed overrides (used together):
+- `$.etcd.pdb.minAvailable = ""`
+- `$.etcd.pdb.maxUnavailable = "[Ma"`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0002/paths/aaadbc44a6ff4d313d85>)
+
+#### E032 (HH1101)
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on apisix/templates/control-plane/dep-ds.yaml: error converting YAML to JSON: yaml: line 336: found
+unexpected end of stream
+```
+
+Phase: $.controlPlane.extraConfigExistingConfigMap | Status: interrupted
+
+Changed overrides (used together):
+- `$.controlPlane.extraConfigExistingConfigMap = "'\n"`
+
+[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789854946/0002/paths/98c9de7170b4f8fa32cd>)
+
+[Chart artifacts](<bitnami-runs/bitnami-charts_1789854946/0002>)
 
 ### bitnami/appsmith
 

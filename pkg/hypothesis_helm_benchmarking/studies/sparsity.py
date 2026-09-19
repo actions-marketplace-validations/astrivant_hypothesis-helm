@@ -98,10 +98,13 @@ def plot(output: Path, rows: list[dict[str, object]], reference: dict[str, int])
     figure, axes = plt.subplots(1, 2, figsize=(12, 4.5))
     xs = list(range(1, len(rows) + 1))
     labels = [f"{x}\nn={row['completed']:,}" for x, row in zip(xs, rows, strict=True)]
-    for key, label in (("total_variation", "Total variation"), ("cdf_error", "Maximum CDF error")):
+    for key, label in (
+        ("total_variation", r"Total variation, $\frac{1}{2}\sum_j|\hat{p}_j-p_j|$"),
+        ("cdf_error", r"Maximum CDF error, $\max_j|\hat{F}_j-F_j|$"),
+    ):
         axes[1].plot(xs, [mapping(row["quality"])[key] for row in rows], "o-", label=label)
     axes[0].plot(xs, [100 * float(str(mapping(row["quality"])["coverage"])) for row in rows], "o-")
-    axes[0].set(ylabel="Distinct outcomes covered (%)", ylim=(0, 105))
+    axes[0].set(ylabel=r"Distinct outcomes covered, $100|O_{\mathrm{seen}}|/|O|$ (%)", ylim=(0, 105))
     axes[1].set(ylabel="Distribution error (lower is better)", ylim=(0, 1))
     axes[1].legend()
     for axis in axes:
@@ -142,8 +145,8 @@ def plot(output: Path, rows: list[dict[str, object]], reference: dict[str, int])
         )
         axis.set(
             title=f"Run {index + 1}: {row['completed']:,} inputs",
-            xlabel="Emitted value",
-            ylabel="Probability per histogram bin",
+            xlabel=r"Emitted value, $x$",
+            ylabel=r"Probability per bin, $\hat{P}(x\in I_j)$",
             ylim=(0, None),
         )
         axis.legend()

@@ -36,7 +36,7 @@ def test_sample_deviation_and_physical_bounds(tmp_path: Path) -> None:
     assert set(inner[inner[:, 0] == 2, 1]) == {96, 100}
     finish(figure, tmp_path, "variation", "Repeated seed trials.", question="How much do results vary across seeds?")
     svg = (tmp_path / "variation.svg").read_text()
-    assert "n=3" in svg and "not confidence intervals" in svg
+    assert "R=3" in svg and "not confidence intervals" in svg
 
 
 def test_singletons_and_missing_points_have_no_estimated_spread() -> None:

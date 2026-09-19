@@ -156,10 +156,12 @@ def finish(figure: Figure, output: Path, name: str, subtitle: str, *, question: 
     if counts:
         sample_label = str(min(counts)) if min(counts) == max(counts) else f"{min(counts)}-{max(counts)}"
         subtitle += (
-            f"\nMean ±1 SD (dark), ±2 SD (light); n={sample_label} per shaded point. "
-            "Sample spread, not confidence intervals; clipped to physical bounds."
+            "\n" + rf"Mean $\bar{{x}}\pm{{s}}$ (dark), $\bar{{x}}\pm2s$ (light); $R={sample_label}$ repeats per shaded point. "
+            "$s$ is the sample standard deviation. Bands show spread, not confidence intervals; clipped to physical bounds."
         )
-    subtitle = "\n".join(fill(line, width=int(figure.get_figwidth() * 17)) for line in subtitle.splitlines())
+    subtitle = "\n".join(
+        fill(line, width=int(figure.get_figwidth() * 17), break_long_words=False, break_on_hyphens=False) for line in subtitle.splitlines()
+    )
     footer = max(0.07, 0.045 + 0.023 * len(subtitle.splitlines()))
     figure.text(0.06, 0.025, subtitle, fontsize=8, color="#475569")
     top = describe(figure, name, question=question)
@@ -212,8 +214,8 @@ def scaling_plots(output: Path, points: list[Point], shard_total: int) -> None:
             color=COLORS[index % len(COLORS)],
         )
     right.plot(replicas, replicas, "--", color="#94a3b8", label="ideal speedup")
-    left.set(xlabel="Global permutation count", ylabel="Measured wall time (s)")
-    right.set(xlabel="Parallel worker shards (local)", ylabel="T(1) / T(replicas)", xticks=replicas)
+    left.set(xlabel=r"Global test cases, $N$", ylabel=r"Wall time, $T$ (s)")
+    right.set(xlabel=r"Local worker shards, $w$", ylabel=r"Speedup, $S(w)=T(1,N)/T(w,N)$", xticks=replicas)
     left.legend(fontsize=9)
     right.legend(fontsize=8, ncol=2)
     finish(
@@ -253,10 +255,10 @@ def scaling_plots(output: Path, points: list[Point], shard_total: int) -> None:
         )
     right.axhline(1, color="#94a3b8", linestyle="--", label="ideal weak efficiency")
     left.set(
-        xlabel="Global permutation count (grows with workers)",
-        ylabel="Measured wall time (s)",
+        xlabel=r"Global test cases, $N=wN_0$",
+        ylabel=r"Wall time, $T$ (s)",
     )
-    right.set(xlabel="Parallel worker shards (local)", ylabel="T(1, n) / T(p, p·n)", xticks=replicas)
+    right.set(xlabel=r"Local worker shards, $w$", ylabel=r"Weak efficiency, $E(w)=T(1,N_0)/T(w,wN_0)$", xticks=replicas)
     left.legend(fontsize=9)
     right.legend(fontsize=8, ncol=2)
     finish(
@@ -287,8 +289,8 @@ def scaling_plots(output: Path, points: list[Point], shard_total: int) -> None:
         measured_line(
             right, [float(workers) for workers, _ in replica_chosen], [batch for _, batch in replica_chosen], metric, label, color
         )
-    right.set(xticks=replicas, xlabel="Parallel worker shards (local)", ylabel="Completed input checks")
-    left.set(xlabel="Parallel worker shards (local)", ylabel="Completed checks / second", xticks=replicas)
+    right.set(xticks=replicas, xlabel=r"Local worker shards, $w$", ylabel=r"Completed checks, $N_{\mathrm{checked}}$")
+    left.set(xlabel=r"Local worker shards, $w$", ylabel=r"Throughput, $N_{\mathrm{checked}}/T$ (checks/s)", xticks=replicas)
     left.legend(fontsize=9)
     right.legend(fontsize=8, ncol=2)
     finish(
@@ -367,12 +369,12 @@ def plot(output: Path, document: dict[str, object]) -> None:
         limit = float(str(metadata["time_limit_seconds"]))
         left.axhline(limit, linestyle="--", color="#475569", label=f"{limit:g}s execution ceiling")
         left.set(
-            xlabel="Requested global permutation count",
-            ylabel="Measured wall time (s)",
+            xlabel=r"Requested global test cases, $N$",
+            ylabel=r"Wall time, $T$ (s)",
         )
         right.set(
-            xlabel="Requested global permutation count",
-            ylabel="Completed checks / skipped renders",
+            xlabel=r"Requested global test cases, $N$",
+            ylabel=r"Checks or skipped renders (count)",
         )
         # Keep measured checkpoints prominent rather than stretching to unfinished targets.
         visible_end = max(key[0] for key in progressive) * 1.1
@@ -439,9 +441,9 @@ def plot(output: Path, document: dict[str, object]) -> None:
             reference,
             "--",
             color=COLORS[2],
-            label=f"Normal reference: mean={spec['mean']}, stddev={spec['stddev']}",
+            label=rf"Normal reference: $\mu={spec['mean']},\ \sigma={spec['stddev']}$",
         )
-        axis.set(xlabel="Emitted ConfigMap value (rounded normal quantile)", ylabel="Measured frequency")
+        axis.set(xlabel=r"Emitted ConfigMap value, $x$ (rounded normal quantile)", ylabel=r"Observations per bin, $n_j$")
         axis.legend(fontsize=9)
         finish(
             figure,

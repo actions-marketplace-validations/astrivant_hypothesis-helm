@@ -120,6 +120,9 @@ class InputInventory:
         references, warnings = discover(chart.path, prune_literals=True, offline=True)
         dependency_graph = chart.dependency_model or Dependencies.build(chart.path)
         dependency_graph.baseline = chart.defaults
+        # Restored input domains skip their usual dependency initialization. Keep
+        # this snapshot available to path generation, including in queue workers.
+        chart.dependency_model = dependency_graph
         references.extend(dependency_graph.references)
         unresolved = [asdict(warning) for warning in warnings]
         unresolved.extend(dependency_graph.diagnostics)

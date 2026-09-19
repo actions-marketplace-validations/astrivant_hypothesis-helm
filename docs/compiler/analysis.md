@@ -60,6 +60,10 @@ also remains eligible because parent templates can read child values even when
 the child is disabled. Finite planning proposes corresponding interaction groups
 within its existing group-size budgets.
 
+Discovery and path generation share the installed dependency defaults, including in workers that restore cached input domains.
+If a parent chart omits a child's map, changing one nested field leaves its siblings at their installed defaults.
+Generation only draws a wider context when needed to satisfy schema constraints.
+
 Missing child sources, ambiguous imports, and unsupported forwarding are reported.
 Activation states are predictions checked through Helm execution. They do not
 authorize skipping renders: charts with dependencies are outside the current
@@ -185,7 +189,7 @@ Unknown expressions remain ordinary Helm tests. The remaining boundaries are:
 | Unsupported operations inside `tpl`, template-local definitions and recursive expansion beyond the call budget | The compiler cannot establish the generated program's behavior within its supported subset. |
 | `.Files.Glob`, `.Files.GetBytes`, binary files and file contexts exceeding the inspection budget | These file operations remain native Helm work. |
 | Integer/channel ranges; ranges over unsorted `keys` results | Iterator semantics or iteration order are outside the supported deterministic subset. |
-| `set`, `unset`, `merge`, `mergeOverwrite` and their `must` aliases | Can change the context used by later conditions. Writes in statements or conditions block prediction. |
+| `set`, `unset`, `merge` and shared or nested overwrite merges | Can change the context used by later conditions. Writes block prediction; fresh flat-map overwrite merges are supported as described below. |
 | Unicode case conversion, floating-point arithmetic, implicit numeric coercion, integer overflow | These operations need additional Go-specific semantics; Python's behavior is not assumed to match. |
 | Regex groups, alternation, flags, character-class shortcuts and multiple variable repetitions | These expressions exceed the deliberately restricted regex evaluator. |
 | Candidate-supplied maps/lists | Their observed members do not prove a fixed enum. Membership can still establish a supported rejection. |
@@ -309,6 +313,17 @@ and [fallback semantics](https://github.com/Masterminds/sprig/blob/v3.3.0/defaul
 In particular, fallback arguments are evaluated eagerly even when not selected.
 All rejection predictions involving these transformations require native Helm
 confirmation before exclusion.
+
+Formatting around a validator no longer prevents reaching its allowlist. The evaluator supports
+`quote` for ASCII strings, Booleans and null arguments, plus `indent` and `nindent` with literal or
+explicitly converted integer widths. It follows [Sprig's formatting implementations](https://github.com/Masterminds/sprig/blob/v3.3.0/strings.go),
+including control-character escapes, trailing-line indentation and null omission. Output is bounded by `compiler.max_string_chars`.
+
+`mergeOverwrite (dict) ...` and `mustMergeOverwrite (dict) ...` accept flat maps with scalar values.
+The destination must be a literal empty dictionary; sources are bounded by `compiler.max_range_items`.
+Winning entries retain their original values paths, so a merged helper argument can still lead back to its input's enum.
+Shared destinations and nested maps remain unresolved: [Sprig's merges](https://github.com/Masterminds/sprig/blob/v3.3.0/dict.go)
+can mutate aliased containers. Treating every fresh destination as a deep copy would make later rejection predictions unsafe.
 
 Regex evaluation supports ASCII literals, dot, simple character classes, `^`/`$`
 anchors and at most one variable repetition, such as `[a-z0-9-]+`. Fixed counted

@@ -184,7 +184,7 @@ def describe(figure: Figure, name: str, *, question: str | None = None) -> float
         title = name.replace("-", " ").capitalize()
     title = figure.get_suptitle() or title
     width, height = figure.get_figwidth(), figure.get_figheight()
-    title = fill(title, width=max(35, int(width * 8)))
+    title = fill(title, width=max(35, int(width * 8)), break_long_words=False, break_on_hyphens=False)
     question = fill(question, width=max(40, int(width * 13)))
     title_height = len(title.splitlines()) * 0.25
     title_artist = figure.suptitle(title, x=0.5, y=1 - 0.10 / height, va="top", fontsize=16)

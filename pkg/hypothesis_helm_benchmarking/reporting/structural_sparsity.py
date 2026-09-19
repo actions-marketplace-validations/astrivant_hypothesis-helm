@@ -119,7 +119,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
         )
         for panel, method, grid, sd in zip(axes.flat, methods, grids, deviations, strict=False):
             image = panel.imshow(grid, origin="lower", aspect="auto", vmin=0, vmax=high)
-            panel.set(title=method, xlabel="Placement / resource connectivity", ylabel="Breadth × depth")
+            panel.set(title=method, xlabel="Placement / resource connectivity", ylabel=r"Chart size, $B\times D$")
             panel.set_xticks(range(len(placements)), placements)
             panel.set_yticks(range(len(sizes)), [f"{breadth} × {depth}" for breadth, depth in sizes])
             for (i, j), value in np.ndenumerate(grid):

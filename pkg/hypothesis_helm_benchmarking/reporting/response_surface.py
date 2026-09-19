@@ -59,13 +59,13 @@ def plot(output: Path, document: dict[str, object]) -> None:
         modern = "plane" in selected[0]
         x_key, y_key = ("x", "y") if modern else ("axis_value", "error_percent")
         x_label = {
-            "structure": "Fields ignored by primary output",
-            "failures": "Failure clustering",
-            "clustering": "Failure clustering",
-            "depth": "Nested conditions",
-            "redundancy": "Unused fields",
+            "structure": r"Fields ignored by primary output, $n_{\mathrm{unused}}$",
+            "failures": r"Failure clustering, $c$",
+            "clustering": r"Failure clustering, $c$",
+            "depth": r"Nested conditions, $d$",
+            "redundancy": r"Unused fields, $n_{\mathrm{unused}}$",
         }.get(plane, plane)
-        y_label = "Nested conditions" if plane == "structure" else "Requested erroneous inputs (%)"
+        y_label = r"Nested conditions, $d$" if plane == "structure" else r"Requested error rate, $100\varepsilon$ (%)"
         xs = sorted({float(str(row[x_key])) for row in selected})
         ys = sorted({float(str(row[y_key])) for row in selected})
         for method in methods:
@@ -112,7 +112,11 @@ def plot(output: Path, document: dict[str, object]) -> None:
                 panels[1].pcolormesh(grid_x, grid_y, predicted, shading="auto", vmin=low, vmax=high)
                 spread = max(float(np.abs(residuals).max()), 1e-12)
                 errors = panels[2].imshow(residuals, origin="lower", aspect="auto", cmap="coolwarm", vmin=-spread, vmax=spread)
-                for panel, title in zip(panels, ("Collected means ±1 SD", "Fitted quadratic", "Observed - fitted"), strict=True):
+                for panel, title in zip(
+                    panels,
+                    (r"Collected means, $\bar{z}\pm{s_z}$", r"Fitted quadratic, $\hat{z}_2(u,v)$", r"Residuals, $\bar{z}-\hat{z}_2$"),
+                    strict=True,
+                ):
                     panel.set(title=title, xlabel=x_label, ylabel=y_label)
                 for panel in (panels[0], panels[2]):
                     panel.set_xticks(range(len(xs)), [f"{value:g}" for value in xs])
@@ -131,7 +135,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
                     )
                 figure.colorbar(colours, ax=panels[0], label=label)
                 figure.colorbar(colours, ax=panels[1], label=label)
-                figure.colorbar(errors, ax=panels[2], label="Residual (same units)")
+                figure.colorbar(errors, ax=panels[2], label=r"Residual, $\bar{z}-\hat{z}_2$ (same units)")
                 figure.suptitle(f"{plane.capitalize()} response surface: {method} / {label}")
                 top = describe(
                     figure,

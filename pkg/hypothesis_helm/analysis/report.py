@@ -116,8 +116,8 @@ def plot(output: Path, document: dict[str, object]) -> None:
         axes[0].text(0.5, 0.5, "No comparable single mutations", transform=axes[0].transAxes, ha="center")
     axes[0].set(
         title=f"Which single changes affect output most?\n{len(singles)} measured mutations; IDs follow the input file",
-        xlabel="Mutation ID",
-        ylabel="Changed leaf indicators",
+        xlabel=r"Mutation ID, $i$",
+        ylabel=r"Output change, $\|\Delta_i f\|_1$",
     )
     pairs = [mapping(row) for row in sequence(document["interactions"]) if "mixed_difference_l1" in mapping(row)]
     positions = {name: index for index, name in enumerate(names)}
@@ -138,35 +138,46 @@ def plot(output: Path, document: dict[str, object]) -> None:
             vmax=max(1, float(np.nanmax(matrix))),
             extent=(0.5, len(names) + 0.5, 0.5, len(names) + 0.5),
         )
-        figure.colorbar(heatmap, ax=axes[1], label="Interaction magnitude", shrink=0.75)
+        figure.colorbar(heatmap, ax=axes[1], label=r"Interaction, $\|\Delta_i\Delta_j f\|_1$", shrink=0.75)
     else:
         axes[1].text(0.5, 0.5, "No comparable pairs", transform=axes[1].transAxes, ha="center")
     axes[1].set(
         title=f"Which pairs interact?\n{len(pairs)} measured pairs; gray = unmeasured or inapplicable",
-        xlabel="Mutation ID",
-        ylabel="Mutation ID",
+        xlabel=r"Mutation ID, $i$",
+        ylabel=r"Mutation ID, $j$",
     )
     steps = [mapping(row) for row in sequence(document["sequence"]) if "cumulative_path_length" in mapping(row)]
     indices = list(range(len(steps) + 1))
     if steps:
-        axes[2].plot(indices, [0, *(int(str(row["cumulative_path_length"])) for row in steps)], marker=".", label="Cumulative path length")
         axes[2].plot(
-            indices, [0, *(int(str(row["endpoint_displacement"])) for row in steps)], marker=".", label="Displacement from baseline"
+            indices,
+            [0, *(int(str(row["cumulative_path_length"])) for row in steps)],
+            marker=".",
+            label=r"Path length, $\sum_{k=1}^{m}\|f_k-f_{k-1}\|_1$",
+        )
+        axes[2].plot(
+            indices,
+            [0, *(int(str(row["endpoint_displacement"])) for row in steps)],
+            marker=".",
+            label=r"Baseline displacement, $\|f_m-f_0\|_1$",
         )
         axes[2].legend()
     else:
         axes[2].text(0.5, 0.5, "No comparable sequence", transform=axes[2].transAxes, ha="center")
     axes[2].set(
         title=f"Do later changes undo earlier ones?\n{len(steps)} measured steps in explicit input order",
-        xlabel="Completed mutation steps",
-        ylabel="Leaf indicators",
+        xlabel=r"Completed mutation steps, $m$",
+        ylabel=r"Output distance ($L^1$ leaf-indicator count)",
     )
     for index, axis in enumerate(axes):
         axis.title.set_fontsize(10)
         axis.tick_params(labelsize=9)
         if index != 1:
             axis.grid(alpha=0.2)
-    heading = figure.suptitle("Which values changes have the largest effects, and which interact?")
+    heading = figure.suptitle(
+        "Which values changes have the largest effects, and which interact?\n"
+        r"$f$ records rendered leaf values; $\Delta_i f$ is the change caused by mutation $i$."
+    )
     heading.set_gid("plot-question")
     for suffix in ("png", "svg"):
         figure.savefig(output / f"sensitivity.{suffix}", dpi=240)

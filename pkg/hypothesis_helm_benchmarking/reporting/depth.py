@@ -59,7 +59,7 @@ def plot(output: Path, document: dict[str, object]) -> None:
                 alpha=0.8,
             )
         axis.set_title(title)
-        axis.set_xlabel("Topology trim depth")
+        axis.set_xlabel(r"Structural trim depth, $d$")
         axis.set_xticks(sequence(metadata["depths"]))
         axis.grid(alpha=0.25)
         if multiplier == 100:

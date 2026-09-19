@@ -75,8 +75,8 @@ def plot(output: Path, ledger: dict[str, object]) -> None:
             panel.set_yticks(range(len(ys)), [f"{v:g}" for v in ys])
             panel.set(
                 title=title,
-                xlabel="Clustering" if record["plane"] in ("clustering", "failures") else str(record["plane"]),
-                ylabel="Nested conditions" if record["plane"] == "structure" else "Requested erroneous inputs (%)",
+                xlabel=r"Failure clustering, $c$" if record["plane"] in ("clustering", "failures") else str(record["plane"]),
+                ylabel=r"Nested conditions, $d$" if record["plane"] == "structure" else r"Requested error rate, $100\varepsilon$ (%)",
             )
             figure.colorbar(image, ax=panel, label="Seconds" if record["metric"] == "total_seconds" else "Erroneous inputs missed")
             for point in sequence(mapping(record["split"])["joint"]):

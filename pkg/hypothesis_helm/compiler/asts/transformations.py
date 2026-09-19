@@ -43,6 +43,9 @@ FUNCTIONS = frozenset(
         "print",
         "int",
         "int64",
+        "quote",
+        "indent",
+        "nindent",
     }
 )
 MIN_INTEGER = -(2**63)
@@ -126,6 +129,34 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
     args = tuple(native(value) for value in arguments)
     if any(isinstance(value, str) and len(value) > limits["max_string_chars"] for value in args):
         raise UnsupportedTransformation(f"transformation exceeds compiler.max_string_chars={limits['max_string_chars']}")
+    if function == "quote" and all(value is None or isinstance(value, str | bool) for value in args):
+        escaped = {"\a": r"\a", "\b": r"\b", "\f": r"\f", "\n": r"\n", "\r": r"\r", "\t": r"\t", "\v": r"\v", '"': r"\"", "\\": r"\\"}
+        quoted: list[str] = []
+        quoted_size = 0
+        for value in args:
+            if value is None:
+                continue
+            text = str(value).lower() if isinstance(value, bool) else str(value)
+            if not text.isascii():
+                raise UnsupportedTransformation("quote requires the supported ASCII subset")
+            literal = '"' + "".join(escaped.get(char, char if 32 <= ord(char) < 127 else f"\\x{ord(char):02x}") for char in text) + '"'
+            quoted_size += len(literal) + int(bool(quoted))
+            if quoted_size > limits["max_string_chars"]:
+                raise UnsupportedTransformation(f"quoted output exceeds compiler.max_string_chars={limits['max_string_chars']}")
+            quoted.append(literal)
+        return " ".join(quoted)
+    if function in {"indent", "nindent"} and len(args) == 2 and type(args[0]) is int and isinstance(args[1], str):
+        width, text = args[0], args[1]
+        if not (
+            type(arguments[0]) is int
+            or isinstance(arguments[0], DerivedValue)
+            and arguments[0].function in {"int", "int64", "atoi", "add", "add1", "sub", "mul", "min", "max"}
+        ):
+            raise UnsupportedTransformation("indentation width requires a literal or explicitly converted integer")
+        size = len(text) + width * (text.count("\n") + 1) + int(function == "nindent")
+        if width < 0 or size > limits["max_string_chars"]:
+            raise UnsupportedTransformation(f"indentation exceeds compiler.max_string_chars={limits['max_string_chars']}")
+        return ("\n" if function == "nindent" else "") + " " * width + text.replace("\n", "\n" + " " * width)
     if function in {"default", "coalesce"}:
         if any(value is not None and not isinstance(value, (str, bool, int, float, list, dict)) for value in args):
             raise UnsupportedTransformation("unknown emptiness semantics")

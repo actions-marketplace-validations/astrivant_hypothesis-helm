@@ -63,9 +63,9 @@ def publish(output: Path, document: dict[str, object]) -> None:
             "#2563eb",
             upper=100,
         )
-        axis.set(xlabel="Sensitivity order r (0 = seeded random)", ylabel=f"{title} (%)", xticks=orders, ylim=(0, 105))
+        axis.set(xlabel=r"Sensitivity order, $r$ ($r=0$: seeded random)", ylabel=f"{title} (%)", xticks=orders, ylim=(0, 105))
         axis.grid(alpha=0.2)
-    figure.suptitle(f"Sensitivity ordering on one fixed {fixed} chart (p={maximum})")
+    figure.suptitle(rf"Sensitivity ordering on one fixed {fixed} chart ($0\leq r\leq p={maximum}$)")
     finish(
         figure,
         output,
@@ -103,10 +103,10 @@ def publish(output: Path, document: dict[str, object]) -> None:
                 colors[method],
                 upper=total,
             )
-        axes[index, 0].set(title=f"{structure}: {count} tests, {total} known bugs", xlabel="Test iteration (baseline included)")
-        axes[index, 1].set(title=f"{structure}: first reaching each path count", xlabel="Distinct changed values paths reached")
+        axes[index, 0].set(title=f"{structure}: {count} tests, {total} known bugs", xlabel=r"Test iteration, $k$ (baseline included)")
+        axes[index, 1].set(title=f"{structure}: first reaching each path count", xlabel=r"Distinct values paths reached, $n$")
         for axis in axes[index]:
-            axis.set(ylabel="Distinct bugs found", ylim=(0, total * 1.1))
+            axis.set(ylabel=r"Distinct bugs found, $B_{\mathrm{found}}$", ylim=(0, total * 1.1))
             axis.grid(alpha=0.2)
     axes[0, 0].legend(fontsize=7, ncol=2)
     figure.suptitle("How traversal changes the rate of bug discovery")
@@ -138,7 +138,12 @@ def publish(output: Path, document: dict[str, object]) -> None:
                     colors[method],
                     upper=total,
                 )
-            axis.set(title=f"{structure}: {order}-path bugs", xlabel="Test iteration", ylabel="Distinct bugs found", ylim=(0, total * 1.1))
+            axis.set(
+                title=f"{structure}: {order}-path bugs",
+                xlabel=r"Test iteration, $k$",
+                ylabel=r"Distinct bugs found, $B_{\mathrm{found}}$",
+                ylim=(0, total * 1.1),
+            )
             axis.grid(alpha=0.2)
     axes[0, 0].legend(fontsize=7, ncol=2)
     figure.suptitle("Discovery by chart structure and bug interaction order")
