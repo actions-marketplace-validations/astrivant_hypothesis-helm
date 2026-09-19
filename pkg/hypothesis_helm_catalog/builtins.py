@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import io
 import json
-import os
 import tempfile
 import urllib.request
 from pathlib import Path
@@ -15,8 +14,9 @@ from zipfile import ZipFile
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+from hypothesis_helm_catalog import toolchain
+
 LOCK = Path(__file__).with_name("data") / "builtin-sources.json"
-TOOL = Path(__file__).with_name("upstream") / "builtins"
 LIBRARY = Path(__file__).parents[1] / "hypothesis_helm/compiler/builtin_inventory.json"
 
 
@@ -128,18 +128,9 @@ def rebuild(cache: Path, go: str, *, offline: bool = False, lock: Path = LOCK) -
         config = root / "sources.json"
         config.write_text(json.dumps(inputs))
         executable = root / "extract"
-        environment = {
-            **os.environ,
-            "GOCACHE": str(cache / "go-build"),
-            "GOPATH": str(cache / "go-path"),
-            "GOTOOLCHAIN": "local",
-            "GOPROXY": "off",
-        }
         owner = Processes()
         try:
-            owner.run(
-                [go, "build", "-o", str(executable), str(TOOL / "main.go")], env=environment, capture_output=True, check=True, timeout=180
-            )
+            toolchain.build(executable, cache, go, owner, offline=offline)
             process = owner.run([str(executable), "--config", str(config)], capture_output=True, check=True, timeout=60)
         finally:
             owner.stop()
@@ -147,7 +138,7 @@ def rebuild(cache: Path, go: str, *, offline: bool = False, lock: Path = LOCK) -
         return {
             "format": 2,
             "analysis": "Go AST facts; unresolved calls are not purity proofs",
-            "extractor_sha256": hashlib.sha256((TOOL / "main.go").read_bytes()).hexdigest(),
+            "extractor_sha256": toolchain.fingerprint(),
             "sources": sources,
             **extracted,
         }

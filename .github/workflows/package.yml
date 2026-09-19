@@ -68,7 +68,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .cache/compiler-builtins/
-          key: compiler-builtins-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkg/hypothesis_helm_catalog/data/builtin-sources.json') }}
+          key: compiler-builtins-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pkg/hypothesis_helm_catalog/data/builtin-sources.json', 'pkg/hypothesis_helm_catalog/upstream/go.sum') }}
       - name: Verify compiler function inventory before a release
         if: startsWith(github.ref, 'refs/tags/')
         run: poetry run hypothesis-helm-builtins --check

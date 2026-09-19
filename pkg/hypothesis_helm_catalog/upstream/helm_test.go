@@ -7,6 +7,16 @@ import (
 	"testing"
 )
 
+// fixture writes a self-contained provider package for extraction tests.
+//
+// Args:
+//
+//	t (*testing.T): Owning test and temporary-directory allocator.
+//	code (string): Go source containing the fixture function map.
+//
+// Returns:
+//
+//	source: Provider description pointing at the temporary package.
 func fixture(t *testing.T, code string) source {
 	t.Helper()
 	root := t.TempDir()
@@ -16,6 +26,11 @@ func fixture(t *testing.T, code string) source {
 	return source{Provider: "fixture", Directory: root, Map: "genericMap"}
 }
 
+// TestNewFunctionsAndAliasesFollowSources propagates effects and return shapes through aliases.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated fixtures.
 func TestNewFunctionsAndAliasesFollowSources(t *testing.T) {
 	src := fixture(t, `package fixture
 import "crypto/rand"
@@ -43,6 +58,11 @@ func object() result { return result{} }
 	}
 }
 
+// TestUnknownCallNeverBecomesPurityEvidence preserves uncertainty across external calls.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated fixtures.
 func TestUnknownCallNeverBecomesPurityEvidence(t *testing.T) {
 	src := fixture(t, `package fixture
 import "example.com/unknown"
@@ -58,6 +78,11 @@ func wrapper(x any) string { return unknown.Execute(x) }
 	}
 }
 
+// TestSourceChangeChangesShapeAndFingerprint invalidates facts when implementations change.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated fixtures.
 func TestSourceChangeChangesShapeAndFingerprint(t *testing.T) {
 	before := fixture(t, `package fixture
 var genericMap = map[string]any{"value": value}
@@ -80,6 +105,11 @@ func value() []string { return []string{"one"} }
 	}
 }
 
+// TestRendererOverrideRetainsEnabledImplementation keeps effects from conditional implementations.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated fixtures.
 func TestRendererOverrideRetainsEnabledImplementation(t *testing.T) {
 	base := fixture(t, `package fixture
 import "net"
@@ -107,6 +137,11 @@ func (e Engine) initFunMap() {
 	}
 }
 
+// TestDynamicMapDefinitionFailsRebuild rejects unsupported registration syntax.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated fixtures.
 func TestDynamicMapDefinitionFailsRebuild(t *testing.T) {
 	src := fixture(t, `package fixture; var genericMap = createMap()`)
 	if _, _, err := extract([]source{src}); err == nil {
@@ -114,6 +149,11 @@ func TestDynamicMapDefinitionFailsRebuild(t *testing.T) {
 	}
 }
 
+// TestRecursiveCallsTerminateAndRetainEffects bounds traversal without losing detected effects.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated fixtures.
 func TestRecursiveCallsTerminateAndRetainEffects(t *testing.T) {
 	src := fixture(t, `package fixture
 import "time"
@@ -130,6 +170,11 @@ func b() string { time.Now(); return a() }
 	}
 }
 
+// TestMapProjectionDiffersFromOrderDependentSelection only proves supported projections independent.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated fixtures.
 func TestMapProjectionDiffersFromOrderDependentSelection(t *testing.T) {
 	src := fixture(t, `package fixture
 var genericMap = map[string]any{"project": project, "first": first}

@@ -77,7 +77,7 @@ def fingerprint(
     files = sorted(directory.glob("*.py")) + [
         directory / name for name in ("values.coalesced.yaml", "values.inferred.schema.json", "chart-source.json", "input-domains.json")
     ]
-    for package in ("hypothesis", "hypothesis-jsonschema", "jsonschema", "ruamel.yaml", "pytest"):
+    for package in ("hypothesis", "hypothesis-jsonschema", "jsonschema", "ruamel.yaml", "pytest", "lupa"):
         digest.update(f"{package}={version(package)}".encode())
     source = directory / "chart-source.json"
     if source.exists():
@@ -89,6 +89,7 @@ def fingerprint(
                 digest.update(hashlib.sha256(file.read_bytes()).digest())
     package_root = Path(__file__).resolve().parents[1]
     files += sorted(file for file in package_root.rglob("*.py") if "tests" not in file.relative_to(package_root).parts)
+    files += sorted((package_root / "compiler" / "lua").glob("*.lua"))
     for file in files:
         if file.is_file():
             digest.update(file.name.encode())

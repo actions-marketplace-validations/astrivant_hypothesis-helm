@@ -89,8 +89,21 @@ def matching_rules(chart: Path) -> list[dict[str, object]]:
     rules = sequence(inherited_policy().get("input_constraints", []))
     if not rules:
         return []
-    name = chart_identity(chart)
-    source = source_identity(chart)
+    return select_rules(rules, chart_identity(chart), source_identity(chart))
+
+
+def select_rules(rules: list[object], name: str, source: str) -> list[dict[str, object]]:
+    """
+    Match already resolved policy rows against a stable chart identity.
+
+    Args:
+        rules (list[object]): Validated input constraint rows.
+        name (str): Chart.yaml name.
+        source (str): Original local directory or remote source.
+
+    Returns:
+        list[dict[str, object]]: Matching rows in configuration order, each included once.
+    """
     result = []
     for raw in rules:
         rule = mapping(raw)

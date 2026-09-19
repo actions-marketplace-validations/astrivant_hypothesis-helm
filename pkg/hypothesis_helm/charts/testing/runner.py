@@ -408,6 +408,7 @@ def check_chart(
         result["ignored_rules"] = ignored_codes()
         result["finding_controls"] = chart_rules(chart.path)
         result["input_domains"] = chart.input_domains().report()
+        result["compiler_limits"] = dict(inputs.dependencies.limits)
         result["hypothesis_settings"] = hypothesis_parameters(
             chart.input_domains().generation, protected_paths[0] if len(protected_paths) == 1 else (), max_examples
         )

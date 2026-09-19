@@ -75,7 +75,7 @@ def profile(chart: Chart, complexity: dict[str, object] | None = None) -> dict[s
         if measured["status"] != "compiled-maximum":
             raise ValueError(str(measured.get("reason", "maximum output complexity is unknown")))
         model = ValuesModel.from_schema(chart.schema)
-        space = factor_space(model, active_limits()["max_sampling_domain_values"])
+        space = factor_space(model, active_limits(chart.path)["max_sampling_domain_values"])
         compiler = Pruner(chart.path, chart.defaults, model)
         if compiler.disabled:
             raise ValueError(compiler.disabled)

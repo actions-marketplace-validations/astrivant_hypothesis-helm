@@ -26,7 +26,7 @@ CERTIFICATES = frozenset(
 SCALARS = frozenset({"toString", "quote", "squote", "b64enc", "b64dec", "toYaml", "toJson", "trim", "lower", "upper", "sha256sum"})
 
 
-def result(function: str, arguments: list[Origin], *, offline: bool = False) -> Origin:
+def result(function: str, arguments: list[Origin], *, offline: bool = False, limits: dict[str, int] | None = None) -> Origin:
     """
     Propagate supported literal results and origins without inferring global input constraints.
 
@@ -34,6 +34,7 @@ def result(function: str, arguments: list[Origin], *, offline: bool = False) -> 
         function (str): Statically named template function.
         arguments (list[Origin]): Symbolic input arguments in Helm call order.
         offline (bool): Executor guarantees plain helm template, without cluster or DNS access.
+        limits (dict[str, int] | None): Compiler budgets captured by the chart's discovery pass.
 
     Returns:
         Origin: Supported shape and source dependencies, or explicit uncertainty.
@@ -42,7 +43,7 @@ def result(function: str, arguments: list[Origin], *, offline: bool = False) -> 
     scalar = Derived(inputs)
     if function in FUNCTIONS and all(isinstance(argument, Literal) for argument in arguments):
         try:
-            value = calculate(function, tuple(argument.value for argument in arguments if isinstance(argument, Literal)))
+            value = calculate(function, tuple(argument.value for argument in arguments if isinstance(argument, Literal)), limits=limits)
             if not isinstance(value, (dict, list)):
                 return Literal(value)
             # Collection-producing functions need the structured origins below;

@@ -343,6 +343,7 @@ def check_paths(
         "ignored_rules": ignored_codes(),
         "finding_controls": chart_rules(chart.path),
         "input_domains": chart.input_domains().report(),
+        "compiler_limits": dict(inventory.dependencies.limits),
         "workers": min(jobs, len(ordered)),
         "worker_model": "shared chart path queue",
         "seed": seed,

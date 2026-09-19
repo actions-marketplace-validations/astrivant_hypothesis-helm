@@ -16,6 +16,7 @@
   - [Airflow: malformed helper dictionary silently loses annotations](#airflow-malformed-helper-dictionary-silently-loses-annotations)
 - [Recommended fix order](#recommended-fix-order)
 - [Fixes implemented after this scan](#fixes-implemented-after-this-scan)
+- [Validation](#validation)
 <!-- toc:end -->
 
 The scan found actionable compiler gaps and a reporting defect that loses observed failures when shrinking reaches the time limit.
@@ -221,3 +222,12 @@ This was a functional check under concurrent test-suite load, not a comparable p
 
 Whole-template destination projection still needs further work. Opaque helper outputs, mutation, serialization and joint validation rules
 must retain conservative handling. The fixes above do not establish complete helper semantics or fix the upstream chart defects.
+
+## Validation
+
+The broad core-suite run passed 1,834 tests and skipped 23. Its 14 failures were subsequently resolved: seven required implementation or
+expectation corrections, three required normal terminal-color settings, and four required permission to bind temporary localhost ports.
+All affected cases passed in the 185-test focused rerun. Subsequent checks passed 128 execution/reporting tests and 172 compiler/domain
+tests after the final changes. Ruff, mypy, docstring checks and generated-reference checks passed.
+
+No scan is left running. The full original Bitnami report was not overwritten, and these changes do not modify the upstream charts.

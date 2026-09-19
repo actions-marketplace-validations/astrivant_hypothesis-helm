@@ -187,7 +187,7 @@ class RejectionPolicy:
             )
             suggestions: dict[str, list[object]] = {}
             for domain in current_rejection.transformed_domains:
-                for name, choices in domain.suggestions().items():
+                for name, choices in domain.suggestions(limits=limits).items():
                     suggestions.setdefault(name, []).extend(choices)
             for name in sorted(current_rejection.inputs, key=lambda name: name not in current_rejection.enums):
                 value = current_rejection.inputs[name]

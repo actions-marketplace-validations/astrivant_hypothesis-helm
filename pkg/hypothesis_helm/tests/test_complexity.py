@@ -261,13 +261,18 @@ def test_shared_gate_does_not_combine_incompatible_output_maxima(tmp_path: Path)
         )
 
 
-def test_component_bound_is_admissible_for_every_partial_assignment() -> None:
+@pytest.mark.parametrize("lua", [False, True])
+def test_component_bound_is_admissible_for_every_partial_assignment(lua: bool) -> None:
     """
     Independently enumerate compatible profiles to check that pruning bounds never underestimate.
+
+    Args:
+        lua (bool): Exercise the native kernel or the Python reference.
 
     Returns:
         None: Partial bounds cover every feasible score and complete assignments have exact bounds.
     """
+    from hypothesis_helm.compiler.lua.bounds import BoundEvaluator
     from hypothesis_helm.compiler.passes.complexity import Component, OutputCase, bound
 
     components = (
@@ -282,6 +287,7 @@ def test_component_bound_is_admissible_for_every_partial_assignment() -> None:
             ),
         ),
     )
+    evaluator = BoundEvaluator(components, max_memory_bytes=64 * 1024 * 1024) if lua else lambda assignment: bound(components, assignment)
     scores = {}
     for assignment in product(range(2), repeat=2):
         profiles = [
@@ -293,9 +299,9 @@ def test_component_bound_is_admissible_for_every_partial_assignment() -> None:
         scores[assignment] = max(levels) * depth
     for partial in ({}, {0: 0}, {0: 1}, {1: 0}, {1: 1}):
         feasible = [score for choices, score in scores.items() if all(choices[index] == value for index, value in partial.items())]
-        assert bound(components, partial) >= max(feasible)
+        assert evaluator(partial) >= max(feasible)
     for choices, score in scores.items():
-        assert bound(components, dict(enumerate(choices))) == score
+        assert evaluator(dict(enumerate(choices))) == score
 
 
 def test_complexity_cli_accepts_chart_paths(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

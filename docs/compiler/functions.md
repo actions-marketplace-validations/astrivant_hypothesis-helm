@@ -395,6 +395,15 @@ The source downloads and Go build cache live under `.cache/compiler-builtins/`
 by default. Ordinary chart tests load the bundled JSON and need neither Go nor
 network access. Tagged release builds verify the inventory before packaging.
 
+Both catalog commands build the same Go package under
+[`hypothesis_helm_catalog/upstream`](../../pkg/hypothesis_helm_catalog/upstream/):
+`main.go` handles command dispatch and shared utilities, `helm.go` analyzes Helm,
+Sprig and Go template functions, and `kubernetes.go` extracts API constraints and
+checks their boundary cases against Kubernetes validators. The first build caches
+the pinned Go dependencies; subsequent `--offline` builds require those dependencies
+and the upstream source downloads in the selected cache directory. The extractor
+fingerprint includes all three Go files and both dependency manifests.
+
 ### What comes from source, and what still needs a contract
 
 ```mermaid

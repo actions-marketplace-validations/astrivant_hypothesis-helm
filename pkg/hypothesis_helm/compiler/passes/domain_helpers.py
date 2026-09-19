@@ -66,6 +66,8 @@ def argument(expr: object, context: object, variables: dict[str, object]) -> obj
     if isinstance(expr, FieldAccess):
         return select(argument(expr.receiver, context, variables), expr.fields)
     if isinstance(expr, tuple):
+        if expr and expr[0] == "list":
+            return [argument(item, context, variables) for item in expr[1:]]
         if expr and expr[0] == "dict" and len(expr) % 2 == 1:
             pairs = [
                 (argument(k, context, variables), argument(v, context, variables)) for k, v in zip(expr[1::2], expr[2::2], strict=True)
@@ -75,6 +77,10 @@ def argument(expr: object, context: object, variables: dict[str, object]) -> obj
         raise Unknown("helper argument needs unsupported evaluation")
     if not isinstance(expr, str):
         raise Unknown("invalid helper argument")
+    if expr == "dict":
+        return {}
+    if expr == "list":
+        return []
     if expr.startswith('"'):
         return json.loads(expr)
     if expr.startswith("`") and expr.endswith("`"):
@@ -128,6 +134,8 @@ def symbolic_argument(value: object) -> str:
     if isinstance(value, dict):
         fields = " ".join(f"{json.dumps(key)} {symbolic_argument(child)}" for key, child in value.items())
         return f"(dict {fields})"
+    if isinstance(value, list):
+        return "(list " + " ".join(symbolic_argument(child) for child in value) + ")"
     return json.dumps(value)
 
 

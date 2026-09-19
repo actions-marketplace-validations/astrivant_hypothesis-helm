@@ -1,13 +1,8 @@
-// Command builtins extracts template function facts from pinned upstream Go ASTs.
-// This is deliberately not a Go interpreter: unresolved calls remain explicit.
 package main
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -74,10 +69,24 @@ type summary struct {
 	evidence   map[string]bool
 }
 
+// newSummary allocates independent sets for one function analysis.
+//
+// Returns:
+//
+//	*summary: Empty effect, unresolved-call, call and evidence sets.
 func newSummary() *summary {
 	return &summary{map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}}
 }
 
+// keys returns sorted unique names from a set.
+//
+// Args:
+//
+//	values (map[string]bool): Set whose keys are the recorded names.
+//
+// Returns:
+//
+//	[]string: Names in deterministic lexical order.
 func keys(values map[string]bool) []string {
 	result := make([]string, 0, len(values))
 	for key := range values {
@@ -87,6 +96,15 @@ func keys(values map[string]bool) []string {
 	return result
 }
 
+// text prints Go syntax without source-formatting differences.
+//
+// Args:
+//
+//	node (ast.Node): Syntax to print, or nil for an empty result.
+//
+// Returns:
+//
+//	string: Canonical printed syntax, ignoring printer errors as unresolved evidence.
 func text(node ast.Node) string {
 	var output bytes.Buffer
 	if node != nil {
@@ -95,11 +113,16 @@ func text(node ast.Node) string {
 	return output.String()
 }
 
-func digest(data []byte) string {
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
-}
-
+// read parses a provider package without importing or executing its code.
+//
+// Args:
+//
+//	source (source): Provider identity, directory and function-map name.
+//
+// Returns:
+//
+//	*packageSource: Parsed files, imports, functions and declared types.
+//	error: Directory or syntax error, or nil on success.
 func read(source source) (*packageSource, error) {
 	p := &packageSource{set: token.NewFileSet(), functions: map[string]*function{}, types: map[string]ast.Expr{}, provider: source.Provider}
 	paths, err := filepath.Glob(filepath.Join(source.Directory, "*.go"))
@@ -148,6 +171,17 @@ func read(source source) (*packageSource, error) {
 	return p, nil
 }
 
+// mapEntries collects literal function registrations and rejects ambiguous maps.
+//
+// Args:
+//
+//	expr (ast.Expr): Expected map composite literal.
+//	u (*unit): Source file supplying each binding.
+//	result (map[string][]binding): Destination updated with unique literal registrations.
+//
+// Returns:
+//
+//	error: Unsupported entries or duplicate names, or nil on success.
 func mapEntries(expr ast.Expr, u *unit, result map[string][]binding) error {
 	literal, ok := expr.(*ast.CompositeLit)
 	if !ok {
@@ -170,6 +204,17 @@ func mapEntries(expr ast.Expr, u *unit, result map[string][]binding) error {
 	return nil
 }
 
+// bindings reads registrations, removed names and conditional renderer overrides.
+//
+// Args:
+//
+//	target (string): Function-map declaration name within the provider.
+//
+// Returns:
+//
+//	map[string][]binding: Registered implementations, including conditional alternatives.
+//	[]string: Sorted names removed by the renderer.
+//	error: Unsupported registration syntax or an ambiguous map declaration.
 func (p *packageSource) bindings(target string) (map[string][]binding, []string, error) {
 	result := map[string][]binding{}
 	removed := map[string]bool{}
@@ -246,6 +291,15 @@ func (p *packageSource) bindings(target string) (map[string][]binding, []string,
 	return result, keys(removed), extractionError
 }
 
+// resolve finds the local implementation behind a registration.
+//
+// Args:
+//
+//	value (binding): Named function, closure or supported function factory.
+//
+// Returns:
+//
+//	*function: Implementation and its source context, or nil when unresolved.
 func (p *packageSource) resolve(value binding) *function {
 	switch expr := value.expr.(type) {
 	case *ast.Ident:
@@ -264,6 +318,17 @@ func (p *packageSource) resolve(value binding) *function {
 	return nil
 }
 
+// shape resolves a supported Go result type without evaluating the function.
+//
+// Args:
+//
+//	expr (ast.Expr): Type expression to inspect.
+//	seen (map[string]bool): Named types already visited; updated to bound recursion.
+//
+// Returns:
+//
+//	string: Scalar, map, sequence, record or unknown shape.
+//	[]string: Sorted exported field names for a record, otherwise empty.
 func (p *packageSource) shape(expr ast.Expr, seen map[string]bool) (string, []string) {
 	switch typ := expr.(type) {
 	case *ast.MapType:
@@ -295,13 +360,28 @@ func (p *packageSource) shape(expr ast.Expr, seen map[string]bool) (string, []st
 	return "any", []string{}
 }
 
+// effect records a detected effect and the evidence establishing it.
+//
+// Args:
+//
+//	name (string): Effect category.
+//	evidence (string): Source location or semantic boundary.
 func (s *summary) effect(name, evidence string) {
 	s.effects[name] = true
 	s.evidence[name+": "+evidence] = true
 }
 
-// Copying or filtering entries under their original keys is independent of map
-// iteration order. Reject calls, cross-key reads and loop exits from this proof.
+// independentMapWrites checks whether a loop only projects entries under their original keys.
+//
+// Calls, cross-key reads and loop exits prevent proving order independence.
+//
+// Args:
+//
+//	loop (*ast.RangeStmt): Candidate map traversal.
+//
+// Returns:
+//
+//	bool: True only for the supported order-independent projection pattern.
 func independentMapWrites(loop *ast.RangeStmt) bool {
 	key, ok := loop.Key.(*ast.Ident)
 	if !ok || key.Name == "_" {
@@ -347,7 +427,14 @@ func independentMapWrites(loop *ast.RangeStmt) bool {
 	return safe && writes
 }
 
-// Boundaries name primitive APIs, not Helm aliases. Anything else stays unresolved.
+// external records known effects at primitive API boundaries.
+//
+// Imported implementations remain unresolved even when an effect is detected.
+//
+// Args:
+//
+//	path (string): Imported package path.
+//	name (string): Referenced symbol in that package.
 func (s *summary) external(path, name string) {
 	qualified := path + "." + name
 	s.calls[qualified] = true
@@ -375,6 +462,13 @@ func (s *summary) external(path, name string) {
 	s.unresolved[qualified] = true
 }
 
+// analyze follows local calls and accumulates conservative function effects.
+//
+// Args:
+//
+//	fn (*function): Implementation to inspect; missing bodies remain unresolved.
+//	s (*summary): Mutable aggregate of effects, calls and evidence.
+//	visited (map[*ast.BlockStmt]bool): Bodies already analyzed, preventing recursive cycles.
 func (p *packageSource) analyze(fn *function, s *summary, visited map[*ast.BlockStmt]bool) {
 	if fn == nil || fn.body == nil {
 		s.unresolved["missing function body"] = true
@@ -474,6 +568,16 @@ func (p *packageSource) analyze(fn *function, s *summary, visited map[*ast.Block
 	})
 }
 
+// describe combines source facts for every implementation of a template name.
+//
+// Args:
+//
+//	name (string): Exposed template function name.
+//	variants ([]binding): Possible implementations in this provider.
+//
+// Returns:
+//
+//	facts: Return shape, effects and source provenance; uncertainty remains explicit.
 func (p *packageSource) describe(name string, variants []binding) facts {
 	s := newSummary()
 	f := facts{Provider: p.provider, Shape: "any", Fields: []string{}}
@@ -483,13 +587,13 @@ func (p *packageSource) describe(name string, variants []binding) facts {
 		f.Implementation = text(value.expr)
 		f.Source = value.u.file
 		f.Line = p.set.Position(value.expr.Pos()).Line
-		f.SHA256 = digest([]byte(text(value.expr)))
+		f.SHA256 = hash([]byte(text(value.expr)))
 		if fn != nil {
 			f.Implementation = fn.name
 			f.Source = fn.u.file
 			f.Line = p.set.Position(fn.typ.Pos()).Line
 			f.Signature = text(fn.typ)
-			f.SHA256 = digest([]byte(text(fn.typ) + text(fn.body)))
+			f.SHA256 = hash([]byte(text(fn.typ) + text(fn.body)))
 			shape, fields := "any", []string{}
 			if fn.typ.Results != nil && len(fn.typ.Results.List) > 0 {
 				shape, fields = p.shape(fn.typ.Results.List[0].Type, map[string]bool{})
@@ -528,6 +632,16 @@ func (p *packageSource) describe(name string, variants []binding) facts {
 	return f
 }
 
+// union combines names while removing duplicates.
+//
+// Args:
+//
+//	left ([]string): First collection of names.
+//	right ([]string): Second collection of names.
+//
+// Returns:
+//
+//	[]string: Sorted union of both collections.
 func union(left, right []string) []string {
 	result := map[string]bool{}
 	for _, value := range append(left, right...) {
@@ -536,6 +650,17 @@ func union(left, right []string) []string {
 	return keys(result)
 }
 
+// extract merges provider facts in override order without losing possible effects.
+//
+// Args:
+//
+//	sources ([]source): Ordered Go, Sprig and Helm source descriptions.
+//
+// Returns:
+//
+//	map[string]facts: Effective function inventory.
+//	[]string: Sorted removed function names.
+//	error: Source parsing or registration error, or nil on success.
 func extract(sources []source) (map[string]facts, []string, error) {
 	result := map[string]facts{}
 	removed := map[string]bool{}
@@ -571,27 +696,28 @@ func extract(sources []source) (map[string]facts, []string, error) {
 	return result, keys(removed), nil
 }
 
-func run() error {
-	config := flag.String("config", "", "JSON list of pinned provider directories and function maps")
-	flag.Parse()
-	data, err := os.ReadFile(*config)
+// helm rebuilds template-function facts from a provider configuration file.
+//
+// Args:
+//
+//	config (string): JSON file listing pinned provider directories and function maps.
+//
+// Returns:
+//
+//	Record: Function inventory and removed names.
+//	error: Configuration or extraction failure, or nil on success.
+func helm(config string) (Record, error) {
+	data, err := os.ReadFile(config)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var sources []source
 	if err := json.Unmarshal(data, &sources); err != nil {
-		return err
+		return nil, err
 	}
 	functions, removed, err := extract(sources)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return json.NewEncoder(os.Stdout).Encode(map[string]any{"functions": functions, "removed": removed})
-}
-
-func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	return Record{"functions": functions, "removed": removed}, nil
 }

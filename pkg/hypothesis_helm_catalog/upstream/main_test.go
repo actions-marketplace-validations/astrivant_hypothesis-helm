@@ -1,95 +1,109 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"flag"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestIndependentFieldAnnotations(t *testing.T) {
-	root := t.TempDir()
-	relative := "staging/src/k8s.io/api/example/v1/types.go"
-	file := filepath.Join(root, relative)
-	if err := os.MkdirAll(filepath.Dir(file), 0755); err != nil {
+// TestHelmCommand dispatches function extraction through the shared entry point.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and isolated source fixtures.
+func TestHelmCommand(t *testing.T) {
+	src := fixture(t, `package fixture
+var genericMap = map[string]any{"hello": hello}
+func hello() string { return "world" }
+`)
+	config := filepath.Join(t.TempDir(), "sources.json")
+	data, err := json.Marshal([]source{src})
+	if err != nil {
 		t.Fatal(err)
 	}
-	source := `package v1
- type Settings struct {
-    // +k8s:minimum=1
-    Count *int32 ` + "`json:\"count,omitempty\"`" + `
-    // +k8s:maxLength=63
-    Name string ` + "`json:\"name\"`" + `
-    // +k8s:ifEnabled(Feature):minimum=2
-    Conditional int32 ` + "`json:\"conditional\"`" + `
-    // +k8s:minimum=1
-    Duration Duration ` + "`json:\"duration\"`" + `
-    // +k8s:minimum=2
-    Items []int32 ` + "`json:\"items\"`" + `
-    // +k8s:maximum=3
-    Private int32
- }
-`
-	if err := os.WriteFile(file, []byte(source), 0600); err != nil {
+	if err := os.WriteFile(config, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	rules, unresolved, hashes := fields(root)
-	if len(rules) != 2 || len(unresolved) != 4 {
-		t.Fatalf("unexpected extraction: %v, %v", rules, unresolved)
+	var output bytes.Buffer
+	if err := run([]string{"--config", config}, strings.NewReader(""), &output, io.Discard); err != nil {
+		t.Fatal(err)
 	}
-	count := rules["io.k8s.api.example.v1.Settings/count"].([]Record)[0]
-	if count["schema"].(Record)["minimum"] != 1 || count["file"] != relative {
-		t.Fatalf("missing bound or provenance: %v", count)
+	var result struct {
+		Functions map[string]facts `json:"functions"`
 	}
-	name := rules["io.k8s.api.example.v1.Settings/name"].([]Record)[0]
-	if name["schema"].(Record)["maxLength"] != 63 {
-		t.Fatalf("missing length bound: %v", name)
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatal(err)
 	}
-	if hashes[relative] != hash([]byte(source)) {
-		t.Fatal("source digest mismatch")
+	if result.Functions["hello"].Shape != "scalar" {
+		t.Fatal(result)
 	}
-	for _, row := range unresolved {
-		if row["reason"] == nil || row["line"] == nil {
-			t.Fatalf("unexplained omission: %v", row)
+}
+
+// TestOracleCommand preserves JSON Lines validation across repeated invocations.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions and input/output buffers.
+func TestOracleCommand(t *testing.T) {
+	for _, test := range []struct{ input, expected string }{
+		{`{"profile":"port-number","value":0}
+{"profile":"port-number","value":1}
+{"profile":"port-number","value":65536}
+`, "false\ntrue\nfalse\n"},
+		{`{"profile":"dns1123-subdomain","value":"my-config"}
+{"profile":"dns1123-subdomain","value":"I\n&"}
+`, "true\nfalse\n"},
+		{`{"profile":"pdb-count-or-percent","value":"100%"}
+{"profile":"pdb-count-or-percent","value":"101%"}
+`, "true\nfalse\n"},
+	} {
+		var output bytes.Buffer
+		if err := run([]string{"--oracle"}, strings.NewReader(test.input), &output, io.Discard); err != nil {
+			t.Fatal(err)
+		}
+		if output.String() != test.expected {
+			t.Fatalf("unexpected oracle results: %q", output.String())
 		}
 	}
 }
 
-func TestChangedValidatorChangesCanonicalIdentity(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "validation.go")
-	write := func(source string) string {
-		t.Helper()
-		if err := os.WriteFile(file, []byte(source), 0600); err != nil {
-			t.Fatal(err)
+// TestInvalidCommandSelection rejects ambiguous operations before inspecting sources.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions for argument errors.
+func TestInvalidCommandSelection(t *testing.T) {
+	for _, args := range [][]string{
+		{}, {"--source", "missing", "--config", "missing"},
+		{"--oracle", "--source", "missing"}, {"--oracle", "--config", "missing"},
+		{"--oracle", "unexpected"}, {"--unknown"},
+	} {
+		var output bytes.Buffer
+		if err := run(args, strings.NewReader(""), &output, io.Discard); err == nil {
+			t.Fatalf("accepted invalid flags: %v", args)
 		}
-		_, functions := declarations(file)
-		return canonical(functions["valid"])
+		if output.Len() != 0 {
+			t.Fatalf("invalid command emitted catalog data: %v", args)
+		}
 	}
-	first := write("package validation; func valid(port int) bool { return 1 <= port && port <= 65535 }")
-	formatted := write("package validation\nfunc valid(port int) bool {\nreturn 1 <= port && port <= 65535\n}")
-	changed := write("package validation; func valid(port int) bool { return 0 <= port && port <= 65535 }")
-	if first != formatted || first == changed {
-		t.Fatal("validator identities must ignore formatting and detect changed bounds")
+	if err := run([]string{"--help"}, strings.NewReader(""), io.Discard, io.Discard); !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("help must remain a successful CLI request: %v", err)
 	}
 }
 
-func TestPercentLimitComesFromSource(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "validation.go")
-	for _, maximum := range []string{"99", "100", "101"} {
-		source := `package validation
-func limit() {
-    errors := []string{}
-    value, isPercent := read()
-    if !isPercent || value <= ` + maximum + ` { return }
-    errors = append(errors, "too large")
-    return
-}`
-		if err := os.WriteFile(file, []byte(source), 0600); err != nil {
-			t.Fatal(err)
-		}
-		_, functions := declarations(file)
-		if got := percentLimit(functions["limit"]); fmt.Sprint(got) != maximum {
-			t.Fatalf("wrong source-derived limit: %d", got)
-		}
+// TestOracleRejectsMalformedInput reports incomplete JSON instead of accepting partial cases.
+//
+// Args:
+//
+//	t (*testing.T): Test assertions for input errors.
+func TestOracleRejectsMalformedInput(t *testing.T) {
+	if err := run([]string{"--oracle"}, strings.NewReader(`{"profile":`), io.Discard, io.Discard); err == nil {
+		t.Fatal("malformed input did not fail")
 	}
 }

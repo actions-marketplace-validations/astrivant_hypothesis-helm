@@ -98,18 +98,19 @@ class DiscoverySources:
         register(nodes)
 
     @classmethod
-    def build(cls, chart: Path) -> DiscoverySources:
+    def build(cls, chart: Path, *, limits: dict[str, int] | None = None) -> DiscoverySources:
         """
         Read local templates and dependency helpers, including bounded nested chart archives.
 
         Args:
             chart (Path): Prepared chart directory.
+            limits (dict[str, int] | None): Captured parent budgets, or settings resolved for this chart.
 
         Returns:
             DiscoverySources: Root trees, callable helpers, and explicit failures to inspect sources.
         """
         result = cls()
-        limits = active_limits()
+        limits = active_limits(chart) if limits is None else limits
         metadata = yamlio.load((chart / "Chart.yaml").read_text()) if (chart / "Chart.yaml").is_file() else {}
         name = metadata.get("name", chart.name) if isinstance(metadata, dict) else chart.name
         result.base_path = f"{name}/templates"

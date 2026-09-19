@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from hypothesis_helm_catalog import builtins as builder
+from hypothesis_helm_catalog import toolchain
 
 from hypothesis_helm.compiler import builtins
 from hypothesis_helm.compiler.asts.contracts import Contracts
@@ -64,11 +65,32 @@ def test_extractor_matches_generated_inventory() -> None:
         None: Checked-in facts identify this extractor and every locked source artifact.
     """
     inventory = mapping(json.loads(builder.LIBRARY.read_text()))
-    assert inventory["extractor_sha256"] == hashlib.sha256((builder.TOOL / "main.go").read_bytes()).hexdigest()
+    assert inventory["extractor_sha256"] == toolchain.fingerprint()
     locked = json.loads(builder.LOCK.read_text())["sources"]
     assert [source["sha256"] for source in (mapping(raw) for raw in sequence(inventory["sources"]))] == [
         source["sha256"] for source in locked
     ]
+
+
+@pytest.mark.parametrize("filename", ["main.go", "helm.go", "kubernetes.go", "go.mod", "go.sum"])
+def test_extractor_identity_covers_all_compiled_sources(tmp_path: Path, filename: str) -> None:
+    """
+    Invalidate generated facts when either extraction mode or a pinned dependency changes.
+
+    Args:
+        tmp_path (Path): Isolated minimal Go module.
+        filename (str): Compiled source or dependency manifest changed in this case.
+
+    Returns:
+        None: Production edits change the digest; test-only files do not.
+    """
+    for name in ("main.go", "helm.go", "kubernetes.go", "go.mod", "go.sum"):
+        (tmp_path / name).write_text(name)
+    baseline = toolchain.fingerprint(tmp_path)
+    (tmp_path / "main_test.go").write_text("test-only change")
+    assert toolchain.fingerprint(tmp_path) == baseline
+    (tmp_path / filename).write_text("changed implementation or dependency")
+    assert toolchain.fingerprint(tmp_path) != baseline
 
 
 def test_generated_effects_and_shapes_enter_analysis() -> None:

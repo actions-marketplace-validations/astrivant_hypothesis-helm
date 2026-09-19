@@ -35,6 +35,9 @@ GENERATION_EXAMPLE = (
               - ./charts
             names: [example, example-worker]
         path: $  # Whole chart; descendants inherit these partial overrides.
+        compiler:  # Chart-wide budgets, including dependencies; only accepted with path: $.
+          max_call_depth: 64  # Other limits inherit the global compiler settings.
+          max_steps: 20000
         hypothesis:
           character_sets: ascii
           max_examples: 20

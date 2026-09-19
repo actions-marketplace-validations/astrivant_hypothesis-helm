@@ -23,6 +23,7 @@ from hypothesis_helm.compiler.asts.conditions import condition_path
 from hypothesis_helm.compiler.asts.templates import Node, specialize, value_path, walk
 from hypothesis_helm.compiler.complexity import maximum_score, output_profile
 from hypothesis_helm.compiler.limits import active_limits
+from hypothesis_helm.compiler.lua.bounds import BoundEvaluator
 from hypothesis_helm.compiler.passes.pruning import Pruner, safe_values
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
 from hypothesis_helm.schemas.factors import FactorSpace, factor_space
@@ -185,7 +186,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
     Returns:
         dict[str, object]: Compiled maximum or explicit uncertainty, with search accounting.
     """
-    limits = active_limits()
+    limits = active_limits(chart.path)
     max_cases = limits["max_complexity_cases"] if max_cases is None else max_cases
     time_limit = float(limits["max_complexity_seconds"]) if time_limit is None else time_limit
     if max_cases < 1 or not math.isfinite(time_limit) or time_limit <= 0:
@@ -234,6 +235,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
             evaluated += 1
 
     compiler: Pruner | None = None
+    bounds: BoundEvaluator | None = None
     try:
         model = ValuesModel.from_schema(chart.schema)
         compiler = Pruner(chart.path, chart.defaults, model)
@@ -275,7 +277,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
                     for resource in _resources(program, baseline_effective, model)
                 ]
                 validate_resources(baseline_resources)
-                best = output_profile(baseline_resources)
+                best = output_profile(baseline_resources, node_limit=limits["max_output_nodes"])
             except (YAMLError, RenderFailure, ValueError):
                 # An opaque first candidate is not evidence about another branch.
                 pass
@@ -317,7 +319,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
                     cases.append(OutputCase(local, None, ()))
                     result["invalid_outputs"] = int(str(result["invalid_outputs"])) + 1
                 else:
-                    output_profile(resources)
+                    output_profile(resources, node_limit=limits["max_output_nodes"])
                     cases.append(OutputCase(local, resources, _levels(resources)))
                 result["template_evaluations"] = int(str(result["template_evaluations"])) + 1
             components.append(Component(factors, tuple(cases)))
@@ -325,7 +327,8 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
         order = sorted(range(len(sizes)), key=lambda index: (-use_counts[index], -control_uses[index], space.paths[index]))
         result["factor_order"] = [list(space.paths[index]) for index in order]
         result["unused_factors"] = [list(space.paths[index]) for index, count in enumerate(use_counts) if not count]
-        pending: list[tuple[dict[int, int], int]] = [({}, bound(components, {}))]
+        bounds = BoundEvaluator(components, max_memory_bytes=limits["max_lua_memory_bytes"])
+        pending: list[tuple[dict[int, int], int]] = [({}, bounds({}))]
         while pending:
             budget()
             assigned, upper = pending.pop()
@@ -343,7 +346,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
                 for choice in range(sizes[index]):
                     budget()
                     child = {**assigned, index: choice}
-                    children.append((child, bound(components, child)))
+                    children.append((child, bounds(child)))
                 # LIFO stack visits highest bounds first, then lowest canonical domain index.
                 pending.extend(sorted(children, key=lambda item: (item[1], -item[0][index])))
                 continue
@@ -366,7 +369,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
             except RenderFailure:
                 result["invalid_outputs"] = int(str(result["invalid_outputs"])) + 1
                 continue
-            profile = output_profile(bundle)
+            profile = output_profile(bundle, node_limit=limits["max_output_nodes"])
             if best is None or profile["score"] > best["score"]:
                 best = profile
                 result["lower_bound"] = best
@@ -382,6 +385,8 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
         result.pop("maximum_output", None)
         result["reason"] = "chart source changed during complexity analysis"
     result["branch_analysis"] = compiler.branch_analysis if compiler is not None else {}
+    if bounds is not None:
+        result["bound_backend"] = bounds.report()
     result["analysis_seconds"] = time.perf_counter() - started
     return result
 

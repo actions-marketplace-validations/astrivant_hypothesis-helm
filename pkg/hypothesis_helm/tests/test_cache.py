@@ -3,6 +3,7 @@ Verify persistent outcomes across serial, threaded, and CI runs.
 """
 
 import json
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,35 @@ import pytest
 from hypothesis_helm.execution.cache import fingerprint, read_outcomes
 from hypothesis_helm.execution.environment import in_ci
 from hypothesis_helm.execution.suite import run_suite
+
+
+def test_lua_implementation_invalidates_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Invalidate compiler-derived successes when the bundled kernel or Lupa version changes.
+
+    Args:
+        tmp_path (Path): Isolated implementation and suite paths.
+        monkeypatch (pytest.MonkeyPatch): Point fingerprinting at the isolated package snapshot.
+
+    Returns:
+        None: Both native source and dependency identity participate in the cache key.
+    """
+    from hypothesis_helm.execution import cache
+
+    package = tmp_path / "package"
+    source = package / "execution" / "cache.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("# unchanged Python implementation\n")
+    script = package / "compiler" / "lua" / "bounds.lua"
+    script.parent.mkdir(parents=True)
+    script.write_text("return 1\n")
+    monkeypatch.setattr(cache, "__file__", str(source))
+    before = fingerprint(tmp_path, 0, None, "none")
+    script.write_text("return 2\n")
+    after_source = fingerprint(tmp_path, 0, None, "none")
+    assert after_source != before
+    monkeypatch.setattr(cache, "version", lambda name: "changed" if name == "lupa" else version(name))
+    assert fingerprint(tmp_path, 0, None, "none") != after_source
 
 
 @pytest.mark.parametrize("value", ["false", "NO", "0", "off", "", " true ", "yes", "1"])

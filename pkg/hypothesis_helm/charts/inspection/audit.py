@@ -9,6 +9,7 @@ import logging
 from hypothesis_helm.charts.inspection.templates import discover
 from hypothesis_helm.charts.model import Chart, _default_paths, _schema_nodes
 from hypothesis_helm.charts.values.presence import has_path
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.complexity import measure
 from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
@@ -91,6 +92,7 @@ def audit_findings(chart: Chart) -> dict[str, object]:
         (suppressed if finding["code"] in disabled else visible).append(finding)
     return {
         "chart": str(chart.path),
+        "compiler_limits": active_limits(chart.path),
         "references": [asdict(r) for r in references],
         "dynamic_references": [asdict(r) for r in references if not r.path or "*" in r.path],
         "findings": [finding for finding in visible if finding["code"] != "HH2005"],

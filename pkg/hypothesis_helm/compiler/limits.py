@@ -5,11 +5,12 @@ Resolve bounded compiler analysis independently of Helm's rendering limits.
 import json
 import os
 from functools import lru_cache
+from pathlib import Path
 
 # Resource budgets only. Language semantics, numeric precision and proof requirements
 # are not configurable: changing those would change what the analysis can establish.
 LIMITS: dict[str, tuple[int, str]] = {
-    "max_call_depth": (16, "Nested helper/tpl calls; --compiler-call-depth overrides this."),
+    "max_call_depth": (16, "Nested helper/tpl calls."),
     "max_files": (10000, "Members inspected per chart archive, including directories."),
     "max_context_bytes": (64 * 1024 * 1024, "Packed archive bytes and total unpacked member bytes, per archive."),
     "max_template_bytes": (1024 * 1024, "UTF-8 bytes in each dynamically analyzed tpl source."),
@@ -29,6 +30,7 @@ LIMITS: dict[str, tuple[int, str]] = {
     "max_output_nodes": (100000, "Manifest nodes inspected per complexity measurement."),
     "max_complexity_cases": (4096, "Template assignments and witnesses in a complexity search."),
     "max_complexity_seconds": (5, "Whole seconds allowed for a complexity search."),
+    "max_lua_memory_bytes": (64 * 1024 * 1024, "Lua allocations per complexity analysis; exhaustion uses Python bounds."),
     "max_sampling_domain_values": (4096, "Values per factor when computing a sampling profile."),
     "max_fallbacks": (128, "Distinct incomplete-analysis diagnostics retained per chart."),
     "max_preimage_steps": (128, "Search steps when proposing inputs for a transformed allowlist."),
@@ -40,16 +42,14 @@ LIMITS: dict[str, tuple[int, str]] = {
     "max_repair_length": (16, "Largest proposed list length during rejection repair."),
 }
 DEFAULT_LIMITS = {name: default for name, (default, _) in LIMITS.items()}
-DEFAULT_CALL_DEPTH = DEFAULT_LIMITS["max_call_depth"]
 
 
-def compiler_limits(raw: object, *, max_call_depth: int | None = None) -> dict[str, int]:
+def compiler_limits(raw: object) -> dict[str, int]:
     """
-    Validate compiler settings and apply an explicit command-line override.
+    Validate configured compiler settings and fill in default budgets.
 
     Args:
         raw (object): Partial compiler configuration mapping.
-        max_call_depth (int | None): Explicit override for nested helper calls.
 
     Returns:
         dict[str, int]: Complete compiler limits suitable for worker serialization.
@@ -64,39 +64,61 @@ def compiler_limits(raw: object, *, max_call_depth: int | None = None) -> dict[s
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"compiler.{name} must be a positive integer")
         resolved[name] = value
-    if max_call_depth is not None:
-        if isinstance(max_call_depth, bool) or not isinstance(max_call_depth, int) or max_call_depth < 1:
-            raise ValueError("compiler.max_call_depth (--compiler-call-depth) must be a positive integer")
-        resolved["max_call_depth"] = max_call_depth
     return resolved
 
 
-@lru_cache(maxsize=32)
-def policy_limits(serialized: str) -> tuple[tuple[str, int], ...]:
+@lru_cache(maxsize=128)
+def policy_limits(serialized: str, name: str | None = None, source: str | None = None) -> tuple[tuple[str, int], ...]:
     """
     Cache validated limits by the complete inherited policy, never by chart or process alone.
 
     Args:
         serialized (str): Coordinator policy serialized for worker inheritance.
+        name (str | None): Root chart name, or global defaults when omitted.
+        source (str | None): Original chart source for matrix selectors.
 
     Returns:
         tuple[tuple[str, int], ...]: Immutable entries safe to reuse across analysis calls.
     """
-    from hypothesis_helm.schemas.contracts import mapping
+    from hypothesis_helm.schemas.contracts import mapping, sequence
+    from hypothesis_helm.schemas.selectors import select_rules
 
-    return tuple(compiler_limits(mapping(json.loads(serialized)).get("compiler", {})).items())
+    policy = mapping(json.loads(serialized))
+    resolved = compiler_limits(policy.get("compiler", {}))
+    overrides: dict[str, int] = {}
+    if name is not None and source is not None:
+        for rule in select_rules(sequence(policy.get("input_constraints", [])), name, source):
+            if "compiler" not in rule:
+                continue
+            if rule.get("path") != "$":
+                raise ValueError("Chart compiler overrides require path: $; compiler budgets cannot vary by values branch")
+            configured = mapping(rule["compiler"])
+            validated = compiler_limits(configured)
+            for key in configured:
+                value = validated[key]
+                if key in overrides and overrides[key] != value:
+                    raise ValueError(f"Conflicting compiler.{key} overrides for chart {name!r} from {source!r}")
+                overrides[key] = value
+    return tuple({**resolved, **overrides}.items())
 
 
-def active_limits() -> dict[str, int]:
+def active_limits(chart: Path | None = None) -> dict[str, int]:
     """
     Snapshot the coordinator's compiler budgets when building an analysis.
+
+    Args:
+        chart (Path | None): Root chart for scoped overrides; omit for global defaults.
 
     Returns:
         dict[str, int]: Detached validated settings, also available in spawned workers.
     """
     from hypothesis_helm.schemas.policy import ENVIRONMENT
+    from hypothesis_helm.schemas.selectors import chart_identity, source_identity
 
-    return dict(policy_limits(os.environ.get(ENVIRONMENT, "{}")))
+    serialized = os.environ.get(ENVIRONMENT, "{}")
+    return dict(
+        policy_limits(serialized, chart_identity(chart), source_identity(chart)) if chart is not None else policy_limits(serialized)
+    )
 
 
 def call_depth() -> int:

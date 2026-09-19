@@ -43,7 +43,7 @@ ignored:
 # downstream_inputs: true  # Use constraints from supported downstream field mappings.
 # # Compiler budgets are positive integers; bytes, characters and counts are separate units.
 # compiler:
-#   max_call_depth: 16  # Nested helper/tpl calls; --compiler-call-depth overrides this.
+#   max_call_depth: 16  # Nested helper/tpl calls.
 #   max_files: 10000  # Members inspected per chart archive, including directories.
 #   max_context_bytes: 67108864  # Packed archive bytes and total unpacked member bytes, per archive.
 #   max_template_bytes: 1048576  # UTF-8 bytes in each dynamically analyzed tpl source.
@@ -63,6 +63,7 @@ ignored:
 #   max_output_nodes: 100000  # Manifest nodes inspected per complexity measurement.
 #   max_complexity_cases: 4096  # Template assignments and witnesses in a complexity search.
 #   max_complexity_seconds: 5  # Whole seconds allowed for a complexity search.
+#   max_lua_memory_bytes: 67108864  # Lua allocations per complexity analysis; exhaustion uses Python bounds.
 #   max_sampling_domain_values: 4096  # Values per factor when computing a sampling profile.
 #   max_fallbacks: 128  # Distinct incomplete-analysis diagnostics retained per chart.
 #   max_preimage_steps: 128  # Search steps when proposing inputs for a transformed allowlist.
@@ -92,6 +93,9 @@ ignored:
 #           - ./charts
 #         names: [example, example-worker]
 #     path: $  # Whole chart; descendants inherit these partial overrides.
+#     compiler:  # Chart-wide budgets, including dependencies; only accepted with path: $.
+#       max_call_depth: 64  # Other limits inherit the global compiler settings.
+#       max_steps: 20000
 #     hypothesis:
 #       character_sets: ascii
 #       max_examples: 20

@@ -61,7 +61,7 @@ def project_file(
     references: dict[str, tuple[tuple[str, ...], int, bool, bool]] = {}
     name = str(file.relative_to(chart))
     source = file.read_text()
-    limits = contracts.limits if contracts is not None else active_limits()
+    limits = contracts.limits if contracts is not None else active_limits(chart)
     prefix = "HHINPUTDOMAINMARKER"
     if prefix in source:
         diagnostics.append({"file": name, "reason": "reserved analysis marker occurs in source"})

@@ -125,16 +125,14 @@ conversions and oversized strings remain native Helm work.
 These scope rules follow [Go's template language](https://pkg.go.dev/text/template#hdr-Variables)
 and are checked against native Helm. The compiler analyzes up to 16 nested helper
 calls by default, counting the first call as level 1. This is our analysis budget,
-not a Helm rendering restriction. Override it for a run with
-`helm hypothesis test ./chart --filter --compiler-call-depth 64`, or configure:
+not a Helm rendering restriction. Configure it in `.hypothesis-helm.yaml` or a file selected with `--config`:
 
 ```yaml
 compiler:
   max_call_depth: 64
 ```
 
-`--compiler-call-depth` takes precedence over the config on `audit`, `generate`,
-`test`, `scan` and `run`. Both rejection analysis and helper-aware destination
+This setting applies to `audit`, `generate`, `test`, `scan` and `run`. Both rejection analysis and helper-aware destination
 typing use it; workers inherit it, and changing it invalidates cached results.
 When the budget is exhausted, analysis leaves the affected code unresolved and
 Helm tests continue normally. Raising it permits deeper analysis, but does not
@@ -143,7 +141,6 @@ Helm has its own [repeated-include recursion guard](https://github.com/helm/helm
 which this setting does not change.
 
 Other resource budgets are configurable in the same `compiler:` mapping. For example:
-
 ```yaml
 compiler:
   max_files: 20000
@@ -151,6 +148,10 @@ compiler:
   max_steps: 20000
   max_range_items: 8192
 ```
+
+Global budgets can also be overridden per chart through `input_constraints` rules with `path: $`, using the same
+chart names or source/name matrices as Hypothesis settings.
+See [configuration inheritance](../input-domains/README.md#inheritance-and-test-budgets).
 
 The defaults allow 10,000 archive members and 64 MiB per archive. Both `.Files`
 inspection and dependency unpacking use those limits. Nested archives are checked
@@ -346,6 +347,33 @@ The deterministic search proceeds as follows:
 This is **branch-and-bound**: a bound can rule out many assignments without
 visiting each one. It does not assume that enabling every Boolean independently
 produces the largest valid chart.
+
+Repeated upper-bound calculations run through [Lupa](https://github.com/scoder/lupa) using the bundled
+[`compiler/lua/bounds.lua`](../../pkg/hypothesis_helm/compiler/lua/bounds.lua) script and Lua 5.4 integer arithmetic.
+The first bound uses Python, avoiding runtime setup when the search finishes immediately. If more bounds are needed,
+numeric component tables are copied once into a runtime owned by that analysis. Later calls pass only the partial assignment.
+The script computes the same component maxima and summed depth counts as the Python reference; it does not interpret Helm templates.
+
+Conversion overflow, integer addition/multiplication overflow, Lua errors or allocation exhaustion switch the remaining
+calculations to Python's unbounded integers. Cancellation still propagates. The default `compiler.max_lua_memory_bytes`
+is 67,108,864 (64 MiB of Lua allocations per analysis), with the same global and per-chart overrides as other compiler budgets.
+This is separate from Python's component-table memory. Audit complexity results record the actual backend and fallback reason
+under `bound_backend`. Cache fingerprints include both the Lua source and Lupa version.
+
+A local microbenchmark with Lupa 2.8 and Python 3.13 on macOS ARM64 compared 127 bound queries over tables with 64 cases per
+component and eight output levels. These are medians of seven runs, alternating execution order; Lua times include runtime
+setup, table conversion and its first Python query. They measure this calculation, not complete chart-scan runtime.
+
+| Components | Python | Lua | Speedup |
+| ---: | ---: | ---: | ---: |
+| 1 | 7.4 ms | 2.3 ms | 3.2x |
+| 8 | 52.9 ms | 12.8 ms | 4.1x |
+| 32 | 233.5 ms | 52.7 ms | 4.4x |
+| 64 | 468.4 ms | 98.4 ms | 4.8x |
+
+Generated differential tests compare repeated native bounds with the Python reference, while independent exhaustive tests
+check that partial bounds never underestimate reachable scores. Complete chart searches check identical maxima, witnesses
+and search counts with Lua enabled and with its memory budget deliberately exhausted.
 
 Complete component tables and a completed search establish `compiled-maximum`
 within the supported model. Unsupported operations or an exhausted budget produce

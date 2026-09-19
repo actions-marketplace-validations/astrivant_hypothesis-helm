@@ -1,342 +1,104 @@
-// Catalog rebuilding uses Kubernetes' Go AST and its actual reusable validators.
+// Command catalog extracts Helm function facts and Kubernetes validation constraints
+// from pinned upstream sources for the Python catalog rebuild commands.
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/printer"
-	"go/token"
 	"io"
 	"os"
-	"path/filepath"
-	"reflect"
-	"runtime"
-	"strconv"
-	"strings"
-
-	validation "k8s.io/apimachinery/pkg/util/validation"
 )
 
+// Record holds the JSON fields shared by catalog extraction operations.
 type Record map[string]any
 
+// must propagates failures when a pinned source no longer matches the supported syntax.
+//
+// Args:
+//
+//	err (error): Failure to propagate, or nil to continue.
+//
+// Panics:
+//
+//	The supplied error when it is not nil.
 func must(err error) {
 	if err != nil {
 		panic(err)
 	}
 }
-func hash(data []byte) string { h := sha256.Sum256(data); return hex.EncodeToString(h[:]) }
-func encode(value any)        { must(json.NewEncoder(os.Stdout).Encode(value)) }
-func expression(e ast.Expr, constants map[string]ast.Expr) any {
-	switch e := e.(type) {
-	case *ast.BasicLit:
-		if e.Kind == token.STRING {
-			v, err := strconv.Unquote(e.Value)
-			must(err)
-			return v
-		}
-		v, err := strconv.Atoi(e.Value)
-		must(err)
-		return v
-	case *ast.Ident:
-		return expression(constants[e.Name], constants)
-	case *ast.BinaryExpr:
-		if e.Op == token.ADD {
-			return expression(e.X, constants).(string) + expression(e.Y, constants).(string)
-		}
-	}
-	panic("unsupported constant expression")
-}
-func canonical(node ast.Node) string {
-	var b bytes.Buffer
-	must(printer.Fprint(&b, token.NewFileSet(), node))
-	return hash(b.Bytes())
-}
-func declarations(file string) (map[string]ast.Expr, map[string]*ast.FuncDecl) {
-	set := token.NewFileSet()
-	node, err := parser.ParseFile(set, file, nil, parser.ParseComments)
-	must(err)
-	constants := map[string]ast.Expr{}
-	functions := map[string]*ast.FuncDecl{}
-	for _, raw := range node.Decls {
-		switch decl := raw.(type) {
-		case *ast.GenDecl:
-			for _, raw := range decl.Specs {
-				if spec, ok := raw.(*ast.ValueSpec); ok && len(spec.Names) == 1 && len(spec.Values) == 1 {
-					constants[spec.Names[0].Name] = spec.Values[0]
-				}
-			}
-		case *ast.FuncDecl:
-			functions[decl.Name.Name] = decl
-		}
-	}
-	return constants, functions
-}
-func profiles(root string) Record {
-	source := filepath.Join(root, "staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go")
-	constants, funcs := declarations(source)
-	file, _ := runtime.FuncForPC(reflect.ValueOf(validation.IsDNS1123Subdomain).Pointer()).FileLine(0)
-	_, compiled := declarations(file)
-	result := Record{}
-	for _, row := range []struct{ name, fn, regex, length string }{
-		{"dns1123-subdomain", "IsDNS1123Subdomain", "dns1123SubdomainRegexp", "DNS1123SubdomainMaxLength"},
-		{"dns1123-label", "IsDNS1123Label", "dns1123LabelRegexp", "DNS1123LabelMaxLength"},
-		{"dns1035-label", "IsDNS1035Label", "dns1035LabelRegexp", "DNS1035LabelMaxLength"},
-	} {
-		if funcs[row.fn] == nil || compiled[row.fn] == nil || canonical(funcs[row.fn]) != canonical(compiled[row.fn]) {
-			panic("source and oracle validator differ: " + row.fn)
-		}
-		call, ok := constants[row.regex].(*ast.CallExpr)
-		if !ok || len(call.Args) != 1 {
-			panic("unsupported regexp declaration")
-		}
-		pattern := expression(call.Args[0], constants).(string)
-		if !strings.HasPrefix(pattern, "^") || !strings.HasSuffix(pattern, "$") {
-			panic("validator regexp is not anchored")
-		}
-		schema := Record{"type": "string", "pattern": strings.TrimSuffix(pattern, "$") + `(?![\s\S])`, "maxLength": expression(constants[row.length], constants)}
-		result[row.name] = Record{"schema": schema, "function": row.fn, "function_sha256": canonical(funcs[row.fn])}
-	}
-	port := funcs["IsValidPortNum"]
-	if port == nil || canonical(port) != canonical(compiled["IsValidPortNum"]) || len(port.Body.List) != 2 {
-		panic("unsupported port validator")
-	}
-	condition, ok := port.Body.List[0].(*ast.IfStmt)
-	if !ok || condition.Else != nil {
-		panic("unsupported port guard")
-	}
-	conjunction, ok := condition.Cond.(*ast.BinaryExpr)
-	if !ok || conjunction.Op != token.LAND {
-		panic("unsupported port range")
-	}
-	lower, ok := conjunction.X.(*ast.BinaryExpr)
-	if !ok || lower.Op != token.LEQ {
-		panic("unsupported lower bound")
-	}
-	upper, ok := conjunction.Y.(*ast.BinaryExpr)
-	if !ok || upper.Op != token.LEQ {
-		panic("unsupported upper bound")
-	}
-	if lower.Y.(*ast.Ident).Name != "port" || upper.X.(*ast.Ident).Name != "port" {
-		panic("unsupported port operand")
-	}
-	result["port-number"] = Record{"schema": Record{"type": "integer", "minimum": expression(lower.X, constants), "maximum": expression(upper.Y, constants)}, "function": "IsValidPortNum", "function_sha256": canonical(port)}
-	if funcs["IsValidPercent"] == nil || canonical(funcs["IsValidPercent"]) != canonical(compiled["IsValidPercent"]) {
-		panic("source and oracle percent validator differ")
-	}
-	_, apps := declarations(filepath.Join(root, "pkg/apis/apps/validation/validation.go"))
-	_, policy := declarations(filepath.Join(root, "pkg/apis/policy/validation/validation.go"))
-	bound := percentLimit(apps["IsNotMoreThan100Percent"])
-	values := make([]string, bound+1)
-	for value := range values {
-		values[value] = strconv.Itoa(value)
-	}
-	result["pdb-count-or-percent"] = Record{
-		"schema": Record{"type": []string{"integer", "string"}, "minimum": 0, "maximum": int64(1<<31 - 1), "pattern": "^0*(?:" + strings.Join(values, "|") + `)%(?![\s\S])`},
-		"functions": Record{
-			"IsValidPercent":                  canonical(funcs["IsValidPercent"]),
-			"ValidatePositiveIntOrPercent":    canonical(apps["ValidatePositiveIntOrPercent"]),
-			"IsNotMoreThan100Percent":         canonical(apps["IsNotMoreThan100Percent"]),
-			"ValidatePodDisruptionBudgetSpec": canonical(policy["ValidatePodDisruptionBudgetSpec"]),
-		},
-		"scope": "PDB replica counts and percentages; field exclusivity is a separate API rule",
-	}
-	return result
+
+// hash computes a stable SHA-256 identity for source bytes or canonical syntax.
+//
+// Args:
+//
+//	data ([]byte): Content to identify.
+//
+// Returns:
+//
+//	string: Lowercase hexadecimal digest.
+func hash(data []byte) string {
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
 }
 
-func percentLimit(function *ast.FuncDecl) int {
-	if function == nil || len(function.Body.List) != 5 {
-		panic("unsupported percentage bound validator")
+// run selects exactly one catalog operation and writes its JSON result.
+//
+// Args:
+//
+//	args ([]string): Flags for Helm extraction, Kubernetes extraction or validation.
+//	input (io.Reader): JSON Lines boundary cases for oracle mode.
+//	output (io.Writer): Destination for extracted facts or validation results.
+//	diagnostics (io.Writer): Destination for flag usage and parsing errors.
+//
+// Returns:
+//
+//	error: Invalid arguments, failed extraction or output failure; nil on success.
+func run(args []string, input io.Reader, output, diagnostics io.Writer) error {
+	flags := flag.NewFlagSet("catalog", flag.ContinueOnError)
+	flags.SetOutput(diagnostics)
+	config := flags.String("config", "", "JSON list of pinned Helm, Sprig and Go function-map sources")
+	root := flags.String("source", "", "pinned Kubernetes checkout")
+	verify := flags.Bool("oracle", false, "evaluate Kubernetes validators on JSON Lines")
+	if err := flags.Parse(args); err != nil {
+		return err
 	}
-	guard, ok := function.Body.List[2].(*ast.IfStmt)
-	if !ok || guard.Else != nil {
-		panic("unsupported percentage guard")
+	selected := 0
+	for _, enabled := range []bool{*config != "", *root != "", *verify} {
+		if enabled {
+			selected++
+		}
 	}
-	disjunction, ok := guard.Cond.(*ast.BinaryExpr)
-	if !ok || disjunction.Op != token.LOR {
-		panic("unsupported percentage condition")
+	if selected != 1 || flags.NArg() != 0 {
+		return fmt.Errorf("select exactly one of --config, --source or --oracle; positional arguments are not accepted")
 	}
-	lower, ok := disjunction.Y.(*ast.BinaryExpr)
-	if !ok || lower.Op != token.LEQ || lower.X.(*ast.Ident).Name != "value" {
-		panic("unsupported percentage upper bound")
-	}
-	maximum := expression(lower.Y, nil).(int)
-	if maximum < 0 || maximum > 10000 {
-		panic("percentage bound exceeds the catalog expansion budget")
-	}
-	return maximum
-}
-func fields(root string) (Record, []Record, Record) {
-	rules := Record{}
-	unresolved := []Record{}
-	hashes := Record{}
-	base := filepath.Join(root, "staging/src/k8s.io/api")
-	must(filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || entry.Name() != "types.go" {
-			return nil
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		relative, _ := filepath.Rel(root, path)
-		hashes[filepath.ToSlash(relative)] = hash(data)
-		set := token.NewFileSet()
-		file, err := parser.ParseFile(set, path, data, parser.ParseComments)
-		if err != nil {
-			return err
-		}
-		pkg, _ := filepath.Rel(base, filepath.Dir(path))
-		prefix := "io.k8s.api." + strings.ReplaceAll(filepath.ToSlash(pkg), "/", ".")
-		for _, raw := range file.Decls {
-			decl, ok := raw.(*ast.GenDecl)
-			if !ok {
-				continue
-			}
-			for _, raw := range decl.Specs {
-				spec, ok := raw.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				body, ok := spec.Type.(*ast.StructType)
-				if !ok {
-					continue
-				}
-				for _, field := range body.Fields.List {
-					if field.Doc == nil {
-						continue
-					}
-					name := ""
-					if field.Tag != nil {
-						tag, err := strconv.Unquote(field.Tag.Value)
-						if err != nil {
-							return err
-						}
-						name = strings.Split(reflect.StructTag(tag).Get("json"), ",")[0]
-					}
-					id := prefix + "." + spec.Name.Name + "/" + name
-					for _, comment := range field.Doc.List {
-						tag := strings.TrimSpace(strings.TrimPrefix(comment.Text, "//"))
-						if !strings.HasPrefix(tag, "+k8s:") {
-							continue
-						}
-						evidence := Record{"type_field": id, "file": filepath.ToSlash(relative), "line": set.Position(comment.Pos()).Line, "tag": tag}
-						key, value, has := strings.Cut(strings.TrimPrefix(tag, "+k8s:"), "=")
-						keyword := ""
-						switch key {
-						case "minimum", "maximum", "minLength", "maxLength":
-							keyword = key
-						}
-						if keyword == "" || !has || name == "" || name == "-" {
-							evidence["reason"] = "unsupported or conditional annotation"
-							unresolved = append(unresolved, evidence)
-							continue
-						}
-						number, err := strconv.Atoi(value)
-						if err != nil {
-							evidence["reason"] = "non-integer annotation"
-							unresolved = append(unresolved, evidence)
-							continue
-						}
-						// Only scalar fields can receive these independent bounds. Named types remain unresolved.
-						typ := field.Type
-						if pointer, ok := typ.(*ast.StarExpr); ok {
-							typ = pointer.X
-						}
-						basic, ok := typ.(*ast.Ident)
-						integer := ok && (basic.Name == "int32" || basic.Name == "int64" || basic.Name == "int")
-						text := ok && basic.Name == "string"
-						if !(integer && (key == "minimum" || key == "maximum") || text && (key == "minLength" || key == "maxLength")) {
-							evidence["reason"] = "annotation target is not a supported scalar"
-							unresolved = append(unresolved, evidence)
-							continue
-						}
-						evidence["schema"] = Record{keyword: number}
-						rows, _ := rules[id].([]Record)
-						rules[id] = append(rows, evidence)
-					}
-				}
-			}
-		}
-		return nil
-	}))
-	return rules, unresolved, hashes
-}
-func oracle() {
-	decoder := json.NewDecoder(os.Stdin)
-	for {
-		var test struct {
-			Profile string          `json:"profile"`
-			Value   json.RawMessage `json:"value"`
-		}
-		err := decoder.Decode(&test)
-		if err == io.EOF {
-			return
-		}
-		must(err)
-		valid := false
-		if test.Profile == "pdb-count-or-percent" {
-			var count int32
-			var text string
-			if json.Unmarshal(test.Value, &text) == nil && len(validation.IsValidPercent(text)) == 0 {
-				percent, err := strconv.Atoi(strings.TrimSuffix(text, "%"))
-				valid = err == nil && percent <= 100
-			} else if json.Unmarshal(test.Value, &count) == nil && string(test.Value) != "null" {
-				valid = count >= 0
-			}
-		} else if test.Profile == "port-number" {
-			var value int
-			must(json.Unmarshal(test.Value, &value))
-			valid = len(validation.IsValidPortNum(value)) == 0
-		} else {
-			var value string
-			must(json.Unmarshal(test.Value, &value))
-			switch test.Profile {
-			case "dns1123-subdomain":
-				valid = len(validation.IsDNS1123Subdomain(value)) == 0
-			case "dns1123-label":
-				valid = len(validation.IsDNS1123Label(value)) == 0
-			case "dns1035-label":
-				valid = len(validation.IsDNS1035Label(value)) == 0
-			default:
-				panic("unknown profile")
-			}
-		}
-		encode(valid)
-	}
-}
-func main() {
-	root := flag.String("source", "", "pinned Kubernetes checkout")
-	verify := flag.Bool("oracle", false, "evaluate actual upstream validators on JSON Lines")
-	flag.Parse()
 	if *verify {
-		oracle()
-		return
+		return oracle(input, output)
 	}
-	if *root == "" {
-		fmt.Fprintln(os.Stderr, "--source is required")
-		os.Exit(2)
+	var result Record
+	if *config != "" {
+		var err error
+		result, err = helm(*config)
+		if err != nil {
+			return err
+		}
+	} else {
+		result = kubernetes(*root)
 	}
-	rules, unresolved, hashes := fields(*root)
-	for _, path := range []string{
-		"staging/src/k8s.io/apimachinery/pkg/util/validation/validation.go",
-		"staging/src/k8s.io/apimachinery/pkg/util/intstr/intstr.go",
-		"pkg/apis/core/validation/validation.go",
-		"pkg/apis/apps/validation/validation.go",
-		"pkg/apis/policy/validation/validation.go",
-		"api/openapi-spec/swagger.json",
-	} {
-		data, err := os.ReadFile(filepath.Join(*root, path))
-		must(err)
-		hashes[path] = hash(data)
+	return json.NewEncoder(output).Encode(result)
+}
+
+// main dispatches the catalog operation and reports command failures to stderr.
+//
+// Returns:
+//
+//	No value. The process exits with status one on failure and zero on success or help.
+func main() {
+	if err := run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); err != nil && !errors.Is(err, flag.ErrHelp) {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-	encode(Record{"profiles": profiles(*root), "fields": rules, "unresolved": unresolved, "source_hashes": hashes})
 }

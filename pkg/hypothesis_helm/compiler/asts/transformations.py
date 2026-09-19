@@ -270,7 +270,7 @@ def inputs(value: object) -> dict[tuple[str, ...], object]:
     return {}
 
 
-def replay(value: object, path: tuple[str, ...], replacement: object) -> object:
+def replay(value: object, path: tuple[str, ...], replacement: object, *, limits: dict[str, int] | None = None) -> object:
     """
     Reevaluate a composed expression with every occurrence of one source input replaced.
 
@@ -278,6 +278,7 @@ def replay(value: object, path: tuple[str, ...], replacement: object) -> object:
         value (object): Expression or literal operand.
         path (tuple[str, ...]): Input being changed.
         replacement (object): Proposed source value.
+        limits (dict[str, int] | None): Captured chart budgets, or the global configuration.
 
     Returns:
         object: Concrete transformed output for the proposal.
@@ -285,7 +286,9 @@ def replay(value: object, path: tuple[str, ...], replacement: object) -> object:
     if isinstance(value, BoundValue):
         return replacement if value.path == path else native(value)
     if isinstance(value, DerivedValue):
-        return calculate(value.function, tuple(replay(argument, path, replacement) for argument in value.arguments))
+        return calculate(
+            value.function, tuple(replay(argument, path, replacement, limits=limits) for argument in value.arguments), limits=limits
+        )
     return native(value)
 
 
@@ -362,14 +365,17 @@ class TransformedDomain:
         """
         return {"expression": describe(self.expression), "allowed_outputs": list(self.outputs)}
 
-    def suggestions(self) -> dict[str, list[object]]:
+    def suggestions(self, *, limits: dict[str, int] | None = None) -> dict[str, list[object]]:
         """
         Find a few preimage witnesses and verify them against the entire expression.
+
+        Args:
+            limits (dict[str, int] | None): Captured chart budgets, or the global configuration.
 
         Returns:
             dict[str, list[object]]: Per-path proposals, bounded and awaiting whole-chart checks.
         """
-        limits = active_limits()
+        limits = active_limits() if limits is None else limits
         pending: list[tuple[object, object]] = [(self.expression, target) for target in self.outputs[: limits["max_preimage_choices"]]]
         proposals: dict[str, list[object]] = {}
         for _ in range(limits["max_preimage_steps"]):
@@ -380,7 +386,7 @@ class TransformedDomain:
                 pending.extend(inverse_targets(value, target)[: limits["max_preimage_choices"]])
             elif isinstance(value, BoundValue) and value.path and (native(value) is None or type(native(value)) is type(target)):
                 try:
-                    if replay(self.expression, value.path, target) not in self.outputs:
+                    if replay(self.expression, value.path, target, limits=limits) not in self.outputs:
                         continue
                 except UnsupportedTransformation:
                     continue

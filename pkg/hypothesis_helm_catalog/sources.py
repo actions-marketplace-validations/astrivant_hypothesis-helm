@@ -4,8 +4,6 @@ Rebuild portable domains from pinned Kubernetes Go sources and verify their boun
 
 import hashlib
 import json
-import os
-import shutil
 import tempfile
 from pathlib import Path
 
@@ -14,10 +12,11 @@ from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.policy import intersect
 from jsonschema import validators
 
+from hypothesis_helm_catalog import toolchain
+
 REVISION = "66452049f3d692768c39c797b21b793dce80314e"
 VERSION = "1.35.0"
 REPOSITORY = "https://github.com/kubernetes/kubernetes.git"
-TOOL = Path(__file__).with_name("upstream")
 
 # Bindings identify reviewed API types, not similarly named Helm inputs. The Go
 # extractor supplies the actual patterns and bounds from the pinned validators.
@@ -211,29 +210,19 @@ def rebuild(source: Path, cache: Path, go: str = "go", *, offline: bool = False)
         file = source / relative
         if not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != digest:
             raise ValueError(f"Kubernetes source differs from pinned {VERSION}: {relative}; review the source lock before rebuilding")
-    binary = shutil.which(go)
-    if binary is None:
-        raise ValueError("Catalog rebuilds require Go 1.25 or newer; run scripts/setup-dev.sh")
     cache = cache.resolve()
     cache.mkdir(parents=True, exist_ok=True)
-    environment = {**os.environ, "GOMODCACHE": str(cache / "go/modules"), "GOCACHE": str(cache / "go/build"), "GOTOOLCHAIN": "local"}
-    if offline:
-        environment.update(GOPROXY="off", GOSUMDB="off")
     owner = Processes()
-    with tempfile.TemporaryDirectory(dir=cache) as temporary:
-        tool = Path(temporary) / "catalog-source"
-        owner.run(
-            [binary, "build", "-mod=readonly", "-o", str(tool), "."],
-            cwd=TOOL,
-            env=environment,
-            capture_output=True,
-            check=True,
-            timeout=300,
-        )
-        output = owner.run([str(tool), "--source", str(source.resolve())], capture_output=True, check=True, timeout=60)
-        result = mapping(json.loads(output.stdout))
-        if result["source_hashes"] != lock["sha256"]:
-            raise ValueError("Kubernetes source inventory differs from the pinned release; review the source lock before rebuilding")
-        result["verification"] = verify(tool, mapping(result["profiles"]), owner)
+    try:
+        with tempfile.TemporaryDirectory(dir=cache) as temporary:
+            tool = Path(temporary) / "catalog-source"
+            toolchain.build(tool, cache, go, owner, offline=offline)
+            output = owner.run([str(tool), "--source", str(source.resolve())], capture_output=True, check=True, timeout=60)
+            result = mapping(json.loads(output.stdout))
+            if result["source_hashes"] != lock["sha256"]:
+                raise ValueError("Kubernetes source inventory differs from the pinned release; review the source lock before rebuilding")
+            result["verification"] = verify(tool, mapping(result["profiles"]), owner)
+    finally:
+        owner.stop()
     result.update(version=VERSION, revision=REVISION, repository=REPOSITORY, resources=destinations(source, result))
     return result

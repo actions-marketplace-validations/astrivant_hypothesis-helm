@@ -398,7 +398,13 @@ class Contracts:
         Returns:
             Contracts: Immutable source nodes with explicit unsupported-source diagnostics.
         """
-        result = cls(dependencies=dependencies if dependencies is not None else Dependencies.build(chart), chart=chart)
+        limits = dict(dependencies.limits) if dependencies is not None else active_limits(chart)
+        result = cls(
+            dependencies=dependencies if dependencies is not None else Dependencies.build(chart),
+            chart=chart,
+            limits=limits,
+            max_call_depth=limits["max_call_depth"],
+        )
         if (chart / "values.schema.json").is_file():
             result.schemas[()] = json.loads((chart / "values.schema.json").read_text())
         duplicates: set[str] = set()

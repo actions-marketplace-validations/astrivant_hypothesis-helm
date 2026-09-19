@@ -115,7 +115,6 @@ def load_policy(
     *,
     character_sets: str | None = None,
     max_examples: int | None = None,
-    compiler_call_depth: int | None = None,
 ) -> dict[str, object]:
     """
     Resolve chart-scoped restrictions and freeze supplied resource schemas for workers.
@@ -124,13 +123,12 @@ def load_policy(
         config (Path | None): Policy file; schema filenames are relative to this file.
         character_sets (str | None): Optional CLI override for the configured character domain.
         max_examples (int | None): Explicit CLI override for the global Hypothesis example budget.
-        compiler_call_depth (int | None): Explicit CLI override for nested helper analysis.
 
     Returns:
         dict[str, object]: JSON-compatible policy with resource schema contents embedded.
     """
     document = configuration(config)
-    limits = compiler_limits(document.get("compiler", {}), max_call_depth=compiler_call_depth)
+    limits = compiler_limits(document.get("compiler", {}))
     defaults = validate_settings(document)
     if max_examples is not None:
         defaults["hypothesis"] = {**mapping(defaults.get("hypothesis", {})), "max_examples": max_examples}
@@ -148,7 +146,7 @@ def load_policy(
     resolved: list[dict[str, object]] = []
     for raw in rules:
         rule = mapping(raw)
-        if set(rule) - {"charts", "path", "profile", "schema", "allow_empty", "ignored", "enabled", *SETTING_KEYS}:
+        if set(rule) - {"charts", "path", "profile", "schema", "allow_empty", "ignored", "enabled", "compiler", *SETTING_KEYS}:
             raise ValueError("Unknown input constraint option")
         charts = selectors(rule.get("charts"), root)
         generation = validate_settings(rule)
@@ -156,6 +154,12 @@ def load_policy(
         if not isinstance(path, str):
             raise ValueError("Each input constraint requires a string 'path'")
         path_parts(path)
+        compiler: dict[str, object] = {}
+        if "compiler" in rule:
+            if path != "$":
+                raise ValueError("Chart compiler overrides require path: $; compiler budgets cannot vary by values branch")
+            validated = compiler_limits(rule["compiler"])
+            compiler = {"compiler": {key: validated[key] for key in mapping(rule["compiler"])}}
         controls: dict[str, object] = {}
         for key in ("ignored", "enabled"):
             if key in rule:
@@ -166,9 +170,9 @@ def load_policy(
         if set(sequence(controls.get("ignored", []))) & set(sequence(controls.get("enabled", []))):
             raise ValueError("An input constraint cannot both ignore and enable the same code")
         constrained = "profile" in rule or "schema" in rule
-        if "profile" in rule and "schema" in rule or not constrained and not controls and not generation:
-            raise ValueError("Each input constraint requires one of 'profile' or 'schema', or finding/generation settings")
-        resolved_rule: dict[str, object] = {"charts": charts, "path": path, **controls, **generation}
+        if "profile" in rule and "schema" in rule or not constrained and not controls and not generation and not compiler:
+            raise ValueError("Each input constraint requires a profile, schema, finding settings, generation settings or compiler settings")
+        resolved_rule: dict[str, object] = {"charts": charts, "path": path, **controls, **generation, **compiler}
         if not constrained:
             if "allow_empty" in rule:
                 raise ValueError("allow_empty requires a profile or schema")

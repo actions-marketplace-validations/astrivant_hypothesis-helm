@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path, PurePosixPath
 from textwrap import dedent
 
-from attrs import define, field, frozen
+from attrs import Factory, define, field, frozen
 
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.limits import active_limits
@@ -246,7 +246,7 @@ class RendererContext:
     files: dict[tuple[str, ...], FileSet] = field(factory=dict)
     offline: bool = True
     enable_dns: bool = False
-    limits: dict[str, int] = field(factory=active_limits, kw_only=True)
+    limits: dict[str, int] = field(default=Factory(lambda self: active_limits(self.chart), takes_self=True), kw_only=True)
     metadata: dict[tuple[str, ...], FixedFields] = field(factory=dict, kw_only=True)
 
     def capability_fields(self) -> dict[str, object]:

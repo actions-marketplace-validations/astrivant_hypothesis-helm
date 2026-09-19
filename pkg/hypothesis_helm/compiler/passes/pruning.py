@@ -237,7 +237,7 @@ def snapshot(chart: Path) -> dict[str, bytes]:
     """
     result = {}
     size = 0
-    limit = active_limits()["max_proof_bytes"]
+    limit = active_limits(chart)["max_proof_bytes"]
     for path in sorted(chart.rglob("*")):
         if path.is_symlink():
             raise ValueError("chart symlinks are outside the proof contract")

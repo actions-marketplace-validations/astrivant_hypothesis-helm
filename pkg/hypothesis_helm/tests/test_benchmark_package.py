@@ -59,6 +59,11 @@ def test_benchmark_wheel(tmp_path: Path) -> None:
         metadata = Parser().parsestr(archive.read(metadata_name).decode())
         assert "benchmarking" in metadata.get_all("Provides-Extra", [])
         requirements = metadata.get_all("Requires-Dist", [])
+        assert any(Requirement(line).name == "lupa" for line in requirements)
+        assert "hypothesis_helm/compiler/lua/bounds.lua" in archive.namelist()
+        for name in ("main.go", "helm.go", "kubernetes.go", "go.mod", "go.sum"):
+            assert f"hypothesis_helm_catalog/upstream/{name}" in archive.namelist()
+        assert not any(name.startswith("hypothesis_helm_catalog/upstream/builtins/") for name in archive.namelist())
         assert any(line.startswith("hypothesis-helm-benchmarking ") and 'extra == "benchmarking"' in line for line in requirements)
         assert not any("file://" in line for line in requirements)
         assert not any(name.startswith("hypothesis_helm_benchmarking/") for name in archive.namelist())

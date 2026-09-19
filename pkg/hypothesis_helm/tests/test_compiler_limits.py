@@ -165,21 +165,22 @@ def test_invalid_compiler_configuration(tmp_path: Path, compiler: object) -> Non
 
 
 @pytest.mark.parametrize("command", ["audit", "generate", "test", "scan", "run"])
-def test_compiler_option_available(command: str) -> None:
+def test_compiler_option_removed(command: str) -> None:
     """
-    Expose the same override on every command accepting an input policy.
+    Require compiler settings in configuration instead of command-line overrides.
 
     Args:
         command (str): Command performing or scheduling compiler analysis.
 
     Returns:
-        None: Parser accepts an explicit depth for each entry point.
+        None: Every entry point rejects the removed compiler option.
     """
-    args = argument_parser().parse_args([command, "example", "--compiler-call-depth", "32"])
-    assert args.compiler_call_depth == 32
+    with pytest.raises(SystemExit) as error:
+        argument_parser().parse_args([command, "example", "--compiler-call-depth", "32"])
+    assert error.value.code == 2
 
 
-def test_policy_precedence_and_cache_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_policy_configuration_and_cache_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Freeze each chart's budget and prevent cache reuse after a configuration change.
 
@@ -188,47 +189,64 @@ def test_policy_precedence_and_cache_identity(tmp_path: Path, monkeypatch: pytes
         monkeypatch (pytest.MonkeyPatch): Apply resolved policies as the coordinator does.
 
     Returns:
-        None: Overrides win, old models retain their budget, and newly built models use the new setting.
+        None: Old models retain their budget, and newly built models use the updated configuration.
     """
-    config = tmp_path / "policy.yaml"
+    config = tmp_path.parent / f"{tmp_path.name}-policy.yaml"
     config.write_text(yamlio.dump({"compiler": {"max_call_depth": 24}}))
     chart = helper_chart(tmp_path, 20)
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
     original = Contracts.build(chart.path)
     previous = fingerprint(tmp_path, 0, None, "none")
-    monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config, compiler_call_depth=32)))
+    config.write_text(yamlio.dump({"compiler": {"max_call_depth": 32}}))
+    monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
     assert original.max_call_depth == 24
     assert Contracts.build(chart.path).max_call_depth == 32
     assert fingerprint(tmp_path, 0, None, "none") != previous
-    with pytest.raises(ValueError, match="positive integer"):
-        load_policy(config, compiler_call_depth=0)
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
-def test_parallel_workers_inherit_compiler_override(tmp_path: Path, capfd: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize("scoped", [False, True])
+def test_parallel_workers_inherit_compiler_configuration(tmp_path: Path, capfd: pytest.CaptureFixture[str], scoped: bool) -> None:
     """
     Exercise the real CLI, inherited policy, and path-worker interpreters together.
 
     Args:
         tmp_path (Path): Chart and artifact directories.
         capfd (pytest.CaptureFixture[str]): Capture the machine-readable CLI report.
+        scoped (bool): Configure depth globally or only for a matching chart/source selector.
 
     Returns:
-        None: Worker rejection reports retain the CLI override instead of their own default.
+        None: Worker rejection reports retain the configured budgets instead of their own defaults.
     """
-    chart = helper_chart(tmp_path, 20)
+    source = tmp_path / "charts"
+    source.mkdir()
+    directory = source / "first"
+    directory.mkdir()
+    helper_chart(directory, 20)
+    if scoped:
+        second = source / "second"
+        second.mkdir()
+        helper_chart(second, 20)
+        (second / "Chart.yaml").write_text(yamlio.dump({"apiVersion": "v2", "name": "ordinary", "version": "1.0.0"}))
     config = tmp_path / "policy.yaml"
-    config.write_text(yamlio.dump({"compiler": {"max_call_depth": 1, "max_files": 4321, "max_steps": 23456}}))
+    configured: dict[str, object] = {"compiler": {"max_call_depth": 1 if scoped else 32, "max_files": 4321, "max_steps": 23456}}
+    if scoped:
+        configured["input_constraints"] = [
+            {
+                "charts": [{"sources": [str(source)], "names": ["helpers"]}],
+                "path": "$",
+                "compiler": {"max_call_depth": 32},
+            }
+        ]
+    config.write_text(yamlio.dump(configured))
     assert (
         main(
             [
                 "test",
-                str(chart.path),
+                str(source),
                 "--filter",
                 "--config",
                 str(config),
-                "--compiler-call-depth",
-                "32",
                 "--jobs",
                 "2",
                 "--max-examples",
@@ -246,8 +264,16 @@ def test_parallel_workers_inherit_compiler_override(tmp_path: Path, capfd: pytes
     )
     report = json.loads(capfd.readouterr().out)
     expected = {**DEFAULT_LIMITS, "max_call_depth": 32, "max_files": 4321, "max_steps": 23456}
-    assert report["settings"]["input_policy"]["compiler"] == expected
+    assert report["settings"]["input_policy"]["compiler"] == {**expected, "max_call_depth": 1 if scoped else 32}
+    assert report["charts"][0]["compiler_limits"] == expected
+    assert report["charts"][0]["audit"]["compiler_limits"] == expected
     phases = [phase for phase in report["charts"][0]["phases"] if "worker_pid" in phase]
     assert len(phases) == 2
     assert all(phase["configuration_rejections"]["max_call_depth"] == 32 for phase in phases)
     assert all(phase["configuration_rejections"]["compiler_limits"] == expected for phase in phases)
+    if scoped:
+        other = report["charts"][1]
+        assert other["compiler_limits"] == {**expected, "max_call_depth": 1}
+        other_phases = [phase for phase in other["phases"] if "worker_pid" in phase]
+        assert len(other_phases) == 2
+        assert all(phase["configuration_rejections"]["max_call_depth"] == 1 for phase in other_phases)

@@ -1,6 +1,6 @@
 {
   "analysis": "Go AST facts; unresolved calls are not purity proofs",
-  "extractor_sha256": "e4641d987536691c03010a3bb9cbde137c3801d330c8e5dc6c37574b5b06476a",
+  "extractor_sha256": "1df41be4361c25f30fd123d4c57e5fa279743ab359e4656c44e4316ec665554a",
   "format": 2,
   "functions": {
     "abbrev": {

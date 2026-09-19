@@ -443,6 +443,9 @@ def test_unsupported_inferred_yaml_keeps_declared_domain_evidence(tmp_path: Path
         '{{- define "secret" -}}{{- .name -}}{{- end -}}',
         '{{- define "secret" -}}{{- (.).name -}}{{- end -}}',
         '{{- define "secret" -}}{{- (dict "name" .name).name -}}{{- end -}}',
+        '{{- define "secret" -}}{{- $empty := dict -}}{{- .name -}}{{- end -}}',
+        '{{- define "secret" -}}{{- $empty := list -}}{{- .name -}}{{- end -}}',
+        '{{- define "secret" -}}{{- $items := list .name -}}{{- .name -}}{{- end -}}',
         '{{- define "secret" -}}{{- $v := (dict "nested" .) -}}{{- ($v.nested).name -}}{{- end -}}',
         '{{- define "secret" -}}{{- $v := .name -}}{{- include "identity" (dict "value" $v) -}}{{- end -}}'
         '{{- define "identity" -}}{{- .value -}}{{- end -}}',

@@ -39,6 +39,7 @@ packages = [
 include = [
     {path = "plugin.yaml", format = ["sdist"]},
     {path = "scripts", format = ["sdist"]},
+    {path = "pkg/hypothesis_helm/compiler/lua/*.lua", format = ["sdist", "wheel"]},
 ]
 
 [tool.poetry.urls]
@@ -59,6 +60,7 @@ deepdiff = ">=9.1,<10"
 reportlab = ">=4,<5"
 matplotlib = ">=3.10,<4"
 immutables = ">=0.21,<1"
+lupa = ">=2.6,<3"
 hypothesis-helm-benchmarking = {path = "pkg/hypothesis_helm_benchmarking", develop = true, optional = true}
 
 [tool.poetry.group.dev.dependencies]

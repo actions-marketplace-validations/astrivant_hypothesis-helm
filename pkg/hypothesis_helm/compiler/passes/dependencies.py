@@ -168,7 +168,7 @@ class Dependencies:
         Returns:
             Dependencies: Namespaced metadata and template references; no downloads or source edits.
         """
-        result = cls()
+        result = cls(limits=active_limits(chart))
         if (chart / "values.yaml").is_file():
             result.baseline = mapping(yamlio.load((chart / "values.yaml").read_text()) or {})
         with tempfile.TemporaryDirectory(prefix="helm-dependency-analysis-") as temporary:
@@ -271,7 +271,7 @@ class Dependencies:
                     schema = (
                         mapping(json.loads((root / "values.schema.json").read_text())) if (root / "values.schema.json").is_file() else {}
                     )
-                    found, warnings = discover(root, prune_literals=True, offline=True)
+                    found, warnings = discover(root, prune_literals=True, offline=True, limits=self.limits)
                     references = [Reference((*path, *ref.path), child_source + ref.file, ref.line, ref.fallback) for ref in found]
                     # Globals also have parent/root forwarding paths, so retain both potential sources.
                     references += [

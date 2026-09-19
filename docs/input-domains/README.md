@@ -75,7 +75,7 @@ Numeric-looking strings such as `"0"` remain eligible when their destination per
 can still be detected. Source schemas and supplied defaults are not rewritten.
 
 Helper analysis defaults to 16 nested calls. Set `compiler.max_call_depth` in the
-configuration below or pass `--compiler-call-depth 64` to analyze deeper chains.
+configuration below to analyze deeper chains.
 This controls both destination typing and rejection analysis, independently of Helm's
 rendering limits. The same mapping configures file, byte, statement, projection and search budgets.
 Unresolved cases remain ordinary tests; see
@@ -185,7 +185,7 @@ ignored: [HH2006]  # Other findings remain enabled.
 downstream_inputs: true  # Use constraints from supported downstream field mappings.
 # Compiler budgets are positive integers; bytes, characters and counts are separate units.
 compiler:
-  max_call_depth: 16  # Nested helper/tpl calls; --compiler-call-depth overrides this.
+  max_call_depth: 16  # Nested helper/tpl calls.
   max_files: 10000  # Members inspected per chart archive, including directories.
   max_context_bytes: 67108864  # Packed archive bytes and total unpacked member bytes, per archive.
   max_template_bytes: 1048576  # UTF-8 bytes in each dynamically analyzed tpl source.
@@ -205,6 +205,7 @@ compiler:
   max_output_nodes: 100000  # Manifest nodes inspected per complexity measurement.
   max_complexity_cases: 4096  # Template assignments and witnesses in a complexity search.
   max_complexity_seconds: 5  # Whole seconds allowed for a complexity search.
+  max_lua_memory_bytes: 67108864  # Lua allocations per complexity analysis; exhaustion uses Python bounds.
   max_sampling_domain_values: 4096  # Values per factor when computing a sampling profile.
   max_fallbacks: 128  # Distinct incomplete-analysis diagnostics retained per chart.
   max_preimage_steps: 128  # Search steps when proposing inputs for a transformed allowlist.
@@ -234,6 +235,9 @@ input_constraints:
           - ./charts
         names: [example, example-worker]
     path: $  # Whole chart; descendants inherit these partial overrides.
+    compiler:  # Chart-wide budgets, including dependencies; only accepted with path: $.
+      max_call_depth: 64  # Other limits inherit the global compiler settings.
+      max_steps: 20000
     hypothesis:
       character_sets: ascii
       max_examples: 20
@@ -287,6 +291,14 @@ Global settings are defaults. A rule's `path` applies to that branch and its des
 for each setting independently. For example, overriding `max_examples` retains the inherited deadline and phases.
 Conflicting generation settings at equal path depth are configuration errors. Schema/profile restrictions intersect;
 [finding controls](../rules/README.md#controls-for-individual-values-paths) have their own suppression rules.
+
+Compiler budgets follow the same global/chart split. Put `compiler:` beside `hypothesis:` in a rule with `path: $`.
+Use `charts: [airflow, "redis*"]`, or the source/name matrix shown above, to select charts. Only specified budgets
+override the global `compiler:` mapping. Every budget accepts a positive integer.
+Compiler rules apply to a whole chart and its dependencies, so narrower values paths are rejected.
+Matching rules may set different budgets, but conflicting values for the same budget are configuration errors.
+Each chart resolves its settings independently before analysis; workers use those settings, and audit/test results
+record them as `compiler_limits`. Config changes invalidate cached results.
 
 `--max-examples` and `--character-sets` override global defaults, while branch rules remain more specific.
 `hypothesis.max_examples` sets the number of successful generated examples **per selected path property**.

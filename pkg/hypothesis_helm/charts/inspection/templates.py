@@ -61,7 +61,9 @@ class Diagnostic:
     message: str
 
 
-def discover(path: Path, *, prune_literals: bool = False, offline: bool = False) -> tuple[list[Reference], list[Diagnostic]]:
+def discover(
+    path: Path, *, prune_literals: bool = False, offline: bool = False, limits: dict[str, int] | None = None
+) -> tuple[list[Reference], list[Diagnostic]]:
     """
     Resolve direct fields, aliases, with/range scopes, and literal key access.
 
@@ -69,6 +71,7 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
         path (Path): Value path or chart location to inspect.
         prune_literals (bool): Skip branches controlled by literal true/false conditions.
         offline (bool): Analyze plain helm template with neither a cluster connection nor DNS enabled.
+        limits (dict[str, int] | None): Captured parent budgets for dependency inspection, or this chart's settings.
 
     Returns:
         tuple[list[Reference], list[Diagnostic]]: Result of the documented operation.
@@ -79,9 +82,9 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
     active_helpers: list[str] = []
     visited_helpers: dict[tuple[object, ...], bool] = {}
     mutations = 0
-    limits = active_limits()
+    limits = active_limits(path) if limits is None else limits
     remaining = limits["max_discovery_nodes"]
-    sources = DiscoverySources.build(path)
+    sources = DiscoverySources.build(path, limits=limits)
     refs: list[Reference] = []
     diagnostics = [Diagnostic(*item) for item in sources.diagnostics]
     for name, nodes in sources.roots.items():
@@ -233,7 +236,7 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
                             if not stage:
                                 return None
                             arguments = [expression(arg) for arg in tpl.arguments(stage[1:])]
-                            value = function_result(stage[0], [*arguments, value], offline=offline)
+                            value = function_result(stage[0], [*arguments, value], offline=offline, limits=limits)
                         return value
                     if ts[0] == "(":
                         depth = 0
@@ -307,7 +310,7 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
                             return Literal(None if ts[0] == "nil" else ts[0] == "true" if ts[0] in ("true", "false") else int(ts[0]))
                         if ts[0].startswith((".", "$")):
                             return resolve(ts[0])
-                    return function_result(ts[0], [expression(arg) for arg in tpl.arguments(ts[1:])], offline=offline)
+                    return function_result(ts[0], [expression(arg) for arg in tpl.arguments(ts[1:])], offline=offline, limits=limits)
 
                 def origin_path(ts: list[str]) -> tuple[str, ...] | None:
                     """

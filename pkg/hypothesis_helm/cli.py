@@ -19,7 +19,6 @@ from hypothesis_helm.charts.repositories.scan import discover_charts, scan
 from hypothesis_helm.charts.suites.generate import generate_tests
 from hypothesis_helm.charts.suites.runtime import RenderOptions
 from hypothesis_helm.charts.testing.runner import check_chart
-from hypothesis_helm.compiler.limits import DEFAULT_CALL_DEPTH
 from hypothesis_helm.compiler.passes.exports import export_repository
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
@@ -608,12 +607,6 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             "--character-sets", choices=("ascii", "unicode"), help="generated text alphabet; overrides config; default: ascii"
         )
         command.add_argument(
-            "--compiler-call-depth",
-            type=int,
-            metavar="N",
-            help=f"maximum nested helper calls analyzed by the compiler; overrides config; default: {DEFAULT_CALL_DEPTH}",
-        )
-        command.add_argument(
             "--ignore", action="append", default=[], metavar="CODE", help="disable one built-in check; repeat to add codes"
         )
         command.add_argument(
@@ -766,7 +759,6 @@ def main(argv: list[str] | None = None) -> int:
                 args.config,
                 character_sets=args.character_sets,
                 max_examples=args.max_examples if getattr(args, "max_examples_explicit", False) else None,
-                compiler_call_depth=args.compiler_call_depth,
             )
             if hasattr(args, "max_examples"):
                 args.max_examples = int(str(mapping(args.input_policy.get("hypothesis", {})).get("max_examples", args.max_examples)))
