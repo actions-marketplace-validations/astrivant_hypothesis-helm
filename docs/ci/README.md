@@ -282,7 +282,7 @@ jobs:
 
 The [action](../../action.yml) installs the tools and uploads per-shard reports.
 See [action inputs and outputs](../ci.md#github-action) for worker, cache and artifact settings.
-Its [Bash invocation](../../pkg/hypothesis-helm/hypothesis_helm/integrations/github_action.sh) keeps
+Its [Bash invocation](../../pkg/hypothesis_helm/integrations/github_action.sh) keeps
 command flags at the execution site; Python handles shard metadata, cancellation
 and action outputs.
 

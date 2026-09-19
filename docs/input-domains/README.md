@@ -317,14 +317,14 @@ Saved suites embed these schemas in `input-domains.json`, so `run` can validate 
 the original schema files are unavailable. An explicit current configuration overrides saved schemas for the same
 API version and kind. Changes to the effective schema invalidate cached manifest validation.
 
-The [CRD integration tests](../../pkg/hypothesis-helm/hypothesis_helm/tests/test_custom_resources.py) use a
-[pinned Polyad Gate chart fixture](../../pkg/hypothesis-helm/hypothesis_helm/tests/fixtures/polyad-gate/README.md).
+The [CRD integration tests](../../pkg/hypothesis_helm/tests/test_custom_resources.py) use a
+[pinned Polyad Gate chart fixture](../../pkg/hypothesis_helm/tests/fixtures/polyad-gate/README.md).
 They run Helm's real helper and `tpl` rendering, check schema bounds and missing contracts, exercise generated
 values and failure reports, and verify saved-suite reuse. Mixed-resource routing tests check that built-ins still
 reach the Python schema validator against local fixture schemas. No cluster or neighboring checkout is required.
 
 ```sh
-bash scripts/project-run.sh pytest pkg/hypothesis-helm/hypothesis_helm/tests/test_custom_resources.py
+bash scripts/project-run.sh pytest pkg/hypothesis_helm/tests/test_custom_resources.py
 ```
 
 ## Coverage and reproducibility
@@ -355,7 +355,7 @@ After an initial online build, `--offline` requires cached sources, schemas and 
 For release publication, explicitly update the bundled catalog, then verify it:
 
 ```sh
-hypothesis-helm-catalog --output pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/input-domains.json
+hypothesis-helm-catalog --output pkg/hypothesis_helm_catalog/data/input-domains.json
 hypothesis-helm-catalog --check
 ```
 
@@ -378,8 +378,8 @@ No bound is inferred solely from a Helm values key's name. Conditional annotatio
 functions and state-dependent rules are not translated. A field with no supported bound remains unconstrained by this catalog;
 users can add an explicit profile or schema.
 
-Source inventories are checked against [kubernetes-source-lock.json](../../pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/kubernetes-source-lock.json).
-Reviewed prose rules live in [reviewed-domains.json](../../pkg/hypothesis-helm-catalog/hypothesis_helm_catalog/data/reviewed-domains.json).
+Source inventories are checked against [kubernetes-source-lock.json](../../pkg/hypothesis_helm_catalog/data/kubernetes-source-lock.json).
+Reviewed prose rules live in [reviewed-domains.json](../../pkg/hypothesis_helm_catalog/data/reviewed-domains.json).
 Source changes require review; rebuilding does not invent replacements. Identical sources produce identical output without timestamps.
 
 References: [Kubernetes declarative validation](https://kubernetes.io/docs/reference/using-api/declarative-validation/),

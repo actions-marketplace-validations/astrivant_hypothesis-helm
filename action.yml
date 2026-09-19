@@ -312,7 +312,7 @@ runs:
         HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: ${{ inputs.schema-memory-dir }}
         HH_COMMIT_MINIMAL_VALUES: ${{ inputs.commit-minimal-values }}
         HH_COMMIT_BRANCH: ${{ github.ref_type == 'branch' && github.ref_name || '' }}
-      run: bash "$ACTION_PATH/pkg/hypothesis-helm/hypothesis_helm/integrations/minimal_values.sh"
+      run: bash "$ACTION_PATH/pkg/hypothesis_helm/integrations/minimal_values.sh"
     - name: Save Kubernetes schemas
       if: ${{ always() && (inputs.schema-validation == 'true' || inputs.kubesec == 'true') && inputs.schema-cache == 'true' && steps.schemas.outputs.cache-primary-key != '' && steps.schemas.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v5

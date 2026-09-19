@@ -198,8 +198,8 @@ External tools such as kubesec retain their own rule systems; `DL` and `SC` code
 
 ## Shared finding library
 
-[`findings/catalog.py`](../../pkg/hypothesis-helm/hypothesis_helm/findings/catalog.py) stores each code's category, evidence criterion,
-example and suggested action. [`FindingGenerator`](../../pkg/hypothesis-helm/hypothesis_helm/findings/generator.py) creates structured
+[`findings/catalog.py`](../../pkg/hypothesis_helm/findings/catalog.py) stores each code's category, evidence criterion,
+example and suggested action. [`FindingGenerator`](../../pkg/hypothesis_helm/findings/generator.py) creates structured
 findings and generates the CLI listing, JSON catalog, commented configuration and reference below from those definitions.
 Add a definition and a detector with regression tests when implementing a new check; a catalog entry alone does not detect anything.
 

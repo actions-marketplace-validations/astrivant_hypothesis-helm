@@ -169,7 +169,7 @@ jobs:
         with:
           name: benchmark-refresh
           path: |
-            pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/parameters/
+            pkg/hypothesis_helm_benchmarking/assets/fixture/parameters/
             docs/benchmarking/
             docs/reports/
             studies/

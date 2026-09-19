@@ -94,7 +94,7 @@ After changing CLI arguments, regenerate the [CLI reference](cli/README.md):
 bash scripts/project-run.sh cog -r docs/cli/README.md
 ```
 
-Unit and integration tests live under `pkg/hypothesis-helm/hypothesis_helm/tests`. Helm must be
+Unit and integration tests live under `pkg/hypothesis_helm/tests`. Helm must be
 available for render tests; the neighboring Astrivant audit skips when absent.
 `ASTRIVANT_CHART=<path>` opts into the full whole-chart Astrivant integration gate.
 Fixture schemas deliberately containing documentation gaps are not processed by
@@ -223,15 +223,15 @@ cache fingerprints cover implementation modules recursively across all subpackag
 
 ## Repository map
 
-Project folders under `pkg/` use dashes. Python modules inside them keep underscores, as in
-`pkg/hypothesis-helm/hypothesis_helm`, so imports and editable installs work normally.
+Project folders and Python modules under `pkg/` use underscores, as in
+`pkg/hypothesis_helm`. Published distribution names and CLI commands keep their existing names.
 
 | Location | Responsibility |
 | --- | --- |
-| [`pkg/hypothesis-helm/hypothesis_helm/`](../pkg/hypothesis-helm/hypothesis_helm) | CLI and public API; implementation grouped under charts, schemas, execution, reporting, and integrations. |
-| [`pkg/hypothesis-helm/hypothesis_helm/tests/`](../pkg/hypothesis-helm/hypothesis_helm/tests) | Unit tests and real Helm integration tests. |
-| [`pkg/hypothesis-helm-benchmarking/`](../pkg/hypothesis-helm-benchmarking) | Independently packaged benchmark commands, studies, and refresh automation. |
-| [`pkg/hypothesis-helm-catalog/`](../pkg/hypothesis-helm-catalog) | Shipped input-domain catalog and its rebuild command. |
+| [`pkg/hypothesis_helm/`](../pkg/hypothesis_helm) | CLI and public API; implementation grouped under charts, schemas, execution, reporting, and integrations. |
+| [`pkg/hypothesis_helm/tests/`](../pkg/hypothesis_helm/tests) | Unit tests and real Helm integration tests. |
+| [`pkg/hypothesis_helm_benchmarking/`](../pkg/hypothesis_helm_benchmarking) | Independently packaged benchmark commands, studies, and refresh automation. |
+| [`pkg/hypothesis_helm_catalog/`](../pkg/hypothesis_helm_catalog) | Shipped input-domain catalog and its rebuild command. |
 | [`pkg/pipeline/`](../pkg/pipeline) | Shared work scheduling and balancing. |
 | [`examples/`](../examples) | Small charts and a checked-in generated workload suite. |
 | [`scripts/`](../scripts) | Project command runner, validation command and Helm plugin hooks. |

@@ -27,7 +27,7 @@
 [Documentation](../README.md) · [Project](../../README.md)
 
 Benchmark code, shell helpers, refresh recipes and chart assets ship together in
-[`hypothesis-helm-benchmarking`](<../../pkg/hypothesis-helm-benchmarking>).
+[`hypothesis-helm-benchmarking`](<../../pkg/hypothesis_helm_benchmarking>).
 
 | Location in the package | Contents |
 | --- | --- |
@@ -100,7 +100,7 @@ All synthetic studies use the same chart generator. Each command reuses one temp
 chart and retains YAML parameter records for its cases. Separate invocations have
 separate workspaces, including concurrent CI jobs.
 
-The [combined stress chart](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/chart) includes gates, shared outputs,
+The [combined stress chart](../../pkg/hypothesis_helm_benchmarking/assets/chart) includes gates, shared outputs,
 interactions, equivalent inputs, boundary changes, coupled inputs, and six known defect
 families. The [fixture guide](fixture.md) explains its controls and fixed progression.
 
@@ -271,7 +271,7 @@ count. Timing studies and repository scans reserve the queue. Independent tables
 and plot preparation can overlap. Nested workers retain their own settings,
 including six path workers per chart in the repository tests.
 
-The [operation inventory](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/refresh/plan.py) declares
+The [operation inventory](../../pkg/hypothesis_helm_benchmarking/refresh/plan.py) declares
 all declared studies, fresh profiling captures, diagrams, verification gates, repository
 reports, and documentation updates. The preserved local [Workgraph](../../pkg/pipeline) scheduler runs this inventory.
 The Helm-specific inventory and Bash commands ship in the benchmarking package. The separate [Reflow](https://github.com/astrivant/reflow) project
@@ -341,13 +341,13 @@ Run saved suites with 1–4 local GNU Parallel shards:
 
 ~~~sh
 brew bundle # macOS; Debian/Ubuntu: sudo apt-get install parallel
-helm hypothesis generate pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/chart --output .cache/benchmarks/shard-suite --max-examples 10
+helm hypothesis generate pkg/hypothesis_helm_benchmarking/assets/chart --output .cache/benchmarks/shard-suite --max-examples 10
 for shards in 1 2 3 4; do
   bash scripts/project-run.sh hypothesis-helm-benchmark shards --shards "$shards" .cache/benchmarks/shard-suite
 done
 ~~~
 
-The [wrapper](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/scripts/shards.sh) launches `helm hypothesis run` with one
+The [wrapper](../../pkg/hypothesis_helm_benchmarking/scripts/shards.sh) launches `helm hypothesis run` with one
 worker per shard and caching disabled. Logs and reports go to
 `.cache/benchmarks/local-shards/`. Pass additional run options after `--`.
 
@@ -361,7 +361,7 @@ hypothesis-helm-benchmark generate \
 
 ### Performance and scaling
 
-Run the [plotting benchmark](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/studies/performance.py):
+Run the [plotting benchmark](../../pkg/hypothesis_helm_benchmarking/studies/performance.py):
 
 ~~~sh
 hypothesis-helm-benchmark run \
@@ -456,11 +456,11 @@ normal-distribution output. The benchmark independently calculates expected outp
 for the added behavior and checks the rendered manifests against them.
 Fault injection (`--bug-percent`, `--bug-orders`, `--bug-seed`) remains available.
 
-The [topology preset](../../pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/topology.yaml) has 1,024 possible inputs for
+The [topology preset](../../pkg/hypothesis_helm_benchmarking/assets/fixture/topology.yaml) has 1,024 possible inputs for
 complete comparisons. See [sampling controls and complexity](../execution/README.md#optional-trimming).
 
 ```sh
-hypothesis-helm-benchmark --parameters pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/topology.yaml sparsity \
+hypothesis-helm-benchmark --parameters pkg/hypothesis_helm_benchmarking/assets/fixture/topology.yaml sparsity \
   --count 1024 --levels 5 \
   --output .cache/benchmarks/structure-sparsity
 ```

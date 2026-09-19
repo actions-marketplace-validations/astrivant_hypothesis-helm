@@ -26,7 +26,7 @@ flowchart TD
 
 ## Representation and operations
 
-[`asts/lattice.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/lattice.py) represents each field as a finite set of strings or Booleans,
+[`asts/lattice.py`](../../pkg/hypothesis_helm/compiler/asts/lattice.py) represents each field as a finite set of strings or Booleans,
 or an explicit unknown value. An empty set means no configuration can reach that branch.
 The ordering is set inclusion: fewer possible values means more precise knowledge.
 

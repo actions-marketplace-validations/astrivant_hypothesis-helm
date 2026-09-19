@@ -18,7 +18,7 @@ testing and populate audits. Test results come from executing the selected check
 
 ## Branch knowledge
 
-[`branches.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/branches.py) narrows possible values inside supported conditions,
+[`branches.py`](../../pkg/hypothesis_helm/compiler/passes/branches.py) narrows possible values inside supported conditions,
 removes contradictory nested branches, and merges the surviving alternatives before analyzing later statements.
 It runs after literal folding in the exact-equivalence compiler, which is also used by maximum-output analysis.
 The [branch knowledge lattice](lattice.md) defines the operations, supported conditions and uncertainty rules.
@@ -26,7 +26,7 @@ Audits expose source-level decisions under `complexity.branch_analysis`; test re
 
 ## Input inventory
 
-[`inputs.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/inputs.py) compares three
+[`inputs.py`](../../pkg/hypothesis_helm/compiler/passes/inputs.py) compares three
 sources: supplied values, declared schema fields, and references found in
 templates. `InputInventory.build` binds these paths to the shared values model
 and records their source locations.
@@ -43,12 +43,12 @@ bound for input coverage, not proof that every possible input path was discovere
 
 ## Dependency discovery and activation
 
-[`dependencies.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/dependencies.py)
+[`dependencies.py`](../../pkg/hypothesis_helm/compiler/passes/dependencies.py)
 reads chart metadata and installed child charts, including archives. It records
 child inputs under their dependency name or alias, ordered Boolean conditions,
 shared tag controls, and the parent dependencies that must also be enabled.
 The data records live in
-[`asts/dependencies.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/dependencies.py).
+[`asts/dependencies.py`](../../pkg/hypothesis_helm/compiler/asts/dependencies.py).
 
 This catches enablement settings that appear only in `Chart.yaml`. For a selected
 child field, generation can propose a context that enables the child while
@@ -64,7 +64,7 @@ exact-equivalence and topology proof contract.<sup>[\[2\]](../scanning/README.md
 
 ## Explicit rejection discovery
 
-[`Contracts.build`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts/contracts.py) locates
+[`Contracts.build`](../../pkg/hypothesis_helm/compiler/asts/contracts.py) locates
 calls to `fail` and `required` in parsed expressions. It follows supported named
 helper calls and evaluates the branches that lead to those calls for a candidate.
 It does not classify failures by searching comments or error-message keywords.
@@ -77,7 +77,7 @@ with Helm before using them to filter inferred inputs.
 
 ## Maximum output complexity
 
-[`complexity.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/complexity.py) searches
+[`complexity.py`](../../pkg/hypothesis_helm/compiler/passes/complexity.py) searches
 for the largest supported manifest structure that allowed values can produce.
 Its score is **breadth × depth**: breadth counts the largest number of nodes on
 any one level of the output tree; depth counts the longest path from the bundle
@@ -104,12 +104,12 @@ within the supported model. Unsupported operations or an exhausted budget produc
 `unknown`; any retained lower bound comes from a checked complete configuration.
 The analysis uses compiled output, without invoking Helm or Kubernetes API schema
 validation. It measures potential output structure, not bug count or runtime.
-[`compiler/complexity.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/complexity.py) supplies
+[`compiler/complexity.py`](../../pkg/hypothesis_helm/compiler/complexity.py) supplies
 the tree metric and size-based theoretical ceiling.
 
 ## Sampling profile
 
-[`sampling.py`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes/sampling.py) combines a
+[`sampling.py`](../../pkg/hypothesis_helm/compiler/passes/sampling.py) combines a
 fresh complexity result with input domain sizes, scalar kinds, conditional nesting
 depth, and the largest number of distinct direct values references in a template.
 The latter is reported as `interaction_order`, describing the template's input

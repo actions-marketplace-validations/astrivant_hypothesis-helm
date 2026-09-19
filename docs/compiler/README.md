@@ -80,12 +80,12 @@ options and report fields.
 
 | Location | Responsibility |
 | --- | --- |
-| [`compiler/asts/`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/asts) | Tokens, template nodes, rejection expressions, and dependency records. |
-| [`compiler/passes/`](../../pkg/hypothesis-helm/hypothesis_helm/compiler/passes) | Analyses, selection policies, and exports described in this guide. |
-| [`schemas/model.py`](../../pkg/hypothesis-helm/hypothesis_helm/schemas/model.py) | Shared schema-derived values tree and attrs/cattrs conversion. |
-| [`charts/templates.py`](../../pkg/hypothesis-helm/hypothesis_helm/charts/templates.py) | Scope-aware reference discovery using the action tree. |
-| [`charts/planning.py`](../../pkg/hypothesis-helm/hypothesis_helm/charts/planning.py) | Finite candidate planning and selection orchestration. |
-| [`charts/candidates.py`](../../pkg/hypothesis-helm/hypothesis_helm/charts/candidates.py) | Candidate checks and verified witnesses. |
+| [`compiler/asts/`](../../pkg/hypothesis_helm/compiler/asts) | Tokens, template nodes, rejection expressions, and dependency records. |
+| [`compiler/passes/`](../../pkg/hypothesis_helm/compiler/passes) | Analyses, selection policies, and exports described in this guide. |
+| [`schemas/model.py`](../../pkg/hypothesis_helm/schemas/model.py) | Shared schema-derived values tree and attrs/cattrs conversion. |
+| [`charts/templates.py`](../../pkg/hypothesis_helm/charts/templates.py) | Scope-aware reference discovery using the action tree. |
+| [`charts/planning.py`](../../pkg/hypothesis_helm/charts/planning.py) | Finite candidate planning and selection orchestration. |
+| [`charts/candidates.py`](../../pkg/hypothesis_helm/charts/candidates.py) | Candidate checks and verified witnesses. |
 
 These modules analyze Helm; they do not implement its full rendering language.
 Each result states its supported scope and any unresolved behavior.

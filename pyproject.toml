@@ -32,9 +32,9 @@ classifiers = [
     "Topic :: System :: Systems Administration",
 ]
 packages = [
-    {include = "hypothesis_helm", from = "pkg/hypothesis-helm"},
+    {include = "hypothesis_helm", from = "pkg"},
     {include = "pipeline", from = "pkg"},
-    {include = "hypothesis_helm_catalog", from = "pkg/hypothesis-helm-catalog"},
+    {include = "hypothesis_helm_catalog", from = "pkg"},
 ]
 include = [
     {path = "plugin.yaml", format = ["sdist"]},
@@ -59,7 +59,7 @@ deepdiff = ">=9.1,<10"
 reportlab = ">=4,<5"
 matplotlib = ">=3.10,<4"
 immutables = ">=0.21,<1"
-hypothesis-helm-benchmarking = {path = "pkg/hypothesis-helm-benchmarking", develop = true, optional = true}
+hypothesis-helm-benchmarking = {path = "pkg/hypothesis_helm_benchmarking", develop = true, optional = true}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15"
@@ -72,6 +72,7 @@ types-jsonschema = "^4.23"
 cogapp = ">=3.6,<4"
 numpy = ">=2,<3"
 pytest-xdist = ">=3.8,<4"
+setuptools = ">=77"
 
 [tool.poetry.scripts]
 hypothesis-helm-catalog = "hypothesis_helm_catalog.builder:main"
@@ -89,7 +90,7 @@ requires = ["poetry-core>=2.0,<3.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-testpaths = ["pkg/hypothesis-helm/hypothesis_helm/tests"]
+testpaths = ["pkg/hypothesis_helm/tests"]
 markers = ["integration: requires Helm", "astrivant: optional neighboring Astrivant chart", "hypothesis_helm_path(path): schema path exercised by a generated test"]
 
 [tool.ruff]
@@ -108,7 +109,7 @@ convention = "google"
 
 [tool.mypy]
 # Bash-executed recipe snapshots retain their pre-migration type-checking scope.
-exclude = ["^pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/refresh/recipes/"]
+exclude = ["^pkg/hypothesis_helm_benchmarking/refresh/recipes/"]
 python_version = "3.13"
 strict = true
 files = ["pkg"]

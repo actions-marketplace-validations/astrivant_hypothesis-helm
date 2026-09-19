@@ -10,7 +10,7 @@
 [Full refresh command](README.md#reproduce-the-full-project-run) · [Benchmark results](<../../studies/README.md>)
 
 These scripts prepare charts, run measurements, generate plots and publish reports.
-The operation inventory lives in `pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/refresh/plan.py`.
+The operation inventory lives in `pkg/hypothesis_helm_benchmarking/refresh/plan.py`.
 
 Refresh workspaces and internal records live under `.cache/refresh/refresh-<epoch>/`.
 That includes logs, timestamps, process journals, verification results, source snapshots and checksum inventories.

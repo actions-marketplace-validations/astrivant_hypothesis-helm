@@ -13,7 +13,7 @@ outcome coverage and distribution error; see the main benchmark for bug discover
 
 ~~~sh
 hypothesis-helm-benchmark \
-  --parameters pkg/hypothesis-helm-benchmarking/hypothesis_helm_benchmarking/assets/fixture/parameters/standard.yaml \
+  --parameters pkg/hypothesis_helm_benchmarking/assets/fixture/parameters/standard.yaml \
   sparsity --count 32768 --retain 0.25 --levels 8 --time-limit 9m --output .cache/benchmarks/sparsity
 ~~~
 
