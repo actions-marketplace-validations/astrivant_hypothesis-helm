@@ -341,6 +341,7 @@ class Contracts:
         relevant (set[str]): Helpers transitively containing explicit rejection calls.
         explicit_relevant (set[str]): Helpers with statically visible fail or required calls, excluding possible dynamic code.
         diagnostics (list[str]): Unsupported or ambiguous source constructs.
+        ambiguous_helpers (set[str]): Conflicting definitions that invalidate only their callers.
         dependencies (Dependencies): Child namespaces and activation conditions.
         scopes (dict[str, tuple[str, ...]]): Values namespace for each root template.
         schemas (dict[tuple[str, ...], object]): Original authored schemas indexed by chart namespace.
@@ -360,6 +361,7 @@ class Contracts:
     relevant: set[str] = field(factory=set)
     explicit_relevant: set[str] = field(factory=set)
     diagnostics: list[str] = field(factory=list)
+    ambiguous_helpers: set[str] = field(factory=set)
     dependencies: Dependencies = field(factory=Dependencies)
     scopes: dict[str, tuple[str, ...]] = field(factory=dict)
     schemas: dict[tuple[str, ...], object] = field(factory=dict)
@@ -458,7 +460,11 @@ class Contracts:
                 result.scopes[source] = scope
         for name in duplicates:
             result.helpers.pop(name, None)
-            result.diagnostics.append(f"Duplicate helper left unresolved: {name}")
+        result.ambiguous_helpers = duplicates
+        # An ambiguous call can reject or mutate its context. Keep its callers in
+        # the analysis and stop that call chain, without disabling other roots.
+        result.relevant.update(duplicates)
+        result.explicit_relevant.update(duplicates)
         for _ in range(len(result.helpers) + 1):
             previous = (set(result.relevant), set(result.explicit_relevant))
             for name, (_, nodes) in result.helpers.items():
@@ -797,7 +803,13 @@ class Evaluation:
                 raise Unknown("unsupported context lookup")
             if key not in container and index != len(parts) - 1:
                 raise Unknown("missing parent context lookup")
-            current = BoundValue(container.get(key), (*current.path, key)) if isinstance(current, BoundValue) else container.get(key)
+            current = (
+                BoundValue(container.get(key), (*current.path, key))
+                if isinstance(current, BoundValue)
+                else DerivedValue(container.get(key), "_field", (current, key))
+                if isinstance(current, DerivedValue)
+                else container.get(key)
+            )
         if isinstance(current, BoundValue):
             current = self.observe(current)
         return self.context_value(current)
@@ -843,17 +855,21 @@ class Evaluation:
                         break
                     container = container[key]
                 else:
-                    if type(container) is not type(value.value) or container != value.value:
+                    supplied, observed = native(container), native(value.value)
+                    if type(supplied) is not type(observed) or supplied != observed:
                         raise Unknown("forwarded global value differs from its candidate origin")
                     value = BoundValue(value.value, (*origin, *suffix))
                     break
             else:
-                raise Unknown("forwarded global input origin is absent")
+                if value.value is not None:
+                    raise Unknown("forwarded global input origin is absent")
+                # A missing optional leaf is a known nil, not an unknown supplied
+                # value. Native verification still checks dependency coalescing.
         if value.path:
             self.inputs["$." + ".".join(value.path)] = value.value
         return value
 
-    def evaluate(self, expr: object, source: str, line: int, variables: Scope) -> object:
+    def evaluate(self, expr: object, source: str, line: int, variables: Scope, *, output_required: bool = True) -> object:
         """
         Evaluate supported expressions using Helm-compatible scalar and string semantics.
 
@@ -862,6 +878,7 @@ class Evaluation:
             source (str): Template filename for diagnostics.
             line (int): Template line for diagnostics.
             variables (Scope): Lexically visible local bindings.
+            output_required (bool): Preserve full output when an expression consumes it, rather than only visiting rejection effects.
 
         Returns:
             object: Evaluated scalar, list, or helper output.
@@ -896,10 +913,21 @@ class Evaluation:
         if not isinstance(expr, tuple) or not expr:
             raise Unknown("invalid expression")
         function, *arguments = expr
+        if not output_required and function in {"quote", "indent", "nindent"} and arguments:
+            # Only the surrounding manifest consumes this text. Evaluate helper
+            # rejection effects without implementing their YAML serialization.
+            # Skipped formatting errors still require a native check per candidate.
+            for argument in arguments[:-1]:
+                self.evaluate(argument, source, line, variables)
+            self.contextual = True
+            self.evaluate(arguments[-1], source, line, variables, output_required=False)
+            return ""
         if function in {"include", "template"}:
             if len(arguments) not in ({2} if function == "include" else {1, 2}):
                 raise Unknown("include requires a name and context")
             name = native(self.evaluate(arguments[0], source, line, variables))
+            if isinstance(name, str) and name in self.contracts.ambiguous_helpers:
+                raise Unknown(f"conflicting helper definitions: {name}")
             helper = self.contracts.helpers.get(name) if isinstance(name, str) else None
             if helper is None and isinstance(name, str) and self.contracts.renderer is not None:
                 states = self.contracts.dependencies.states({}, self.values)
@@ -923,15 +951,20 @@ class Evaluation:
             context = self.evaluate(arguments[1], source, line, variables) if len(arguments) == 2 else None
             previous_context = self.context
             previous_loops = self.loops
+            previous_needed = self.needed
             self.context = context
             self.loops = 0
+            if not output_required:
+                self.needed = self.contracts.variables(nodes)
+                self.contextual = True
             self.depth += 1
             try:
-                return self.visit(nodes, helper_source, Scope({"$": context}), strict=True)
+                return self.visit(nodes, helper_source, Scope({"$": context}), strict=output_required)
             finally:
                 self.depth -= 1
                 self.context = previous_context
                 self.loops = previous_loops
+                self.needed = previous_needed
         if function in ("and", "or"):
             if not arguments:
                 raise Unknown("empty boolean call")
@@ -1068,6 +1101,24 @@ class Evaluation:
             if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments[::2]):
                 return ConstantMap(entries)
             return entries
+        if function == "omit" and args and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[1:]):
+            if not all(isinstance(key, str) for key in args[0]):
+                raise Unknown("omit requires string-key maps")
+            if len(args[0]) > self.contracts.limits["max_range_items"]:
+                raise Unknown(f"omit exceeds compiler.max_range_items={self.contracts.limits['max_range_items']}")
+            source_map = evaluated[0]
+            kept = {key: value for key, value in args[0].items() if key not in args[1:]}
+            if isinstance(source_map, ConstantMap):
+                return ConstantMap(kept)
+            if isinstance(source_map, BoundValue | DerivedValue):
+                kept = {
+                    key: BoundValue(value, (*source_map.path, key))
+                    if isinstance(source_map, BoundValue) and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9-]*", key)
+                    else DerivedValue(value, "_field", (source_map, key))
+                    for key, value in kept.items()
+                }
+            self.transformed = True
+            return kept
         if function == "hasKey" and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
             present = args[1] in args[0]
             if not present and isinstance(evaluated[0], ConstantMap) and isinstance(evaluated[1], BoundValue):
@@ -1342,7 +1393,7 @@ class Evaluation:
                         elif node.text.startswith("template "):
                             output.append(self.named_template(node.text, source, node.line, variables))
                         else:
-                            value = native(self.evaluate(expression(node.text), source, node.line, variables))
+                            value = native(self.evaluate(expression(node.text), source, node.line, variables, output_required=strict))
                             if type(value) not in (str, int, bool):
                                 raise Unknown("unsupported output type")
                             output.append(str(value).lower() if type(value) is bool else str(value))

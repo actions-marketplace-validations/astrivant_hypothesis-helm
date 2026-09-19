@@ -139,6 +139,16 @@ DEFINITIONS = (
         "Use the validator's field path and expected type to check the template and input schema.",
     ),
     Rule(
+        "HH1109",
+        "Invalid manifest field type",
+        "manifest",
+        "violation",
+        "error",
+        "Helm parses the YAML but cannot decode a field into its required manifest type.",
+        "An annotation contains an array instead of a string.",
+        "Check the field named in Helm's decoding error and constrain its values to the required type.",
+    ),
+    Rule(
         "HH1011",
         "Rendered output cannot be encoded as JSON",
         "unclassified",

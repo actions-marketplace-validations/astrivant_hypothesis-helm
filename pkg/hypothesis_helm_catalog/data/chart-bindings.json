@@ -264,5 +264,192 @@
     "quoted": false,
     "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow",
     "scope": "generated nonnegative replica counts, percentages from 0% through 100%, or the chart empty fallback; field exclusivity remains testable"
+  },
+  {
+    "chart": "mongodb",
+    "path": [
+      "existingConfigmap"
+    ],
+    "destination": "apps/v1/StatefulSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "6404b1bfcf27957d083e3651528b8d7bd3631b01e23b5dacbc3f9739c5037b78",
+      "templates/replicaset/statefulset.yaml": "749015a2d0f6f774810e0bedc9ec4dd7f8a587c70defb2ff5f98b87d2ff6b43c",
+      "templates/standalone/dep-sts.yaml": "3657c687694ba2613217c55ce978329456cbe09c0a14d20a58dc289c5e7deb47"
+    },
+    "reference": "oci://registry-1.docker.io/bitnamicharts/mongodb:16.5.45",
+    "profile": "dns1123-subdomain"
+  },
+  {
+    "chart": "mongodb",
+    "path": [
+      "arbiter",
+      "existingConfigmap"
+    ],
+    "destination": "apps/v1/StatefulSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "6404b1bfcf27957d083e3651528b8d7bd3631b01e23b5dacbc3f9739c5037b78",
+      "templates/arbiter/statefulset.yaml": "c37f09c8adfb6fd0d2827e0a366c8cfc690912d584fd85ff8ae13ab49ebd4941"
+    },
+    "reference": "oci://registry-1.docker.io/bitnamicharts/mongodb:16.5.45",
+    "profile": "dns1123-subdomain"
+  },
+  {
+    "chart": "mongodb",
+    "path": [
+      "hidden",
+      "existingConfigmap"
+    ],
+    "destination": "apps/v1/StatefulSet:$.spec.template.spec.volumes[*].configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "6404b1bfcf27957d083e3651528b8d7bd3631b01e23b5dacbc3f9739c5037b78",
+      "templates/hidden/statefulset.yaml": "8070723f0e6abfc7a0e782fe1696b2e60bae22067ff802fd04535bd66d89c8a9"
+    },
+    "reference": "oci://registry-1.docker.io/bitnamicharts/mongodb:16.5.45",
+    "profile": "dns1123-subdomain"
+  },
+  {
+    "chart": "apisix",
+    "path": [
+      "controlPlane",
+      "extraConfigExistingConfigMap"
+    ],
+    "destination": "apps/v1/Deployment:$.spec.template.spec.volumes.*.configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "1b013f41ebb584ad2e37b703e8223fa1b1ea64a25712811ddf51c7b0e32a49e4",
+      "templates/control-plane/dep-ds.yaml": "c2db85094fe00622755a04e38d52fd8e1fb59791ce6c8183bb779513d462dbb8"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apisix",
+    "profile": "dns1123-subdomain"
+  },
+  {
+    "chart": "apisix",
+    "path": [
+      "dataPlane",
+      "extraConfigExistingConfigMap"
+    ],
+    "destination": "apps/v1/Deployment:$.spec.template.spec.volumes.*.configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "1b013f41ebb584ad2e37b703e8223fa1b1ea64a25712811ddf51c7b0e32a49e4",
+      "templates/data-plane/dep-ds.yaml": "d521dcc9ca9c7e23fef2cb7401ac65ed6b6f2c9ed793a6ca46fe30eb5c97e62a"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apisix",
+    "profile": "dns1123-subdomain"
+  },
+  {
+    "chart": "apisix",
+    "path": [
+      "ingressController",
+      "extraConfigExistingConfigMap"
+    ],
+    "destination": "apps/v1/Deployment:$.spec.template.spec.volumes.*.configMap.name",
+    "files": {
+      "templates/_helpers.tpl": "1b013f41ebb584ad2e37b703e8223fa1b1ea64a25712811ddf51c7b0e32a49e4",
+      "templates/ingress-controller/deployment.yaml": "dd7f100a05fc6cacf65298904713f12958c0755a988ebda508075ed842eeec12"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apisix",
+    "profile": "dns1123-subdomain"
+  },
+  {
+    "chart": "etcd",
+    "path": [
+      "pdb",
+      "minAvailable"
+    ],
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.minAvailable",
+    "files": {
+      "templates/pdb.yaml": "48a9a7e175854fa97905b1364bbd95ea497d25e3cde35c796f1c2371cb4b16d1"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/etcd",
+    "profile": "pdb-count-or-percent",
+    "quoted": false
+  },
+  {
+    "chart": "etcd",
+    "path": [
+      "pdb",
+      "maxUnavailable"
+    ],
+    "destination": "policy/v1/PodDisruptionBudget:$.spec.maxUnavailable",
+    "files": {
+      "templates/pdb.yaml": "48a9a7e175854fa97905b1364bbd95ea497d25e3cde35c796f1c2371cb4b16d1"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/etcd",
+    "profile": "pdb-count-or-percent",
+    "quoted": false
+  },
+  {
+    "chart": "apache",
+    "path": [
+      "commonAnnotations"
+    ],
+    "destination": "v1/Service:$.metadata.annotations",
+    "files": {
+      "templates/svc.yaml": "3b682e15b048684d8063cb3fabd6d0d40be46abaa1348a619b587830a924bca9"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apache",
+    "quoted": false,
+    "serialized": true,
+    "scope": "generated serialized fields follow their destination schema; supplied values are unchanged"
+  },
+  {
+    "chart": "apache",
+    "path": [
+      "service",
+      "annotations"
+    ],
+    "destination": "v1/Service:$.metadata.annotations",
+    "files": {
+      "templates/svc.yaml": "3b682e15b048684d8063cb3fabd6d0d40be46abaa1348a619b587830a924bca9"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apache",
+    "quoted": false,
+    "serialized": true,
+    "scope": "generated serialized fields follow their destination schema; supplied values are unchanged"
+  },
+  {
+    "chart": "redis",
+    "path": [
+      "sentinel",
+      "service",
+      "headless",
+      "annotations"
+    ],
+    "destination": "v1/Service:$.metadata.annotations",
+    "files": {
+      "templates/headless-svc.yaml": "129c8f346049dfcf7690f670504ef50d0eda1c9a0a0f3edfebcf5efee9ee0911"
+    },
+    "reference": "oci://registry-1.docker.io/bitnamicharts/redis:22.0.4",
+    "quoted": false,
+    "serialized": true,
+    "scope": "generated serialized fields follow their destination schema; supplied values are unchanged"
+  },
+  {
+    "chart": "redis",
+    "path": [
+      "commonAnnotations"
+    ],
+    "destination": "v1/Service:$.metadata.annotations",
+    "files": {
+      "templates/headless-svc.yaml": "129c8f346049dfcf7690f670504ef50d0eda1c9a0a0f3edfebcf5efee9ee0911"
+    },
+    "reference": "oci://registry-1.docker.io/bitnamicharts/redis:22.0.4",
+    "quoted": false,
+    "serialized": true,
+    "scope": "generated serialized fields follow their destination schema; supplied values are unchanged"
+  },
+  {
+    "chart": "apache",
+    "path": [
+      "serviceAccount",
+      "annotations"
+    ],
+    "destination": "v1/ServiceAccount:$.metadata.annotations",
+    "files": {
+      "templates/serviceaccount.yaml": "38d2e3c18904b238a3b4d83d1033ce0926c861efc76278367d36b507fd8cc5f6"
+    },
+    "reference": "https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apache",
+    "quoted": false,
+    "serialized": true,
+    "scope": "generated serialized fields follow their destination schema; supplied values are unchanged"
   }
 ]

@@ -8,6 +8,7 @@ import re
 from collections import Counter
 
 from attrs import frozen
+from ruamel.yaml.scalarbool import ScalarBoolean
 
 
 @frozen
@@ -159,6 +160,10 @@ def native(value: object) -> object:
         return value.text()
     if isinstance(value, str):
         return str(value)
+    if isinstance(value, ScalarBoolean):
+        return bool(value)
     if isinstance(value, int) and not isinstance(value, bool):
         return int(value)
+    if isinstance(value, float):
+        return float(value)
     return value

@@ -22,6 +22,7 @@
   - [HH1106: Duplicate resource identity](#hh1106-duplicate-resource-identity)
   - [HH1107: Empty resource bundle](#hh1107-empty-resource-bundle)
   - [HH1108: Kubernetes schema validation failed](#hh1108-kubernetes-schema-validation-failed)
+  - [HH1109: Invalid manifest field type](#hh1109-invalid-manifest-field-type)
   - [HH1011: Rendered output cannot be encoded as JSON](#hh1011-rendered-output-cannot-be-encoded-as-json)
   - [HH1012: Unclassified baseline lint failure](#hh1012-unclassified-baseline-lint-failure)
   - [HH2001: Undocumented values path](#hh2001-undocumented-values-path)
@@ -323,6 +324,7 @@ cog.out(FindingGenerator.render("markdown"))
 | `HH1106` | Duplicate resource identity | manifest | violation | error |
 | `HH1107` | Empty resource bundle | manifest | violation | error |
 | `HH1108` | Kubernetes schema validation failed | manifest | violation | error |
+| `HH1109` | Invalid manifest field type | manifest | violation | error |
 | `HH1011` | Rendered output cannot be encoded as JSON | unclassified | diagnostic | error |
 | `HH1012` | Unclassified baseline lint failure | unclassified | diagnostic | error |
 | `HH2001` | Undocumented values path | values | warning | warning |
@@ -435,6 +437,16 @@ Default severity: **error**.
 Example: An unquoted boolean becomes a non-string ConfigMap data value.
 
 Suggested action: Use the validator's field path and expected type to check the template and input schema.
+
+### HH1109: Invalid manifest field type
+
+Detected when: Helm parses the YAML but cannot decode a field into its required manifest type.
+
+Default severity: **error**.
+
+Example: An annotation contains an array instead of a string.
+
+Suggested action: Check the field named in Helm's decoding error and constrain its values to the required type.
 
 ### HH1011: Rendered output cannot be encoded as JSON
 

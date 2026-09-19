@@ -93,6 +93,14 @@ Their `minAvailable` and `maxUnavailable` accept nonnegative replica counts or p
 the chart's empty-string fallback remains available. For example, `"50%"` is eligible while `"#"` and `"[Ma"` are excluded.
 The source schema still controls the input type, so a field inferred as a string samples percentages and the empty fallback.
 This constrains individual fields; it does not enforce the separate API rule against setting both PDB limits.
+The same PDB bindings cover etcd. APISIX's extra ConfigMap references use ConfigMap
+naming rules. Apache's service annotations and Redis's headless-service annotations
+use the destination schema's map-of-strings domain, including through dependency
+aliases. An array-valued annotation therefore cannot dominate generated tests;
+ordinary multiline annotation strings remain eligible.
+MongoDB 16.5.45 has a separate reviewed snapshot for charts such as Appsmith that
+depend on that release. If any reviewed version matches, stale alternatives for
+the same input do not produce a source-mismatch warning.
 Supplied values and `tpl` expressions are preserved. Changed templates disable that binding and produce a
 diagnostic. These are reviewed mappings for the recorded sources, not general analysis of arbitrary helpers.
 

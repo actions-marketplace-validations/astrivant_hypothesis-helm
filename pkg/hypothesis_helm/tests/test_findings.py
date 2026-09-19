@@ -57,6 +57,19 @@ def chart(tmp_path: Path) -> Chart:
         ('{{ fail "nil pointer evaluating interface {}.port" }}', "HH1001"),
         ('{{ required "wrong type for value; expected string; got bool" .Values.absent }}', "HH1001"),
         ("apiVersion: [", "HH1101"),
+        ("[]", "HH1102"),
+        (
+            dedent("""
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: example
+              annotations:
+                note: []
+            """),
+            "HH1109",
+        ),
+        ('{{ fail "YAML parse error on x: error unmarshaling JSON: json: cannot unmarshal array" }}', "HH1001"),
     ],
 )
 def test_real_helm_diagnostics(chart: Chart, template: str, code: str) -> None:

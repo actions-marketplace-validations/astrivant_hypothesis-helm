@@ -279,6 +279,7 @@ class RejectionPolicy:
             "schema_conflicts": self.schema_conflicts,
             "requirements": copy.deepcopy(list(self.records.values())),
             "unsupported_sources": self.contracts.diagnostics,
+            "ambiguous_helpers": sorted(self.contracts.ambiguous_helpers),
             "compiler_limits": {**self.contracts.limits, "max_call_depth": self.contracts.max_call_depth},
             "analysis_fallbacks": copy.deepcopy(self.contracts.fallbacks),
             "incomplete_evaluations": self.contracts.incomplete_evaluations,

@@ -18,6 +18,7 @@ ignored:
   # - HH1106  # Duplicate resource identity
   # - HH1107  # Empty resource bundle
   # - HH1108  # Kubernetes schema validation failed
+  # - HH1109  # Invalid manifest field type
 
   # Execution
   # - HH1201  # Render invocation timed out

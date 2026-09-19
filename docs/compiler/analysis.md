@@ -314,6 +314,20 @@ In particular, fallback arguments are evaluated eagerly even when not selected.
 All rejection predictions involving these transformations require native Helm
 confirmation before exclusion.
 
+Conflicting helper definitions block analysis of their callers, while independent
+templates can still establish rejection conditions. Any prediction reached after
+an unresolved template requires native confirmation. Reports list the conflicting
+names under `configuration_rejections.ambiguous_helpers`.
+When a helper's text is used only as manifest output, the pass follows its rejection
+conditions without reproducing unused serialization. This lets a valid resource
+preset precede another preset's failing enum check. Output used by a condition or
+assignment still requires full evaluation; it is never replaced with an invented
+value. Predictions that skip output formatting require native verification for
+each candidate, including candidates that matched an earlier rejection.
+Dependency globals retain their supplying ancestor's values path; an omitted
+optional field is treated as nil. YAML anchors and scalar wrappers do not change
+that origin. Incompatible ancestor values still prevent a prediction.
+
 Formatting around a validator no longer prevents reaching its allowlist. The evaluator supports
 `quote` for ASCII strings, Booleans and null arguments, plus `indent` and `nindent` with literal or
 explicitly converted integer widths. It follows [Sprig's formatting implementations](https://github.com/Masterminds/sprig/blob/v3.3.0/strings.go),
@@ -325,9 +339,18 @@ Winning entries retain their original values paths, so a merged helper argument 
 Shared destinations and nested maps remain unresolved: [Sprig's merges](https://github.com/Masterminds/sprig/blob/v3.3.0/dict.go)
 can mutate aliased containers. Treating every fresh destination as a deep copy would make later rejection predictions unsafe.
 
+`omit` retains the source paths of surviving map entries, and `concat` and `split`
+respect `compiler.max_range_items`. `kindIs` supports strings, maps, lists, Booleans
+and nil; numeric reflection kinds remain unresolved because Helm can change their
+representation when loading values. Selecting a field from a derived map retains
+its transformation history.
+
 Regex evaluation supports ASCII literals, dot, simple character classes, `^`/`$`
-anchors and at most one variable repetition, such as `[a-z0-9-]+`. Fixed counted
-repetitions are also supported. Patterns are limited to 256 characters, subjects
+anchors, ASCII `\d` and alternatives with at most one variable repetition per
+alternative, such as `[a-z0-9-]+`. Fixed counted repetitions are also supported.
+`regexFind` returns the first match, and `regexReplaceAll` supports literal
+replacement text when the pattern cannot match an empty string. Capture expansion
+remains unresolved. Patterns are limited to 256 characters, subjects
 to 4,096, and repeat counts to 1,000. The end anchor is translated to require the
 actual end of the string, including when the input ends in a newline. Other Go
 regex constructs remain ordinary Helm tests; Python-only regex features are never

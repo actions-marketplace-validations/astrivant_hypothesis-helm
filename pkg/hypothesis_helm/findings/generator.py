@@ -80,6 +80,10 @@ class FindingGenerator:
             return cls.create("HH1001", diagnostic)
         if re.search(r"(?:^|\n)(?:Error: )?YAML parse error on .+: error converting YAML to JSON:", diagnostic):
             return cls.create("HH1101", diagnostic)
+        if re.search(r"(?:^|\n)(?:Error: )?YAML parse error on .+: error unmarshaling JSON:.*json: cannot unmarshal ", diagnostic):
+            if re.search(r"into Go value of type (?:\w+\.)?SimpleHead\b", diagnostic):
+                return cls.create("HH1102", diagnostic)
+            return cls.create("HH1109", diagnostic)
         if re.search(r"executing .+ at <[^\n]+>:\s+nil pointer evaluating ", diagnostic):
             return cls.create("HH3001", diagnostic)
         if re.search(

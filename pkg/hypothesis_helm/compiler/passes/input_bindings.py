@@ -10,7 +10,7 @@ from hypothesis_helm_catalog.builder import DATA
 
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping, sequence
-from hypothesis_helm.schemas.resources import library
+from hypothesis_helm.schemas.resources import destination, library
 
 
 def reviewed_bindings(chart: Path) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
@@ -40,9 +40,19 @@ def reviewed_bindings(chart: Path) -> tuple[list[dict[str, object]], list[dict[s
         if not matches:
             diagnostics.append({"path": binding["path"], "reason": "reviewed helper source changed; input binding not applied"})
             continue
-        profile = mapping(mapping(mapping(library()["upstream"])["profiles"])[str(binding["profile"])])
         quoted = bool(binding.get("quoted", True))
-        restriction: dict[str, object] = {"anyOf": [profile["schema"], {"const": ""}]}
+        if "profile" in binding:
+            profile = mapping(mapping(mapping(library()["upstream"])["profiles"])[str(binding["profile"])])
+            restriction: dict[str, object] = {"anyOf": [profile["schema"], {"const": ""}]}
+        else:
+            identity, _, output = str(binding["destination"]).partition(":$.")
+            found = destination(identity, tuple(output.split("."))) if output else None
+            if found is None:
+                diagnostics.append(
+                    {"path": binding["path"], "reason": "reviewed destination schema unavailable; input binding not applied"}
+                )
+                continue
+            restriction, _ = found
         if quoted:
             restriction["type"] = "string"
         result.append(
@@ -51,7 +61,8 @@ def reviewed_bindings(chart: Path) -> tuple[list[dict[str, object]], list[dict[s
                 "schema": restriction,
                 "source": "reviewed-chart-binding",
                 "quoted": quoted,
-                "profile": binding["profile"],
+                "serialized": bool(binding.get("serialized", False)),
+                "profile": binding.get("profile"),
                 "destination": binding["destination"],
                 "files": files,
                 "reference": binding["reference"],
@@ -60,4 +71,7 @@ def reviewed_bindings(chart: Path) -> tuple[list[dict[str, object]], list[dict[s
                 ),
             }
         )
-    return result, diagnostics
+    # Several reviewed chart versions can describe the same input. A matching
+    # version supersedes source-mismatch notes for that path, not other paths.
+    applied = {tuple(sequence(rule["path"])) for rule in result}
+    return result, [note for note in diagnostics if tuple(sequence(note["path"])) not in applied]

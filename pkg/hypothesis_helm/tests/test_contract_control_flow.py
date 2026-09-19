@@ -318,6 +318,70 @@ def test_incompatible_global_origins_stay_unknown(control_chart: Chart) -> None:
         assert not evaluator.inputs
 
 
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+@pytest.mark.parametrize("independent", [False, True])
+def test_duplicate_helpers_only_block_their_callers(control_chart: Chart, independent: bool) -> None:
+    """
+    Keep ambiguous helpers as barriers while analyzing independent rejection roots.
+
+    Args:
+        control_chart (Chart): Root with two conflicting helper definitions.
+        independent (bool): Add a separate, fully supported rejection template.
+
+    Returns:
+        None: No rejection is inferred past an ambiguous call, but unrelated roots remain usable.
+    """
+    (control_chart.path / "templates/_a.tpl").write_text('{{ define "conflict" }}{{ $_ := set .Values "enabled" false }}{{ end }}')
+    (control_chart.path / "templates/_b.tpl").write_text('{{ define "conflict" }}{{ end }}')
+    (control_chart.path / "templates/a.yaml").write_text(
+        '{{ include "conflict" . }}{{ if .Values.enabled }}{{ fail "unsafe after ambiguity" }}{{ end }}'
+    )
+    if independent:
+        (control_chart.path / "templates/z.yaml").write_text('{{ fail "independent rejection" }}')
+    contracts = Contracts.build(control_chart.path)
+    rejection = contracts.predict(control_chart.defaults)
+    assert contracts.ambiguous_helpers == {"conflict"}
+    assert any("conflicting helper definitions: conflict" == note["reason"] for note in contracts.fallbacks)
+    if independent:
+        assert rejection is not None and rejection.message == "independent rejection"
+        assert rejection.contextual
+        with pytest.raises(RenderFailure) as observed:
+            render(control_chart, {})
+        assert matches_rejection(str(observed.value), rejection)
+    else:
+        assert rejection is None
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_optional_and_yaml_scalar_globals_match_helm(control_chart: Chart) -> None:
+    """
+    Resolve missing optional leaves and YAML scalar subclasses without inventing global origins.
+
+    Args:
+        control_chart (Chart): Root receiving a dependency with an optional global field.
+
+    Returns:
+        None: Empty and supplied globals retain their actual origins and agree with Helm.
+    """
+    child = control_chart.path / "charts/child"
+    (child / "templates").mkdir(parents=True)
+    (child / "Chart.yaml").write_text(yamlio.dump({"apiVersion": "v2", "name": "child", "version": "1.0.0"}))
+    (child / "values.yaml").write_text("global: {}\n")
+    (child / "templates/NOTES.txt").write_text('{{ if not .Values.global.optional }}{{ fail "optional global absent" }}{{ end }}')
+    contracts = Contracts.build(control_chart.path)
+    rejection = contracts.predict(control_chart.defaults)
+    assert rejection is not None and rejection.contextual
+    assert not contracts.fallbacks
+    with pytest.raises(RenderFailure) as observed:
+        render(control_chart, {})
+    assert matches_rejection(str(observed.value), rejection)
+    for literal, expected in [('"bad"', "bad"), ("true", True), ("1", 1), ("1.5", 1.5)]:
+        anchored = mapping(yamlio.load(f"global: {{mode: &mode {literal}}}\nchild: {{global: {{mode: *mode}}}}"))
+        evaluator = Evaluation(contracts, anchored)
+        origin = evaluator.observe(BoundValue(expected, ("child", "global", "mode")))
+        assert origin.path == ("global", "mode")
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
 def test_airflow_contract_warnings_resolve_causes(tmp_path: Path) -> None:

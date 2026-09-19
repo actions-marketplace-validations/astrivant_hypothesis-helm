@@ -39,6 +39,11 @@ FUNCTIONS = frozenset(
         "mustRegexMatch",
         "trunc",
         "splitList",
+        "split",
+        "kindIs",
+        "concat",
+        "regexFind",
+        "regexReplaceAll",
         "ternary",
         "print",
         "int",
@@ -75,14 +80,25 @@ def regular_expression(pattern: str, max_pattern_chars: int) -> re.Pattern[str]:
         raise UnsupportedTransformation(f"regex exceeds compiler.max_regex_pattern_chars={max_pattern_chars}")
     if not pattern.isascii():
         raise UnsupportedTransformation("regex requires the supported ASCII subset")
-    atom = re.compile(r"\[\^?(?:[A-Za-z0-9 _-]|\\[-\\\]^])+\]|\\[.\\+*?()|\[\]{}^$nrtfv]|[A-Za-z0-9 _:/,.-]")
+    atom = re.compile(r"\[\^?(?:[A-Za-z0-9 _-]|\\[-\\\]^])+\]|\\[.\\+*?()|\[\]{}^$nrtfvd]|[A-Za-z0-9 _:/,.-]")
     position = 1 if pattern.startswith("^") else 0
     output = ["^"] if position else []
     variable_repetitions = 0
     while position < len(pattern):
-        if pattern[position:] == "$":
+        if pattern[position] == "|":
+            if position == 0 or position + 1 == len(pattern) or pattern[position - 1] == "|":
+                raise UnsupportedTransformation("empty regex alternatives remain unresolved")
+            output.append("|")
+            variable_repetitions = 0
+            position += 1
+            if pattern[position] == "^":
+                output.append("^")
+                position += 1
+            continue
+        if pattern[position] == "$" and (position + 1 == len(pattern) or pattern[position + 1] == "|"):
             output.append(r"\Z")
-            break
+            position += 1
+            continue
         match = atom.match(pattern, position)
         if match is None:
             raise UnsupportedTransformation("regex syntax is outside the supported Go-compatible subset")
@@ -169,13 +185,33 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
         if not text.isascii():
             raise UnsupportedTransformation("byte truncation requires the supported ASCII subset")
         return text[:width] if width >= 0 else text[max(0, len(text) + width) :]
-    if function == "splitList" and len(args) == 2 and all(isinstance(value, str) for value in args):
+    if function in {"splitList", "split"} and len(args) == 2 and all(isinstance(value, str) for value in args):
         separator, text = str(args[0]), str(args[1])
+        count = text.count(separator) + 1 if separator else len(text)
+        if count > limits["max_range_items"]:
+            raise UnsupportedTransformation(f"split exceeds compiler.max_range_items={limits['max_range_items']}")
         if not separator:
             if not text.isascii():
                 raise UnsupportedTransformation("empty-separator splitting requires the supported ASCII subset")
-            return list(text)
-        return text.split(separator)
+            pieces = list(text)
+        else:
+            pieces = text.split(separator)
+        return pieces if function == "splitList" else {f"_{index}": piece for index, piece in enumerate(pieces)}
+    if function == "_field" and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
+        return args[0].get(args[1])
+    if function == "concat" and all(isinstance(value, list) for value in args):
+        collections = [value for value in args if isinstance(value, list)]
+        if sum(map(len, collections)) > limits["max_range_items"]:
+            raise UnsupportedTransformation(f"concat exceeds compiler.max_range_items={limits['max_range_items']}")
+        return [item for collection in collections for item in collection]
+    if function == "kindIs" and len(args) == 2 and isinstance(args[0], str):
+        # Raw YAML numbers do not reliably identify the Go reflection kind.
+        # Nonnumeric kinds are stable across Helm's JSON coalescing boundary.
+        if args[0] in {"string", "map", "slice", "bool", "invalid"}:
+            kinds = {str: "string", dict: "map", list: "slice", bool: "bool", type(None): "invalid"}
+            kind = next((name for cls, name in kinds.items() if isinstance(args[1], cls)), None)
+            return kind == args[0]
+        raise UnsupportedTransformation("numeric and renderer-specific reflection kinds remain unresolved")
     if function == "ternary" and len(args) == 3 and type(args[2]) is bool:
         return args[0] if args[2] else args[1]
     if function == "print" and all(isinstance(value, str) for value in args):
@@ -194,14 +230,15 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
         return args[0].lower() if function == "lower" else args[0].upper()
     if len(args) == 2 and all(isinstance(value, str) for value in args):
         pattern, value = str(args[0]), str(args[1])
-        if function in {"regexMatch", "mustRegexMatch"}:
+        if function in {"regexMatch", "mustRegexMatch", "regexFind"}:
             if len(value) > limits["max_regex_subject_chars"]:
                 raise UnsupportedTransformation(
                     f"regex subject exceeds compiler.max_regex_subject_chars={limits['max_regex_subject_chars']}"
                 )
             if not value.isascii():
                 raise UnsupportedTransformation("regex subject requires the supported ASCII subset")
-            return regular_expression(pattern, limits["max_regex_pattern_chars"]).search(value) is not None
+            match = regular_expression(pattern, limits["max_regex_pattern_chars"]).search(value)
+            return (match[0] if match else "") if function == "regexFind" else match is not None
         if function == "trimAll":
             return value.strip(pattern) if pattern else value
         if function == "trimPrefix":
@@ -219,6 +256,17 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
         if len(value) + value.count(old) * (len(new) - len(old)) > limits["max_string_chars"]:
             raise UnsupportedTransformation(f"replacement exceeds compiler.max_string_chars={limits['max_string_chars']}")
         return value.replace(old, new)
+    if function == "regexReplaceAll" and len(args) == 3 and all(isinstance(value, str) for value in args):
+        pattern, text, replacement = map(str, args)
+        if not text.isascii() or len(text) > limits["max_regex_subject_chars"]:
+            raise UnsupportedTransformation("regex replacement subject exceeds the supported ASCII or length bounds")
+        compiled = regular_expression(pattern, limits["max_regex_pattern_chars"])
+        if "$" in replacement or compiled.search("") is not None:
+            raise UnsupportedTransformation("regex capture expansion and empty matches remain unresolved")
+        # Literal replacements avoid Python/Go differences in expansion syntax.
+        if len(text) * max(1, len(replacement)) > limits["max_string_chars"]:
+            raise UnsupportedTransformation(f"regex replacement exceeds compiler.max_string_chars={limits['max_string_chars']}")
+        return compiled.sub(lambda _: replacement, text)
     if function == "toString" and len(args) == 1 and type(args[0]) in (str, int, bool):
         return str(args[0]).lower() if type(args[0]) is bool else str(args[0])
     if function == "atoi" and len(args) == 1 and isinstance(args[0], str):

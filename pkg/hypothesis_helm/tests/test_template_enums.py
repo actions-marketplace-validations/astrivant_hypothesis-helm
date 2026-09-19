@@ -95,6 +95,56 @@ def test_map_enum_guards_and_message_order(preset_chart: Chart) -> None:
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_serialized_valid_preset_does_not_hide_later_enum(preset_chart: Chart) -> None:
+    """
+    Analyze rejection effects without demanding unused YAML from an earlier valid helper.
+
+    Args:
+        preset_chart (Chart): Helper whose accepted branch serializes a resource map.
+
+    Returns:
+        None: The later enum remains discoverable and every candidate still needs native confirmation.
+    """
+    template = preset_chart.path / "templates/config.yaml"
+    template.write_text(
+        template.read_text().replace(
+            "status: ready", 'status: ready\n  first: {{ include "preset.resources" (dict "type" "nano") | quote }}'
+        )
+    )
+    contracts = Contracts.build(preset_chart.path)
+    values = {**preset_chart.defaults, "preset": "bad"}
+    rejection = contracts.predict(values)
+    assert rejection is not None and rejection.enums == {"$.preset": ("large", "nano", "small")}
+    assert rejection.contextual and not contracts.fallbacks
+    with pytest.raises(RenderFailure) as observed:
+        render(preset_chart, values)
+    assert matches_rejection(str(observed.value), rejection)
+    policy = RejectionPolicy(contracts, preset_chart.defaults)
+    policy.verified(rejection, values)
+    assert policy.needs_probe(rejection, values)
+    assert contracts.predict({**values, "preset": "small"}) is None
+    assert render(preset_chart, {"preset": "small"})
+
+
+def test_consumed_helper_output_remains_required(preset_chart: Chart) -> None:
+    """
+    Keep serialization unresolved when its output controls a rejection branch.
+
+    Args:
+        preset_chart (Chart): Helper whose toYaml output the compiler cannot reproduce exactly.
+
+    Returns:
+        None: Discarded-output analysis never supplies a fabricated conditional value.
+    """
+    (preset_chart.path / "templates/config.yaml").write_text(
+        '{{ if eq (include "preset.resources" (dict "type" "nano")) "" }}{{ fail "invented empty output" }}{{ end }}'
+    )
+    contracts = Contracts.build(preset_chart.path)
+    assert contracts.predict(preset_chart.defaults) is None
+    assert any(note["reason"] == "unsupported function: toYaml" for note in contracts.fallbacks)
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
 @pytest.mark.parametrize("function", ["mergeOverwrite", "mustMergeOverwrite"])
 def test_enum_after_fresh_label_merge_and_formatting(preset_chart: Chart, function: str) -> None:
     """
