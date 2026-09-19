@@ -122,18 +122,18 @@ def test_invalid_zero_stays_in_example(tmp_path: Path, monkeypatch: pytest.Monke
     (tmp_path / "values.schema.json").write_text(json.dumps(schema))
     (tmp_path / "values.yaml").write_text("{}\n")
 
-    def reject(manifests: str, timeout: float) -> None:
+    def reject(manifests: list[object], timeout: float) -> None:
         """
         Model a downstream rule requiring a positive index.
 
         Args:
-            manifests (str): Actual Helm-rendered YAML.
+            manifests (list[object]): Parsed Helm-rendered documents.
             timeout (float): Validation budget.
 
         Returns:
             None: The zero candidate fails without proposing a replacement.
         """
-        assert mapping(mapping(yamlio.load_all(manifests)[0])["spec"])["index"] == 0
+        assert mapping(mapping(manifests[0])["spec"])["index"] == 0
         raise AssertionError("API index must be at least 1")
 
     monkeypatch.setenv("HYPOTHESIS_HELM_INPUT_POLICY", json.dumps({"resource_schemas": {"example.test/v1/Indexed": {"type": "object"}}}))

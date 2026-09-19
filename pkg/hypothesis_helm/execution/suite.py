@@ -35,6 +35,8 @@ from hypothesis_helm.execution.sampling import ENVIRONMENT as SAMPLING_ENVIRONME
 from hypothesis_helm.execution.sampling import REPORT as SAMPLING_REPORT
 from hypothesis_helm.execution.structure import inspect_structure
 from hypothesis_helm.execution.traversal import ALGORITHM, validate_strategy
+from hypothesis_helm.findings.severity import junit_findings
+from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format
@@ -60,6 +62,7 @@ def run_suite(
     rerun: str = "auto",
     run_id: str | None = None,
     export_suppressions: bool = False,
+    audit_report: dict[str, object] | None = None,
 ) -> int:
     """
     Execute a saved generated suite with the plugin's Python and pytest.
@@ -86,6 +89,7 @@ def run_suite(
         rerun (str): Auto, all, or failed; auto retries failures outside CI.
         run_id (str | None): Common identifier for shards belonging to one final report.
         export_suppressions (bool): Write a categorized draft from this chart or shard's observed findings.
+        audit_report (dict[str, object] | None): Pre-execution audit retained with lower-severity findings.
 
     Returns:
         int: Pytest exit status, or 130 when the child is interrupted.
@@ -144,14 +148,13 @@ def run_suite(
             str(results / "junit.xml"),
             "-ra",
         ]
-        if fail_fast:
-            command.append("--exitfirst")
         if match is not None:
             command += ["-k", match]
         if collect_only:
             command.append("--collect-only")
         command.append(str(module))
         environment = dict(os.environ)
+        environment["HYPOTHESIS_HELM_FAIL_FAST"] = "1" if fail_fast else "0"
         environment["HYPOTHESIS_HELM_TRAVERSAL_STRATEGY"] = traversal_strategy
         environment["HYPOTHESIS_HELM_TRAVERSAL_SEED"] = str(seed)
         environment[SAMPLING_ENVIRONMENT] = json.dumps({"percent": sampling.percent, "minimum": sampling.minimum})
@@ -278,6 +281,7 @@ def run_suite(
             )
         selected = set(assignment["tests"]) if assignment is not None else set()
         reused = sorted(node for node in selected if retry and cached.get(node) == "passed")
+        findings = junit_findings((results / "junit.xml").read_text()) if (results / "junit.xml").is_file() else []
         report = {
             "run_id": run_id,
             "started_epoch": started,
@@ -288,10 +292,16 @@ def run_suite(
             if status == 130
             else "collected"
             if status == 0 and collect_only
+            else "findings"
+            if status == 0 and findings
             else "passed"
             if status == 0
             else "failed",
             "exit_code": status,
+            "findings": findings,
+            "finding_policy": finding_policy(),
+            **({"audit": audit_report} if audit_report is not None else {}),
+            **({"coverage_complete": False} if findings else {}),
             "suite": str(directory),
             "render_hashes": render_statistics,
             "input_policy": json.loads(environment.get("HYPOTHESIS_HELM_INPUT_POLICY", "{}")),

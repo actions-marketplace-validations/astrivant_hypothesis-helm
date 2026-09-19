@@ -223,6 +223,7 @@ def write_reports(
                 lines.append(
                     f"- `{observed_finding['code']}` at `{format_path(path)}`: "
                     f"{mapping(observed_finding.get('finding', {})).get('title', '')}"
+                    f"{(' (' + str(observed_finding['severity']) + ')') if 'severity' in observed_finding else ''}"
                 )
             if len(findings) > 6:
                 lines.append(f"- {len(findings) - 6} additional audit findings in JSON.")
@@ -280,7 +281,9 @@ def write_reports(
             if isinstance(finding, dict):
                 lines.extend(
                     [
-                        f"**{finding['title']}** ({finding['category']} / {finding['kind']}). {finding['remediation']}",
+                        f"**{finding['title']}** ({finding['category']} / {finding['kind']}). "
+                        f"{('Severity: **' + str(finding['severity']) + '**. ') if 'severity' in finding else ''}"
+                        f"{finding['remediation']}",
                         "",
                     ]
                 )

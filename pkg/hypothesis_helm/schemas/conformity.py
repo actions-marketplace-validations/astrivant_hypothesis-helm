@@ -11,6 +11,7 @@ import re
 import shutil
 import tempfile
 import time
+from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
@@ -209,12 +210,12 @@ def schema_validator(file: Path, identity: str) -> Validator:
     return validators.validator_for(schema)(schema, format_checker=FormatChecker())
 
 
-def validate(manifests: str, timeout: float, *, configuration: str | None = None) -> None:
+def validate(manifests: str | Iterable[object], timeout: float, *, configuration: str | None = None) -> None:
     """
-    Validate rendered YAML strictly against the selected local API schemas.
+    Validate rendered documents against local API schemas, reusing parsed YAML when available.
 
     Args:
-        manifests (str): Complete rendered YAML stream.
+        manifests (str | Iterable[object]): Complete YAML text or already parsed documents; input objects are not mutated.
         timeout (float): Time budget checked between resources; the owning chart worker enforces its process deadline.
         configuration (str | None): Explicit cache selection, or the configuration inherited by the current worker.
 
@@ -271,6 +272,6 @@ def validate(manifests: str, timeout: float, *, configuration: str | None = None
         except (ValueError, OSError, ValidationError) as exc:
             raise AssertionError(f"Kubernetes {settings['version']} API schema validation failed: {exc}") from exc
 
-    for document in yamlio.load_all(manifests):
+    for document in yamlio.load_all(manifests) if isinstance(manifests, str) else manifests:
         if document is not None:
             check(document)

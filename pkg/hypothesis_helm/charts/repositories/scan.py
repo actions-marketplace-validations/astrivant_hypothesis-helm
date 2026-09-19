@@ -34,6 +34,8 @@ from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.execution.sensitivity import validate_order
 from hypothesis_helm.execution.signals import Termination
+from hypothesis_helm.findings.severity import attributes, blocks, for_paths, level
+from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
 from hypothesis_helm.reporting.errors import chart_errors, deduplicate_errors
@@ -132,12 +134,20 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
         message = str(finding.get("message", finding.get("issue", "Unresolved value access")))
         identity = (str(finding["code"]), location, message)
         if identity not in seen:
-            LOGGER.warning("[%s] Audit finding: chart=%s; %s; at=%s", finding["code"], name, message, location)
+            LOGGER.warning(
+                "[%s] Audit finding: chart=%s; %s; at=%s; severity=%s",
+                finding["code"],
+                name,
+                message,
+                location,
+                finding.get("severity", level(str(finding["code"]))),
+            )
             seen.add(identity)
-        if args.fail:
+        if finding.get("fail_fast", args.fail and blocks(str(finding["code"]))):
             return {
                 "status": "failed",
                 "code": finding["code"],
+                **{key: finding[key] for key in ("severity", "blocking", "fail_fast") if key in finding},
                 "error": f"[{finding['code']}] Input audit finding at {location} (--fail)",
                 "audit": findings,
                 "coverage": "audit only",
@@ -167,13 +177,18 @@ def _exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> di
     if baseline.returncode and not ignored("HH1012", chart=path):
         from hypothesis_helm.reporting.logs import FindingLog, chart_name
 
-        FindingLog(chart_name(path), {}, artifacts=artifacts).emit("Baseline check failed", "HH1012", diagnostic)
+        decision = attributes("HH1012", settings=for_paths(path))
+        FindingLog(chart_name(path), {}, artifacts=artifacts).emit(
+            "Baseline check failed", "HH1012", diagnostic, severity=str(decision["severity"])
+        )
         status = (
             "missing-dependencies"
             if "dependencies" in diagnostic.lower() and ("missing" in diagnostic.lower() or "not found" in diagnostic.lower())
             else "baseline-failed"
         )
-        return {"status": status, "code": "HH1012", "error": diagnostic, "coverage": "defaults only"}
+        if status == "baseline-failed" and not decision["blocking"]:
+            status = "findings"
+        return {"status": status, "code": "HH1012", "error": diagnostic, "coverage": "defaults only", **decision}
     has_schema = (path / "values.schema.json").is_file()
     try:
         chart = (
@@ -549,7 +564,7 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
                 record.get("dependency_preparation_seconds", 0.0),
                 len(records) - index - 1,
             )
-        if args.fail and record["status"] in {"baseline-failed", "failed", "error"}:
+        if record.get("fail_fast", args.fail) and record["status"] in {"baseline-failed", "failed", "error"}:
             failed_early = True
             LOGGER.info("Stopping scan after failure in %s (--fail)", record["chart"])
             break
@@ -572,7 +587,13 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         )
         record.setdefault(
             "result",
-            "PASS" if record["status"] == "passed" else "FAIL" if record["status"] in {"baseline-failed", "failed"} else "N/A",
+            "PASS"
+            if record["status"] == "passed"
+            else "FINDINGS"
+            if record["status"] == "findings"
+            else "FAIL"
+            if record["status"] in {"baseline-failed", "failed"}
+            else "N/A",
         )
     counts = dict(Counter(str(record["status"]) for record in records))
     report: dict[str, object] = {
@@ -598,6 +619,7 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         "charts": records,
         "git_comparison": changes,
         "ignored_rules": ignored_codes(),
+        "finding_policy": finding_policy(),
         "input_policy": getattr(args, "input_policy", {}),
         "settings": {
             "ignored_rules": ignored_codes(),
@@ -677,4 +699,4 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         return 1
     if any(status in counts for status in ("invalid-metadata", "baseline-failed", "failed", "error")):
         return 1
-    return 0 if records and set(counts) <= {"passed", "cached-pass", "ignored"} else 2
+    return 0 if records and set(counts) <= {"passed", "cached-pass", "ignored", "findings"} else 2

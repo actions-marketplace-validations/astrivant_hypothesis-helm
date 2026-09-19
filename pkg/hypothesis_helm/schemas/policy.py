@@ -16,6 +16,7 @@ from jsonschema import validators
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.limits import compiler_limits
 from hypothesis_helm.findings.catalog import CATALOG
+from hypothesis_helm.findings.severity import validate as validate_findings
 from hypothesis_helm.schemas.characters import validate_character_sets
 from hypothesis_helm.schemas.contracts import json_value, mapping, number, sequence
 from hypothesis_helm.schemas.selectors import selectors
@@ -49,6 +50,7 @@ def configuration(config: Path | None) -> dict[str, object]:
         "resource_schemas",
         "downstream_inputs",
         "compiler",
+        "findings",
         *SETTING_KEYS,
     }:
         raise ValueError(f"{path}: unknown configuration key; see the complete example in docs/input-domains/README.md")
@@ -128,6 +130,7 @@ def load_policy(
         dict[str, object]: JSON-compatible policy with resource schema contents embedded.
     """
     document = configuration(config)
+    findings = validate_findings(document.get("findings", {}))
     limits = compiler_limits(document.get("compiler", {}))
     defaults = validate_settings(document)
     if max_examples is not None:
@@ -146,7 +149,7 @@ def load_policy(
     resolved: list[dict[str, object]] = []
     for raw in rules:
         rule = mapping(raw)
-        if set(rule) - {"charts", "path", "profile", "schema", "allow_empty", "ignored", "enabled", "compiler", *SETTING_KEYS}:
+        if set(rule) - {"charts", "path", "profile", "schema", "allow_empty", "ignored", "enabled", "compiler", "findings", *SETTING_KEYS}:
             raise ValueError("Unknown input constraint option")
         charts = selectors(rule.get("charts"), root)
         generation = validate_settings(rule)
@@ -161,6 +164,8 @@ def load_policy(
             validated = compiler_limits(rule["compiler"])
             compiler = {"compiler": {key: validated[key] for key in mapping(rule["compiler"])}}
         controls: dict[str, object] = {}
+        if "findings" in rule:
+            controls["findings"] = validate_findings(rule["findings"], partial=True)
         for key in ("ignored", "enabled"):
             if key in rule:
                 codes = rule[key]
@@ -209,6 +214,7 @@ def load_policy(
         "downstream_inputs": document.get("downstream_inputs", True),
         "character_sets": selected,
         "compiler": limits,
+        "findings": findings,
     }
 
 

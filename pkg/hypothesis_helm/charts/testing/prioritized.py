@@ -94,8 +94,9 @@ def check_prioritized(
             }
         )
     remaining = budget - (time.monotonic() - started)
-    if fail_fast and any(
-        phase["status"] == "failed"
+    if any(
+        phase.get("fail_fast", fail_fast)
+        and phase["status"] == "failed"
         and phase.get("failure_type") not in {"Unsatisfiable", "FailedHealthCheck", "SchemaError", "InvalidArgument"}
         for phase in phases
     ):
@@ -173,7 +174,7 @@ def check_prioritized(
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "report.json").write_text(json.dumps(phase, indent=2) + "\n")
     failures = [phase for phase in phases if phase["status"] == "failed"]
-    incomplete = any(phase["status"] not in {"passed", "failed", "not-needed"} or phase.get("stop_reason") for phase in phases)
+    incomplete = any(phase["status"] not in {"passed", "failed", "findings", "not-needed"} or phase.get("stop_reason") for phase in phases)
     status = (
         "failed"
         if failures
@@ -183,9 +184,12 @@ def check_prioritized(
         if incomplete
         else "ignored"
         if phases and all(phase["status"] in {"ignored", "not-needed"} for phase in phases)
+        else "findings"
+        if any(phase["status"] == "findings" for phase in phases)
         else "passed"
     )
     result: dict[str, object] = {
+        **({"fail_fast": any(bool(phase.get("fail_fast", fail_fast)) for phase in failures)} if failures else {}),
         "status": status,
         "ignored_rules": ignored_codes(),
         "attempts": sum(int(str(phase.get("attempts", 0))) for phase in phases),

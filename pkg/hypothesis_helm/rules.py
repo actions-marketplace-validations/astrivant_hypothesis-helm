@@ -137,11 +137,13 @@ class RenderFailure(AssertionError):
     Attributes:
         code (str): Stable identifier, independent of report grouping order.
         finding (Finding): Structured observation carried by this exception.
+        controls (dict[str, object]): Frozen severity and failure decision from the detecting scope.
         resources (list[object] | None): Parsed output available before validation failed.
     """
 
     code: str
     finding: Finding
+    controls: dict[str, object]
     resources: list[object] | None = None
 
     def __init__(self, message: str, code: str = "HH1001") -> None:
@@ -154,6 +156,9 @@ class RenderFailure(AssertionError):
         """
         self.finding = FindingGenerator.create(code, message)
         self.code = self.finding.rule.code
+        from hypothesis_helm.findings.severity import attributes
+
+        self.controls = attributes(self.code)
         super().__init__(f"[{self.code}] {message}")
 
 

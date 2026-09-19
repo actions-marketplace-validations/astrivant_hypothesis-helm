@@ -17,6 +17,7 @@ from hypothesis_helm.execution.feedback import ThroughputController
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
 from hypothesis_helm.execution.traversal import validate_strategy
+from hypothesis_helm.findings.severity import junit_stops
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.display import start_progress
 
@@ -199,7 +200,7 @@ def run_parallel(
                             "throughput": controller.throughput,
                         }
                     )
-                    if fail_fast and status != 0:
+                    if fail_fast and status != 0 and (status != 1 or junit_stops(reports[index])):
                         failed_early = True
                         LOGGER.info("Stopping after the first failed property (--fail)")
                         break

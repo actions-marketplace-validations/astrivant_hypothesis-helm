@@ -30,6 +30,7 @@ from hypothesis_helm.execution.signals import Termination
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.execution.traversal import STRATEGIES, validate_strategy
 from hypothesis_helm.findings.generator import FindingGenerator
+from hypothesis_helm.findings.severity import LEVELS, audit_blocks
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.budget import parse_time_limit
@@ -41,13 +42,37 @@ from hypothesis_helm.reporting.shards import aggregate
 from hypothesis_helm.rules import ENVIRONMENT as RULE_ENVIRONMENT
 from hypothesis_helm.rules import load_ignored, may_check
 from hypothesis_helm.schemas.conformity import ENVIRONMENT, prepare
-from hypothesis_helm.schemas.contracts import mapping
+from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.factors import factor_space
 from hypothesis_helm.schemas.finite import NonFiniteSchema
 from hypothesis_helm.schemas.groups import parse_group
 from hypothesis_helm.schemas.policy import ENVIRONMENT as INPUT_ENVIRONMENT
 from hypothesis_helm.schemas.policy import load_policy
 from hypothesis_helm.schemas.selectors import SourceScope, chart_identity, source_identity
+
+
+class FailAction(argparse.Action):
+    """
+    Keep Boolean fail-fast scheduling while accepting an optional severity threshold.
+    """
+
+    def __call__(
+        self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: object, option_string: str | None = None
+    ) -> None:
+        """
+        Record the explicit CLI threshold separately from the scheduling switch.
+
+        Args:
+            parser (argparse.ArgumentParser): Owning command parser.
+            namespace (argparse.Namespace): Parsed execution settings.
+            values (object): Validated severity, or info for bare --fail.
+            option_string (str | None): Original flag spelling.
+
+        Returns:
+            None: Fail-fast remains Boolean for existing schedulers.
+        """
+        namespace.fail = True
+        namespace.fail_level = str(values)
 
 
 class ExamplesAction(argparse.Action):
@@ -282,8 +307,12 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     )
     repository.add_argument(
         "--fail",
-        action="store_true",
-        help="stop on the first unsuppressed finding, including audit findings; save partial results and exit 1",
+        action=FailAction,
+        nargs="?",
+        const="info",
+        default=False,
+        choices=tuple(LEVELS),
+        help="stop at this severity or higher and exit 1; bare flag: any finding; lower findings remain reported",
     )
     repository.add_argument("--seed", type=int, default=0)
     repository.add_argument(
@@ -312,7 +341,15 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         ),
     )
     inspect.add_argument("chart", type=Path)
-    inspect.add_argument("--fail", action="store_true", help="fail on any finding or unresolved access")
+    inspect.add_argument(
+        "--fail",
+        action=FailAction,
+        nargs="?",
+        const="info",
+        default=False,
+        choices=tuple(LEVELS),
+        help="fail on audit findings at this severity or higher; bare flag: any finding",
+    )
     inspect.add_argument("--artifact-dir", type=Path, default=Path(".cache/hypothesis-helm/audits"), help="audit export directory")
     run = commands.add_parser(
         "run",
@@ -355,8 +392,12 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     )
     test.add_argument(
         "--fail",
-        action="store_true",
-        help="stop on the first unsuppressed finding, including audit findings; save partial results and exit 1",
+        action=FailAction,
+        nargs="?",
+        const="info",
+        default=False,
+        choices=tuple(LEVELS),
+        help="stop at this severity or higher and exit 1; bare flag: any finding; lower findings remain reported",
     )
     test.add_argument("--max-examples", type=int, action=ExamplesAction, default=10)
     test.add_argument(
@@ -563,8 +604,12 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     for command in (generate, run):
         command.add_argument(
             "--fail",
-            action="store_true",
-            help="stop on the first unsuppressed finding, including audit findings; exit 1",
+            action=FailAction,
+            nargs="?",
+            const="info",
+            default=False,
+            choices=tuple(LEVELS),
+            help="stop at this severity or higher and exit 1; bare flag: any finding; lower findings remain reported",
         )
     for command in (repository, inspect, generate, test):
         command.add_argument(
@@ -690,7 +735,13 @@ def main(argv: list[str] | None = None) -> int:
         int: Process exit status, zero on success.
     """
     parser = argument_parser()
-    args = parser.parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    for index, argument in enumerate(arguments):
+        if argument == "--":
+            break
+        if argument == "--fail" and (index + 1 == len(arguments) or arguments[index + 1] not in LEVELS):
+            arguments[index] = "--fail=info"
+    args = parser.parse_args(arguments)
     if args.generate_config:
         if args.command is not None:
             parser.error("--generate-config cannot be combined with a command")
@@ -762,6 +813,14 @@ def main(argv: list[str] | None = None) -> int:
             )
             if hasattr(args, "max_examples"):
                 args.max_examples = int(str(mapping(args.input_policy.get("hypothesis", {})).get("max_examples", args.max_examples)))
+            finding_policy = mapping(args.input_policy["findings"])
+            if hasattr(args, "fail"):
+                if args.fail:
+                    finding_policy["fail_on"] = args.fail_level
+                args.fail = finding_policy.get("fail_on") is not None or any(
+                    mapping(mapping(rule).get("findings", {})).get("fail_on") is not None
+                    for rule in sequence(args.input_policy.get("input_constraints", []))
+                )
             os.environ[INPUT_ENVIRONMENT] = json.dumps(args.input_policy, sort_keys=True)
             args.ignored_rules = load_ignored(args.config, args.ignore)
             os.environ[RULE_ENVIRONMENT] = json.dumps(args.ignored_rules)
@@ -813,6 +872,7 @@ def main(argv: list[str] | None = None) -> int:
                 source_document = mapping(json.loads(source_record.read_text()))
                 if "source" in source_document:
                     stack.enter_context(SourceScope(str(source_document["source"])))
+        finding_report = None
         if args.command in ("generate", "test", "run") and args.fail:
             source = args.chart if args.command != "run" else None
             if source is None:
@@ -821,7 +881,16 @@ def main(argv: list[str] | None = None) -> int:
                     raise ValueError("--fail run requires chart-source.json; regenerate the suite")
                 source = args.suite / json.loads(metadata.read_text())["chart"]
             finding_report = audit_findings(Chart.load(source))
-            if finding_report["findings"] or finding_report["unresolved"]:
+            for item in [*sequence(finding_report.get("findings", [])), *sequence(finding_report.get("unresolved", []))]:
+                finding = mapping(item)
+                logger.warning(
+                    "[%s] Audit finding: %s; path=%s; severity=%s",
+                    finding["code"],
+                    finding.get("message", finding.get("issue", "Unresolved value access")),
+                    finding.get("path", []),
+                    finding["severity"],
+                )
+            if audit_blocks(finding_report):
                 if getattr(args, "export_suppressions", False):
                     destination = args.artifact_dir or args.suite
                     selector, _ = resolve_shard(args.shard, os.environ)
@@ -1021,6 +1090,7 @@ def main(argv: list[str] | None = None) -> int:
                 rerun=args.rerun,
                 artifact_dir=args.artifact_dir,
                 export_suppressions=args.export_suppressions,
+                audit_report=finding_report,
             )
         chart = load_input_chart(args.chart) if args.command == "audit" else Chart.load(args.chart)
         capture = stack.enter_context(
@@ -1035,9 +1105,9 @@ def main(argv: list[str] | None = None) -> int:
             status = 0
         elif args.command == "audit":
             report = audit_findings(chart) if args.fail else audit(chart)
-            if args.fail and not (report["findings"] or report["unresolved"]):
+            if args.fail and not audit_blocks(report):
                 report = audit(chart)
-            status = 1 if args.fail and (report["findings"] or report["unresolved"]) else 0
+            status = 1 if args.fail and audit_blocks(report) else 0
         elif not args.whole_chart and not args.exhaustive and args.permutations is None:
             if args.timeout <= 0:
                 raise ValueError("timeout must be positive")
@@ -1084,6 +1154,7 @@ def main(argv: list[str] | None = None) -> int:
                 rerun=args.rerun,
                 artifact_dir=args.artifact_dir,
                 export_suppressions=args.export_suppressions,
+                audit_report=finding_report,
             )
         else:
             if args.shard is not None:
@@ -1129,7 +1200,14 @@ def main(argv: list[str] | None = None) -> int:
                 filter_rejections=args.filter,
                 fail_fast=args.fail,
             )
-            status = 0 if report["status"] in ("passed", "dry-run", "ignored") else 124 if report["status"] == "time-limit" else 1
+            status = (
+                0 if report["status"] in ("passed", "dry-run", "ignored", "findings") else 124 if report["status"] == "time-limit" else 1
+            )
+        if finding_report is not None:
+            report["audit"] = finding_report
+            if getattr(args, "artifact_dir", None) is not None:
+                args.artifact_dir.mkdir(parents=True, exist_ok=True)
+                (args.artifact_dir / "audit.json").write_text(json.dumps(finding_report, indent=2) + "\n")
         if getattr(args, "dry_run", False):
             plot_progression(report)
         if minimal_values is not None:

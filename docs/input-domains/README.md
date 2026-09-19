@@ -183,6 +183,11 @@ ignored: [HH2006]  # Other findings remain enabled.
 
 # Global defaults for fresh generated text; supplied values are preserved.
 downstream_inputs: true  # Use constraints from supported downstream field mappings.
+findings:
+  fail_on: null  # null: existing exit behavior; info, warning or error: fail fast at that severity or higher.
+  severity:  # Optional per-code overrides; ignored/enabled still control whether a finding is emitted.
+    HH2001: error  # Require documented values paths when a failure threshold is enabled.
+    HH2003: info  # Missing descriptions remain informational.
 # Compiler budgets are positive integers; bytes, characters and counts are separate units.
 compiler:
   max_call_depth: 16  # Nested helper/tpl calls.
@@ -235,6 +240,10 @@ input_constraints:
           - ./charts
         names: [example, example-worker]
     path: $  # Whole chart; descendants inherit these partial overrides.
+    findings:
+      fail_on: error  # Override the global threshold for these charts.
+      severity:
+        HH2003: info  # Other code severities retain their inherited settings.
     compiler:  # Chart-wide budgets, including dependencies; only accepted with path: $.
       max_call_depth: 64  # Other limits inherit the global compiler settings.
       max_steps: 20000
@@ -261,6 +270,9 @@ input_constraints:
 
   - charts: [example]
     path: $.containers[*].label
+    findings:
+      severity:
+        HH2001: warning  # Override this branch only; fail_on still inherits.
     schema:
       type: string
       minLength: 1
@@ -291,6 +303,10 @@ Global settings are defaults. A rule's `path` applies to that branch and its des
 for each setting independently. For example, overriding `max_examples` retains the inherited deadline and phases.
 Conflicting generation settings at equal path depth are configuration errors. Schema/profile restrictions intersect;
 [finding controls](../rules/README.md#controls-for-individual-values-paths) have their own suppression rules.
+
+Rules also accept `findings.fail_on` and `findings.severity`, using the same keys as the global `findings` section.
+Unspecified settings and code severities inherit their values; deeper matching paths override them individually.
+See [severity thresholds](../rules/README.md#severity-thresholds) for examples and multi-path behavior.
 
 Compiler budgets follow the same global/chart split. Put `compiler:` beside `hypothesis:` in a rule with `path: $`.
 Use `charts: [airflow, "redis*"]`, or the source/name matrix shown above, to select charts. Only specified budgets

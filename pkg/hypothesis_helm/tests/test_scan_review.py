@@ -100,13 +100,15 @@ def test_shrink_timeout_retains_observed_failure(chart: Chart, tmp_path: Path, m
     assert json.loads((artifacts / "report.json").read_text()) == result
 
 
-def test_worker_recovery_retains_checkpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("blocking", [True, False])
+def test_worker_recovery_retains_checkpoint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, blocking: bool) -> None:
     """
     Recover a claimed property's saved failure when its worker cannot write a final result.
 
     Args:
         tmp_path (Path): Queue and worker evidence.
         monkeypatch (pytest.MonkeyPatch): Simulate an exited worker with no final queue record.
+        blocking (bool): Whether saved evidence meets the active severity threshold.
 
     Returns:
         None: The coordinator retains the observed failure and marks execution incomplete.
@@ -126,13 +128,16 @@ def test_worker_recovery_retains_checkpoint(tmp_path: Path, monkeypatch: pytest.
             SimpleNamespace: Completed process status without a queue result.
         """
         save(queue / "started-00000000.json", {"path": ["a"], "artifacts": str(artifacts), "worker_pid": 42})
-        save(artifacts / "observed-failure.json", {"status": "failed", "values": {"a": True}, "code": "HH1101"})
+        save(
+            artifacts / "observed-failure.json",
+            {"status": "failed" if blocking else "findings", "values": {"a": True}, "code": "HH1101", "blocking": blocking},
+        )
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr("hypothesis_helm.execution.path_queue.Processes", lambda **kwargs: SimpleNamespace(run=run, stop=lambda: None))
     results = execute({"paths": [{"path": ["a"]}], "deadline": float("inf")}, queue, 1)
     assert len(results) == 1
-    assert results[0]["status"] == "failed"
+    assert results[0]["status"] == ("failed" if blocking else "error")
     assert results[0]["stop_reason"] == "error"
     assert results[0]["values"] == {"a": True}
     assert results[0]["path"] == ["a"]

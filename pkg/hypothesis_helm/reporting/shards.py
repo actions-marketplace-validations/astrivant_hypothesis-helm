@@ -13,6 +13,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from hypothesis_helm.findings.severity import junit_attributes
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.errors import chart_errors
 from hypothesis_helm.reporting.repository import write_reports
@@ -75,6 +76,7 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
         traversal: set[tuple[str, str]] = set()
         sampling_policies: set[str] = set()
         ignored_policies: set[str] = set()
+        finding_policies: set[str] = set()
         inventories: set[str] = set()
         selected: set[str] = set()
         matched: set[int] = set()
@@ -105,6 +107,7 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
                 raise ValueError(f"Shard {index}/{total} lacks suite or collection identity")
             signatures.add(signature)
             ignored_policies.add(json.dumps(record.get("ignored_rules", []), sort_keys=True))
+            finding_policies.add(json.dumps(record.get("finding_policy", {}), sort_keys=True))
             sampling_policies.add(json.dumps(record.get("sampling"), sort_keys=True))
             traversal.add((str(record.get("traversal_strategy", "linear")), str(record.get("traversal_algorithm", "legacy"))))
             inventories.add(inventory)
@@ -144,6 +147,7 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
                             {
                                 "phase": f"shard {index}/{total}: {case.get('classname', '')}.{case.get('name', '')}",
                                 "status": "failed",
+                                **junit_attributes(case),
                                 "error": entry.text or entry.get("message", "") or f"JUnit {tag} without diagnostic text",
                             }
                             for entry in entries
@@ -154,6 +158,8 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             input_hash.update(junit)
         if len(ignored_policies) != 1:
             raise ValueError("Shards used different ignored-rule policies")
+        if len(finding_policies) != 1:
+            raise ValueError("Shards used different finding severity policies")
         if len(sampling_policies) != 1:
             raise ValueError("Shards used different random sampling policies or populations")
         if len(traversal) != 1:
@@ -182,7 +188,8 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             if 1 in codes or counts["failures"] or counts["errors"]
             else 0
         )
-        outcome = "passed" if status == 0 else "failed" if status == 1 else "incomplete"
+        findings = [finding for item in records for finding in sequence(item.get("findings", []))]
+        outcome = "findings" if status == 0 and findings else "passed" if status == 0 else "failed" if status == 1 else "incomplete"
         summary = [
             f"Run: {run_id}. All {total} shards reported; {len(selected)} selected properties.",
             f"Executed: {counts['tests']}; reused cached successes: {reused}; "
@@ -194,17 +201,24 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             "chart": Path(str(records[0]["suite"])).name,
             "sampling": json.loads(next(iter(sampling_policies))),
             "status": outcome,
-            "result": "PASS" if status == 0 else "FAIL" if status == 1 else "N/A",
+            "result": "FINDINGS" if outcome == "findings" else "PASS" if status == 0 else "FAIL" if status == 1 else "N/A",
+            "findings": findings,
+            **({"audit": records[0]["audit"]} if "audit" in records[0] else {}),
+            **({"coverage_complete": False} if findings else {}),
             "coverage": f"{len(selected)} selected properties across {total} shards",
             "artifacts": str(directory / "shards") if directory is not None else "none",
             "phases": [{"phase": f"shard {index}/{total}", "status": item["status"]} for index, item in enumerate(records, 1)],
-            "error_diagnostics": chart_errors({"phases": failure_phases}),
+            "error_diagnostics": chart_errors(
+                {"phases": failure_phases, "findings": findings, "finding_policy": json.loads(next(iter(finding_policies)))}
+            ),
         }
         if failures:
             record["error"] = "\n\n".join(failures)
         report: dict[str, object] = {
             "title": "Helm sharded test results",
             "ignored_rules": json.loads(next(iter(ignored_policies))),
+            "finding_policy": json.loads(next(iter(finding_policies))),
+            "findings": findings,
             "directory": str(directory) if directory is not None else "piped shard reports",
             "run_id": run_id,
             "input_digest": identity,

@@ -452,6 +452,7 @@ class Pruner:
                 partitions.append((name, output.partition))
                 influences.update(output.influences)
         if reason is not None:
+            from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths
             from hypothesis_helm.rules import RenderFailure, ignored
 
             self.reasons[reason] = self.reasons.get(reason, 0) + 1
@@ -460,8 +461,11 @@ class Pruner:
                 if reason not in self.warned:
                     self.warned.add(reason)
                     LOGGER.warning("[HH2007] Exact-equivalence analysis incomplete: %s", message)
-                if self.fail_fast:
-                    raise RenderFailure(message, "HH2007")
+                decision = attributes("HH2007", settings=ACTIVE_POLICY.get() or for_paths(self.chart))
+                if decision.get("fail_fast", self.fail_fast and decision["blocking"]):
+                    failure = RenderFailure(message, "HH2007")
+                    failure.controls = decision
+                    raise failure
             return None
         return Witness(
             configuration_key({"outputs": outputs, "partitions": partitions, "context": context}),

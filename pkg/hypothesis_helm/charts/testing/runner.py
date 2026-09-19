@@ -39,6 +39,8 @@ from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.sensitivity import SensitivityOrder, validate_order
 from hypothesis_helm.execution.traversal import order_configurations, validate_strategy
 from hypothesis_helm.findings.policy import chart_rules
+from hypothesis_helm.findings.severity import attributes
+from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.changes import compare
 from hypothesis_helm.reporting.checkpoints import save as save_checkpoint
@@ -407,6 +409,13 @@ def check_chart(
             result["sensitivity"] = sensitivity.report()
         result["ignored_rules"] = ignored_codes()
         result["finding_controls"] = chart_rules(chart.path)
+        result["finding_policy"] = finding_policy()
+        result["findings"] = list(checks.nonblocking_findings.values())
+        if checks.nonblocking_findings:
+            result["coverage_complete"] = False
+            result["proof_of_totality"] = False
+            if result["status"] == "passed":
+                result["status"] = "findings"
         result["input_domains"] = chart.input_domains().report()
         result["compiler_limits"] = dict(inputs.dependencies.limits)
         result["hypothesis_settings"] = hypothesis_parameters(
@@ -469,7 +478,8 @@ def check_chart(
                 },
                 "completed_iterations": expansion_checked,
                 "successful_iterations": checks.completed_count,
-                "failed_iterations": len(expansion_failures),
+                "failed_iterations": len(expansion_failures)
+                + sum(int(str(record["occurrences"])) for record in checks.nonblocking_findings.values()),
                 "planned_iterations": total,
                 "remaining_iterations": total - expansion_checked,
                 "unattempted_iterations": total
@@ -583,6 +593,7 @@ def check_chart(
             "comparisons": comparisons(values, documents),
             "failure_type": type(exc).__name__,
             "code": getattr(exc, "code", None),
+            **getattr(exc, "controls", attributes(str(getattr(exc, "code", "")))),
             "render_hashes": hashes.snapshot(),
             **({"pruning": pruner.report()} if pruner is not None else {}),
         }
@@ -606,6 +617,7 @@ def check_chart(
                 str(result["code"] or result["failure_type"]),
                 message,
                 values,
+                severity=str(result["severity"]) if "severity" in result else None,
             )
         return result
 
@@ -627,14 +639,18 @@ def check_chart(
         initial_count = len(work)
         for position, index in enumerate(work):
             values = expansion_values[index]
+            findings_before = sum(int(str(record["occurrences"])) for record in checks.nonblocking_findings.values())
+            failed = False
             try:
                 check(values, force_render=position >= initial_count, baseline=position == 0)
+                failed = sum(int(str(record["occurrences"])) for record in checks.nonblocking_findings.values()) > findings_before
             except TimeLimitReached:
                 return stopped_report()
             except KeyboardInterrupt as exc:
                 save_failure(exc)
                 raise
             except Exception as exc:
+                failed = True
                 failed_values, message, documents = checks.last_failure or (values, str(exc), None)
                 expansion_failures.append(
                     {
@@ -644,12 +660,13 @@ def check_chart(
                         "comparisons": comparisons(failed_values, documents),
                     }
                 )
-                if fail_fast:
+                if mapping(getattr(exc, "controls", {})).get("fail_fast", fail_fast):
                     expansion_checked += 1
                     expansion_executed += int(position >= initial_count)
                     return save_failure(exc)
                 if first_error is None:
                     first_error, first_failure = exc, checks.last_failure
+            if failed:
                 added = expansion.failed(expansion_positions[configuration_key(values)])
                 additional = order_configurations(
                     select(expansion_values, added),
@@ -757,7 +774,15 @@ def check_chart(
             "coverage_complete": not bool(trimmed_cases),
         }
         if statistics is not None:
-            result.update(statistics.finish("ignored" if checks.ignored_failures and checks.completed_count == 0 else "passed"))
+            result.update(
+                statistics.finish(
+                    "findings"
+                    if checks.nonblocking_findings
+                    else "ignored"
+                    if checks.ignored_failures and checks.completed_count == 0
+                    else "passed"
+                )
+            )
         expansion_report(result)
         if artifact_dir is not None and (statistics is not None or pruner is not None):
             artifact_dir.mkdir(parents=True, exist_ok=True)
@@ -797,14 +822,19 @@ def check_chart(
         if first_sample_failure is not None:
             raise first_sample_failure
         ignored_before = sum(checks.ignored_failures.values())
+        findings_before = sum(int(str(record["occurrences"])) for record in checks.nonblocking_findings.values())
         try:
             accepted = check(values)
         except Exception as exc:
-            if fail_fast:
+            if mapping(getattr(exc, "controls", {})).get("fail_fast", fail_fast):
                 first_sample_failure = exc
             raise
         # Disabled failures consume an example without becoming a successful witness.
-        assume(accepted or sum(checks.ignored_failures.values()) > ignored_before)
+        assume(
+            accepted
+            or sum(checks.ignored_failures.values()) > ignored_before
+            or sum(int(str(record["occurrences"])) for record in checks.nonblocking_findings.values()) > findings_before
+        )
 
     try:
         property_test()
@@ -860,7 +890,7 @@ def check_chart(
     }
 
     expansion_report(result)
-    if (pruner is not None or policy is not None) and artifact_dir is not None:
+    if (pruner is not None or policy is not None or checks.nonblocking_findings) and artifact_dir is not None:
         artifact_dir.mkdir(parents=True, exist_ok=True)
         (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     return result

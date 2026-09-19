@@ -15,7 +15,9 @@ from hypothesis_helm_benchmarking.studies.matrix import bundle_key
 from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
 from hypothesis_helm.reporting.budget import TimeLimitReached
+from hypothesis_helm.rules import RenderFailure
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
+from hypothesis_helm.schemas.policy import ENVIRONMENT
 
 
 @pytest.fixture
@@ -152,6 +154,45 @@ def test_fail_fast_preserves_first_failure(expansion_chart: Chart, monkeypatch: 
     if not sampled:
         assert report["failed_iterations"] == 1
         assert mapping(report["failure_expansion"])["additional_scheduled"] == 0
+
+
+def test_nonblocking_findings_still_expand_regions(expansion_chart: Chart, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Separate the severity gate from failure-driven coverage expansion.
+
+    Args:
+        expansion_chart (Chart): Two regions with four cases in each.
+        monkeypatch (pytest.MonkeyPatch): Demote the malformed-output finding to a warning.
+
+    Returns:
+        None: The faulty region expands fully without failing the error-only gate.
+    """
+    monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error", "severity": {"HH1101": "warning"}}}))
+
+    def render(chart: Chart, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
+        """
+        Produce malformed output only in the active Boolean region.
+
+        Args:
+            chart (Chart): Chart being tested.
+            values (dict[str, object]): Selected region member.
+            **kwargs (object): Render options.
+
+        Returns:
+            list[dict[str, object]]: Ordinary output unless the faulty gate is enabled.
+        """
+        if values.get("a"):
+            raise RenderFailure("invalid YAML", "HH1101")
+        return error_output(values)
+
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
+    report = check_chart(
+        expansion_chart, permutations=2, trim_topology=2, expand_failures=True, fail_fast=True, infer_exhaustive_groups=False
+    )
+    assert report["status"] == "findings"
+    assert report["failed_iterations"] == 4
+    assert int(str(mapping(report["failure_expansion"])["additional_executed"])) > 0
+    assert report["coverage_complete"] is False
 
 
 @pytest.mark.parametrize("limited", [False, True])

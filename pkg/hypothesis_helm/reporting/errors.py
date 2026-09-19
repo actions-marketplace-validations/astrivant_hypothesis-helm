@@ -15,6 +15,7 @@ from ruamel.yaml.error import YAMLError
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.generator import FindingGenerator
+from hypothesis_helm.findings.severity import attributes
 from hypothesis_helm.reporting.reproductions import failing_input
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -93,13 +94,23 @@ def chart_errors(record: dict[str, object], chart: Path | None = None) -> list[d
     phases = [
         mapping(phase)
         for phase in sequence(record.get("phases", []))
-        if isinstance(phase, dict) and (phase.get("error") or phase.get("failure_expansion"))
+        if isinstance(phase, dict) and (phase.get("error") or phase.get("failure_expansion") or phase.get("findings"))
     ]
     aggregate = "\n\n".join(
         f"{phase.get('phase')}: {phase['error']}" for phase in phases if phase.get("status") == "failed" and phase.get("error")
     )
     sources = list(phases)
-    if (record.get("error") and record["error"] != aggregate) or record.get("failure_expansion"):
+    for source in [record, *phases]:
+        sources.extend(
+            {**{key: source[key] for key in ("phase", "artifacts") if key in source}, **item}
+            for item in sequence(source.get("findings", []))
+            if isinstance(item, dict) and item.get("error")
+        )
+    baseline = record.get("baseline")
+    if isinstance(baseline, dict) and baseline.get("status") == "findings" and baseline.get("error"):
+        sources.append(baseline)
+    baseline_error = baseline.get("error") if isinstance(baseline, dict) and baseline.get("status") == "findings" else None
+    if (record.get("error") and record["error"] not in (aggregate, baseline_error)) or record.get("failure_expansion"):
         sources.append(record)
     expanded_sources = []
     for source in sources:
@@ -136,7 +147,11 @@ def chart_errors(record: dict[str, object], chart: Path | None = None) -> list[d
             if identity is not None:
                 diagnostic = diagnostic[leaf.start() :].replace(location, f"{identity['name']}/{identity['template']}", 1)
         code = source.get("code") or (match.group(1) if (match := re.search(r"\[(HH\d{4})\]", str(source["error"]))) else None)
-        finding = FindingGenerator.create(str(code), diagnostic).record() if code in CATALOG else None
+        finding = source.get("finding") or (FindingGenerator.create(str(code), diagnostic).record() if code in CATALOG else None)
+        if isinstance(finding, dict):
+            if not source.get("finding") and "finding_policy" in record:
+                finding = {**finding, **attributes(str(code), settings=mapping(record["finding_policy"]))}
+            finding = {**finding, **{key: source[key] for key in ("severity", "blocking", "fail_fast") if key in source}}
         errors.append(
             {
                 "phase": source.get("phase", "chart"),
@@ -144,6 +159,11 @@ def chart_errors(record: dict[str, object], chart: Path | None = None) -> list[d
                 "failure_type": source.get("failure_type"),
                 "code": code,
                 "finding": finding,
+                **(
+                    {key: finding[key] for key in ("severity", "blocking", "fail_fast") if key in finding}
+                    if isinstance(finding, dict)
+                    else {}
+                ),
                 "error": diagnostic,
                 "source": identity,
                 "input": failing_input(source),

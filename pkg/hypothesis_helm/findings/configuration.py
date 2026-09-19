@@ -13,6 +13,11 @@ GENERATION_EXAMPLE = (
         """
     # Global defaults for fresh generated text; supplied values are preserved.
     downstream_inputs: true  # Use constraints from supported downstream field mappings.
+    findings:
+      fail_on: null  # null: existing exit behavior; info, warning or error: fail fast at that severity or higher.
+      severity:  # Optional per-code overrides; ignored/enabled still control whether a finding is emitted.
+        HH2001: error  # Require documented values paths when a failure threshold is enabled.
+        HH2003: info  # Missing descriptions remain informational.
     # Compiler budgets are positive integers; bytes, characters and counts are separate units.
     __COMPILER_EXAMPLE__
     hypothesis:
@@ -35,6 +40,10 @@ GENERATION_EXAMPLE = (
               - ./charts
             names: [example, example-worker]
         path: $  # Whole chart; descendants inherit these partial overrides.
+        findings:
+          fail_on: error  # Override the global threshold for these charts.
+          severity:
+            HH2003: info  # Other code severities retain their inherited settings.
         compiler:  # Chart-wide budgets, including dependencies; only accepted with path: $.
           max_call_depth: 64  # Other limits inherit the global compiler settings.
           max_steps: 20000
@@ -61,6 +70,9 @@ GENERATION_EXAMPLE = (
 
       - charts: [example]
         path: $.containers[*].label
+        findings:
+          severity:
+            HH2001: warning  # Override this branch only; fail_on still inherits.
         schema:
           type: string
           minLength: 1

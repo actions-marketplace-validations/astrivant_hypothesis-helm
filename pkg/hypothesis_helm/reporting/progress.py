@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+from collections.abc import Generator
 from pathlib import Path
 from typing import cast
 
@@ -26,6 +27,34 @@ from hypothesis_helm.reporting.display import start_progress
 
 LOGGER = logging.getLogger(__name__)
 DISPLAY: tuple[Progress, TaskID] | None = None
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+    """
+    Preserve scoped finding decisions in JUnit and honor their fail-fast setting.
+
+    Args:
+        item (pytest.Item): Executing property.
+        call (pytest.CallInfo[None]): Its setup, call or teardown outcome.
+
+    Returns:
+        Generator[None, pytest.TestReport, pytest.TestReport]: Hook wrapper that yields control to pytest,
+            receives its ordinary report and returns that report with the original severity decision attached.
+    """
+    from hypothesis_helm.rules import RenderFailure
+
+    error = call.excinfo.value if call.excinfo is not None else None
+    cause = error if isinstance(error, RenderFailure) else getattr(error, "__cause__", None)
+    decision = cause.controls if isinstance(cause, RenderFailure) else {}
+    report = yield
+    if isinstance(cause, RenderFailure):
+        entry = ("hypothesis_helm.finding", json.dumps({"code": cause.code, **decision}, sort_keys=True))
+        item.user_properties.append(entry)
+        report.user_properties.append(entry)
+    if report.failed and os.environ.get("HYPOTHESIS_HELM_FAIL_FAST") == "1" and decision.get("fail_fast", True):
+        item.session.shouldfail = "Stopping after the first finding at the configured severity threshold"
+    return report
 
 
 def format_path(path: tuple[str | int, ...]) -> str:

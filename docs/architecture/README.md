@@ -51,6 +51,9 @@ renders the templates, then resource assertions and optional Kubernetes schema
 validation check the output. When a check fails, Hypothesis attempts to simplify
 the failing input while preserving the failure.
 
+Each rendered YAML bundle is parsed once. Resource checks and Kubernetes schema
+validation reuse those parsed documents, including when parallel workers prefetch Helm output.
+
 A property can test multiple inputs and render multiple manifests. JUnit records
 the property's result; execution reports retain the input and render counts.
 Selection, caching, traversal, and sharding determine which properties execute.

@@ -196,7 +196,7 @@ def render(
             """
             validate_resources(resources)
             try:
-                validate(output, timeout)
+                validate(resources, timeout)
             except AssertionError as exc:
                 raise RenderFailure(str(exc), "HH1108") from exc
 

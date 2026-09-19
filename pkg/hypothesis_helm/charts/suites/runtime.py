@@ -25,6 +25,8 @@ from hypothesis_helm.charts.testing.rendering import RenderFailure, render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.findings.policy import RuleScope
+from hypothesis_helm.findings.severity import blocks, level
+from hypothesis_helm.reporting.logs import FindingLog, chart_name
 from hypothesis_helm.rules import check, ignored
 from hypothesis_helm.schemas.characters import SUITE_CHARACTER_SETS, validate_character_sets
 from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
@@ -395,5 +397,8 @@ def check_path(
             from hypothesis_helm.findings.suppressions import observe
 
             observe(exc.code, chart.defaults, values)
+            if not blocks(exc.code):
+                FindingLog(chart_name(chart.path), chart.defaults, paths=(path,)).observed(exc.code, str(exc), values)
+                raise SkipTest(f"Finding below failure threshold [{exc.code}] ({level(exc.code)}): {exc}") from exc
             raise
         return resources

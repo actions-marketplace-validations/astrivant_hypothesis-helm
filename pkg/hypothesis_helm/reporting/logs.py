@@ -12,6 +12,7 @@ from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.catalog import CATALOG
+from hypothesis_helm.findings.severity import level
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.reporting.reproductions import changed_values
 
@@ -158,7 +159,7 @@ class FindingLog:
             self.seen.add(code)
             self.emit("Finding observed", code, message, values)
 
-    def emit(self, stage: str, code: str, message: str, values: dict[str, object] | None = None) -> None:
+    def emit(self, stage: str, code: str, message: str, values: dict[str, object] | None = None, *, severity: str | None = None) -> None:
         """
         Render a concise finding with input context and a link to retained evidence.
 
@@ -167,12 +168,14 @@ class FindingLog:
             code (str): Finding code or diagnostic category.
             message (str): Original diagnostic, shortened for console output.
             values (dict[str, object] | None): Overrides when available; None means no input was recorded.
+            severity (str | None): Recorded severity when the detecting scope has already exited.
 
         Returns:
             None: Logging does not change the check's outcome or its reproducing input.
         """
         if not LOGGER.isEnabledFor(logging.WARNING):
             return
+        severity = level(code) if severity is None else severity
         title = CATALOG[code].title if code in CATALOG else code
         diagnostic = diagnostic_line(message)
         selected = ", ".join(format_path(path) for path in self.paths) or "chart"
@@ -191,16 +194,22 @@ class FindingLog:
             except (TypeError, ValueError):
                 preview = "input preview unavailable; see artifacts"
         LOGGER.warning(
-            "%s: chart=%s; path=%s; [%s] %s; %s; %s%s",
+            "%s: chart=%s; path=%s; [%s] %s; severity=%s; %s; %s%s",
             stage,
             self.chart,
             compact(selected, 200),
             code,
             title,
+            severity,
             compact(diagnostic),
             preview,
             f"; artifacts={self.artifacts}" if self.artifacts is not None else "",
-            extra={"chart": self.chart, "finding_code": code, "value_paths": [list(path) for path in self.paths]},
+            extra={
+                "chart": self.chart,
+                "finding_code": code,
+                "finding_severity": severity,
+                "value_paths": [list(path) for path in self.paths],
+            },
         )
 
 

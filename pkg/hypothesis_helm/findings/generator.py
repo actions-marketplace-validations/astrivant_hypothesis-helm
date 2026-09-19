@@ -10,6 +10,7 @@ from attrs import frozen
 
 from hypothesis_helm.findings.catalog import CATALOG, Rule
 from hypothesis_helm.findings.configuration import GENERATION_EXAMPLE
+from hypothesis_helm.findings.severity import attributes
 
 
 @frozen
@@ -37,6 +38,7 @@ class Finding:
             "title": self.rule.title,
             "category": self.rule.category,
             "kind": self.rule.kind,
+            **attributes(self.rule.code),
             "evidence": self.evidence,
             "remediation": self.rule.remediation,
         }
@@ -107,6 +109,7 @@ class FindingGenerator:
                 "title": rule.title,
                 "category": rule.category,
                 "kind": rule.kind,
+                "severity": rule.severity,
                 "detection": rule.detection,
                 "example": rule.example,
                 "remediation": rule.remediation,
@@ -144,9 +147,9 @@ class FindingGenerator:
             lines.extend(f"# {line}".rstrip() for line in GENERATION_EXAMPLE.splitlines())
             return "\n".join(lines) + "\n"
         if format == "markdown":
-            lines = ["| Code | Finding | Category | Kind |", "| --- | --- | --- | --- |"]
+            lines = ["| Code | Finding | Category | Kind | Severity |", "| --- | --- | --- | --- | --- |"]
             for rule in CATALOG.values():
-                lines.append(f"| `{rule.code}` | {rule.title} | {rule.category} | {rule.kind} |")
+                lines.append(f"| `{rule.code}` | {rule.title} | {rule.category} | {rule.kind} | {rule.severity} |")
             for rule in CATALOG.values():
                 lines.extend(
                     [
@@ -155,6 +158,8 @@ class FindingGenerator:
                         "",
                         f"Detected when: {rule.detection}",
                         "",
+                        f"Default severity: **{rule.severity}**.",
+                        "",
                         f"Example: {rule.example}",
                         "",
                         f"Suggested action: {rule.remediation}",
@@ -162,5 +167,7 @@ class FindingGenerator:
                 )
             return "\n".join(lines) + "\n"
         if format == "text":
-            return "\n".join(f"{rule.code}  [{rule.category}/{rule.kind}] {rule.title}" for rule in CATALOG.values()) + "\n"
+            return (
+                "\n".join(f"{rule.code}  [{rule.severity}; {rule.category}/{rule.kind}] {rule.title}" for rule in CATALOG.values()) + "\n"
+            )
         raise ValueError(f"Unknown catalog format: {format}")

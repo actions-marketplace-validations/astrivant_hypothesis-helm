@@ -6,11 +6,19 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from textwrap import dedent, indent
+from unittest.mock import Mock
 
 import pytest
 
+from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.cache import fingerprint
+from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.rules import RenderFailure
 from hypothesis_helm.schemas import conformity
+from hypothesis_helm.schemas.contracts import mapping, sequence
 
 
 def test_sparse_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,6 +152,76 @@ def test_validator_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         conformity.validate("apiVersion: v1\nkind: ConfigMap\nunexpected: true", 1)
     with pytest.raises(AssertionError, match="no cached schema"):
         conformity.validate("apiVersion: v1\nkind: Secret", 1)
+
+
+@pytest.mark.parametrize("valid", [False, True])
+@pytest.mark.parametrize("listed", [False, True])
+@pytest.mark.parametrize("prefetched", [False, True])
+def test_render_parses_once_for_schema_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, valid: bool, listed: bool, prefetched: bool
+) -> None:
+    """
+    Share parsed manifests across envelope checks and API schema validation.
+
+    Args:
+        tmp_path (Path): Isolated schema snapshot and chart location.
+        monkeypatch (pytest.MonkeyPatch): Track parsing and replace the Helm invocation.
+        valid (bool): Whether the rendered data satisfies the string schema.
+        listed (bool): Wrap the resource in a Kubernetes List.
+        prefetched (bool): Supply output from the parallel renderer's prefetch boundary.
+
+    Returns:
+        None: One parse preserves aliases and empty documents while schema failures retain their code and resources.
+    """
+    (tmp_path / "configmap-v1.json").write_text(
+        json.dumps({"type": "object", "properties": {"data": {"type": "object", "additionalProperties": {"type": "string"}}}})
+    )
+    monkeypatch.setenv(conformity.ENVIRONMENT, json.dumps({"version": "1.35.0", "schemas": str(tmp_path)}))
+    output = dedent("""
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: parse-once
+        data:
+          answer: &answer "42"
+          alias: *answer
+    """).lstrip()
+    if not valid:
+        output = output.replace('"42"', "42")
+    if listed:
+        output = dedent("""
+            apiVersion: v1
+            kind: List
+            items:
+              -
+        """).lstrip() + indent(output, "    ")
+    output = (
+        dedent("""
+        ---
+        # Empty document
+        ---
+    """).lstrip()
+        + output
+        + "---\n"
+    )
+    parser = Mock(wraps=yamlio.load_all)
+    helm = Mock(return_value=output)
+    monkeypatch.setattr(yamlio, "load_all", parser)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.render_output", helm)
+    chart = Chart(tmp_path, {"type": "object"}, {})
+    hashes = RenderHashes()
+    if valid:
+        resources = render(chart, {}, hashes=hashes, stream=False, rendered_output=output if prefetched else None)
+        resource = mapping(sequence(resources[0]["items"])[0]) if listed else resources[0]
+        assert resource["data"] == {"answer": "42", "alias": "42"}
+        assert hashes.snapshot()["validated_entries"] == 1
+    else:
+        with pytest.raises(RenderFailure, match=r"HH1108.*ConfigMap.*data\.") as failure:
+            render(chart, {}, hashes=hashes, stream=False, rendered_output=output if prefetched else None)
+        assert failure.value.resources
+        assert hashes.snapshot()["validated_entries"] == 0
+    parser.assert_called_once_with(output)
+    assert helm.call_count == (0 if prefetched else 1)
 
 
 def test_cli_validation_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

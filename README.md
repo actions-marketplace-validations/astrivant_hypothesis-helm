@@ -394,7 +394,7 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--scan-timeout SCAN_TIMEOUT]
                             [--max-examples MAX_EXAMPLES] [--cache-dir CACHE_DIR]
                             [--no-cache] [--jobs JOBS] [--permutations PERMUTATIONS]
-                            [--filter] [--fail] [--seed SEED]
+                            [--filter] [--fail [{info,warning,error}]] [--seed SEED]
                             [--build-dependencies | --no-build-dependencies]
                             [--filter-adaptive]
                             [--sampling-calibration SAMPLING_CALIBRATION]
@@ -452,8 +452,9 @@ options:
                         coverage or sampling
   --filter              filter finite charts with failure expansion; otherwise filter
                         generated inputs before path traversal
-  --fail                stop on the first unsuppressed finding, including audit
-                        findings; save partial results and exit 1
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
   --seed SEED
   --build-dependencies, --no-build-dependencies
                         build locked dependencies in temporary chart copies
@@ -518,7 +519,8 @@ options:
 
 ~~~text
 usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMPLES]
-                                [--fail] [--export-topological-graph [FILENAME]]
+                                [--fail [{info,warning,error}]]
+                                [--export-topological-graph [FILENAME]]
                                 [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
                                 [--export-minimal-values [FILENAME]]
                                 [--log-color [{auto,always,never}]] [--log-file PATH]
@@ -537,8 +539,9 @@ options:
   -h, --help            show this help message and exit
   --output OUTPUT
   --max-examples MAX_EXAMPLES
-  --fail                stop on the first unsuppressed finding, including audit
-                        findings; exit 1
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
   --export-topological-graph [FILENAME]
                         export input references, control flow and observed manifests
                         as JSON and DOT
@@ -570,8 +573,8 @@ options:
 <summary>helm hypothesis audit</summary>
 
 ~~~text
-usage: helm hypothesis audit [-h] [--fail] [--artifact-dir ARTIFACT_DIR]
-                             [--export-suppressions]
+usage: helm hypothesis audit [-h] [--fail [{info,warning,error}]]
+                             [--artifact-dir ARTIFACT_DIR] [--export-suppressions]
                              [--export-topological-graph [FILENAME]]
                              [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
                              [--export-minimal-values [FILENAME]]
@@ -589,7 +592,9 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --fail                fail on any finding or unresolved access
+  --fail [{info,warning,error}]
+                        fail on audit findings at this severity or higher; bare flag:
+                        any finding
   --artifact-dir ARTIFACT_DIR
                         audit export directory
   --export-suppressions
@@ -636,7 +641,7 @@ usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
                            [--disable-schema-caching] [--progress] [--run-id RUN_ID]
                            [--no-cache] [--rerun {auto,all,failed}] [--shard SHARD]
                            [--jobs JOBS] [--output-format {json,yaml}]
-                           [--export-suppressions] [--fail]
+                           [--export-suppressions] [--fail [{info,warning,error}]]
                            [--log-color [{auto,always,never}]] [--log-file PATH]
                            [--config CONFIG] [--character-sets {ascii,unicode}]
                            [--ignore CODE] [--disable-codes CODE[,CODE...]]
@@ -692,8 +697,9 @@ options:
   --export-suppressions
                         write categorized suppressions.yaml in each chart's artifacts
                         after testing; review before applying
-  --fail                stop on the first unsuppressed finding, including audit
-                        findings; exit 1
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
   --log-color [{auto,always,never}]
                         color log severity labels; bare flag: always; auto: terminals
                         unless NO_COLOR is set; default: never
@@ -718,7 +724,8 @@ options:
 usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
                             [--chart-timeout CHART_TIMEOUT]
                             [--scan-timeout SCAN_TIMEOUT]
-                            [--build-dependencies | --no-build-dependencies] [--fail]
+                            [--build-dependencies | --no-build-dependencies]
+                            [--fail [{info,warning,error}]]
                             [--max-examples MAX_EXAMPLES] [--time-limit DURATION]
                             [--paths | --exhaustive | --whole-chart |
                             --permutations N] [--filter] [--trim-random N]
@@ -770,8 +777,9 @@ options:
                         preparation
   --build-dependencies, --no-build-dependencies
                         build dependencies in isolated copies
-  --fail                stop on the first unsuppressed finding, including audit
-                        findings; save partial results and exit 1
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
   --max-examples MAX_EXAMPLES
   --time-limit DURATION
                         whole-chart execution budget, e.g. 30s or 3m (default: 3m);

@@ -563,15 +563,21 @@ class Contracts:
         Returns:
             None: A deduplicated diagnostic is retained and an enabled warning is logged.
         """
+        from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths
         from hypothesis_helm.rules import RenderFailure, ignored
 
         source = getattr(error, "source", None) or source
         line = getattr(error, "line", 0)
         reason = str(error) if isinstance(error, Unknown) else f"unsupported evaluator operation ({type(error).__name__})"
         paths = tuple(tuple(path.removeprefix("$.").split(".")) for path in observed)
+        settings = ACTIVE_POLICY.get()
+        if settings is None and self.chart is not None:
+            settings = for_paths(self.chart, paths)
+        decision = attributes("HH2007", settings=settings)
         suppressed = ignored("HH2007", chart=self.chart, paths=paths)
         record: dict[str, object] = {
             "code": "HH2007",
+            **decision,
             "source": source,
             "line": line,
             "reason": reason,
@@ -589,8 +595,10 @@ class Contracts:
                         message,
                         extra={"diagnostic_key": json.dumps([str(self.chart), source, line, reason])},
                     )
-        if self.fail_fast and not suppressed:
-            raise RenderFailure(message, "HH2007")
+        if not suppressed and decision.get("fail_fast", self.fail_fast and decision["blocking"]):
+            failure = RenderFailure(message, "HH2007")
+            failure.controls = decision
+            raise failure
 
     def variables(self, nodes: tuple[Node, ...]) -> set[str]:
         """

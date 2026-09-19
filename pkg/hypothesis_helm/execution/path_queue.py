@@ -145,6 +145,9 @@ def execute(context: dict[str, object], directory: Path, workers: int) -> list[d
             evidence = mapping(json.loads(checkpoint.read_text()))
             reason = str(phase["status"])
             phase.update(evidence, **started, stop_reason=reason)
+            if evidence.get("blocking") is False:
+                # A nonfatal chart finding cannot turn worker loss or a timeout into success.
+                phase["status"] = reason
             if interrupted:
                 phase["status"] = "interrupted"
         records.append(phase)
@@ -252,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
                 break
             if result["status"] == "time-limit" or result.get("stop_reason") == "time-limit":
                 break
-            if context["fail_fast"] and result["status"] == "failed":
+            if result.get("fail_fast", context["fail_fast"]) and result["status"] == "failed":
                 (directory / "stop").touch()
                 break
     return 0

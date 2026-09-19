@@ -15,6 +15,8 @@ from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import chart_rules, resolve_codes
+from hypothesis_helm.findings.severity import attributes, for_paths
+from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.rules import AUDIT_RULES, ignored_codes
 from hypothesis_helm.schemas.contracts import sequence
@@ -78,11 +80,17 @@ def audit_findings(chart: Chart) -> dict[str, object]:
     for finding in findings:
         finding["code"] = AUDIT_RULES[str(finding["issue"])]
     unresolved: list[dict[str, object]] = [{**asdict(d), "code": "HH2005"} for d in diagnostics]
-    for finding in [*findings, *unresolved]:
-        finding["finding"] = FindingGenerator.create(
-            str(finding["code"]), str(finding.get("message", finding.get("issue", "Unresolved value access")))
-        ).record()
     controls = chart_rules(chart.path)
+    for finding in [*findings, *unresolved]:
+        path = tuple(str(part) if not isinstance(part, int) else part for part in sequence(finding.get("path", [])))
+        decision = attributes(str(finding["code"]), settings=for_paths(chart.path, (path,), rules=controls))
+        finding.update(decision)
+        finding["finding"] = (
+            FindingGenerator.create(
+                str(finding["code"]), str(finding.get("message", finding.get("issue", "Unresolved value access")))
+            ).record()
+            | decision
+        )
     global_codes = ignored_codes()
     suppressed: list[dict[str, object]] = []
     visible: list[dict[str, object]] = []
@@ -100,6 +108,7 @@ def audit_findings(chart: Chart) -> dict[str, object]:
         "ignored_findings": suppressed,
         "ignored_rules": global_codes,
         "finding_controls": controls,
+        "finding_policy": finding_policy(),
     }
 
 

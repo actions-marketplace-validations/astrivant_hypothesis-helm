@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from deepdiff import DeepDiff
 
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.findings.severity import ACTIVE_POLICY, for_paths
 from hypothesis_helm.reporting.reproductions import leaves
 from hypothesis_helm.schemas.contracts import sequence
 from hypothesis_helm.schemas.policy import path_parts
@@ -35,7 +36,7 @@ def chart_rules(chart: Path) -> list[dict[str, object]]:
     Returns:
         list[dict[str, object]]: Matching rules; generation-only restrictions are excluded.
     """
-    return [rule for rule in matching_rules(chart) if "ignored" in rule or "enabled" in rule]
+    return [rule for rule in matching_rules(chart) if {"ignored", "enabled", "findings"} & rule.keys()]
 
 
 def resolve_codes(rules: list[dict[str, object]], paths: tuple[tuple[str | int, ...], ...], global_codes: list[str]) -> frozenset[str]:
@@ -104,15 +105,18 @@ class RuleScope(AbstractContextManager[None]):
     Bind disabled codes to one candidate without leaking into another worker or render.
     """
 
-    def __init__(self, codes: frozenset[str]) -> None:
+    def __init__(self, codes: frozenset[str], settings: dict[str, object] | None = None) -> None:
         """
         Retain the resolved policy until this scope is entered.
 
         Args:
             codes (frozenset[str]): Candidate-specific disabled checks.
+            settings (dict[str, object] | None): Candidate-specific severity and failure thresholds.
         """
         self.codes = codes
         self.token: Token[frozenset[str] | None] | None = None
+        self.settings = settings
+        self.severity_token: Token[dict[str, object] | None] | None = None
 
     @classmethod
     def for_values(cls, chart: Chart, values: dict[str, object]) -> RuleScope:
@@ -129,12 +133,14 @@ class RuleScope(AbstractContextManager[None]):
         from hypothesis_helm.rules import AUDIT_RULES, ignored_codes
 
         audit_codes = {*AUDIT_RULES.values(), "HH2005"}
+        selected = chart_rules(chart.path)
         rules = [
             rule
-            for rule in chart_rules(chart.path)
-            if any(code not in audit_codes for key in ("ignored", "enabled") for code in sequence(rule.get(key, [])))
+            for rule in selected
+            if "findings" in rule or any(code not in audit_codes for key in ("ignored", "enabled") for code in sequence(rule.get(key, [])))
         ]
-        return cls(resolve_codes(rules, candidate_paths(chart, values) if rules else (), ignored_codes()))
+        paths = candidate_paths(chart, values) if rules else ()
+        return cls(resolve_codes(rules, paths, ignored_codes()), for_paths(chart.path, paths, rules=selected))
 
     def __enter__(self) -> None:
         """
@@ -144,6 +150,7 @@ class RuleScope(AbstractContextManager[None]):
             None: Nested callers see the resolved check set.
         """
         self.token = ACTIVE_CODES.set(self.codes)
+        self.severity_token = ACTIVE_POLICY.set(self.settings)
 
     def __exit__(self, kind: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None) -> None:
         """
@@ -159,3 +166,5 @@ class RuleScope(AbstractContextManager[None]):
         """
         if self.token is not None:
             ACTIVE_CODES.reset(self.token)
+        if self.severity_token is not None:
+            ACTIVE_POLICY.reset(self.severity_token)

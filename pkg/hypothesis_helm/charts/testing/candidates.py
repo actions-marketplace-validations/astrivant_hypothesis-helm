@@ -17,7 +17,9 @@ from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
 from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import ACTIVE_CODES, RuleScope
+from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, blocks
 from hypothesis_helm.reporting.budget import execution_timer
 from hypothesis_helm.reporting.logs import FindingLog
 from hypothesis_helm.reporting.output import emit_manifest
@@ -55,6 +57,7 @@ class CandidateChecks:
         allow_empty (bool): Whether a render with no resource documents is accepted.
         baseline_documents (list[object] | None): Successful baseline resources retained for failure comparisons.
         ignored_failures (dict[str, int]): Cases blocked by disabled checks, never successful validation witnesses.
+        nonblocking_findings (dict[str, dict[str, object]]): First reproducer and occurrence count for each code below the threshold.
         count (int): Number of attempted candidates, including failures.
         completed_count (int): Number of candidates that passed all configured checks.
         last_failure (tuple[dict[str, object], str, list[object] | None] | None): Exact overrides, message and available output from the
@@ -84,6 +87,7 @@ class CandidateChecks:
     allow_empty: bool
     baseline_documents: list[object] | None
     ignored_failures: dict[str, int] = field(factory=dict)
+    nonblocking_findings: dict[str, dict[str, object]] = field(factory=dict)
     count: int = 0
     completed_count: int = 0
     last_failure: tuple[dict[str, object], str, list[object] | None] | None = None
@@ -112,6 +116,7 @@ class CandidateChecks:
             "values": values,
             "error": str(error),
             "code": getattr(error, "code", None),
+            **getattr(error, "controls", attributes(str(getattr(error, "code", "")))),
             "failure_type": type(error).__name__,
             "attempts": self.count,
             "coverage_complete": False,
@@ -204,7 +209,9 @@ class CandidateChecks:
                             return False
                         self.policy.adjusted += 1
                         values = replacement
-                        ACTIVE_CODES.set(RuleScope.for_values(self.chart, values).codes)
+                        scope = RuleScope.for_values(self.chart, values)
+                        ACTIVE_CODES.set(scope.codes)
+                        ACTIVE_POLICY.set(scope.settings)
                         effective = merge_values(self.chart.defaults, values)
                 self.count += 1
                 attempted = True
@@ -242,6 +249,7 @@ class CandidateChecks:
                     self.observe(effective, pristine)
                 return True
         except RenderFailure as exc:
+            exc.controls = attributes(exc.code)
             if not attempted:
                 self.count += 1
                 attempted = True
@@ -251,7 +259,9 @@ class CandidateChecks:
                 record_ignored(exc.code, str(exc))
                 self.ignored_failures[exc.code] = self.ignored_failures.get(exc.code, 0) + 1
                 return False
-            self.remember_failure(values, exc, observed if observed is not None else exc.resources)
+            blocking = blocks(exc.code)
+            if blocking:
+                self.remember_failure(values, exc, observed if observed is not None else exc.resources)
             if self.policy is not None and exc.code != "HH2007":
                 try:
                     declared_rejection = self.policy.predict(merge_values(self.chart.defaults, values))
@@ -271,6 +281,22 @@ class CandidateChecks:
                     conflict_record["occurrences"] = int(str(conflict_record["occurrences"])) + 1
             if self.findings is not None:
                 self.findings.observed(exc.code, str(exc), values)
+            if not blocking:
+                if exc.code not in self.nonblocking_findings:
+                    self.nonblocking_findings[exc.code] = {
+                        "status": "findings",
+                        "code": exc.code,
+                        "error": str(exc),
+                        **attributes(exc.code),
+                        "finding": FindingGenerator.create(exc.code, str(exc)).record(),
+                        "values": copy.deepcopy(values),
+                        "occurrences": 0,
+                    }
+                record = self.nonblocking_findings[exc.code]
+                record["occurrences"] = int(str(record["occurrences"])) + 1
+                if self.failure_sink is not None and self.failure_record is None:
+                    self.failure_sink({**record, "findings": list(self.nonblocking_findings.values()), "coverage_complete": False})
+                return False
             raise
         except KeyboardInterrupt:
             self.interrupted_values = copy.deepcopy(values)

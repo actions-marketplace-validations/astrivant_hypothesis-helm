@@ -26,7 +26,8 @@ from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
 from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.traversal import ALGORITHM, SELECTION_ORDER, order_paths, validate_strategy
-from hypothesis_helm.findings.policy import chart_rules
+from hypothesis_helm.findings.policy import RuleScope, chart_rules
+from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
 from hypothesis_helm.reporting.logs import input_baseline
 from hypothesis_helm.reporting.progress import format_path
@@ -196,12 +197,24 @@ def check_paths(
     try:
         with execution_timer(budget):
             baseline["attempts"] = 1
-            resources = render(
-                chart, {}, helm=helm, timeout=min(timeout, budget), release=release, namespace=namespace, kube_version=kube_version
-            )
-            if not resources and not allow_empty:
-                check(False, "HH1107", "chart rendered no resources")
-            baseline["status"] = "passed"
+            try:
+                with RuleScope.for_values(chart, {}):
+                    resources = render(
+                        chart, {}, helm=helm, timeout=min(timeout, budget), release=release, namespace=namespace, kube_version=kube_version
+                    )
+                    if not resources and not allow_empty:
+                        check(False, "HH1107", "chart rendered no resources")
+                baseline["status"] = "passed"
+            except RenderFailure as exc:
+                if exc.controls["blocking"] or ignored(exc.code, chart=chart.path):
+                    raise
+                resources = []
+                baseline.update(status="findings", code=exc.code, error=str(exc), **exc.controls)
+                from hypothesis_helm.reporting.logs import FindingLog, chart_name
+
+                FindingLog(chart_name(chart.path), chart.defaults, artifacts=artifacts).emit(
+                    "Baseline finding", exc.code, str(exc), {}, severity=str(exc.controls["severity"])
+                )
             measured.observe(chart.defaults)
             if jobs > 1:
                 from hypothesis_helm.execution.path_queue import execute
@@ -280,7 +293,7 @@ def check_paths(
                 if phase["status"] == "time-limit" or phase.get("stop_reason") == "time-limit":
                     stopped = True
                     break
-                if fail_fast and phase["status"] == "failed":
+                if phase.get("fail_fast", fail_fast) and phase["status"] == "failed":
                     break
     except KeyboardInterrupt:
         interrupted = True
@@ -301,12 +314,17 @@ def check_paths(
                 error=str(exc),
                 failure_type=type(exc).__name__,
                 code=getattr(exc, "code", None),
+                **getattr(exc, "controls", {}),
             )
             if baseline["status"] == "failed":
                 from hypothesis_helm.reporting.logs import FindingLog, chart_name
 
                 FindingLog(chart_name(chart.path), chart.defaults, artifacts=artifacts).emit(
-                    "Baseline check failed", str(baseline["code"] or baseline["failure_type"]), str(exc), {}
+                    "Baseline check failed",
+                    str(baseline["code"] or baseline["failure_type"]),
+                    str(exc),
+                    {},
+                    severity=str(baseline["severity"]) if "severity" in baseline else None,
                 )
         else:
             raise
@@ -317,7 +335,9 @@ def check_paths(
             measured.varied.update(tuple(path) for path in observed.get("varied_fields", []))
     measured.refresh()
     failures = [phase for phase in phases if phase["status"] == "failed"]
-    completed = sum(phase["status"] in {"passed", "failed", "configuration-rejected"} and not phase.get("stop_reason") for phase in phases)
+    completed = sum(
+        phase["status"] in {"passed", "failed", "findings", "configuration-rejected"} and not phase.get("stop_reason") for phase in phases
+    )
     worker_errors = any(phase["status"] == "error" for phase in phases)
     generation_errors = any(phase["status"] == "generation-error" for phase in phases)
     status = (
@@ -335,12 +355,23 @@ def check_paths(
         if baseline["status"] == "ignored" or (phases and all(phase["status"] == "ignored" for phase in phases))
         else "configuration-rejected"
         if phases and all(phase["status"] == "configuration-rejected" for phase in phases)
+        else "findings"
+        if baseline["status"] == "findings" or any(phase["status"] == "findings" for phase in phases)
         else "passed"
     )
     result: dict[str, object] = {
         "status": status,
+        **(
+            {
+                "fail_fast": any(bool(phase.get("fail_fast", fail_fast)) for phase in failures)
+                or (baseline["status"] == "failed" and bool(baseline.get("fail_fast", fail_fast)))
+            }
+            if failures or baseline["status"] == "failed"
+            else {}
+        ),
         "mode": "paths",
         "ignored_rules": ignored_codes(),
+        "finding_policy": finding_policy(),
         "finding_controls": chart_rules(chart.path),
         "input_domains": chart.input_domains().report(),
         "compiler_limits": dict(inventory.dependencies.limits),

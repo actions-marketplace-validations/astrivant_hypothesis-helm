@@ -5,6 +5,7 @@
 <summary>Table of contents</summary>
 
 - [Stop on findings](#stop-on-findings)
+  - [Severity thresholds](#severity-thresholds)
 - [Controls for individual values paths](#controls-for-individual-values-paths)
 - [Export suppressions from a run](#export-suppressions-from-a-run)
 - [What ignoring changes](#what-ignoring-changes)
@@ -86,7 +87,7 @@ Add `--fail` to stop on the first unsuppressed finding and exit `1`. This includ
 `HH2001` (a values path missing from the schema), `HH2004` (a path missing from `values.yaml`), and `HH2006` (an opaque object).
 It applies to `audit`, `generate`, `test`, `scan`, and `run`. The former `--strict` option has been removed.
 
-Without `--fail`, repository scans record audit findings as warnings and continue testing the chart and subsequent charts.
+Without `--fail` or a configured failure threshold, repository scans record audit findings and continue testing subsequent charts.
 Render and test failures remain failures; they can produce exit `1` after the scan finishes. Audit warnings alone do not.
 Ignored findings neither stop execution nor change its exit status, and audits retain them under `ignored_findings`.
 Parallel execution stops scheduling work and joins active workers when a failed property is reported.
@@ -95,6 +96,72 @@ Parallel execution stops scheduling work and joins active workers when a failed 
 helm hypothesis test ./charts --fail
 helm hypothesis audit ./chart --fail
 ```
+
+### Severity thresholds
+
+Use `--fail error` to stop only on errors, or `--fail warning` to stop on warnings and errors.
+`--fail info` and bare `--fail` stop on any unsuppressed finding. All five commands above accept these thresholds.
+
+| Severity | Default findings | Effect with `--fail error` |
+| --- | --- | --- |
+| `error` | Rendering failures, invalid manifests and baseline lint failures | Stop and exit `1` |
+| `warning` | Missing types/defaults, undocumented paths, incomplete analysis and render invocation timeouts | Report and continue |
+| `info` | Missing field descriptions | Report and continue |
+
+Severity describes the configured CI gate. The existing **kind** describes the evidence: changing a diagnostic to an error
+does not establish that the chart contains a defect. Both appear in the finding catalog and JSON reports.
+
+Configure a default threshold and override individual codes locally:
+
+```yaml
+findings:
+  fail_on: error
+  severity:
+    HH2001: error    # Undocumented paths should block this project's CI.
+    HH2003: info     # Missing descriptions remain visible.
+```
+
+An explicit CLI threshold overrides the global `fail_on`; matching branch overrides remain more specific.
+Global `null` preserves the behavior without `--fail` described above.
+Severity overrides alone do not enable fail-fast execution. Existing `ignored` and branch-specific `enabled` controls
+apply before the threshold, so suppressed findings never fail the command. Unknown codes and levels are configuration errors.
+
+Findings below the threshold remain in reports with their severity and `blocking: false`. Failed validation is never recorded
+as a successful equivalence witness or reused as a cached success. A run containing these runtime findings uses status `findings`
+and can exit `0`; that means the CI threshold was satisfied, not that every manifest passed validation. Saved pytest suites mark
+properties that cannot continue as skipped, retain their diagnostics in JUnit and the report, and continue with other properties.
+Worker crashes, invalid command configuration, chart/scan deadlines and interrupts retain their existing nonzero exit statuses.
+
+Workers inherit the resolved policy. All shards in an aggregate must use the same severity settings.
+
+Add the same `findings` key to `input_constraints` to override selected charts or values branches:
+
+```yaml
+findings:
+  fail_on: error
+input_constraints:
+  - charts: [example]
+    path: $
+    findings:
+      severity:
+        HH2001: error
+  - charts: [example]
+    path: $.optionalIntegration
+    findings:
+      fail_on: warning
+      severity:
+        HH2001: info
+```
+
+Each setting inherits independently: the branch above changes `HH2001`, while other codes keep their global or chart settings.
+Deeper paths win; equally deep rules that disagree on the same setting are configuration errors.
+The usual source/name selectors and `[*]` array paths work here too. A findings-only rule needs no schema or profile.
+For a failure involving several changed paths, it blocks if any affected path meets its own threshold.
+Downgrading one field therefore cannot hide an error involving another field that still requires failure.
+
+Use `fail_on: null` in a matching rule to restore non-fail-fast behavior for that scope: audit findings are reported,
+and render/test failures still affect the final exit status, but do not stop later properties immediately.
+Severity settings never suppress a check; use `ignored` or `enabled` for that purpose.
 
 ## Controls for individual values paths
 
@@ -244,34 +311,36 @@ import cog
 from hypothesis_helm.findings.generator import FindingGenerator
 cog.out(FindingGenerator.render("markdown"))
 ]]] -->
-| Code | Finding | Category | Kind |
-| --- | --- | --- | --- |
-| `HH1001` | Unclassified template failure | unclassified | diagnostic |
-| `HH1201` | Render invocation timed out | execution | diagnostic |
-| `HH1101` | Invalid YAML in rendered output | manifest | violation |
-| `HH1102` | Manifest document is not an object | manifest | violation |
-| `HH1103` | Missing resource API version or kind | manifest | violation |
-| `HH1104` | Invalid resource list | manifest | violation |
-| `HH1105` | Missing resource name | manifest | violation |
-| `HH1106` | Duplicate resource identity | manifest | violation |
-| `HH1107` | Empty resource bundle | manifest | violation |
-| `HH1108` | Kubernetes schema validation failed | manifest | violation |
-| `HH1011` | Rendered output cannot be encoded as JSON | unclassified | diagnostic |
-| `HH1012` | Unclassified baseline lint failure | unclassified | diagnostic |
-| `HH2001` | Undocumented values path | values | warning |
-| `HH2002` | Unspecified values type | values | warning |
-| `HH2003` | Missing values description | values | warning |
-| `HH2004` | No supplied default for a values path | values | warning |
-| `HH2005` | Unresolved template value access | analysis | diagnostic |
-| `HH2006` | Opaque object schema | values | warning |
-| `HH2007` | Incomplete compiler analysis | analysis | warning |
-| `HH3001` | Template accesses a missing object | template | violation |
-| `HH3002` | Incompatible value type in template | template | violation |
-| `HH3003` | Undefined named template | template | violation |
+| Code | Finding | Category | Kind | Severity |
+| --- | --- | --- | --- | --- |
+| `HH1001` | Unclassified template failure | unclassified | diagnostic | error |
+| `HH1201` | Render invocation timed out | execution | diagnostic | warning |
+| `HH1101` | Invalid YAML in rendered output | manifest | violation | error |
+| `HH1102` | Manifest document is not an object | manifest | violation | error |
+| `HH1103` | Missing resource API version or kind | manifest | violation | error |
+| `HH1104` | Invalid resource list | manifest | violation | error |
+| `HH1105` | Missing resource name | manifest | violation | error |
+| `HH1106` | Duplicate resource identity | manifest | violation | error |
+| `HH1107` | Empty resource bundle | manifest | violation | error |
+| `HH1108` | Kubernetes schema validation failed | manifest | violation | error |
+| `HH1011` | Rendered output cannot be encoded as JSON | unclassified | diagnostic | error |
+| `HH1012` | Unclassified baseline lint failure | unclassified | diagnostic | error |
+| `HH2001` | Undocumented values path | values | warning | warning |
+| `HH2002` | Unspecified values type | values | warning | warning |
+| `HH2003` | Missing values description | values | warning | info |
+| `HH2004` | No supplied default for a values path | values | warning | warning |
+| `HH2005` | Unresolved template value access | analysis | diagnostic | warning |
+| `HH2006` | Opaque object schema | values | warning | warning |
+| `HH2007` | Incomplete compiler analysis | analysis | warning | warning |
+| `HH3001` | Template accesses a missing object | template | violation | error |
+| `HH3002` | Incompatible value type in template | template | violation | error |
+| `HH3003` | Undefined named template | template | violation | error |
 
 ### HH1001: Unclassified template failure
 
 Detected when: Helm template exits unsuccessfully without a recognized diagnostic.
+
+Default severity: **error**.
 
 Example: A chart-specific fail message that has not been verified as an input constraint.
 
@@ -281,6 +350,8 @@ Suggested action: Inspect the Helm diagnostic and reproducer; the exit alone doe
 
 Detected when: The Helm subprocess exceeds its invocation deadline.
 
+Default severity: **warning**.
+
 Example: A render takes longer than the configured timeout.
 
 Suggested action: Check runner load and render cost, then adjust the timeout if appropriate. This is incomplete validation, not proof of a bug.
@@ -288,6 +359,8 @@ Suggested action: Check runner load and render cost, then adjust the timeout if 
 ### HH1101: Invalid YAML in rendered output
 
 Detected when: The YAML parser rejects rendered output, or Helm reports a YAML parse error.
+
+Default severity: **error**.
 
 Example: A substituted value breaks YAML indentation.
 
@@ -297,6 +370,8 @@ Suggested action: Inspect the failing YAML and template interpolation, including
 
 Detected when: A nonempty rendered document is a scalar or sequence instead of a mapping.
 
+Default severity: **error**.
+
 Example: A template emits a bare string document.
 
 Suggested action: Emit a resource mapping or remove the stray document.
@@ -304,6 +379,8 @@ Suggested action: Emit a resource mapping or remove the stray document.
 ### HH1103: Missing resource API version or kind
 
 Detected when: A resource has no nonempty string apiVersion or kind.
+
+Default severity: **error**.
 
 Example: kind: null
 
@@ -313,6 +390,8 @@ Suggested action: Supply both resource identifiers in every branch that emits a 
 
 Detected when: A resource with kind List has no array-valued items field.
 
+Default severity: **error**.
+
 Example: kind: List with items: null
 
 Suggested action: Emit an items array, including an empty array when appropriate.
@@ -320,6 +399,8 @@ Suggested action: Emit an items array, including an empty array when appropriate
 ### HH1105: Missing resource name
 
 Detected when: The resource fails the tool's nonempty metadata.name contract.
+
+Default severity: **error**.
 
 Example: metadata: {name: ""}
 
@@ -329,6 +410,8 @@ Suggested action: Provide a name in each resource branch; ignore this check if y
 
 Detected when: Two resources in the checked bundle share apiVersion, kind, namespace and name.
 
+Default severity: **error**.
+
 Example: Enabling an optional component emits a second ConfigMap with the same identity.
 
 Suggested action: Give the resources distinct names or make their activation conditions exclusive.
@@ -336,6 +419,8 @@ Suggested action: Give the resources distinct names or make their activation con
 ### HH1107: Empty resource bundle
 
 Detected when: The active test requires resources but this configuration renders none.
+
+Default severity: **error**.
 
 Example: All resource-producing branches are disabled.
 
@@ -345,6 +430,8 @@ Suggested action: Check resource activation; ignore this contract if an empty ch
 
 Detected when: The configured Kubernetes validator rejects the output.
 
+Default severity: **error**.
+
 Example: An unquoted boolean becomes a non-string ConfigMap data value.
 
 Suggested action: Use the validator's field path and expected type to check the template and input schema.
@@ -352,6 +439,8 @@ Suggested action: Use the validator's field path and expected type to check the 
 ### HH1011: Rendered output cannot be encoded as JSON
 
 Detected when: Manifest processing reports a JSON representation failure.
+
+Default severity: **error**.
 
 Example: A YAML tag produces an unsupported Python scalar object.
 
@@ -361,6 +450,8 @@ Suggested action: Inspect YAML tags and parser support to determine whether the 
 
 Detected when: Helm lint fails on the supplied chart defaults.
 
+Default severity: **error**.
+
 Example: Lint reports an error before generated inputs are tested.
 
 Suggested action: Read the lint diagnostic; distinguish chart errors from missing dependencies or environment requirements.
@@ -368,6 +459,8 @@ Suggested action: Read the lint diagnostic; distinguish chart errors from missin
 ### HH2001: Undocumented values path
 
 Detected when: The audit finds a values path with no matching schema declaration.
+
+Default severity: **warning**.
 
 Example: Templates read service.mode but its schema entry is absent.
 
@@ -377,6 +470,8 @@ Suggested action: Document the path in values.schema.json, including its accepte
 
 Detected when: A schema path declares no type, enum or const.
 
+Default severity: **warning**.
+
 Example: service.mode has only a description: "Service mode".
 
 Suggested action: Declare the accepted type or a finite set of values.
@@ -384,6 +479,8 @@ Suggested action: Declare the accepted type or a finite set of values.
 ### HH2003: Missing values description
 
 Detected when: A typed schema path has no description.
+
+Default severity: **info**.
 
 Example: A boolean gate is declared without explaining which component it enables.
 
@@ -393,6 +490,8 @@ Suggested action: Describe the field's behavior and any requirements shared with
 
 Detected when: A discovered path is absent from the original values file.
 
+Default severity: **warning**.
+
 Example: A conditional branch reads credentials.token, which defaults omit.
 
 Suggested action: Supply a default or document when users must provide the field. Render the relevant configurations to check its requirements.
@@ -400,6 +499,8 @@ Suggested action: Supply a default or document when users must provide the field
 ### HH2005: Unresolved template value access
 
 Detected when: Static analysis cannot resolve a template's values access.
+
+Default severity: **warning**.
 
 Example: An index expression selects a key computed at runtime.
 
@@ -409,6 +510,8 @@ Suggested action: Review the dynamic access and coverage report. Exercise the af
 
 Detected when: An object permits unspecified entries without named fields, patterned fields or a typed map-value schema.
 
+Default severity: **warning**.
+
 Example: extraConfig: {"type": "object"} permits unspecified keys and values.
 
 Suggested action: Describe fields with properties, patternProperties or typed additionalProperties. Ignore HH2006 for intentional free-form configuration; tests still sample those values.
@@ -417,13 +520,17 @@ Suggested action: Describe fields with properties, patternProperties or typed ad
 
 Detected when: An evaluated template operation needs context or semantics outside the supported compiler contract.
 
+Default severity: **warning**.
+
 Example: A rejection guard depends on now, lookup, random data or an unsupported tpl expression.
 
-Suggested action: The candidate is retained for native Helm rendering. Review the source location and coverage; suppress HH2007 to silence this warning without dropping tests. --fail stops at the warning when it is enabled.
+Suggested action: The candidate is retained for native Helm rendering. Review the source location and coverage; suppress HH2007 to silence this warning without dropping tests. --fail stops at this finding when its severity meets the configured threshold.
 
 ### HH3001: Template accesses a missing object
 
 Detected when: Helm reports a nil pointer while evaluating a template field.
+
+Default severity: **error**.
 
 Example: A template reads .Values.service.port when service is absent.
 
@@ -433,6 +540,8 @@ Suggested action: Guard or default the parent object, or require it in the value
 
 Detected when: Helm reports a wrong value type, a field unavailable on a type, or an unsupported range operand.
 
+Default severity: **error**.
+
 Example: A string-only template function receives a boolean allowed by the input schema.
 
 Suggested action: Align the template operation with the accepted input types, or narrow the schema.
@@ -440,6 +549,8 @@ Suggested action: Align the template operation with the accepted input types, or
 ### HH3003: Undefined named template
 
 Detected when: Helm reports that a called named template is not defined.
+
+Default severity: **error**.
 
 Example: include "service.name" . refers to an absent helper.
 
