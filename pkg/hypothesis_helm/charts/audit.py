@@ -36,7 +36,7 @@ def audit_findings(chart: Chart) -> dict[str, object]:
 
     from hypothesis_helm.schemas.paths import enumerate_paths
 
-    references, diagnostics = discover(chart.path, prune_literals=True)
+    references, diagnostics = discover(chart.path, prune_literals=True, offline=True)
     defaults = set(_default_paths(chart.defaults))
     declared = {entry.path: entry.schema for entry in enumerate_paths(chart.schema)}
     paths = defaults | {r.path for r in references if r.path} | declared.keys()

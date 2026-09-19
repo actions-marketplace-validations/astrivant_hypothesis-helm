@@ -96,7 +96,7 @@ def test_unresolved_is_visible(tmp_path: Path) -> None:
             """),
     )
     assert any("dynamic key" in w.message for w in warnings)
-    assert any("helper context" in w.message for w in warnings)
+    assert any("unresolved dot context: .thing" in w.message for w in warnings)
     assert any("unresolved dot" in w.message for w in warnings)
 
 
@@ -207,7 +207,8 @@ def test_tpl_dynamic_recursive_and_invalid(tmp_path: Path) -> None:
         """
 {{ tpl .Values.loop . }}
 {{ tpl .Values.absent . }}
-{{ tpl `{{ .Values.wrong }}` (dict "Values" .Values) }}
+{{ tpl `{{ .Values.mapped }}` (dict "Values" .Values) }}
+{{ tpl `{{ .Values.wrong }}` (mystery .Values) }}
 {{ tpl `{{ if .Values.bad }}` . }}
 {{ tpl (.Files.Get "../outside") . }}
 {{ tpl (.Files.Get "") . }}
@@ -222,6 +223,7 @@ def test_tpl_dynamic_recursive_and_invalid(tmp_path: Path) -> None:
     assert any("outside chart" in message for message in messages)
     assert any("source is dynamic" in message for message in messages)
     assert ("wrong",) not in {ref.path for ref in refs}
+    assert ("mapped",) in {ref.path for ref in refs}
 
 
 def test_tpl_coalescing_and_helm_render(tmp_path: Path) -> None:

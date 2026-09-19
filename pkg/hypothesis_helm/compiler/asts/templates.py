@@ -9,7 +9,7 @@ from collections.abc import Iterator
 
 from attrs import frozen
 
-from hypothesis_helm.compiler.asts.lexing import SPACE
+from hypothesis_helm.compiler.asts.lexing import SPACE, block_spacing
 from hypothesis_helm.compiler.asts.lexing import Token as Token
 from hypothesis_helm.compiler.asts.lexing import lex as lex
 from hypothesis_helm.schemas.contracts import configuration_key
@@ -89,9 +89,10 @@ def lower(source: str) -> tuple[Node, ...]:
             if not token.action:
                 nodes.append(Node("text", token.text, token.line))
                 continue
-            head = token.text.split(maxsplit=1)[0] if token.text else ""
+            text = block_spacing(token.text)
+            head = text.split(maxsplit=1)[0] if text else ""
             if head in ("else", "end"):
-                return tuple(nodes), token.text
+                return tuple(nodes), text
             if head in ("if", "with", "range", "define", "block"):
                 children, closing = block()
                 otherwise: tuple[Node, ...] = ()
@@ -100,11 +101,11 @@ def lower(source: str) -> tuple[Node, ...]:
                     otherwise, closing = alternatives(closing)
                 if closing != "end":
                     raise ValueError("unbalanced or unsupported template block")
-                expression = token.text[len(head) :].strip(SPACE)
+                expression = text[len(head) :].strip(SPACE)
                 nodes.append(
                     Node(
                         "if" if supported else "opaque",
-                        expression if supported else token.text,
+                        expression if supported else text,
                         token.line,
                         children,
                         otherwise,

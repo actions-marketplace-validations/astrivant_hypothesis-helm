@@ -4,7 +4,7 @@ Track input origins through lexical aliases and literal helper dictionaries.
 
 from __future__ import annotations
 
-from attrs import frozen
+from attrs import define, frozen
 
 
 @frozen
@@ -52,9 +52,57 @@ class Sequence:
 
     Attributes:
         items (tuple[Origin, ...]): Literal members or one symbolic representative of generated members.
+        exact (bool): Whether items enumerate the complete collection in iteration order.
     """
 
     items: tuple[Origin, ...]
+    exact: bool = True
+
+
+@define
+class Dictionary:
+    """
+    Retain literal map entries and invalidate facts shared by aliases after mutation.
+
+    Attributes:
+        fields (dict[str, Origin]): Statically constructed entries.
+        uncertain (bool): Whether an unsupported mutation may have changed any entry.
+    """
+
+    fields: dict[str, Origin]
+    uncertain: bool = False
+
+
+@define
+class Projection:
+    """
+    Describe a shallow map copy made by selecting or omitting known keys.
+
+    Attributes:
+        source (Origin): Original map whose remaining entries retain their origins.
+        keys (frozenset[str]): Selected or omitted keys.
+        include (bool): True for pick, false for omit.
+        uncertain (bool): Whether the copied map was subsequently mutated.
+    """
+
+    source: Origin
+    keys: frozenset[str]
+    include: bool
+    uncertain: bool = False
+
+
+@frozen
+class Text:
+    """
+    Retain a supported serialization operation for concrete tpl source discovery.
+
+    Attributes:
+        source (Origin): Original value, including aliases and alternative sources.
+        operation (str): Supported conversion whose output is textual.
+    """
+
+    source: Origin
+    operation: str
 
 
 @frozen
@@ -69,7 +117,7 @@ class Choice:
     alternatives: tuple[Origin, ...]
 
 
-type Origin = tuple[str, ...] | dict[str, Origin] | Literal | Derived | Record | Sequence | Choice | None
+type Origin = tuple[str, ...] | Dictionary | Projection | Text | Literal | Derived | Record | Sequence | Choice | None
 
 
 def identity(origin: Origin) -> tuple[object, ...]:
@@ -82,16 +130,20 @@ def identity(origin: Origin) -> tuple[object, ...]:
     Returns:
         tuple[object, ...]: Hashable context identity, independent of dictionary insertion order.
     """
-    if isinstance(origin, dict):
-        return ("dict", tuple((key, identity(value)) for key, value in sorted(origin.items())))
+    if isinstance(origin, Dictionary):
+        return ("dict", tuple((key, identity(value)) for key, value in sorted(origin.fields.items())), origin.uncertain)
+    if isinstance(origin, Projection):
+        return ("projection", identity(origin.source), tuple(sorted(origin.keys)), origin.include, origin.uncertain)
+    if isinstance(origin, Text):
+        return ("text", identity(origin.source), origin.operation)
     if isinstance(origin, Literal):
         return ("literal", repr(origin.value))
     if isinstance(origin, Derived):
         return ("derived", origin.inputs, origin.external)
     if isinstance(origin, Record):
-        return ("record", identity(origin.fields))
+        return ("record", tuple((key, identity(value)) for key, value in sorted(origin.fields.items())))
     if isinstance(origin, Sequence):
-        return ("sequence", tuple(identity(item) for item in origin.items))
+        return ("sequence", tuple(identity(item) for item in origin.items), origin.exact)
     if isinstance(origin, Choice):
         return ("choice", tuple(identity(item) for item in origin.alternatives))
     return ("path", origin) if isinstance(origin, tuple) else ("unknown",)
@@ -129,9 +181,11 @@ def paths(origin: Origin) -> tuple[tuple[str, ...], ...]:
         return (origin,)
     if isinstance(origin, Derived):
         return origin.inputs
+    if isinstance(origin, (Projection, Text)):
+        return paths(origin.source)
     items = (
-        origin.values()
-        if isinstance(origin, dict)
+        origin.fields.values()
+        if isinstance(origin, Dictionary)
         else origin.fields.values()
         if isinstance(origin, Record)
         else origin.items
@@ -170,8 +224,18 @@ def select(origin: Origin, parts: tuple[str, ...]) -> Origin:
     for part in parts:
         if isinstance(origin, tuple):
             origin = (*origin, part)
-        elif isinstance(origin, dict):
-            origin = join(*origin.values()) if part == "*" else origin.get(part, Literal(None))
+        elif isinstance(origin, Dictionary):
+            selected = join(*origin.fields.values()) if part == "*" else origin.fields.get(part, Literal(None))
+            origin = join(selected, None) if origin.uncertain else selected
+        elif isinstance(origin, Projection):
+            selected = (
+                join(*(select(origin.source, (key,)) for key in sorted(origin.keys)))
+                if part == "*" and origin.include
+                else select(origin.source, (part,))
+                if part == "*" or (part in origin.keys) == origin.include
+                else Literal(None)
+            )
+            origin = join(selected, None) if origin.uncertain else selected
         elif isinstance(origin, Choice):
             origin = join(*(select(item, (part,)) for item in origin.alternatives))
         elif isinstance(origin, Sequence) and part == "*":

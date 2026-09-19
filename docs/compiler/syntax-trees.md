@@ -57,9 +57,45 @@ inside its own body. Each alternative has its own subtree, including its final
 
 Assignments to an existing variable retain the possible input sources from every
 branch. A new local declaration shadows that variable only within its own block.
-Loop analysis includes the zero-iteration case and repeats until the set of input
-sources stops changing. If it has not stabilized after eight passes, discovery
-retains the known sources plus an unknown alternative and reports the limit.
+Known helper arguments can prove that a branch cannot execute. For example, a
+literal dictionary containing `context` satisfies `hasKey . "context"`, and an
+omitted argument defaulting to an empty list cannot enter a `range` body.
+These decisions use template construction, never the current values defaults.
+Input-controlled branches remain in discovery even when disabled by default.
+
+List operations (`concat`, `append`, `prepend`, `first`, `last`, `reverse`, `uniq` and
+`sortAlpha`) preserve the possible origins of their members. `pick` and `omit`
+retain the original paths for fields they keep. Unsupported map mutation still
+warns and invalidates affected key facts, including aliases and cached helper
+effects. An earlier `hasKey` result cannot authorize pruning after such a mutation.
+
+Literal lists and string-keyed dictionaries are visited in their known iteration
+order. A literal `splitList "." "security.privileged"` therefore follows two keys
+and reaches `$.security.privileged`; it does not grow an unknown-depth wildcard
+path. These finite walks share the statement budget described below.
+`split` and `splitn` produce dictionaries with numbered keys, which follow Go's
+lexical key ordering. Compact block syntax such as `range.Values.items` is valid
+and is recognized by both syntax trees. Scalar helper arguments retain their
+input origins without being mistaken for a values dictionary.
+The [builtin inventory](functions.md) distinguishes result-shape models from
+effect classification and exact evaluation.
+For unknown-length collections, loop analysis includes the zero-iteration case
+and repeats until the possible input sources stop changing. Growing lists are
+summarized by their possible members. If other origins have not stabilized after
+eight passes, discovery retains the known sources plus an unknown alternative
+and reports the limit.
+
+Looking up an input-selected key in a literal dictionary retains all possible
+entry origins. A surrounding `hasKey` guard proves membership within its matching
+branch; an unguarded lookup also retains the missing-key possibility. This does
+not declare a global input enum or replace [rejection analysis](analysis.md#explicit-rejection-discovery).
+
+For `tpl`, discovery follows aliases, `default`/`coalesce` alternatives and supported
+text conversions to inspect available strings from the supplied values. Known
+strings are analyzed even when another alternative is unresolved; that uncertainty
+still produces a diagnostic. Literal dictionary contexts preserve their mapped
+values paths. This inspection does not establish what arbitrary future template
+strings will execute or prove output equivalence.
 
 Unknown helper names, conflicting definitions, unsupported argument transformations,
 recursion and exhausted analysis budgets still produce `HH2005` diagnostics.

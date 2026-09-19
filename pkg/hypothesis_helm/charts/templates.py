@@ -16,11 +16,14 @@ from hypothesis_helm.charts import tpl, yamlio
 from hypothesis_helm.compiler.asts.actions import TOKEN
 from hypothesis_helm.compiler.asts.actions import Action as Action
 from hypothesis_helm.compiler.asts.actions import parse as parse
-from hypothesis_helm.compiler.asts.origins import Derived, Literal, Origin, identity, join, paths, select, unresolved
+from hypothesis_helm.compiler.asts.origins import Derived, Dictionary, Literal, Origin, identity, join, paths, select, unresolved
+from hypothesis_helm.compiler.builtins import BUILTINS, MUTATIONS, NATIVE_STATE
 from hypothesis_helm.compiler.limits import call_depth
+from hypothesis_helm.compiler.passes.discovery_flow import invalidate, iterations, key_guards, truth, widen
 from hypothesis_helm.compiler.passes.discovery_functions import CERTIFICATES
 from hypothesis_helm.compiler.passes.discovery_functions import result as function_result
 from hypothesis_helm.compiler.passes.discovery_sources import DiscoverySources
+from hypothesis_helm.compiler.passes.discovery_tpl import sources as tpl_sources
 
 
 @define(frozen=True)
@@ -57,22 +60,24 @@ class Diagnostic:
     message: str
 
 
-def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Reference], list[Diagnostic]]:
+def discover(path: Path, *, prune_literals: bool = False, offline: bool = False) -> tuple[list[Reference], list[Diagnostic]]:
     """
     Resolve direct fields, aliases, with/range scopes, and literal key access.
 
     Args:
         path (Path): Value path or chart location to inspect.
         prune_literals (bool): Skip branches controlled by literal true/false conditions.
+        offline (bool): Analyze plain helm template with neither a cluster connection nor DNS enabled.
 
     Returns:
         tuple[list[Reference], list[Diagnostic]]: Result of the documented operation.
     """
     values_file = path / "values.yaml"
     defaults = yamlio.load(values_file.read_text()) if values_file.is_file() else {}
-    active_tpl: set[tuple[str, tuple[str, ...] | None]] = set()
+    active_tpl: set[tuple[str, tuple[object, ...]]] = set()
     active_helpers: list[str] = []
-    visited_helpers: set[tuple[object, ...]] = set()
+    visited_helpers: dict[tuple[object, ...], bool] = {}
+    mutations = 0
     remaining = 10000
     sources = DiscoverySources.build(path)
     refs: list[Reference] = []
@@ -84,6 +89,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
             dot: Origin,
             env: dict[str, Origin],
             source_name: str = name,
+            guards: frozenset[tuple[object, ...]] = frozenset(),
         ) -> dict[str, Origin]:
             """
             Resolve value references in the current lexical scope.
@@ -93,11 +99,12 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                 dot (Origin): Current dot origin, literal dictionary, or unresolved context.
                 env (dict[str, Origin]): Variable aliases available in the current lexical scope.
                 source_name (str): Filename captured for this traversal.
+                guards (frozenset[tuple[object, ...]]): Key-membership facts established by enclosing branches.
 
             Returns:
                 dict[str, Origin]: Assignments to variables declared outside this lexical block.
             """
-            nonlocal remaining
+            nonlocal remaining, mutations
             env = dict(env)
             outward: dict[str, Origin] = {}
             declared: set[str] = set()
@@ -218,7 +225,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                             if not stage:
                                 return None
                             arguments = [expression(arg) for arg in tpl.arguments(stage[1:])]
-                            value = function_result(stage[0], [*arguments, value])
+                            value = function_result(stage[0], [*arguments, value], offline=offline)
                         return value
                     if ts[0] == "(":
                         depth = 0
@@ -233,6 +240,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                     if ts[0] == "dict":
                         args = tpl.arguments(ts[1:])
                         if len(args) % 2:
+                            warn("dict has an unpaired key; Helm supplies an empty final value; helper context cannot be established")
                             return None
                         bound: dict[str, Origin] = {}
                         for key_tokens, item in zip(args[::2], args[1::2], strict=True):
@@ -242,7 +250,7 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                             if name is None:
                                 return None
                             bound[name] = expression(item)
-                        return bound
+                        return Dictionary(bound)
                     if ts[0] in ("index", "get") and len(ts) >= 3:
                         args = tpl.arguments(ts[1:])
                         if len(args) < 2:
@@ -251,19 +259,29 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         if base is None:
                             warn("unresolved lookup target: " + action_text)
                             return None
-                        keys = []
                         for argument in args[1:]:
                             key_value = expression(argument)
                             key = str(key_value.value) if isinstance(key_value, Literal) else None
+                            if isinstance(base, Dictionary) and isinstance(key_value, Literal) and isinstance(key_value.value, str):
+                                # A literal '*' is a real dictionary key, not the range-member wildcard.
+                                selected = base.fields.get(key_value.value, Literal(None))
+                                base = join(selected, None) if base.uncertain else selected
+                                continue
                             if len(argument) == 1 and argument[0].isdigit():
                                 key = "*"
                             if key is None:
+                                if isinstance(base, Dictionary) and not base.uncertain:
+                                    # A closed table has finitely many possible results even when the key is an input.
+                                    # Resolve immediately against the live epoch, including preceding helper effects.
+                                    present = (identity(base), identity(key_value), mutations) in guards  # noqa: B023
+                                    base = join(*base.fields.values(), *(() if present else (Literal(None),)))
+                                    continue
                                 if not isinstance(base, Derived) or not base.external:
                                     warn("dynamic key requires manual review: " + action_text)
-                                keys.append("*")
+                                base = select(base, ("*",))
                             else:
-                                keys.append(key)
-                        return select(base, tuple(keys))
+                                base = select(base, (key,))
+                        return base
                     if ts[0] == "dig" and len(ts) >= 4:
                         ts = ts[: next((i for i, t in enumerate(ts) if t in ("|", ")")), len(ts))]
                         base = resolve(ts[-1])
@@ -276,10 +294,12 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         if ts[0].startswith(('"', "`")):
                             return Literal(literal(ts[0]))
                         if ts[0] in ("true", "false", "nil") or ts[0].lstrip("-").isdigit():
+                            if ts[0].lstrip("-").startswith("0") and len(ts[0].lstrip("-")) > 1:
+                                return None  # Go octal and alternate numeric spellings need their own parser.
                             return Literal(None if ts[0] == "nil" else ts[0] == "true" if ts[0] in ("true", "false") else int(ts[0]))
                         if ts[0].startswith((".", "$")):
                             return resolve(ts[0])
-                    return function_result(ts[0], [expression(arg) for arg in tpl.arguments(ts[1:])])
+                    return function_result(ts[0], [expression(arg) for arg in tpl.arguments(ts[1:])], offline=offline)
 
                 def origin_path(ts: list[str]) -> tuple[str, ...] | None:
                     """
@@ -332,24 +352,42 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                             args = tpl.arguments(tokens[j + 1 :])
                             if len(args) != 2 or (j > 0 and tokens[j - 1] == "|"):
                                 raise ValueError("tpl requires a resolvable string and context")
-                            content = tpl.source_text(args[0], path, defaults, origin_path)
-                            context = origin_path(args[1])
+                            contents: tuple[str, ...]
+                            incomplete = False
+                            try:
+                                contents = (tpl.source_text(args[0], path, defaults, origin_path),)
+                            except ValueError as exc:
+                                contents, incomplete = tpl_sources(expression(args[0]), defaults)
+                                if incomplete:
+                                    warn(str(exc))
+                            context = expression(args[1])
                             if context is None:
                                 raise ValueError("tpl context is dynamic or unsupported")
-                            tpl_identity = (content, context)
-                            if tpl_identity in active_tpl or len(active_tpl) >= 32:
-                                raise ValueError("recursive tpl expansion requires review")
-                            nested = parse(content)
-                            active_tpl.add(tpl_identity)
-                            try:
-                                walk(
-                                    nested,
-                                    context,
-                                    {"$": context},
-                                    f"{source_name}:{node.line} (tpl)",
-                                )
-                            finally:
-                                active_tpl.remove(tpl_identity)
+                            for content in contents:
+                                tpl_identity = (content, identity(context))
+                                if tpl_identity in active_tpl or len(active_tpl) >= 32:
+                                    warn("recursive tpl expansion requires review")
+                                    continue
+                                try:
+                                    nested = parse(content)
+                                except ValueError as exc:
+                                    warn(str(exc))
+                                    continue
+                                active_tpl.add(tpl_identity)
+                                try:
+                                    walk(
+                                        nested,
+                                        context,
+                                        {"$": context},
+                                        f"{source_name}:{node.line} (tpl)",
+                                        guards,
+                                    )
+                                finally:
+                                    active_tpl.remove(tpl_identity)
+                            if incomplete or paths(expression(args[0])):
+                                # Values-backed code can mutate its context in a later candidate.
+                                invalidate(context)
+                                mutations += 1
                         except ValueError as exc:
                             warn(str(exc))
                     if t in ("include", "template", "block"):
@@ -358,6 +396,9 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         helper = name_value.value if isinstance(name_value, Literal) and isinstance(name_value.value, str) else None
                         if helper is None or len(args) not in (1, 2) or (j > 0 and tokens[j - 1] == "|"):
                             warn("helper name or call context is dynamic: " + node.text)
+                            for argument in args[1:]:
+                                invalidate(expression(argument))
+                            mutations += 1
                             continue
                         target = sources.helpers.get(helper) or sources.templates.get(helper)
                         if target is None or helper in sources.ambiguous:
@@ -365,33 +406,45 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                             continue
                         if helper in active_helpers or len(active_helpers) >= call_depth():
                             warn("helper is recursive or exceeds compiler call depth: " + helper)
+                            if len(args) == 2:
+                                invalidate(expression(args[1]))
+                            mutations += 1
                             continue
                         bound_context = expression(args[1]) if len(args) == 2 else Literal(None)
-                        if bound_context is None or isinstance(bound_context, Derived) and not bound_context.external:
+                        if bound_context is None:
                             warn("helper context is dynamic or unsupported: " + helper)
                             continue
-                        visit = (helper, identity(bound_context), tuple(active_helpers), frozenset(active_tpl))
+                        visit = (helper, identity(bound_context), tuple(active_helpers), frozenset(active_tpl), guards)
                         if visit in visited_helpers:
+                            if visited_helpers[visit]:
+                                invalidate(bound_context)
+                                mutations += 1
                             continue
                         helper_file, helper_nodes = target
                         active_helpers.append(helper)
+                        before_mutations = mutations
                         try:
-                            walk(helper_nodes, bound_context, {"$": bound_context}, helper_file)
+                            walk(helper_nodes, bound_context, {"$": bound_context}, helper_file, guards)
                         finally:
                             active_helpers.pop()
                         if remaining > 0:
-                            visited_helpers.add(visit)
-                    if t in (
-                        "set",
-                        "unset",
-                        "merge",
-                        "mergeOverwrite",
-                    ):
+                            visited_helpers[visit] = mutations != before_mutations
+                    if t in MUTATIONS or t == "call":
                         warn("dynamic template/context or mutation requires review: " + t)
-                    if t == "lookup":
+                        args = tpl.arguments(tokens[j + 1 :])
+                        if args and t != "call":
+                            invalidate(expression(args[0]))
+                        else:
+                            invalidate(dot)
+                            for origin in env.values():
+                                invalidate(origin)
+                        mutations += 1
+                    if t == "lookup" and not offline:
                         warn("lookup reads external cluster state; result left to Helm")
                     if t in CERTIFICATES:
                         warn(f"{t} generates certificate material; result left to Helm")
+                    elif t in NATIVE_STATE and t != "lookup" and not (offline and t == "getHostByName"):
+                        warn(f"{t} depends on {', '.join(sorted(BUILTINS[t].effects))}; result left to Helm")
                 head = tokens[0]
                 rhs = tokens[1:] if head in ("if", "range", "with") else tokens
                 assignment = next((j for j, t in enumerate(rhs) if t in (":=", "=")), None)
@@ -436,24 +489,54 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                 if head == "block":
                     continue
                 if head == "range":
+                    members = iterations(value)
+                    if members is not None:
+                        carried = dict(env)
+                        changed: set[str] = set()
+                        if not members:
+                            carried.update(walk(node.otherwise, dot, child_env, source_name, guards))
+                            changed.update(carried.keys())
+                        for key, member in members:
+                            if remaining <= 0:
+                                warn("template discovery statement budget exceeded")
+                                carried.update({variable: join(item, None) for variable, item in carried.items()})
+                                changed.update(carried)
+                                break
+                            iteration = dict(carried)
+                            for position, variable in enumerate(names):
+                                iteration[variable] = key if len(names) == 2 and position == 0 else member
+                            updates = walk(node.children, member, iteration, source_name, guards)
+                            if operator == "=":
+                                for variable in names:
+                                    updates.setdefault(variable, iteration[variable])
+                            updates = {key: item for key, item in updates.items() if key in env and not (operator == ":=" and key in names)}
+                            carried.update(updates)
+                            changed.update(updates)
+                        for variable in changed & env.keys():
+                            if operator == ":=" and variable in names:
+                                continue
+                            env[variable] = carried[variable]
+                            if variable not in declared:
+                                outward[variable] = env[variable]
+                        continue
                     carried = dict(env)
-                    changed: set[str] = set(names if operator == "=" else ()) & env.keys()
+                    changed = set(names if operator == "=" else ()) & env.keys()
                     for _ in range(8):
                         iteration = {**carried, **{key: child_env[key] for key in names}}
-                        updates = walk(node.children, child_dot, iteration, source_name)
+                        updates = walk(node.children, child_dot, iteration, source_name, guards)
                         if operator == "=":
                             for variable in names:
                                 updates.setdefault(variable, child_env[variable])
                         updates = {key: item for key, item in updates.items() if key in env and not (operator == ":=" and key in names)}
                         changed.update(updates)
-                        following = {**carried, **{key: join(carried[key], item) for key, item in updates.items()}}
+                        following = {**carried, **{key: widen(carried[key], item) for key, item in updates.items()}}
                         if all(identity(following[key]) == identity(carried[key]) for key in updates):
                             break
                         carried = following
                     else:
                         warn("loop input origins did not converge within 8 passes; unresolved alternatives retained")
                         carried.update({key: join(carried[key], None) for key in changed})
-                    empty = walk(node.otherwise, dot, child_env, source_name)
+                    empty = walk(node.otherwise, dot, child_env, source_name, guards)
                     for variable in changed | (empty.keys() & env.keys()):
                         if operator == ":=" and variable in names:
                             continue
@@ -461,12 +544,20 @@ def discover(path: Path, *, prune_literals: bool = False) -> tuple[list[Referenc
                         if variable not in declared:
                             outward[variable] = env[variable]
                 else:
-                    if prune_literals and tokens in (["if", "true"], ["if", "false"]):
-                        branches = [walk(node.children if tokens[1] == "true" else node.otherwise, dot, child_env, source_name)]
-                    else:
+                    known = truth(value) if head in ("if", "with") else None
+                    if not prune_literals and tokens in (["if", "true"], ["if", "false"]):
+                        known = None
+                    if known is not None:
+                        facts = guards | (key_guards(rhs, expression, mutations, known) if head == "if" else frozenset())
                         branches = [
-                            walk(node.children, child_dot, child_env, source_name),
-                            walk(node.otherwise, dot, child_env, source_name),
+                            walk(node.children if known else node.otherwise, child_dot if known else dot, child_env, source_name, facts)
+                        ]
+                    else:
+                        yes = guards | (key_guards(rhs, expression, mutations) if head == "if" else frozenset())
+                        no = guards | (key_guards(rhs, expression, mutations, False) if head == "if" else frozenset())
+                        branches = [
+                            walk(node.children, child_dot, child_env, source_name, yes),
+                            walk(node.otherwise, dot, child_env, source_name, no),
                         ]
                     for variable in {key for branch in branches for key in branch} & env.keys():
                         if operator == ":=" and variable in names:

@@ -31,6 +31,7 @@ from hypothesis_helm.compiler.asts.contract_values import (
 from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, RendererContext, Unavailable
 from hypothesis_helm.compiler.asts.templates import Node, lower, walk
 from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, TransformedDomain, UnsupportedTransformation, calculate, inputs
+from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE
 from hypothesis_helm.compiler.limits import call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 
@@ -38,7 +39,6 @@ TOKENS = re.compile(r'\s*("(?:\\.|[^"\\])*"|`[^`]*`|[()|]|[^\s()|]+)')
 ASSIGNMENT = re.compile(r"(\$\w+)\s*(:=|=)\s*(.*)", re.DOTALL)
 RANGE_ASSIGNMENT = re.compile(r"(\$\w+)(?:\s*,\s*(\$\w+))?\s*(:=|=)\s*(.*)", re.DOTALL)
 LOGGER = logging.getLogger(__name__)
-NATIVE_STATE = frozenset({"lookup", "now", "randAlphaNum", "randAlpha", "randAscii", "randNumeric", "randBytes", "uuidv4"})
 
 
 def declares_path(schema: object, path: tuple[str, ...]) -> bool:
@@ -288,10 +288,10 @@ def context_effects(nodes: tuple[Node, ...]) -> bool:
         bool: Mutation or dynamic evaluation prevents a supported local prediction.
     """
     for node in walk(nodes):
-        if node.kind == "emit":
+        if node.kind != "text":
             assignment = ASSIGNMENT.fullmatch(node.text)
             functions = calls(expression(assignment[3] if assignment else node.text))
-            if functions & {"set", "unset", "merge", "mergeOverwrite"}:
+            if functions & (MUTATIONS | {"call"}):
                 return True
     return False
 
@@ -455,7 +455,7 @@ class Contracts:
             relevant = self.relevant if dynamic else self.explicit_relevant
             if (
                 found & {"fail", "required"}
-                or (dynamic and found & ({"tpl"} | NATIVE_STATE))
+                or (dynamic and found & (EFFECTS["dynamic-code"] | NATIVE_STATE))
                 or any("include:" + name in found for name in relevant)
             ):
                 return True
@@ -867,6 +867,16 @@ class Evaluation:
             return result
         evaluated = [self.evaluate(argument, source, line, variables) for argument in arguments]
         args = [native(value) for value in evaluated]
+        if function == "lookup" and len(args) == 4 and all(isinstance(value, str) for value in args):
+            if self.contracts.renderer is not None and self.contracts.renderer.offline:
+                self.contextual = True
+                return ConstantMap({})
+            raise Unknown("lookup requires a verified offline renderer context; cluster contents remain external")
+        if function == "getHostByName" and len(args) == 1 and isinstance(args[0], str):
+            if self.contracts.renderer is not None and not self.contracts.renderer.enable_dns:
+                self.contextual = True
+                return ""
+            raise Unknown("DNS is external unless disabled by the verified renderer context")
         if function == "semverCompare" and len(args) == 2 and all(isinstance(value, str) for value in args):
             if self.contracts.renderer is None:
                 raise Unknown("semverCompare requires the fixed Helm renderer context")

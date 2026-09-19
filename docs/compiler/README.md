@@ -64,6 +64,7 @@ eligible for execution; it cannot establish a successful result.<sup>[\[1\]](sel
 | Page | What it explains |
 | --- | --- |
 | [Syntax trees and values model](syntax-trees.md) | Parsed templates, field types, and representations for discovery and proof. |
+| [Helm builtin functions](functions.md) | Complete pinned function inventory, effects, supported models and conservative fallbacks. |
 | [Decisions, panel by panel](decisions.md) | Matched diagrams showing why branches are visited, inputs retained, or work skipped. |
 | [Analysis passes](analysis.md) | Input inventory, dependencies, rejection conditions, maximum output complexity, and sampling profiles. |
 | [Branch knowledge lattice](lattice.md) | Possible values, branch narrowing, merging and conservative handling of unknown operations. |

@@ -143,11 +143,11 @@ Unknown expressions remain ordinary Helm tests. The remaining boundaries are:
 
 | Construct | Why it remains unresolved |
 | --- | --- |
-| `lookup`, clock and random functions | External or changing state is not injected or predicted. Helm executes these normally. |
+| Cluster-backed `lookup`, clock and random functions | External or changing state is not injected or predicted. An explicitly offline renderer permits an empty lookup result. |
 | Unsupported operations inside `tpl`, template-local definitions and recursive expansion beyond the call budget | The compiler cannot establish the generated program's behavior within its supported subset. |
 | `.Files.Glob`, `.Files.GetBytes`, binary files and file contexts exceeding the inspection budget | These file operations remain native Helm work. |
 | Integer/channel ranges; ranges over unsorted `keys` results | Iterator semantics or iteration order are outside the supported deterministic subset. |
-| `set`, `unset`, `merge`, `mergeOverwrite` | Can change the context used by later conditions. A direct mutation before a rejection blocks prediction. |
+| `set`, `unset`, `merge`, `mergeOverwrite` and their `must` aliases | Can change the context used by later conditions. Writes in statements or conditions block prediction. |
 | Unicode case conversion, floating-point arithmetic, implicit numeric coercion, integer overflow | These operations need additional Go-specific semantics; Python's behavior is not assumed to match. |
 | Regex groups, alternation, flags, character-class shortcuts and multiple variable repetitions | These expressions exceed the deliberately restricted regex evaluator. |
 | Candidate-supplied maps/lists | Their observed members do not prove a fixed enum. Membership can still establish a supported rejection. |
@@ -203,6 +203,11 @@ require native Helm verification, even after earlier candidates were confirmed.
 
 Clock, randomness and cluster lookups keep their normal Helm behavior; this change does not
 inject a clock, seed Helm's random functions or simulate a Kubernetes cluster.
+An attached offline renderer context allows `lookup` to return its native empty map;
+disabled DNS similarly allows an empty `getHostByName` result. These are fixed
+execution settings, not assumptions about a cluster. The complete
+[function effect inventory](functions.md) includes aliases and less obvious sources
+of randomness such as password hashing, encryption and certificate generation.
 The rejection report records `analysis_fallbacks` and `incomplete_evaluations`; the
 pruning report records `fallback_reasons`. The evaluation count includes repeated inputs and
 proposed repairs, so it is not a count of distinct rendered inputs. These are analysis limits,

@@ -202,6 +202,8 @@ class RendererContext:
         namespace (str): Fixed release namespace.
         packed (dict[str, bytes] | None): Lazily loaded chart archive; none until file access is needed.
         files (dict[tuple[str, ...], FileSet]): Chart-local file views, reused across candidates.
+        offline (bool): Plain helm template has no cluster connection and lookup returns an empty map.
+        enable_dns (bool): Whether the renderer was explicitly allowed to perform DNS queries.
     """
 
     chart: Path
@@ -213,6 +215,8 @@ class RendererContext:
     namespace: str = "default"
     packed: dict[str, bytes] | None = None
     files: dict[tuple[str, ...], FileSet] = field(factory=dict)
+    offline: bool = True
+    enable_dns: bool = False
 
     def capability_fields(self) -> dict[str, object]:
         """

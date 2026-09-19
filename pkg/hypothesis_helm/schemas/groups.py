@@ -98,7 +98,7 @@ def infer_groups(chart: Path, schema: dict[str, object] | ValuesModel) -> tuple[
         # fields into one exponentially larger group. Existing group budgets apply.
         for reference in dependency.references:
             add(controls | {reference.path}, "dependency:" + ".".join(dependency.path))
-    references, diagnostics = discover(chart)
+    references, diagnostics = discover(chart, offline=True)
     for file in sorted((chart / "templates").rglob("*")):
         if not file.is_file():
             continue

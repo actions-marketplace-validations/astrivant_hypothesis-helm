@@ -8,7 +8,7 @@ import re
 
 from attrs import define, field
 
-from hypothesis_helm.compiler.asts.lexing import lex
+from hypothesis_helm.compiler.asts.lexing import block_spacing, lex
 
 
 @define
@@ -50,7 +50,7 @@ def parse(source: str) -> list[Action]:
     for token in lex(source):
         if not token.action:
             continue
-        text = token.text
+        text = block_spacing(token.text)
         tokens = TOKEN.findall(text)
         if not tokens:
             continue

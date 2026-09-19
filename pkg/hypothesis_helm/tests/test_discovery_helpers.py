@@ -179,7 +179,7 @@ def test_dynamic_ambiguous_recursive_and_transformed_calls_stay_unknown(tmp_path
     assert any("missing or ambiguous: missing" in message for message in messages)
     assert any("recursive or exceeds" in message for message in messages)
     assert any("unresolved variable context: $caller.secret" in message for message in messages)
-    assert any("helper context is dynamic" in message for message in messages)
+    assert any("unresolved dot context: .valid" in message for message in messages)
     paths = {ref.path for ref in refs}
     assert ("inside", "valid") in paths
     assert ("outside", "secret") not in paths

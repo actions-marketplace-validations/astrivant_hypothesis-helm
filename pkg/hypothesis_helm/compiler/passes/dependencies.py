@@ -246,7 +246,7 @@ class Dependencies:
                     schema = (
                         mapping(json.loads((root / "values.schema.json").read_text())) if (root / "values.schema.json").is_file() else {}
                     )
-                    found, warnings = discover(root, prune_literals=True)
+                    found, warnings = discover(root, prune_literals=True, offline=True)
                     references = [Reference((*path, *ref.path), child_source + ref.file, ref.line, ref.fallback) for ref in found]
                     # Globals also have parent/root forwarding paths, so retain both potential sources.
                     references += [

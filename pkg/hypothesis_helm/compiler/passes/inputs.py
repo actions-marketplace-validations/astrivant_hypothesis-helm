@@ -117,7 +117,7 @@ class InputInventory:
         from hypothesis_helm.charts.model import _default_paths, _schema_nodes
         from hypothesis_helm.schemas.paths import enumerate_paths
 
-        references, warnings = discover(chart.path, prune_literals=True)
+        references, warnings = discover(chart.path, prune_literals=True, offline=True)
         dependency_graph = chart.dependency_model or Dependencies.build(chart.path)
         dependency_graph.baseline = chart.defaults
         references.extend(dependency_graph.references)

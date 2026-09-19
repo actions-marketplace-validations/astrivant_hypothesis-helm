@@ -2,9 +2,24 @@
 Lex Go-template actions and literal output for discovery and symbolic compilation.
 """
 
+import re
+
 from attrs import frozen
 
 SPACE = " \t\r\n"
+
+
+def block_spacing(text: str) -> str:
+    """
+    Separate Go block keywords from adjacent field or variable expressions.
+
+    Args:
+        text (str): Complete action without its braces.
+
+    Returns:
+        str: Equivalent action with explicit block boundaries; literals stay unchanged.
+    """
+    return re.sub(r"^(else\s+)?(if|with|range)(?=[.$(])", r"\1\2 ", text)
 
 
 @frozen

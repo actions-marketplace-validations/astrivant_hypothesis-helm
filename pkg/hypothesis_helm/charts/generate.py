@@ -244,7 +244,7 @@ def coalesce(chart: Chart) -> Model:
     """
     values = mapping(yamlio.load(yamlio.dump(chart.defaults)))
     schema = copy.deepcopy(chart.schema)
-    references, warnings = discover(chart.path)
+    references, warnings = discover(chart.path, offline=True)
     dependencies = chart.dependency_model or Dependencies.build(chart.path)
     if dependencies.nodes:
         # Dependency merges can retain YAML comment positions from different files.

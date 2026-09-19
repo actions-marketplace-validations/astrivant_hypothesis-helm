@@ -51,7 +51,7 @@ class PriorityInputs:
         """
         coalesced = coalesce(chart)
         model = ValuesModel.from_schema(coalesced.schema)
-        references, _ = discover(chart.path)
+        references, _ = discover(chart.path, offline=True)
         dynamic = {reference.path[: reference.path.index("*")] for reference in references if "*" in reference.path}
         # Whole-map references may feed toYaml, include, tpl, or other opaque helpers.
         containers = {node.path for node in model.root.walk() if node.children}
