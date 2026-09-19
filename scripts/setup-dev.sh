@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#! /usr/bin/env bash
 # Install local build tools and Python dependencies on macOS or Debian/Ubuntu Linux.
 set -euo pipefail
 
@@ -157,10 +157,19 @@ main() {
                 ;;
         esac
     done
-    project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-    cd "$project_root"
+
+    project_root="$(
+        pushd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null
+        pwd
+        popd >/dev/null
+    )"
+
+    pushd "$project_root" >/dev/null
+
     tool_root="$project_root/.cache/dev-tools"
+
     export PATH="$project_root/.venv/bin:$tool_root/bin:$tool_root/go/bin:$PATH"
+
     if [[ "$check_only" == true ]]; then
         for argument in git git-lfs parallel go helm poetry pre-commit shfmt python; do
             require_command "$argument"
@@ -168,31 +177,41 @@ main() {
         python -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13+ is required"'
         go version
         helm version --short
+        popd >/dev/null
         return
     fi
+
     platform="$(uname -s | tr '[:upper:]' '[:lower:]')"
+
     case "$platform" in darwin | linux) ;; *)
         echo 'Supported platforms: macOS and Linux' >&2
         exit 2
         ;;
     esac
+
     case "$(uname -m)" in arm64 | aarch64) architecture=arm64 ;; x86_64) architecture=amd64 ;; *)
         echo 'Unsupported CPU architecture' >&2
         exit 2
         ;;
     esac
+
     install_system_packages "$platform"
     install_python_tools "$tool_root"
     install_build_tools "$platform" "$architecture" "$tool_root"
+
     pre-commit install
+
     if ! helm hypothesis --help >/dev/null 2>&1; then
         PYTHON="$project_root/.venv/bin/python" helm plugin install .
     fi
+
     if [[ "$build_schemas" == true ]]; then
         hypothesis-helm-catalog --cache-dir schemas
     fi
+
     printf 'Development environment ready. In your current shell, run:\n  export PATH="%s/.venv/bin:%s/bin:%s/go/bin:$PATH"\n' \
         "$project_root" "$tool_root" "$tool_root"
+    popd >/dev/null
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
