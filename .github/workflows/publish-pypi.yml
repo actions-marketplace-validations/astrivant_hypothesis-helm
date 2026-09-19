@@ -16,11 +16,22 @@ defaults:
     shell: bash
 
 jobs:
-  verify:
-    uses: ./.github/workflows/ci.yml
+  code-checks:
+    name: Verify code
+    uses: ./.github/workflows/checks.yml
+  chart-validation:
+    name: Verify chart security
+    uses: ./.github/workflows/chart-validation.yml
+  benchmark-smoke:
+    name: Verify benchmark automation
+    uses: ./.github/workflows/benchmark-smoke.yml
+  package:
+    name: Verify release distributions
+    uses: ./.github/workflows/package.yml
 
   publish:
-    needs: verify
+    name: Publish verified distributions to PyPI
+    needs: [code-checks, chart-validation, benchmark-smoke, package]
     environment: pypi
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -48,8 +59,8 @@ jobs:
           PACKAGE_VERSION: ${{ steps.package-version.outputs.version }}
         run: |
           if [[ -z "$POETRY_PYPI_TOKEN_PYPI" ]]; then
-            echo '::error::Set PYPI_API_TOKEN in the pypi environment before publishing'
-            exit 1
+              echo '::error::Set PYPI_API_TOKEN in the pypi environment before publishing'
+              exit 1
           fi
           echo "Publishing hypothesis-helm $PACKAGE_VERSION to PyPI"
           poetry publish --no-interaction

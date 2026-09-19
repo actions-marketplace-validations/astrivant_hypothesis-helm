@@ -217,8 +217,14 @@ class CandidateChecks:
                 record_ignored(exc.code, str(exc))
                 self.ignored_failures[exc.code] = self.ignored_failures.get(exc.code, 0) + 1
                 return False
-            if self.policy is not None:
-                declared_rejection = self.policy.predict(merge_values(self.chart.defaults, values))
+            if self.policy is not None and exc.code != "HH2007":
+                try:
+                    declared_rejection = self.policy.predict(merge_values(self.chart.defaults, values))
+                except RenderFailure as diagnostic:
+                    if diagnostic.code != "HH2007":
+                        raise
+                    # Preserve the native failure already observed; a secondary analysis warning cannot replace it.
+                    declared_rejection = None
                 if (
                     declared_rejection is not None
                     and self.policy.preserves(declared_rejection)

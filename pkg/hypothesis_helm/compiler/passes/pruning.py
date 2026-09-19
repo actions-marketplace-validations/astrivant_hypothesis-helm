@@ -297,6 +297,8 @@ class Pruner:
         influence_matrix (list[dict[str, object]]): Schema fields mapped to surviving output spans.
         branch_analysis (dict[str, tuple[dict[str, object], ...]]): Per-template lattice decisions with source locations.
         stamp (str): Human-readable chart fingerprint; never used alone as proof identity.
+        fail_fast (bool): Stop on an enabled analysis warning when requested by the executor.
+        warned (set[str]): Fallback reasons already logged for this chart.
     """
 
     chart: Path
@@ -313,6 +315,8 @@ class Pruner:
     influence_matrix: list[dict[str, object]] = field(factory=list)
     branch_analysis: dict[str, tuple[dict[str, object], ...]] = field(factory=dict)
     stamp: str = ""
+    fail_fast: bool = False
+    warned: set[str] = field(factory=set)
 
     def __attrs_post_init__(self) -> None:
         """
@@ -446,7 +450,16 @@ class Pruner:
                 partitions.append((name, output.partition))
                 influences.update(output.influences)
         if reason is not None:
+            from hypothesis_helm.rules import RenderFailure, ignored
+
             self.reasons[reason] = self.reasons.get(reason, 0) + 1
+            if not ignored("HH2007"):
+                message = f"{self.chart}: {reason}; candidate retained for Helm rendering, not proved equivalent"
+                if reason not in self.warned:
+                    self.warned.add(reason)
+                    LOGGER.warning("[HH2007] Exact-equivalence analysis incomplete: %s", message)
+                if self.fail_fast:
+                    raise RenderFailure(message, "HH2007")
             return None
         return Witness(
             configuration_key({"outputs": outputs, "partitions": partitions, "context": context}),

@@ -54,8 +54,9 @@ original paths; use the latest completed journal when inspecting those archived 
 
 ## Parallel refresh on GitHub Actions
 
-Run the **Benchmarks** workflow manually with **full-refresh** enabled. Preparation checks the project and snapshots its
-inputs once. GitHub then runs each declared study on a separate runner, using the same source snapshot and parameters.
+Run the [**Benchmark and report refresh** workflow](../../.github/workflows/benchmark-refresh.yml) manually.
+It first runs the benchmark smoke tests. Preparation then checks the project and snapshots its inputs once.
+GitHub runs each declared study on a separate runner, using the same source snapshot and parameters.
 The matrix comes from the Python study inventory, so adding a study also adds its CI job.
 There is no `max-parallel` setting: GitHub schedules as many jobs as the account's capacity and runner availability permit.
 See [GitHub's matrix concurrency documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstrategymax-parallel).
@@ -69,7 +70,7 @@ Set `HH_CI_RUNNER` to override the default `ubuntu-latest-8-cores` runner label.
 After pushing the workflow changes, launch it with:
 
 ```sh
-gh workflow run benchmarks.yml -f full-refresh=true
+gh workflow run benchmark-refresh.yml
 ```
 
 Local `bash scripts/project-run.sh hypothesis-helm-refresh` still runs timing studies sequentially on one machine to avoid CPU contention affecting

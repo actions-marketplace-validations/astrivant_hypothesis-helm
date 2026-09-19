@@ -11,6 +11,7 @@
 - [GitHub Actions](#github-actions)
 - [Binary downloads and caching](#binary-downloads-and-caching)
 - [Validation and caches](#validation-and-caches)
+  - [Kubesec score gate](#kubesec-score-gate)
   - [Retention between sprints](#retention-between-sprints)
   - [Memory-backed schemas](#memory-backed-schemas)
 - [Minimal values in CI](#minimal-values-in-ci)
@@ -83,7 +84,11 @@ successfully before tagging the tested commit; these examples do not create tags
 
 For large production deployments, use the [validation flow](../../README.md#production-validation)
 to find failures before taking progressively more expensive actions. These are recommended release gates;
-the CI examples below provide chart tests and scanner integration. Add cluster validation and deployment jobs
+the CI examples below provide chart tests and scanner integration. Our own
+[Chart tests and security workflow](../../.github/workflows/chart-validation.yml) exercises
+the published action with Kubesec enabled across three shards and two Kubernetes versions.
+It runs independently on PRs and `main`, and is also required before publishing to PyPI.
+Add cluster validation and deployment jobs
 to your delivery pipeline, requiring each preceding gate to pass.
 
 | Gate | Question it answers | Evidence required to continue |
@@ -123,6 +128,10 @@ Copy into `.gitlab-ci.yml`:
 include:
   - remote: 'https://raw.githubusercontent.com/astrivant/hypothesis-helm/main/ci/gitlab.yml'
 
+variables:
+  KUBESEC_ENABLED: 'true'
+  KUBESEC_SCORE_MINIMUM: '0'
+
 helm-properties:
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
@@ -130,7 +139,6 @@ helm-properties:
       allow_failure: false
   variables:
     HELM_CHART: ./chart
-    KUBESEC_ENABLED: 'false' # true enables security scans
   parallel:
     matrix:
       - K8S_VERSION: ['1.34.0', '1.35.0']
@@ -178,9 +186,10 @@ workflows:
             branches:
               only: main
           chart: ./chart
+          kubesec: true
+          kubesec-score-minimum: 0
           parallelism: 3
           schema-version: '1.35.0'
-          kubesec: false
       - hypothesis-helm/aggregate:
           requires:
             - hypothesis-helm/test-chart: [success, failed, canceled]
@@ -188,6 +197,9 @@ workflows:
             branches:
               only: main
           shards: 3
+          schema-version: '1.35.0'
+          kubesec: true
+          kubesec-score-minimum: 0
 ```
 
 Add `https://raw.githubusercontent.com/astrivant/hypothesis-helm/` to your
@@ -236,7 +248,8 @@ jobs:
           jobs: '2'
           run-id: ${{ github.run_id }}-${{ github.run_attempt }}
           schema-version: '1.35.0'
-          kubesec: 'false'
+          kubesec: 'true'
+          kubesec-score-minimum: '0'
           rerun: all
           cache-dir: .cache/hypothesis-helm/outcomes
       - uses: actions/cache/save@v5
@@ -265,12 +278,27 @@ jobs:
         with:
           pattern: hypothesis-helm-chart-*
           path: downloaded
+      - uses: actions/download-artifact@v8
+        if: ${{ always() }}
+        with:
+          pattern: hypothesis-helm-kubesec-chart-*
+          path: downloaded-security
       - name: Write final report
+        if: ${{ always() }}
         env:
           HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
+          test_status=0
           cat downloaded/*/report.json | hypothesis-helm aggregate \
-            --shards 3 --run-id "$HH_RUN_ID" --output-dir results/final
+              --shards 3 --run-id "$HH_RUN_ID" --output-dir results/final || test_status=$?
+          security_status=0
+          hypothesis-helm-kubesec downloaded-security --aggregate --shards 3 \
+              --run-id "$HH_RUN_ID" --schema-version 1.35.0 --score-minimum 0 \
+              --output results/final/kubesec || security_status=$?
+          if ((test_status != 0)); then
+              exit "$test_status"
+          fi
+          exit "$security_status"
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
@@ -332,14 +360,61 @@ cat downloaded/*/report.json | hypothesis-helm aggregate \
 
 All shards must receive the same run ID. Upload idle shards too: a missing report
 prevents publication. Aggregation writes one PDF, Markdown, JSON, and JUnit bundle
-per chart/version group, including test failures. Optional security results remain
-separate artifacts; require both the test jobs and aggregation before releasing.
+per chart/version group, including test failures. When enabled, security results
+are aggregated separately into `kubesec/` beside the final chart report;
+require both the test jobs and aggregation before releasing.
 
-the built-in schema validator validates API schemas by default. With Kubesec enabled, supported
+The built-in schema validator validates API schemas by default. With Kubesec enabled, supported
 workloads go to Kubesec and remaining resources go to the built-in schema validator. GNU Parallel
 uses the available cores; `KUBESEC_JOBS` (GitLab) or `kubesec-jobs` (CircleCI/GitHub)
 overrides concurrency. Each scanner receives only its shard's emitted manifests.
 Helm failures retain their exit code; scanner failures fail otherwise successful jobs.
+
+### Kubesec score gate
+
+Each scanned workload must pass two checks: it is a valid manifest, and its
+[Kubesec score](https://github.com/controlplaneio/kubesec#example-json-output)
+meets the configured minimum. The default minimum is `0`; set `5`, for example,
+to require additional security measures. Equality passes. A high score never
+overrides invalid YAML, failed API validation, a crashed scanner or missing results.
+The wrapper evaluates the JSON results itself, including score zero;
+[Kubesec 2.14.2's exit policy](https://github.com/controlplaneio/kubesec/blob/v2.14.2/cmd/scan.go)
+rejects zero despite labeling it passed in the JSON.
+Only that built-in score exit policy is disabled. Command failures and incomplete
+output still fail the wrapper. The configurable floor must be nonnegative.
+
+| Entry point | Minimum-score setting |
+| --- | --- |
+| GitHub Action | `kubesec-score-minimum: '5'` |
+| GitLab include | Global variable `KUBESEC_SCORE_MINIMUM: '5'` |
+| CircleCI orb | `kubesec-score-minimum: 5` on both `test-chart` and `aggregate` |
+| Local wrapper | `hypothesis-helm-kubesec manifests.jsonl --score-minimum 5` |
+| This repository's CI | Repository variable `HH_KUBESEC_SCORE_MINIMUM`, default `0` |
+
+Summaries report failed resource attempts and failed checks separately, plus
+invalid manifests, below-floor scores, missing reports, scanner failures,
+critical and advisory rule counts, and minimum/mean/maximum scores.
+One resource can fail both checks. Advisories alone do not fail the gate.
+Counts cover the generated configurations, so repeated resource names are
+separate attempts rather than distinct deployed workloads.
+
+All CI providers retain raw results, `details.jsonl`, `summary.json`,
+`summary.md` and `junit.xml`. GitHub also publishes the Markdown as a job summary.
+Every shard continues scanning after a failed resource so the totals cover all
+scheduled resources; a cancellation still stops the running processes.
+
+To combine downloaded security artifacts locally:
+
+```sh
+hypothesis-helm-kubesec downloaded-security --aggregate \
+  --shards 3 --run-id "$HH_RUN_ID" --schema-version 1.35.0 \
+  --score-minimum 5 --output docs/reports/final/kubesec
+```
+
+Use the same run ID, version and score minimum for scanning and aggregation.
+Aggregation verifies all shard IDs, schema snapshots, result-file checksums and
+counts, including idle shards. Missing evidence blocks success. Publish the
+artifact directory even when the command exits nonzero.
 
 Schemas use a versioned sparse checkout in `schemas`,
 persisted across pipelines. Preparation refreshes the selected version once;

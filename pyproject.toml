@@ -84,6 +84,7 @@ hypothesis-helm = "hypothesis_helm.cli:main"
 hypothesis-helm-complexity = "hypothesis_helm.compiler.passes.complexity:main"
 hypothesis-helm-kubesec = "hypothesis_helm.integrations.kubesec:main"
 hypothesis-helm-github-action = "hypothesis_helm.integrations.github_action:main"
+hypothesis-helm-ci-shell = "hypothesis_helm.integrations.ci_shell:main"
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]

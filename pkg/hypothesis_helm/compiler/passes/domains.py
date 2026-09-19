@@ -3,7 +3,6 @@ Project known manifest scalar domains back through direct values references.
 """
 
 import itertools
-import re
 from pathlib import Path
 
 from ruamel.yaml.scalarstring import ScalarString
@@ -11,7 +10,9 @@ from ruamel.yaml.scalarstring import ScalarString
 from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import _schema_nodes
 from hypothesis_helm.compiler.asts.conditions import parse_condition
+from hypothesis_helm.compiler.asts.contracts import Contracts, expression
 from hypothesis_helm.compiler.asts.templates import Node, fold, lower, value_path
+from hypothesis_helm.compiler.passes.domain_helpers import inline
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.schemas.policy import restrict
 from hypothesis_helm.schemas.resources import destination
@@ -30,15 +31,18 @@ def project(chart: Path, schema: dict[str, object]) -> tuple[list[dict[str, obje
     """
     rules: list[dict[str, object]] = []
     diagnostics: list[dict[str, object]] = []
+    contracts = Contracts.build(chart)
     for file in sorted((chart / "templates").rglob("*")):
         if file.is_file() and file.suffix in {".yaml", ".yml"}:
-            found, notes = project_file(chart, file, schema)
+            found, notes = project_file(chart, file, schema, contracts)
             rules.extend(found)
             diagnostics.extend(notes)
     return rules, diagnostics
 
 
-def project_file(chart: Path, file: Path, schema: dict[str, object]) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+def project_file(
+    chart: Path, file: Path, schema: dict[str, object], contracts: Contracts | None = None
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     """
     Analyze one template without carrying mutable state into another source file.
 
@@ -46,13 +50,14 @@ def project_file(chart: Path, file: Path, schema: dict[str, object]) -> tuple[li
         chart (Path): Root used for source-relative evidence.
         file (Path): Complete template file.
         schema (dict[str, object]): Known input types.
+        contracts (Contracts | None): Shared helper definitions for this chart.
 
     Returns:
         tuple[list[dict[str, object]], list[dict[str, object]]]: Restrictions and conservative analysis diagnostics.
     """
     rules: list[dict[str, object]] = []
     diagnostics: list[dict[str, object]] = []
-    references: dict[str, tuple[tuple[str, ...], int, bool]] = {}
+    references: dict[str, tuple[tuple[str, ...], int, bool, bool]] = {}
     name = str(file.relative_to(chart))
     source = file.read_text()
     prefix = "HHINPUTDOMAINMARKER"
@@ -97,18 +102,27 @@ def project_file(chart: Path, file: Path, schema: dict[str, object]) -> tuple[li
                 for branch, clause in ((node.children, guard), (node.otherwise, {"not": guard})):
                     choices.extend((text, [mapping(clause), *guards]) for text, guards in variants(branch))
             elif node.kind == "emit":
-                expression = node.text.strip()
-                quoted = bool(re.search(r"\s*\|\s*quote$", expression))
-                expression = re.sub(r"\s*\|\s*quote$", "", expression)
-                path = value_path(expression)
+                parsed = expression(node.text)
+                prefixes: list[str] = []
+                while isinstance(parsed, tuple) and parsed[0] in {"nindent", "indent"} and len(parsed) == 3:
+                    if not isinstance(parsed[1], str) or not parsed[1].isdigit() or int(parsed[1]) > 128:
+                        raise ValueError("unresolved indentation")
+                    prefixes.append(("\n" if parsed[0] == "nindent" else "") + " " * int(parsed[1]))
+                    parsed = parsed[2]
+                quoted = isinstance(parsed, tuple) and len(parsed) == 2 and parsed[0] == "quote"
+                serialized = isinstance(parsed, tuple) and len(parsed) == 2 and parsed[0] == "toYaml"
+                if quoted or serialized:
+                    assert isinstance(parsed, tuple)
+                    parsed = parsed[1]
+                path = value_path(parsed) if isinstance(parsed, str) else None
                 if path is None:
-                    if expression not in {".Release.Name", ".Release.Namespace", ".Chart.Name", ".Chart.Version"}:
+                    if parsed not in {".Release.Name", ".Release.Namespace", ".Chart.Name", ".Chart.Version"}:
                         raise ValueError(f"helper or transformed output at line {node.line}")
                     choices = [("hh-static-context", [])]
                 else:
                     marker = f"{prefix}{len(references)}"
-                    references[marker] = (path, node.line, quoted)
-                    choices = [(marker, [])]
+                    references[marker] = (path, node.line, quoted, serialized)
+                    choices = [("".join(prefixes) + marker, [])]
             else:
                 raise ValueError(f"unsupported template block at line {node.line}")
             if len(result) * len(choices) > 64:
@@ -118,7 +132,8 @@ def project_file(chart: Path, file: Path, schema: dict[str, object]) -> tuple[li
 
     collected: list[dict[str, object]] = []
     try:
-        for text, guards in variants(fold(lower(source))):
+        nodes = inline(chart, fold(lower(source)), contracts or Contracts.build(chart))
+        for text, guards in variants(nodes):
             for raw in yamlio.load_all(text):
                 if not isinstance(raw, dict):
                     continue
@@ -149,7 +164,7 @@ def project_file(chart: Path, file: Path, schema: dict[str, object]) -> tuple[li
                         for child in value:
                             walk(child, (*output, "*"))
                     elif isinstance(value, str) and value in references:
-                        path, line, quoted = references[value]
+                        path, line, quoted, serialized = references[value]
                         quoted = quoted or isinstance(value, ScalarString)
                         match = destination(resource, output)
                         if match is not None:
@@ -160,6 +175,7 @@ def project_file(chart: Path, file: Path, schema: dict[str, object]) -> tuple[li
                                     "schema": schema,
                                     "guards": conditions,
                                     "quoted": quoted,
+                                    "serialized": serialized,
                                     "destination": f"{resource}:$.{'.'.join(output)}",
                                     "file": name,
                                     "line": line,

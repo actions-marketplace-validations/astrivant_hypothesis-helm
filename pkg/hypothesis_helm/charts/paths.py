@@ -141,7 +141,9 @@ def check_paths(
     inventory = InputInventory.build(chart)
     input_baseline(chart.path, len(inventory.known))
     rejections = (
-        RejectionPolicy(Contracts.build(chart.path), chart.defaults, (chart.path / "values.schema.json").is_file()) if filtering else None
+        RejectionPolicy(Contracts.build(chart.path, inventory.dependencies), chart.defaults, (chart.path / "values.schema.json").is_file())
+        if filtering
+        else None
     )
     if filtering:
         priority = PriorityInputs.build(chart)

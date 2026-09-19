@@ -5,21 +5,21 @@ output="${2:?output directory}"
 root="${3:?refresh directory}"
 mkdir -p "$output"
 if [[ ! -f "$source_chart" && ! -f "$source_chart/values.yaml" ]]; then
-  printf '%s\n' '{"status":"missing-values","reason":"Source chart has no values.yaml; input graph export was not attempted."}' >"$output/status.json"
-  exit 0
+    printf '%s\n' '{"status":"missing-values","reason":"Source chart has no values.yaml; input graph export was not attempted."}' >"$output/status.json"
+    exit 0
 fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/hypothesis-helm-topology.XXXXXX")"
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir -p "$scratch/chart"
 if [[ -f "$source_chart" ]]; then
-  hypothesis-helm-benchmark generate --parameters "$source_chart" --output "$scratch/chart" >"$output/generate.log" 2>&1
-  generate_status=$?
-  if ((generate_status != 0)); then
-    printf '%s\n' '{"status":"generation-failed","reason":"Fixture replay failed; see generate.log."}' >"$output/status.json"
-    exit "$generate_status"
-  fi
+    hypothesis-helm-benchmark generate --parameters "$source_chart" --output "$scratch/chart" >"$output/generate.log" 2>&1
+    generate_status=$?
+    if ((generate_status != 0)); then
+        printf '%s\n' '{"status":"generation-failed","reason":"Fixture replay failed; see generate.log."}' >"$output/status.json"
+        exit "$generate_status"
+    fi
 else
-  cp -RL "$source_chart/." "$scratch/chart/"
+    cp -RL "$source_chart/." "$scratch/chart/"
 fi
 export HELM_PLUGINS="$PWD/$root/helm/plugins"
 export HELM_REPOSITORY_CONFIG="$PWD/$root/helm/repositories.yaml"
@@ -33,8 +33,8 @@ hypothesis-helm audit "$scratch/chart" --log-file /dev/stderr --export-topologic
 audit_status=$?
 printf '%s\n' "$audit_status" >"$output/audit-exit-code.txt"
 if [[ ! -f "$output/graph.json" ]]; then
-  printf '%s\n' '{"status":"export-failed","reason":"See audit.err and dependencies.txt."}' >"$output/status.json"
-  exit 1
+    printf '%s\n' '{"status":"export-failed","reason":"See audit.err and dependencies.txt."}' >"$output/status.json"
+    exit 1
 fi
 chart_title="${output#"$root/outputs/chart-topologies/"}"
 hypothesis-helm-benchmark topology --graph "$output/graph.json" --output "$output" --title "$chart_title" >"$output/plot.json" 2>"$output/plot.err"

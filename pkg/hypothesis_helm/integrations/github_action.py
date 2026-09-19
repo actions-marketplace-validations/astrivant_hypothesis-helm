@@ -55,6 +55,9 @@ def main() -> int:
             "shard-source": source,
         }
         security = os.environ.get("HH_KUBESEC", "false").lower() == "true"
+        score_minimum = int(os.environ.get("HH_KUBESEC_SCORE_MINIMUM", "0")) if security else 0
+        if score_minimum < 0:
+            raise ValueError("Kubesec score minimum must be nonnegative")
         with manifests.open("w") as stream:
             # Give the Helm parent time to stop its own pytest process groups.
             result = Processes(interrupt_grace=10.0).run(
@@ -96,6 +99,8 @@ def main() -> int:
                 shard=shard,
                 pre_sharded=True,
                 validate_rest=True,
+                score_minimum=score_minimum,
+                run_id=os.environ.get("HH_RUN_ID", ""),
             )
             security_dir = root / "kubesec"
             if shard:

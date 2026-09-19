@@ -254,6 +254,11 @@ def write_reports(
                 record = mapping(requirement)
                 message = " ".join(str(record["requirement"]).split())
                 lines.extend([f"Requirement ({record['source']}:{record['line']}): {message[:500]}", ""])
+                for input_path, choices in mapping(record.get("enums", {})).items():
+                    values = sequence(choices)
+                    shown = ", ".join(f"`{value}`" for value in values[:12])
+                    extra = f" (+{len(values) - 12} more in artifacts)" if len(values) > 12 else ""
+                    lines.extend([f"Template choices for `{input_path}` on this branch: {shown}{extra}.", ""])
                 lines.extend(input_summary({"recorded": True, "paths": record["inputs"]}))
                 lines.append("")
             if len(requirements) > 3:

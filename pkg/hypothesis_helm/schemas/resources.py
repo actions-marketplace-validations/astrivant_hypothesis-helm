@@ -19,6 +19,76 @@ from hypothesis_helm.schemas.policy import inherited_policy, intersect
 SUITE_RESOURCE_SCHEMAS: ContextVar[dict[str, object] | None] = ContextVar("suite_resource_schemas", default=None)
 
 
+def collection_domain(node: dict[str, object], root: dict[str, object], depth: int = 0) -> dict[str, object]:
+    """
+    Retain bounded collection structure while resolving local schema references.
+
+    Args:
+        node (dict[str, object]): Destination schema node.
+        root (dict[str, object]): Resource schema used for local references.
+        depth (int): Current expansion depth; recursive structures remain unresolved.
+
+    Returns:
+        dict[str, object]: Self-contained restrictions for a serialized collection.
+    """
+    if depth > 16:
+        raise ValueError("recursive or deeply nested destination schema")
+    node = dereference(node, root)
+    result = {key: value for key, value in node.items() if key in KEYWORDS}
+    for key in ("items", "additionalProperties"):
+        child = node.get(key)
+        if isinstance(child, dict):
+            result[key] = collection_domain(mapping(child), root, depth + 1)
+        elif isinstance(child, bool):
+            result[key] = child
+    if isinstance(node.get("properties"), dict):
+        result["properties"] = {
+            key: collection_domain(mapping(value), root, depth + 1) for key, value in mapping(node["properties"]).items()
+        }
+    for key in ("allOf", "anyOf", "oneOf"):
+        if isinstance(node.get(key), list):
+            result[key] = [collection_domain(mapping(value), root, depth + 1) for value in sequence(node[key])]
+    return result
+
+
+def catalog_domain(catalog: dict[str, object], identity: str, path: tuple[str, ...], depth: int = 0) -> dict[str, object] | None:
+    """
+    Reconstruct collection types from the catalog's indexed field schemas.
+
+    Args:
+        catalog (dict[str, object]): Selected version's destination catalog.
+        identity (str): API version and kind.
+        path (tuple[str, ...]): Selected field path.
+        depth (int): Bounded recursion through collection members.
+
+    Returns:
+        dict[str, object] | None: Known type and child domains, or an unresolved destination.
+    """
+    paths = mapping(mapping(catalog["resources"]).get(identity, {}))
+    key = paths.get("/".join(path))
+    if key is None or depth > 16:
+        return None
+    result = dict(mapping(mapping(mapping(catalog["domains"])[str(key)])["schema"]))
+    kinds = result.get("type", [])
+    kinds = [kinds] if isinstance(kinds, str) else kinds
+    if not isinstance(kinds, list):
+        return result
+    kind = next((kind for kind in ("object", "array") if kind in kinds), None)
+    if kind is None:
+        return result
+    prefix = "/".join(path) + "/" if path else ""
+    children = sorted({name[len(prefix) :].split("/")[0] for name in paths if name.startswith(prefix) and name != prefix})
+    for child in children:
+        domain = catalog_domain(catalog, identity, (*path, child), depth + 1)
+        if domain is None:
+            continue
+        if child == "*":
+            result["items" if kind == "array" else "additionalProperties"] = domain
+        elif kind == "object":
+            mapping(result.setdefault("properties", {}))[child] = domain
+    return result
+
+
 def resource_schemas() -> dict[str, object]:
     """
     Combine saved output contracts with any explicit current configuration.
@@ -100,6 +170,13 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
             node = mapping(child)
         node = dereference(node, root)
         result = {key: value for key, value in node.items() if key in KEYWORDS}
+        kinds = node.get("type", [])
+        kinds = [kinds] if isinstance(kinds, str) else kinds
+        if isinstance(kinds, list) and any(kind in kinds for kind in ("object", "array")):
+            try:
+                result = collection_domain(node, root)
+            except ValueError:
+                return None
         if node.get("format") in {"int32", "int64"}:
             bits = int(str(node["format"])[3:])
             result = intersect(result, {"minimum": -(2 ** (bits - 1)), "maximum": 2 ** (bits - 1) - 1})
@@ -123,7 +200,7 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
     if record_id is None:
         return None
     record = mapping(mapping(catalog["domains"])[str(record_id)])
-    return mapping(record["schema"]), f"bundled:{catalog['version']}:{record_id}"
+    return catalog_domain(catalog, identity, path) or mapping(record["schema"]), f"bundled:{catalog['version']}:{record_id}"
 
 
 def validate_custom(resource: dict[str, object]) -> bool:

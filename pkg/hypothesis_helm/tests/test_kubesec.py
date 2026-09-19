@@ -5,10 +5,14 @@ Verify parallel security scans use local schemas and preserve shard ownership an
 import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
+from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.integrations import kubesec
 from hypothesis_helm.integrations.sharding import Shard
 
@@ -32,15 +36,24 @@ def test_parallel_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pre_shar
         pytest.skip("GNU Parallel is required")
     binary = tmp_path / "kubesec"
     binary.write_text(
-        "#!/usr/bin/env python3\n"
-        "import json, pathlib, sys\n"
-        "args = sys.argv[1:]\n"
-        "assert args[0] == 'scan'\n"
-        "assert args[args.index('--schema-location')+1].startswith('/')\n"
-        "assert args[args.index('--kubernetes-version')+1] == '1.35.0'\n"
-        "resource = json.loads(pathlib.Path(args[-1]).read_text())\n"
-        "print(json.dumps({'resource': resource['metadata']['name'], 'args': args}))\n"
-        "sys.exit(2 if resource['metadata']['name'] == 'bad' else 0)\n"
+        dedent(
+            """
+            #!/usr/bin/env python3
+            import json, pathlib, sys
+            args = sys.argv[1:]
+            assert args[0] == "scan"
+            assert args[args.index("--exit-code") + 1] == "0"
+            assert args[args.index("--schema-location") + 1].startswith("/")
+            assert args[args.index("--kubernetes-version") + 1] == "1.35.0"
+            resource = json.loads(pathlib.Path(args[-1]).read_text())
+            bad = resource["metadata"]["name"] == "bad"
+            print(json.dumps([{
+                "object": resource["metadata"]["name"], "valid": True, "score": -1 if bad else 0,
+                "scoring": {"critical": [{"points": -1}] if bad else [], "advise": [{"points": 1}]},
+            }]))
+            sys.exit(2 if bad else 0)
+            """
+        ).lstrip()
     )
     binary.chmod(0o755)
     monkeypatch.setattr(os, "process_cpu_count", lambda: 3)
@@ -81,6 +94,12 @@ def test_parallel_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pre_shar
     )
     output = tmp_path / "results with spaces/shards/1-of-2"
     summary = json.loads((output / "summary.json").read_text())
+    assert summary["score_minimum"] == 0
+    assert summary["statistics"]["failed_checks"] == 1
+    assert summary["statistics"]["below_minimum"] == 1
+    assert summary["statistics"]["invalid_resources"] == 0
+    assert summary["statistics"]["report_errors"] == 0
+    assert summary["statistics"]["critical"] == 1
     assert summary["jobs"] == 3
     assert summary["scanned"] == (3 if pre_sharded else 1)
     assert summary["skipped"] == (0 if validate_rest else 1)
@@ -137,3 +156,76 @@ def test_fallback_failure(tmp_path: Path) -> None:
     assert summary["schema_exit_code"] == 1
     assert summary["status"] == "failed"
     assert not (output / "joblog.tsv").exists()
+
+
+@pytest.mark.parametrize("minimum", [0, 5, 6])
+def test_minimum_score_with_successful_scanner(tmp_path: Path, minimum: int) -> None:
+    """
+    Enforce the score floor even when every Kubesec process exits zero.
+
+    Args:
+        tmp_path (Path): Scanner executable, input and reports.
+        minimum (int): Threshold below, equal to or above the observed score.
+
+    Returns:
+        None: Equality passes and raising the floor independently fails the gate.
+    """
+    if not shutil.which("parallel"):
+        pytest.skip("GNU Parallel is required")
+    binary = tmp_path / "kubesec"
+    binary.write_text('#!/bin/sh\nprintf \'[{"object":"Pod/demo","valid":true,"score":5}]\\n\'\n')
+    binary.chmod(0o755)
+    source = tmp_path / "manifests.jsonl"
+    source.write_text('{"apiVersion":"v1","kind":"Pod","metadata":{"name":"demo"}}\n')
+    configuration = json.dumps({"version": "1.35.0", "schemas": str(tmp_path), "identity": "snapshot"})
+    output = tmp_path / "reports"
+    assert kubesec.scan(source, output, configuration, executable=str(binary), score_minimum=minimum) == int(minimum > 5)
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["parallel_exit_code"] == 0
+    assert summary["statistics"]["below_minimum"] == int(minimum > 5)
+    # Reusing an output directory must not count results from the earlier attempt.
+    source.write_text("")
+    assert kubesec.scan(source, output, configuration, executable=str(binary), shard=Shard(3, 3)) == 0
+    idle = json.loads((output / "shards/3-of-3/summary.json").read_text())
+    assert idle["statistics"]["resources"] == idle["statistics"]["checks"] == 0
+
+
+def test_interrupted_scan_retains_missing_work(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Publish incomplete security evidence after the process owner handles interruption.
+
+    Args:
+        tmp_path (Path): Input and reports.
+        monkeypatch (pytest.MonkeyPatch): Interrupt the GNU Parallel invocation.
+
+    Returns:
+        None: The wrapper returns 130 and missing work cannot appear successful.
+    """
+
+    def run(self: Processes, command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """
+        Identify GNU Parallel and interrupt the actual scan.
+
+        Args:
+            self (Processes): Process owner.
+            command (list[str]): Version probe or scan command.
+            **kwargs (object): Process options.
+
+        Returns:
+            subprocess.CompletedProcess[str]: Version probe response only.
+        """
+        if "--version" in command:
+            return subprocess.CompletedProcess(command, 0, "GNU parallel", "")
+        Path(command[command.index("--joblog") + 1]).write_text("Seq\tExitval\tSignal\n1\t")
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(Processes, "run", run)
+    monkeypatch.setattr(shutil, "which", lambda name: sys.executable)
+    source = tmp_path / "manifests.jsonl"
+    source.write_text('{"apiVersion":"v1","kind":"Pod"}\n')
+    configuration = json.dumps({"version": "1.35.0", "schemas": str(tmp_path), "identity": "snapshot"})
+    assert kubesec.scan(source, tmp_path / "reports", configuration) == 130
+    summary = json.loads((tmp_path / "reports/summary.json").read_text())
+    assert summary["status"] == "failed"
+    assert summary["statistics"]["resources"] == summary["statistics"]["report_errors"] == 1
+    assert summary["statistics"]["checks"] == 0

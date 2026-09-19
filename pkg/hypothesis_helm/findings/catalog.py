@@ -198,6 +198,16 @@ DEFINITIONS = (
         "Ignore HH2006 for intentional free-form configuration; tests still sample those values.",
     ),
     Rule(
+        "HH2007",
+        "Incomplete compiler analysis",
+        "analysis",
+        "warning",
+        "An evaluated template operation needs context or semantics outside the supported compiler contract.",
+        "A rejection guard depends on now, lookup, random data or an unsupported tpl expression.",
+        "The candidate is retained for native Helm rendering. Review the source location and coverage; "
+        "suppress HH2007 to silence this warning without dropping tests. --fail stops at the warning when it is enabled.",
+    ),
+    Rule(
         "HH3001",
         "Template accesses a missing object",
         "template",

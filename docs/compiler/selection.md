@@ -67,21 +67,35 @@ separate from the `--filter` presets.
 [`rejections.py`](../../pkg/hypothesis_helm/compiler/passes/rejections.py) applies
 the conditions found by the [rejection analysis](analysis.md#explicit-rejection-discovery).
 With filtering enabled, the first two distinct predicted rejections for each
-requirement are checked against Helm. Dependency charts require confirmation for
-every predicted rejection because imports and coalescing can alter the context.
+requirement are checked against Helm. Dependency charts, inferred enum choices and
+[modeled transformations](analysis.md#transformed-input-domains)
+require confirmation for every predicted rejection. Imports and coalescing can
+alter dependency contexts; enum guidance must confirm the actual rejected value.
 A disagreement disables filtering for that requirement. An unexpected native
 rendering failure remains a failure.
 
-Automatic exclusions apply to inferred domains. If an authored
-`values.schema.json` admits an input that a template rejects, testing retains the
-failure and reports a schema/validation conflict. Template guards do not silently
-narrow the declared contract, and supplied defaults receive normal validation.
+Automatic exclusions apply to inferred domains. A partial `values.schema.json`
+can leave a preset field undeclared; a supported helper can guide that field.
+Explicitly declared fields retain schema/validation conflicts as failures.
+References, schema composition and ambiguous declarations conservatively prevent
+enum guidance. Template guards do not silently narrow an authored domain, and
+supplied defaults receive normal validation.
 
-Sampled path tests can try up to 32 single-field adjustments using supplied
-defaults, Boolean alternatives, and nearby integers. They preserve the selected
-path's value and the original schema. A replacement still has to render and pass
-testing. Finite permutation assignments are preserved; rejected assignments have
-their own counters. Unknown conditions remain eligible for ordinary testing.
+Sampled path tests search at most 48 distinct candidates, with up to three related
+field changes and at most 16 alternatives from each intermediate candidate. They
+use supplied defaults, Boolean alternatives, nearby integers, `example` for an
+empty string, and bounded list lengths using existing elements. Source-backed enum choices
+and verified preimage proposals are tried first. Enum choices use a deterministic
+order derived from the candidate. This keeps
+the resource enabled when a valid preset suffices. A sampled scalar target may
+change to one of those choices or a verified preimage; other selected paths remain protected. Every
+replacement still has to satisfy the generation schema, render and pass testing.
+The search reevaluates guards after each change, including requirements that were
+previously hidden by Boolean short-circuiting. It can satisfy several requirements
+together while keeping the selected feature enabled. This is a bounded search;
+it may miss a valid configuration or one requiring different replacement values.
+Finite permutation assignments are never repaired; rejected assignments
+have their own counters. Unknown conditions remain eligible for ordinary testing.
 
 ## Failure expansion
 

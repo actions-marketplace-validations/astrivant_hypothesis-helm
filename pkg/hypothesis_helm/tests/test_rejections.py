@@ -189,7 +189,7 @@ def test_required_zero_false_and_opaque_guards(guarded_chart: Chart) -> None:
     target = guarded_chart.path / "templates/config.yaml"
     target.write_text(
         dedent("""
-        {{ if eq (tpl .Values.name .) "bad" }}{{ fail "dynamic rejection" }}{{ end }}
+        {{ if eq (tpl "{{ if now }}{{ .Values.name }}{{ end }}" .) "bad" }}{{ fail "dynamic rejection" }}{{ end }}
         apiVersion: v1
         kind: ConfigMap
         metadata:

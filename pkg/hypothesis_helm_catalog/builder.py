@@ -26,6 +26,12 @@ KEYWORDS = {
     "exclusiveMinimum",
     "exclusiveMaximum",
     "multipleOf",
+    "required",
+    "minItems",
+    "maxItems",
+    "uniqueItems",
+    "minProperties",
+    "maxProperties",
 }
 
 
@@ -83,7 +89,7 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
             if review:
                 schema = intersect(schema, mapping(review["schema"]))
                 origins.append(str(review["id"]))
-            if set(schema) - {"type"}:
+            if schema:
                 record = {"schema": schema, "sources": origins}
                 key = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()[:20]
                 domains[key] = record
@@ -93,6 +99,8 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
                     walk(mapping(child), (*path, name))
             if isinstance(node.get("items"), dict):
                 walk(mapping(node["items"]), (*path, "*"))
+            if isinstance(node.get("additionalProperties"), dict):
+                walk(mapping(node["additionalProperties"]), (*path, "*"))
 
         walk(document, ())
         sources[file.name] = hashlib.sha256(contents).hexdigest()

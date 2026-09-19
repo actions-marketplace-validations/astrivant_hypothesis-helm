@@ -25,6 +25,22 @@ class BoundValue:
 
 
 @frozen
+class DerivedValue:
+    """
+    Retain an evaluated transformation without mistaking its output for the source input.
+
+    Attributes:
+        value (object): Concrete result for this candidate.
+        function (str): Supported transformation name.
+        arguments (tuple[object, ...]): Operands retaining their original values paths.
+    """
+
+    value: object
+    function: str
+    arguments: tuple[object, ...]
+
+
+@frozen
 class ConstantMap:
     """
     Retain a dictionary whose keys were literal strings in the template.
@@ -133,12 +149,16 @@ def native(value: object) -> object:
     Returns:
         object: Native value used by supported Helm scalar operations.
     """
-    if isinstance(value, BoundValue):
-        return value.value
+    if isinstance(value, BoundValue | DerivedValue):
+        return native(value.value)
     if isinstance(value, ConstantMap):
         return value.values
     if isinstance(value, ConstantList | UnorderedKeys):
         return list(value.values)
     if isinstance(value, ContractText):
         return value.text()
+    if isinstance(value, str):
+        return str(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return int(value)
     return value

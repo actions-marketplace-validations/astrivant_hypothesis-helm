@@ -7,10 +7,12 @@ from __future__ import annotations
 import copy
 import hashlib
 import re
-from collections.abc import Callable
+from collections import deque
+from collections.abc import Callable, Iterator
 
 from attrs import define, field
 
+from hypothesis_helm.charts.model import merge_values
 from hypothesis_helm.compiler.asts.contracts import Contracts, Rejection
 from hypothesis_helm.schemas.contracts import configuration_key
 
@@ -80,7 +82,7 @@ class RejectionPolicy:
         Returns:
             bool: The rejection must remain a finding rather than an inferred-domain exclusion.
         """
-        return rejection.declared_schema or (self.declared_schema and not rejection.enums)
+        return rejection.declared_schema or (self.declared_schema and not (rejection.enums or rejection.transformed_domains))
 
     def predict(self, values: dict[str, object]) -> Rejection | None:
         """
@@ -109,7 +111,13 @@ class RejectionPolicy:
             bool: Whether native verification is still needed for this witness.
         """
         seen = self.witnesses.get(rejection.key, set())
-        return bool(rejection.enums) or self.verify_every_candidate or (len(seen) < 2 and configuration_key(values) not in seen)
+        return (
+            bool(rejection.enums)
+            or rejection.transformed
+            or rejection.contextual
+            or self.verify_every_candidate
+            or (len(seen) < 2 and configuration_key(values) not in seen)
+        )
 
     def verified(self, rejection: Rejection, values: dict[str, object]) -> None:
         """
@@ -143,7 +151,7 @@ class RejectionPolicy:
         allow_enum_changes: bool = False,
     ) -> dict[str, object] | None:
         """
-        Try bounded single-field changes while preserving the selected path and chart schema.
+        Try bounded joint changes while preserving the selected paths and complete chart schema.
 
         Args:
             values (dict[str, object]): Original overrides.
@@ -155,46 +163,93 @@ class RejectionPolicy:
         Returns:
             dict[str, object] | None: Nearby candidate requiring real testing, or no supported repair.
         """
-        attempts = 0
-        for name in sorted(rejection.inputs, key=lambda name: name not in rejection.enums):
-            value = rejection.inputs[name]
-            path = tuple(name.removeprefix("$.").split("."))
-            enums = rejection.enums.get(name, ())
-            protected_input = any(all(left == right or right == "*" for left, right in zip(path, item, strict=False)) for item in protected)
-            if protected_input and not (allow_enum_changes and enums and path in protected):
-                continue
-            default: object = self.defaults
-            for key in path:
-                default = default.get(key) if isinstance(default, dict) else None
-            alternatives: list[object] = []
-            if enums:
-                offset = int(hashlib.sha256(f"{configuration_key(values)}:{name}".encode()).hexdigest(), 16) % len(enums)
-                alternatives.extend((*enums[offset:], *enums[:offset]))
-            if default is not None:
-                alternatives.append(default)
-            if type(value) is bool:
-                alternatives.append(not value)
-            if type(value) is int:
-                alternatives.extend([0, 1, value - 1, value + 1])
-            for alternative in alternatives:
-                if type(alternative) is type(value) and alternative == value:
+        if self.preserves(rejection):
+            return None
+
+        def options(state: dict[str, object], current_rejection: Rejection) -> Iterator[tuple[tuple[str, ...], list[object]]]:
+            """
+            Propose small changes only to fields read by the current rejection.
+
+            Args:
+                state (dict[str, object]): Overrides at this search node.
+                current_rejection (Rejection): Guard evaluated for this intermediate candidate.
+
+            Yields:
+                tuple[tuple[str, ...], list[object]]: Editable input path and deterministic alternatives.
+            """
+            lengths = sorted({value for value in current_rejection.inputs.values() if type(value) is int and 0 <= value <= 16})
+            suggestions: dict[str, list[object]] = {}
+            for domain in current_rejection.transformed_domains:
+                for name, choices in domain.suggestions().items():
+                    suggestions.setdefault(name, []).extend(choices)
+            for name in sorted(current_rejection.inputs, key=lambda name: name not in current_rejection.enums):
+                value = current_rejection.inputs[name]
+                path = tuple(name.removeprefix("$.").split("."))
+                enums = current_rejection.enums.get(name, ())
+                protected_input = any(
+                    all(left == right or right == "*" for left, right in zip(path, item, strict=False)) for item in protected
+                )
+                if protected_input and not (allow_enum_changes and (enums or suggestions.get(name)) and path in protected):
                     continue
-                attempts += 1
-                if attempts > 32:
-                    return None
-                candidate = copy.deepcopy(values)
-                current = candidate
-                for key in path[:-1]:
-                    if key not in current:
-                        current[key] = {}
-                    child = current[key]
-                    if not isinstance(child, dict):
+                default: object = self.defaults
+                for key in path:
+                    default = default.get(key) if isinstance(default, dict) else None
+                alternatives: list[object] = list(suggestions.get(name, []))
+                if enums:
+                    offset = int(hashlib.sha256(f"{configuration_key(state)}:{name}".encode()).hexdigest(), 16) % len(enums)
+                    alternatives.extend((*enums[offset:], *enums[:offset]))
+                if default is not None:
+                    alternatives.append(default)
+                if type(value) is bool:
+                    alternatives.append(not value)
+                elif type(value) is int:
+                    alternatives.extend([0, 1, value - 1, value + 1])
+                elif isinstance(value, str) and not value:
+                    alternatives.append("example")
+                elif isinstance(value, list):
+                    source = value or (default if isinstance(default, list) else [])
+                    if source:
+                        alternatives.extend([source[0]] * length for length in lengths)
+                unique: list[object] = []
+                for alternative in alternatives:
+                    if not (type(alternative) is type(value) and alternative == value) and alternative not in unique:
+                        unique.append(alternative)
+                if unique:
+                    yield path, unique
+
+        pending = deque([(values, rejection, 0)])
+        seen = {configuration_key(values)}
+        attempts = 0
+        while pending and attempts < 48:
+            state, current_rejection, depth = pending.popleft()
+            local_attempts = 0
+            for path, alternatives in options(state, current_rejection):
+                for alternative in alternatives:
+                    if local_attempts >= 16 or attempts >= 48:
                         break
-                    current = child
-                else:
-                    current[path[-1]] = copy.deepcopy(alternative)
-                    if accept(candidate):
-                        return candidate
+                    candidate = copy.deepcopy(state)
+                    current = candidate
+                    for key in path[:-1]:
+                        child = current.setdefault(key, {})
+                        if not isinstance(child, dict):
+                            break
+                        current = child
+                    else:
+                        current[path[-1]] = copy.deepcopy(alternative)
+                        identity = configuration_key(candidate)
+                        if identity in seen:
+                            continue
+                        seen.add(identity)
+                        attempts += 1
+                        local_attempts += 1
+                        if accept(candidate):
+                            return candidate
+                        if depth < 2:
+                            following = self.predict(merge_values(self.defaults, candidate))
+                            if following is not None and not self.preserves(following):
+                                pending.append((candidate, following, depth + 1))
+                if local_attempts >= 16 or attempts >= 48:
+                    break
         return None
 
     def snapshot(self) -> dict[str, object]:
@@ -206,6 +261,7 @@ class RejectionPolicy:
         """
         return {
             "enabled": True,
+            "max_call_depth": self.contracts.max_call_depth,
             "rejected_candidates": self.candidates,
             "filtered_candidates": self.filtered,
             "adjusted_candidates": self.adjusted,
@@ -216,5 +272,7 @@ class RejectionPolicy:
             "schema_conflicts": self.schema_conflicts,
             "requirements": copy.deepcopy(list(self.records.values())),
             "unsupported_sources": self.contracts.diagnostics,
+            "analysis_fallbacks": copy.deepcopy(self.contracts.fallbacks),
+            "incomplete_evaluations": self.contracts.incomplete_evaluations,
             "scope": "Explicit chart rejection contracts; unknown branches are tested normally. Not a proof of valid chart semantics.",
         }

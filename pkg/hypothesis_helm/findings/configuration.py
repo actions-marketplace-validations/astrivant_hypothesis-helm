@@ -8,6 +8,8 @@ GENERATION_EXAMPLE = dedent(
     """
     # Global defaults for fresh generated text; supplied values are preserved.
     downstream_inputs: true  # Use constraints from supported downstream field mappings.
+    compiler:
+      max_call_depth: 16  # Nested helper calls analyzed; --compiler-call-depth overrides this.
     hypothesis:
       character_sets: ascii  # ascii or unicode; explicit enum/const literals retain their alphabet.
       control_characters:

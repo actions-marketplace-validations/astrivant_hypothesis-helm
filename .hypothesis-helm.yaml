@@ -31,6 +31,7 @@ ignored:
 
   # Analysis
   # - HH2005  # Unresolved template value access
+  # - HH2007  # Incomplete compiler analysis
 
   # Template
   # - HH3001  # Template accesses a missing object
@@ -40,6 +41,8 @@ ignored:
 # Complete optional configuration; see docs/input-domains/README.md.
 # # Global defaults for fresh generated text; supplied values are preserved.
 # downstream_inputs: true  # Use constraints from supported downstream field mappings.
+# compiler:
+#   max_call_depth: 16  # Nested helper calls analyzed; --compiler-call-depth overrides this.
 # hypothesis:
 #   character_sets: ascii  # ascii or unicode; explicit enum/const literals retain their alphabet.
 #   control_characters:

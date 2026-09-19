@@ -121,7 +121,7 @@ jobs:
           HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           cat downloaded/*/report.json | hypothesis-helm aggregate \
-            --shards 4 --run-id "$HH_RUN_ID" --output-dir docs/reports/final
+              --shards 4 --run-id "$HH_RUN_ID" --output-dir docs/reports/final
       - uses: actions/upload-artifact@v7
         if: ${{ always() }}
         with:
@@ -166,9 +166,9 @@ the artifact root. Each directory includes `manifests.jsonl` for downstream
 validation. Set `upload-artifacts: 'false'` to handle outputs in your workflow.
 Give repeated action invocations distinct artifact roots and name prefixes.
 
-The checked-in [action workflow](../.github/workflows/action.yml) exercises the
-local action with a three-job matrix. It uses `uses: ./`, so it can run before
-any release is published.
+The [Chart tests and security workflow](../.github/workflows/chart-validation.yml) exercises the
+local action with three shards for each of two Kubernetes versions. It runs on PRs, pushes to `main`,
+manual dispatch and release verification. It uses `uses: ./`, so it can run before any release is published.
 
 ### Publishing
 
@@ -253,6 +253,23 @@ uses the logical CPUs available to the job; set a positive integer to override i
 Scans consume the current shard's manifest stream and retain separate job logs,
 security reports, and resource counts for each validator. The action exposes `kubesec-report-dir`
 and `kubesec-exit-code`; either test or scanner failure fails the action.
+
+Set `kubesec-score-minimum: '5'` to raise the default floor of `0`. Every resource
+must be valid and score at least that minimum. Scanner errors always fail, even
+when the returned score meets the floor. Scores equal to the floor pass.
+
+Each shard saves `summary.json`, `summary.md`, `junit.xml`, and `details.jsonl`
+alongside the raw scanner output. Summaries count failed resources, invalid
+manifests, scores below the floor, failed checks, missing checks, scanner errors,
+critical rules and advisories. They also show the observed minimum, mean and
+maximum scores. GitHub displays the Markdown in the job summary; all providers
+receive a concise terminal summary. These count generated resource attempts:
+two different inputs rendering the same resource name remain separate attempts.
+
+The [shared examples](ci/README.md#kubesec-score-gate) aggregate security results
+across shards, check run identity and schema consistency, and publish separate
+security JUnit results. A resource failing both validity and score contributes
+two failed checks but only one failed resource.
 
 Kubesec and the built-in schema validator share the prepared local schema snapshot. Schema cache
 restore/save also runs when only Kubesec is enabled. Preparation refreshes the

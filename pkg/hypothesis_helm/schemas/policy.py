@@ -14,6 +14,7 @@ from hypothesis_helm_catalog.profiles import schema as profile_schema
 from jsonschema import validators
 
 from hypothesis_helm.charts import yamlio
+from hypothesis_helm.compiler.limits import compiler_limits
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.schemas.characters import validate_character_sets
 from hypothesis_helm.schemas.contracts import json_value, mapping, number, sequence
@@ -47,6 +48,7 @@ def configuration(config: Path | None) -> dict[str, object]:
         "input_constraints",
         "resource_schemas",
         "downstream_inputs",
+        "compiler",
         *SETTING_KEYS,
     }:
         raise ValueError(f"{path}: unknown configuration key; see the complete example in docs/input-domains/README.md")
@@ -108,7 +110,13 @@ def check_schema(schema: dict[str, object], *, inline: bool = False) -> None:
     validators.validator_for(schema).check_schema(schema)
 
 
-def load_policy(config: Path | None, *, character_sets: str | None = None, max_examples: int | None = None) -> dict[str, object]:
+def load_policy(
+    config: Path | None,
+    *,
+    character_sets: str | None = None,
+    max_examples: int | None = None,
+    compiler_call_depth: int | None = None,
+) -> dict[str, object]:
     """
     Resolve chart-scoped restrictions and freeze supplied resource schemas for workers.
 
@@ -116,11 +124,13 @@ def load_policy(config: Path | None, *, character_sets: str | None = None, max_e
         config (Path | None): Policy file; schema filenames are relative to this file.
         character_sets (str | None): Optional CLI override for the configured character domain.
         max_examples (int | None): Explicit CLI override for the global Hypothesis example budget.
+        compiler_call_depth (int | None): Explicit CLI override for nested helper analysis.
 
     Returns:
         dict[str, object]: JSON-compatible policy with resource schema contents embedded.
     """
     document = configuration(config)
+    limits = compiler_limits(document.get("compiler", {}), max_call_depth=compiler_call_depth)
     defaults = validate_settings(document)
     if max_examples is not None:
         defaults["hypothesis"] = {**mapping(defaults.get("hypothesis", {})), "max_examples": max_examples}
@@ -194,6 +204,7 @@ def load_policy(config: Path | None, *, character_sets: str | None = None, max_e
         "resource_schemas": supplied,
         "downstream_inputs": document.get("downstream_inputs", True),
         "character_sets": selected,
+        "compiler": limits,
     }
 
 

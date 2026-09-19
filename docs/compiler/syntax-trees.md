@@ -51,6 +51,16 @@ The rejection evaluator in
 expressions and follows supported, statically named helper calls. Its supported
 operations differ from those admitted for output-equivalence proofs. Understanding
 a `fail` condition does not establish the complete output of its template.
+Helper arguments retain their original values paths, so `.type` inside a helper
+can refer back to the caller's `$.resourcesPreset` even after passing through a
+nested dictionary. The [supported-expression table](analysis.md#explicit-rejection-discovery)
+describes the current boundaries.
+
+Supported transformations retain an expression tree as well as their concrete
+result. For `lower .Values.mode`, the tree records the `lower` operation and the
+original `mode` path. That distinction lets the compiler reason about accepted
+inputs without treating a normalized output as the original value. See
+[transformed input domains](analysis.md#transformed-input-domains).
 
 ## Output compilation stages
 

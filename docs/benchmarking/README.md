@@ -318,8 +318,8 @@ ceilings, checks error-rate endpoints and intermediate cells across every method
 and checks chart replay and topology plots. These short runs verify the
 automation; their timings are not performance comparisons.
 
-For the complete hosted run, open **Actions > Benchmarks > Run workflow** and enable
-**full-refresh**. It runs the same refresh command and uploads measurements, plots,
+For the complete hosted run, open **Actions > Benchmark and report refresh > Run workflow**.
+This dedicated manual workflow runs the full refresh and uploads measurements, plots,
 reports, and diagnostic logs for 30 days. It uses HTTPS for public submodules and
 leaves committing regenerated files to the reviewer. The workflow has a six-hour
 job limit; interrupted runs retain available artifacts and report incomplete status.

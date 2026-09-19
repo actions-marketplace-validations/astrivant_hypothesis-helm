@@ -4,6 +4,7 @@ Verify destination-aware generation, explicit overrides, shrinking and reproduci
 
 import copy
 import json
+import shutil
 from pathlib import Path
 from textwrap import dedent
 
@@ -434,3 +435,88 @@ def test_unsupported_inferred_yaml_keeps_declared_domain_evidence(tmp_path: Path
     domains = Chart.load(tmp_path).input_domains()
     assert any(rule["path"] == ["port"] for rule in domains.rules)
     assert any("declared paths only" in str(item.get("reason")) for item in domains.diagnostics)
+
+
+@pytest.mark.parametrize(
+    "helper",
+    [
+        '{{- define "secret" -}}{{- .name -}}{{- end -}}',
+        '{{- define "secret" -}}{{- $v := .name -}}{{- include "identity" (dict "value" $v) -}}{{- end -}}'
+        '{{- define "identity" -}}{{- .value -}}{{- end -}}',
+    ],
+)
+def test_helper_projection_preserves_input_origins(tmp_path: Path, helper: str) -> None:
+    """
+    Carry input destinations through pure helper arguments and nested aliases.
+
+    Args:
+        tmp_path (Path): Isolated chart directory.
+        helper (str): Helper source retaining the original input unchanged.
+
+    Returns:
+        None: Generated values obey the destination contract through either helper shape.
+    """
+    chart = fixture_chart(tmp_path)
+    (tmp_path / "templates/_helpers.tpl").write_text(helper)
+    template = tmp_path / "templates/pod.yaml"
+    template.write_text(
+        template.read_text().replace(".Values.secretName | quote", 'include "secret" (dict "name" .Values.secretName) | quote')
+    )
+    validator = validators.validator_for(chart.generation_schema())(chart.generation_schema())
+    assert not validator.is_valid(json_value({**chart.defaults, "secretName": ">0"}))
+    assert validator.is_valid(json_value({**chart.defaults, "secretName": "valid"}))
+    assert {tuple(sequence(rule["path"])) for rule in chart.input_domains().rules} >= {("secretName",), ("port",)}
+
+
+def test_serialized_collections_use_destination_shapes(tmp_path: Path) -> None:
+    """
+    Constrain annotation maps and port arrays using their Kubernetes field schemas.
+
+    Args:
+        tmp_path (Path): Isolated Pod chart.
+
+    Returns:
+        None: Invalid collection members are excluded while valid objects remain available.
+    """
+    chart = fixture_chart(tmp_path)
+    mapping(chart.schema["properties"])["annotations"] = {"type": "object"}
+    mapping(chart.schema["properties"])["ports"] = {"type": "array"}
+    chart.defaults.update(annotations={"purpose": "example"}, ports=[{"containerPort": 8080}])
+    (tmp_path / "values.schema.json").write_text(json.dumps(chart.schema))
+    (tmp_path / "templates/_helpers.tpl").write_text('{{- define "annotations" -}}{{- toYaml .data -}}{{- end -}}')
+    template = tmp_path / "templates/pod.yaml"
+    text = template.read_text().replace(
+        "  name: example", '  name: example\n  annotations: {{ include "annotations" (dict "data" .Values.annotations) | nindent 4 }}'
+    )
+    text = text.replace("      ports:\n        - containerPort: {{ .Values.port }}", "      ports: {{ toYaml .Values.ports | nindent 8 }}")
+    template.write_text(text)
+    validator = validators.validator_for(chart.generation_schema())(chart.generation_schema())
+    assert validator.is_valid(json_value(chart.defaults))
+    assert not validator.is_valid(json_value({**chart.defaults, "annotations": {"example": []}}))
+    assert not validator.is_valid(json_value({**chart.defaults, "ports": ["not-a-port-object"]}))
+    assert not validator.is_valid(json_value({**chart.defaults, "ports": [{}]}))
+    assert not validator.is_valid(json_value({**chart.defaults, "ports": [{"containerPort": 0}]}))
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_helper_domain_keeps_numeric_strings_and_real_encoding_failures(tmp_path: Path) -> None:
+    """
+    Keep legal numeric-looking names available to expose missing YAML quoting.
+
+    Args:
+        tmp_path (Path): Isolated chart with an unquoted helper result.
+
+    Returns:
+        None: The input remains eligible and native Helm output still fails manifest validation.
+    """
+    from hypothesis_helm.charts.rendering import render
+
+    chart = fixture_chart(tmp_path)
+    (tmp_path / "templates/_helpers.tpl").write_text('{{- define "name" -}}{{- .Values.secretName -}}{{- end -}}')
+    template = tmp_path / "templates/pod.yaml"
+    template.write_text(template.read_text().replace("name: example", 'name: {{ include "name" . }}'))
+    candidate = {**chart.defaults, "secretName": "0"}
+    validator = validators.validator_for(chart.generation_schema())(chart.generation_schema())
+    assert validator.is_valid(json_value(candidate))
+    with pytest.raises(RenderFailure, match="HH1105"):
+        render(chart, candidate)

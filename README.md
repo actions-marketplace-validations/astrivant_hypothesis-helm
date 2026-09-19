@@ -44,20 +44,6 @@ equivalent configurations reuse a rendered manifest. [See the synthetic error st
 - Validate Kubernetes API schemas from a versioned local cache, with optional
   [Kubesec](https://github.com/controlplaneio/kubesec) security checks in CI.
 
-Choose coverage for a single chart at each stage of development:
-
-| When | Recommended mode | Starting CPU / RAM per CI job | Local workers | CI shards |
-| --- | --- | --- | ---: | ---: |
-| MR / PR | `--filter-adaptive` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
-| Changes on `main` | `--filter` | 2 vCPU / 4 GiB | `--jobs 2` | 1 |
-| Before tagging a release | `--exhaustive` | 4 vCPU / 8 GiB | `--jobs 4` | 1 |
-
-These are starting estimates for one chart at a time, not measured minimum requirements.
-Use two workers on 2 vCPU / 4 GiB for filtered checks, and four workers on 4 vCPU / 8 GiB for exhaustive release checks.
-Both use one CI job for the chart. Adjust resources after measuring throughput.
-Exhaustive runs use parallel Helm processes; finite interaction execution remains serial. Repository path queues are local to one CI job;
-distributed shards apply to the separate generated-suite workflow.<sup>[\[3\]](docs/ci/resources.md)</sup>
-
 Run the pre-tag check manually on the release commit and review its coverage report before tagging.
 Exhaustive coverage requires a finite domain and a completed run; time-limited runs remain incomplete.
 See the [CI workflow and release-check requirements](docs/ci/README.md#recommended-workflow).
@@ -249,8 +235,9 @@ Set `PYTEST_WORKERS=2` to choose a fixed count, or use
 bash scripts/project-run.sh pytest -n auto --dist worksteal
 ```
 
-Development dependencies include shfmt. Pre-commit formats maintained shell scripts;
-`scripts/check.sh` checks their formatting in CI.
+Shell scripts use four-space indentation, including scripts embedded in CI YAML.
+Pre-commit and `scripts/check.sh` enforce shfmt formatting and ShellCheck;
+see [shell checks](docs/development.md#shell-checks) for the local commands.
 
 ## CLI help
 
@@ -426,7 +413,8 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
-                            [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                            [--compiler-call-depth N] [--ignore CODE]
+                            [--disable-codes CODE[,CODE...]]
                             SOURCE
 
 Fetch charts from a remote Git repository, Helm repository, or OCI chart reference,
@@ -521,6 +509,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --compiler-call-depth N
+                        maximum nested helper calls analyzed by the compiler;
+                        overrides config; default: 16
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -539,7 +530,8 @@ usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMP
                                 [--export-minimal-values [FILENAME]]
                                 [--log-color [{auto,always,never}]] [--log-file PATH]
                                 [--config CONFIG] [--character-sets {ascii,unicode}]
-                                [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                                [--compiler-call-depth N] [--ignore CODE]
+                                [--disable-codes CODE[,CODE...]]
                                 chart
 
 Create a reusable Python property-test suite for a local chart, with one test per
@@ -574,6 +566,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --compiler-call-depth N
+                        maximum nested helper calls analyzed by the compiler;
+                        overrides config; default: 16
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -593,7 +588,8 @@ usage: helm hypothesis audit [-h] [--fail] [--artifact-dir ARTIFACT_DIR]
                              [--export-minimal-values [FILENAME]]
                              [--log-color [{auto,always,never}]] [--log-file PATH]
                              [--config CONFIG] [--character-sets {ascii,unicode}]
-                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                             [--compiler-call-depth N] [--ignore CODE]
+                             [--disable-codes CODE[,CODE...]]
                              chart
 
 Inspect a local chart's values, schema, and template references to identify missing
@@ -630,6 +626,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --compiler-call-depth N
+                        maximum nested helper calls analyzed by the compiler;
+                        overrides config; default: 16
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -655,7 +654,8 @@ usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
                            [--export-suppressions] [--fail]
                            [--log-color [{auto,always,never}]] [--log-file PATH]
                            [--config CONFIG] [--character-sets {ascii,unicode}]
-                           [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                           [--compiler-call-depth N] [--ignore CODE]
+                           [--disable-codes CODE[,CODE...]]
                            suite
 
 Execute a property-test suite previously created by generate. Generate values for its
@@ -719,6 +719,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --compiler-call-depth N
+                        maximum nested helper calls analyzed by the compiler;
+                        overrides config; default: 16
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -764,7 +767,8 @@ usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
-                            [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                            [--compiler-call-depth N] [--ignore CODE]
+                            [--disable-codes CODE[,CODE...]]
                             [chart]
 
 Test a local chart or recursively discover charts in a local directory. Generate
@@ -890,6 +894,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --compiler-call-depth N
+                        maximum nested helper calls analyzed by the compiler;
+                        overrides config; default: 16
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and

@@ -29,19 +29,20 @@ def installer_commands(root: Path, provider: str) -> list[str]:
         "github": "action.yml",
         "gitlab": "ci/gitlab.yml",
         "circleci": "ci/circleci.yml",
-        "github-benchmark": ".github/workflows/benchmarks.yml",
-        "github-project": ".github/workflows/ci.yml",
+        "github-project": ".github/actions/setup-project/action.yml",
         "circleci-project": ".circleci/config.yml",
     }[provider]
     document = mapping(YAML(typ="safe").load((root / filename).read_text()))
     if provider == "gitlab":
         return [str(command) for command in sequence(mapping(document["helm-properties"])["before_script"]) if "curl -fsSL" in str(command)]
-    if provider == "github":
+    if provider in {"github", "github-project"}:
         steps = sequence(mapping(document["runs"])["steps"])
-        return [str(mapping(step)["run"]) for step in steps if mapping(step).get("name") in {"Install Helm", "Install Kubesec"}]
-    job = {"circleci": "test-chart", "github-benchmark": "smoke", "circleci-project": "test-python", "github-project": "test-python"}[
-        provider
-    ]
+        return [
+            str(mapping(step)["run"])
+            for step in steps
+            if mapping(step).get("name") in {"Install Helm", "Install Helm 4", "Install Kubesec"}
+        ]
+    job = {"circleci": "test-chart", "circleci-project": "test-python"}[provider]
     steps = sequence(mapping(mapping(document["jobs"])[job])["steps"])
     commands = []
     for step in steps:
@@ -62,7 +63,6 @@ def installer_commands(root: Path, provider: str) -> list[str]:
         ("github", "macOS", "ARM64"),
         ("gitlab", "Linux", "X64"),
         ("circleci", "Linux", "X64"),
-        ("github-benchmark", "Linux", "X64"),
         ("circleci-project", "Linux", "X64"),
         ("github-project", "Linux", "X64"),
     ],

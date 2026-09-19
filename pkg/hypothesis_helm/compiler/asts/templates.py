@@ -63,13 +63,15 @@ def lower(source: str) -> tuple[Node, ...]:
         """
         if closing == "else":
             return block()
-        if closing.startswith("else if "):
+        if closing.startswith(("else if ", "else with ")):
             line = tokens[position - 1].line
+            head = "if" if closing.startswith("else if ") else "with"
             children, ending = block()
             tail: tuple[Node, ...] = ()
             if ending.startswith("else"):
                 tail, ending = alternatives(ending)
-            return (Node("if", closing[len("else if ") :], line, children, tail),), ending
+            text = closing[len("else ") :]
+            return (Node("if" if head == "if" else "opaque", text[3:] if head == "if" else text, line, children, tail),), ending
         raise ValueError("unsupported alternative branch")
 
     def block() -> tuple[tuple[Node, ...], str]:

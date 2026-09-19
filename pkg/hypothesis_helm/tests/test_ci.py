@@ -281,6 +281,8 @@ def test_action_preserves_arguments_outputs_and_status(
 
     monkeypatch.setattr(Processes, "run", execute)
     monkeypatch.setenv("HH_KUBESEC", str(security).lower())
+    monkeypatch.setenv("HH_KUBESEC_SCORE_MINIMUM", "5")
+    monkeypatch.setenv("HH_RUN_ID", "pipeline-123")
     monkeypatch.setattr(github_action, "prepare", lambda *args, **kwargs: "{}")
     scan_calls: list[dict[str, object]] = []
 
@@ -302,6 +304,8 @@ def test_action_preserves_arguments_outputs_and_status(
     expected_status = exit_code or int(security)
     assert github_action.main() == expected_status
     if security:
+        assert scan_calls[0]["score_minimum"] == 5
+        assert scan_calls[0]["run_id"] == "pipeline-123"
         assert scan_calls[0]["pre_sharded"] is True
         assert scan_calls[0]["validate_rest"] is True
         assert scan_calls[0]["shard"] == Shard(2, 3)
@@ -394,6 +398,8 @@ def test_remote_ci_commands(tmp_path: Path, provider: str, defer_failure: bool, 
         "KUBESEC_ENABLED": str(security).lower(),
         "HH_KUBESEC": str(security).lower(),
         "KUBESEC_JOBS": "auto",
+        "KUBESEC_SCORE_MINIMUM": "5",
+        "HH_KUBESEC_SCORE_MINIMUM": "5",
         "HH_KUBESEC_JOBS": "auto",
         "K8S_VERSION": "1.35.0",
         "HH_SCHEMA_VERSION": "1.35.0",
@@ -440,8 +446,105 @@ def test_remote_ci_commands(tmp_path: Path, provider: str, defer_failure: bool, 
     assert len(calls) == (2 if security else 1)
     if security:
         assert "--pre-sharded" in calls[1] and "--validate-rest" in calls[1]
+        assert calls[1][calls[1].index("--score-minimum") + 1] == "5"
+        assert calls[1][calls[1].index("--run-id") + 1] == command[command.index("--run-id") + 1]
         assert "--schema-offline" in calls[1]
     assert not (tmp_path / "unexpected").exists()
+
+
+@pytest.mark.parametrize("provider", ["gitlab", "circleci", "github"])
+@pytest.mark.parametrize("outcome", ["passed", "failed", "missing"])
+def test_ci_security_aggregation(tmp_path: Path, provider: str, outcome: str) -> None:
+    """
+    Exercise the security aggregation branches of each published provider script.
+
+    Args:
+        tmp_path (Path): Downloaded reports and stubbed chart aggregator.
+        provider (str): Published CI provider to exercise.
+        outcome (str): Complete, rejected or incomplete security evidence.
+
+    Returns:
+        None: Security failures and missing idle shards fail the final CI gate.
+    """
+    from ruamel.yaml import YAML
+
+    from hypothesis_helm.reporting.security import publish
+    from hypothesis_helm.schemas.contracts import sequence
+
+    root = Path(__file__).resolve().parents[3]
+    source = root / (".github/workflows/chart-validation.yml" if provider == "github" else f"ci/{provider}.yml")
+    document = mapping(YAML(typ="safe").load(source.read_text()))
+    if provider == "gitlab":
+        script = str(sequence(mapping(document["helm-report"])["script"])[0])
+        incoming = tmp_path / ".cache/hypothesis-helm/runs/1.35.0"
+        final = tmp_path / "docs/reports/final/1.35.0/kubesec"
+    else:
+        steps = [mapping(step) for step in sequence(mapping(mapping(document["jobs"])["aggregate"])["steps"])]
+        final = tmp_path / "docs/reports/final/kubesec"
+        if provider == "circleci":
+            run = next(mapping(step["run"]) for step in steps if isinstance(step.get("run"), dict) and "Write" in str(step["run"]))
+            script = str(run["command"]).replace("/tmp/hypothesis-helm-aggregation", str(tmp_path / "workspace"))
+            incoming = tmp_path / "workspace/chart"
+        else:
+            script = next(str(step["run"]) for step in steps if str(step.get("name", "")).startswith("Write"))
+            incoming = tmp_path / "downloaded"
+    run_id = "123-1.35.0" if provider == "gitlab" else "workflow-123-chart"
+    for index in range(1, 4):
+        chart = incoming / str(index)
+        if provider == "gitlab":
+            chart = chart / "shards" / f"{index}-of-3"
+        chart.mkdir(parents=True)
+        (chart / "report.json").write_text("{}\n")
+        (chart / "exit-code.txt").write_text("0\n")
+        security = incoming / str(index) / "kubesec"
+        if provider == "github":
+            security = tmp_path / "downloaded-security" / str(index)
+        if index == 3 and outcome == "missing":
+            continue
+        security.mkdir(parents=True)
+        record = {"object": "Pod/demo", "valid": True, "score": 0 if outcome == "failed" else 5, "exit_code": 0, "signal": 0}
+        (security / "details.jsonl").write_text("" if index == 3 else json.dumps(record) + "\n")
+        publish(
+            security,
+            {
+                "scanned": int(index != 3),
+                "shard": f"{index}-of-3",
+                "run_id": run_id,
+                "schema_version": "1.35.0",
+                "schema_identity": "snapshot",
+            },
+            5,
+        )
+    binary = tmp_path / "hypothesis-helm"
+    binary.write_text("#!/bin/sh\ncat >/dev/null\nexit 0\n")
+    binary.chmod(0o755)
+    result = subprocess.run(
+        ["bash", "-euo", "pipefail", "-c", script],
+        cwd=tmp_path,
+        env=dict(
+            os.environ,
+            PATH=os.pathsep.join((str(tmp_path), str(Path(sys.executable).parent), os.environ["PATH"])),
+            KUBESEC_ENABLED="true",
+            HH_KUBESEC="true",
+            KUBESEC_SCORE_MINIMUM="5",
+            HH_KUBESEC_SCORE_MINIMUM="5",
+            HH_SCHEMA_VERSION="1.35.0",
+            HH_RUN_ID=run_id,
+            CI_PIPELINE_ID="123",
+            K8S_VERSION="1.35.0",
+            SHARD_TOTAL="3",
+            CIRCLE_WORKFLOW_ID="workflow-123",
+            HH_REPORT_GROUP="chart",
+            HH_SHARDS="3",
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == {"passed": 0, "failed": 1, "missing": 2}[outcome], result.stdout + result.stderr
+    if outcome != "missing":
+        assert json.loads((final / "summary.json").read_text())["status"] == outcome
+        assert (final / "junit.xml").is_file()
 
 
 @pytest.mark.parametrize(
@@ -466,7 +569,7 @@ def test_ci_aggregation_commands(tmp_path: Path, provider: str, outcome: str) ->
     from hypothesis_helm.schemas.contracts import sequence
 
     root = Path(__file__).resolve().parents[3]
-    source = root / (".github/workflows/action.yml" if provider == "github" else f"ci/{provider}.yml")
+    source = root / (".github/workflows/chart-validation.yml" if provider == "github" else f"ci/{provider}.yml")
     document = mapping(YAML(typ="safe").load(source.read_text()))
     if provider == "gitlab":
         script = str(sequence(mapping(document["helm-report"])["script"])[0])

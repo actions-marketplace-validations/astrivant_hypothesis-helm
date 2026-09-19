@@ -29,6 +29,7 @@
   - [HH2004: No supplied default for a values path](#hh2004-no-supplied-default-for-a-values-path)
   - [HH2005: Unresolved template value access](#hh2005-unresolved-template-value-access)
   - [HH2006: Opaque object schema](#hh2006-opaque-object-schema)
+  - [HH2007: Incomplete compiler analysis](#hh2007-incomplete-compiler-analysis)
   - [HH3001: Template accesses a missing object](#hh3001-template-accesses-a-missing-object)
   - [HH3002: Incompatible value type in template](#hh3002-incompatible-value-type-in-template)
   - [HH3003: Undefined named template](#hh3003-undefined-named-template)
@@ -263,6 +264,7 @@ cog.out(FindingGenerator.render("markdown"))
 | `HH2004` | No supplied default for a values path | values | warning |
 | `HH2005` | Unresolved template value access | analysis | diagnostic |
 | `HH2006` | Opaque object schema | values | warning |
+| `HH2007` | Incomplete compiler analysis | analysis | warning |
 | `HH3001` | Template accesses a missing object | template | violation |
 | `HH3002` | Incompatible value type in template | template | violation |
 | `HH3003` | Undefined named template | template | violation |
@@ -410,6 +412,14 @@ Detected when: An object permits unspecified entries without named fields, patte
 Example: extraConfig: {"type": "object"} permits unspecified keys and values.
 
 Suggested action: Describe fields with properties, patternProperties or typed additionalProperties. Ignore HH2006 for intentional free-form configuration; tests still sample those values.
+
+### HH2007: Incomplete compiler analysis
+
+Detected when: An evaluated template operation needs context or semantics outside the supported compiler contract.
+
+Example: A rejection guard depends on now, lookup, random data or an unsupported tpl expression.
+
+Suggested action: The candidate is retained for native Helm rendering. Review the source location and coverage; suppress HH2007 to silence this warning without dropping tests. --fail stops at the warning when it is enabled.
 
 ### HH3001: Template accesses a missing object
 

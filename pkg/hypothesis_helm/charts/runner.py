@@ -180,19 +180,25 @@ def check_chart(
         or ((trim or trim_topology) and permutations is None)
     ):
         raise ValueError("trim must be nonnegative and requires finite permutation planning")
-    policy = (
-        rejection_policy
-        if rejection_policy is not None
-        else RejectionPolicy(Contracts.build(chart.path), chart.defaults, (chart.path / "values.schema.json").is_file())
-        if filter_rejections
-        else None
-    )
-    initial_rejections = policy.snapshot() if policy is not None else {}
     if input_inventory is None:
         from hypothesis_helm.schemas.opaque import warn_opaque
 
         warn_opaque(chart.schema, str(chart.path))
     inputs = input_inventory if input_inventory is not None else InputInventory.build(chart)
+    policy = (
+        rejection_policy
+        if rejection_policy is not None
+        else RejectionPolicy(
+            Contracts.build(chart.path, inputs.dependencies), chart.defaults, (chart.path / "values.schema.json").is_file()
+        )
+        if filter_rejections
+        else None
+    )
+    if policy is not None:
+        policy.contracts.configure(
+            helm=helm, kube_version=kube_version, timeout=timeout, release=release, namespace=namespace, fail_fast=fail_fast
+        )
+    initial_rejections = policy.snapshot() if policy is not None else {}
     if policy is not None and inputs.dependencies.nodes:
         policy.verify_every_candidate = True
     dependency_attempts = {node.path: {"enabled": 0, "disabled": 0, "unknown": 0} for node in inputs.dependencies.nodes}
@@ -202,6 +208,8 @@ def check_chart(
     hashes = RenderHashes(scope="run-local")
     model = ValuesModel.from_schema(chart.generation_schema()) if permutations is not None or prune_equivalent else None
     pruner = Pruner(chart.path, chart.defaults, model) if prune_equivalent and model is not None else None
+    if pruner is not None:
+        pruner.fail_fast = fail_fast
     if pruner is not None and (not release or not namespace):
         pruner.disabled = "empty release or namespace is outside the fixed-context proof contract"
     plan = build_plan(
@@ -408,6 +416,7 @@ def check_chart(
                 "verification_renders",
                 "classifier_disagreements",
                 "schema_conflicts",
+                "incomplete_evaluations",
             ):
                 evidence[key] = int(str(evidence[key])) - int(str(initial_rejections.get(key, 0)))
             result["configuration_rejections"] = evidence

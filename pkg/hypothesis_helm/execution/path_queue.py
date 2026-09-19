@@ -191,7 +191,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     inventory = InputInventory.build(chart)
     rejections = (
-        RejectionPolicy(Contracts.build(chart.path), chart.defaults, (chart.path / "values.schema.json").is_file())
+        RejectionPolicy(Contracts.build(chart.path, inventory.dependencies), chart.defaults, (chart.path / "values.schema.json").is_file())
         if context["filtering"]
         else None
     )

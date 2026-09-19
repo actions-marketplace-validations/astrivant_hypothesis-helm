@@ -34,3 +34,5 @@ poetry -C pkg/hypothesis_helm_benchmarking build
 
 Its version and release lifecycle are independent of the core package. Set its version before publishing;
 the core PyPI workflow publishes only the core distribution.
+Its `pyproject.toml` uses standard project metadata and the setuptools backend to map this flat directory to
+the `hypothesis_helm_benchmarking` import package. Poetry still manages the repository environment and can invoke the build.

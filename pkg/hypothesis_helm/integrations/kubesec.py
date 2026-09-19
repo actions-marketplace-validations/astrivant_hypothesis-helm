@@ -3,13 +3,17 @@ Scan manifest streams with core-sized GNU Parallel pools and local Kubernetes sc
 """
 
 import argparse
+import csv
 import json
 import os
 import shutil
+import tempfile
+import time
 from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.integrations.sharding import Shard, parse_shard_option, resolve_shard
+from hypothesis_helm.reporting.security import aggregate, publish, read_result
 from hypothesis_helm.schemas.conformity import prepare, validate
 from hypothesis_helm.schemas.contracts import mapping
 
@@ -47,6 +51,8 @@ def scan(
     shard: Shard | None = None,
     pre_sharded: bool = False,
     validate_rest: bool = False,
+    score_minimum: int = 0,
+    run_id: str = "",
 ) -> int:
     """
     Run each supported resource through GNU Parallel and retain every scan result.
@@ -60,10 +66,15 @@ def scan(
         shard (Shard | None): Partition coordinates for a shared input stream.
         pre_sharded (bool): Input is already selected; do not partition its records again.
         validate_rest (bool): Route unsupported resources to native schema validation.
+        score_minimum (int): Inclusive minimum acceptable score for each resource.
+        run_id (str): Common identity used to verify transported shard reports.
 
     Returns:
         int: Zero if all scans succeed, one if any scan fails.
     """
+    if type(score_minimum) is not int or score_minimum < 0:
+        raise ValueError("Kubesec score minimum must be a nonnegative integer")
+    started = time.monotonic()
     workers = worker_count(jobs)
     settings = mapping(json.loads(configuration))
     binary, parallel = shutil.which(executable), shutil.which("parallel")
@@ -79,6 +90,7 @@ def scan(
     records = output / "manifests"
     records.mkdir(exist_ok=True)
     tasks = output / "tasks.bin"
+    results = Path(tempfile.mkdtemp(prefix="results-", dir=output))
     selected, skipped = 0, 0
     remaining = output / "schema-validation.yaml"
     with (
@@ -116,12 +128,19 @@ def scan(
         "--joblog",
         str(output / "joblog.tsv"),
         "--results",
-        str(output / "results"),
+        str(results / "{#}") + "/",
         "--quote",
         "--replace",
         "__HH_MANIFEST__",
         binary,
         "scan",
+        # Kubesec 2.14.2 rejects score zero even though its JSON labels it passed.
+        # Let our explicit validity and score checks own policy failures. Native
+        # command errors still return nonzero, and malformed reports fail closed.
+        "--exit-code",
+        "0",
+        "--format",
+        "json",
         "--kubernetes-version",
         str(settings["version"]),
         "--schema-location",
@@ -133,21 +152,45 @@ def scan(
     disposition = "routed to native schema validation" if validate_rest else "skipped"
     print(f"Kubesec: {selected} resources, {workers} workers, {skipped} {disposition}")
     status = 0
+    interrupted = False
     if selected:
-        with (output / "parallel.stdout").open("w") as stdout:
-            result = Processes(interrupt_grace=12).run(command, cwd=Path.cwd(), env={**os.environ, "GOMAXPROCS": "1"}, stdout=stdout)
-        status = int(result.returncode != 0)
+        try:
+            with (output / "parallel.stdout").open("w") as stdout:
+                result = Processes(interrupt_grace=12).run(command, cwd=Path.cwd(), env={**os.environ, "GOMAXPROCS": "1"}, stdout=stdout)
+            status = result.returncode
+        except KeyboardInterrupt:
+            status, interrupted = 130, True
+    completed = {}
+    if selected and (output / "joblog.tsv").exists():
+        with (output / "joblog.tsv").open() as joblog:
+            for row in csv.DictReader(joblog, delimiter="\t"):
+                try:
+                    completed[int(row["Seq"])] = (int(row["Exitval"]), int(row["Signal"]))
+                except (KeyError, TypeError, ValueError):
+                    # A cancelled writer can leave a partial row. Its absent
+                    # completion status becomes missing evidence below.
+                    continue
+    with (output / "details.jsonl").open("w") as details:
+        for index in range(1, selected + 1):
+            exit_code, signal = completed.get(index, (None, 0))
+            path = results / str(index) / "stdout"
+            record = read_result(path, exit_code=exit_code, signal=signal)
+            record["result_path"] = str(path.relative_to(output))
+            details.write(json.dumps(record) + "\n")
     conformity_status = 0
-    if validate_rest and skipped:
+    if validate_rest and skipped and not interrupted:
         error = None
         try:
             validate(remaining.read_text(), max(30, skipped * 30), configuration=configuration)
         except (AssertionError, ValueError) as exc:
             conformity_status, error = 1, str(exc)
+        except KeyboardInterrupt:
+            conformity_status, error, interrupted = 130, "Schema validation interrupted", True
         (output / "schema-validation.json").write_text(json.dumps({"status": "failed" if error else "passed", "error": error}) + "\n")
-    status = status or conformity_status
     report = {
-        "status": "failed" if status else "passed",
+        "run_id": run_id,
+        "parallel_exit_code": status,
+        "elapsed_seconds": time.monotonic() - started,
         "scanned": selected,
         "skipped": 0 if validate_rest else skipped,
         "schema_scanned": skipped if validate_rest else 0,
@@ -158,8 +201,8 @@ def scan(
         "schema_version": settings["version"],
         "schema_identity": settings["identity"],
     }
-    (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
-    return status
+    outcome = publish(output, report, score_minimum)
+    return 130 if interrupted else outcome
 
 
 def main() -> int:
@@ -170,7 +213,7 @@ def main() -> int:
         int: Scan status or two for an invalid setup.
     """
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("manifests", type=Path)
+    parser.add_argument("manifests", type=Path, help="Manifest JSONL stream, or downloaded security artifact directory with --aggregate")
     parser.add_argument("--output", type=Path, default=Path(".cache/hypothesis-helm/kubesec"))
     parser.add_argument("--jobs", default="auto")
     parser.add_argument("--shard", type=parse_shard_option, default="auto")
@@ -180,8 +223,29 @@ def main() -> int:
     parser.add_argument("--schema-cache-dir", type=Path, default=Path("schemas"))
     parser.add_argument("--schema-offline", action="store_true")
     parser.add_argument("--kubesec-binary", default="kubesec")
+    parser.add_argument(
+        "--score-minimum", type=int, default=0, help="Minimum acceptable score per resource, a nonnegative integer (default: 0)"
+    )
+    parser.add_argument("--run-id", default="", help="Common pipeline and attempt identity for all shards")
+    parser.add_argument(
+        "--aggregate", action="store_true", help="Verify security shard evidence and publish combined statistics without scanning"
+    )
+    parser.add_argument("--shards", type=int, help="Expected security shard count, required with --aggregate")
     args = parser.parse_args()
     try:
+        if args.score_minimum < 0:
+            raise ValueError("Kubesec score minimum must be a nonnegative integer")
+        if args.aggregate:
+            return aggregate(
+                args.manifests,
+                args.output,
+                shards=args.shards or 0,
+                run_id=args.run_id,
+                version=args.schema_version,
+                minimum=args.score_minimum,
+            )
+        if args.shards is not None:
+            raise ValueError("--shards requires --aggregate; use --shard INDEX/TOTAL to scan")
         worker_count(args.jobs)
         shard, _ = resolve_shard(args.shard, os.environ)
         configuration = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
@@ -194,7 +258,11 @@ def main() -> int:
             shard=shard,
             pre_sharded=args.pre_sharded,
             validate_rest=args.validate_rest,
+            score_minimum=args.score_minimum,
+            run_id=args.run_id,
         )
+    except KeyboardInterrupt:
+        return 130
     except (ValueError, OSError) as exc:
         parser.exit(2, f"Kubesec setup failed: {exc}\n")
 

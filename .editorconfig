@@ -2,8 +2,5 @@ root = true
 
 [*.sh]
 indent_style = space
-indent_size = 2
-switch_case_indent = true
-
-[scripts/setup-dev.sh]
 indent_size = 4
+switch_case_indent = true

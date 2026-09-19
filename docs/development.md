@@ -5,7 +5,10 @@
 
 - [Environment](#environment)
 - [Checks](#checks)
+  - [Shell checks](#shell-checks)
+  - [Project checks](#project-checks)
 - [Plugin verification](#plugin-verification)
+- [GitHub workflows](#github-workflows)
 - [Documentation contents](#documentation-contents)
 - [Publishing to PyPI](#publishing-to-pypi)
 - [Pre-commit hook](#pre-commit-hook)
@@ -31,7 +34,7 @@ bash scripts/setup-dev.sh --check
 bash scripts/setup-dev.sh --schemas
 ```
 
-The setup script supports macOS with Homebrew and Debian/Ubuntu Linux with apt. It installs Git, Git LFS and GNU Parallel;
+The setup script supports macOS with Homebrew and Debian/Ubuntu Linux with apt. It installs Git, Git LFS, GNU Parallel and ShellCheck;
 uses a pinned uv bootstrap to provision Python 3.13 and Poetry 2.1.3 locally; and installs checksum-verified Go 1.25.0 and Helm 4.3.0
 under `.cache/dev-tools/`. Python linting, formatting, typing and testing dependencies come from the Poetry lock.
 It creates `.venv` only when absent, installs the benchmarking extra and pre-commit hooks, and registers the Helm plugin.
@@ -52,6 +55,37 @@ the installed binaries. Use `bash scripts/project-run.sh COMMAND` for commands i
 the checkout environment; avoid Python module-launcher wrappers.
 
 ## Checks
+
+### Shell checks
+
+Use four spaces for each shell indentation level. In YAML, these spaces are added
+after the YAML block's indentation. Write control flow on separate lines and
+keep interpolated CI inputs in `env`, then reference quoted shell variables.
+Use `pushd` and `popd` for temporary directory changes. New shell functions follow
+the description and typed-argument comments in [setup-dev.sh](../scripts/setup-dev.sh).
+
+Pre-commit formats maintained `.sh` files and shell blocks in GitHub workflows,
+composite actions, and the GitLab/CircleCI examples. ShellCheck checks both forms;
+diagnostics for embedded code point to its YAML filename and line number.
+The formatter preserves surrounding YAML, comments and heredoc contents. Python
+and PowerShell steps are excluded from shell checks.
+
+```sh
+# Check embedded scripts without changing files:
+bash scripts/project-run.sh hypothesis-helm-ci-shell
+# Format embedded scripts and report remaining ShellCheck findings:
+bash scripts/project-run.sh hypothesis-helm-ci-shell --write
+# Run all shell hooks against maintained files:
+bash scripts/project-run.sh pre-commit run shfmt --all-files
+bash scripts/project-run.sh pre-commit run shellcheck --all-files
+bash scripts/project-run.sh pre-commit run ci-shell --all-files
+```
+
+`scripts/check.sh`, including its CI and refresh callers, runs the same checks
+without rewriting files. `scripts/setup-dev.sh` installs ShellCheck; Poetry
+installs the pinned shfmt formatter.
+
+### Project checks
 
 Raw benchmark datasets, compressed artifacts and scan logs are stored with Git LFS.
 After installing Git LFS, download them before running checks or a full refresh:
@@ -109,8 +143,22 @@ helm hypothesis generate examples/workload --output /tmp/generated-workload
 helm hypothesis run /tmp/generated-workload
 ```
 
-[GitHub Actions CI](../.github/workflows/ci.yml) runs the framework checks, benchmark smoke tests,
-package builds, and end-user plugin commands on pull requests, pushes to `main`, and manual dispatch.
+## GitHub workflows
+
+Each workflow has one purpose, with the same name shown in GitHub's Actions list:
+
+| Workflow | Purpose | When it runs |
+| --- | --- | --- |
+| [Code checks and tests](../.github/workflows/checks.yml) | Pre-commit hooks, Go tests and parallel Python tests. | PRs, `main`, manual, release verification. |
+| [Chart tests and security](../.github/workflows/chart-validation.yml) | Test the example chart, validate schemas, run Kubesec and aggregate shards. | PRs, `main`, manual, release verification. |
+| [Package build and plugin tests](../.github/workflows/package.yml) | Build distributions and exercise the installed Helm plugin; verify the catalog on tags. | PRs, `main`, manual, release verification. |
+| [Benchmark smoke tests](../.github/workflows/benchmark-smoke.yml) | Check benchmark recipes and plot generation with short runs. | PRs, `main`, manual, release verification and full refresh. |
+| [Benchmark and report refresh](../.github/workflows/benchmark-refresh.yml) | Run all studies, regenerate plots and scan Bitnami and Prometheus. | Manual only. |
+| [Publish to PyPI](../.github/workflows/publish-pypi.yml) | Require all four verification workflows, then publish their versioned distributions. | Pushed version tags only. |
+
+The four verification workflows run independently, so their results are visible separately.
+The full refresh is a dedicated manual workflow; there is no additional switch to enable it.
+The shared [project setup action](../.github/actions/setup-project/action.yml) installs the same tools for checks, builds and benchmarks.
 Every pull request update runs all configured pre-commit hooks against all files and tests the PR's head commit.
 Pytest uses all available CPUs. The verification job defaults to `ubuntu-latest-8-cores`;
 enable an eight-core Ubuntu x64 larger runner with that name, or set the repository variable `HH_CI_RUNNER`
@@ -143,7 +191,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Only a pushed version tag triggers the [publishing workflow](../.github/workflows/publish.yml).
+Only a pushed version tag triggers the [publishing workflow](../.github/workflows/publish-pypi.yml).
 Branch pushes, pull requests, and publishing a GitHub release do not upload to PyPI.
 CI checks that the tag matches the package version before building. Prerelease names normalize to Python's version format:
 
@@ -237,7 +285,7 @@ Project folders and Python modules under `pkg/` use underscores, as in
 | [`scripts/`](../scripts) | Project command runner, validation command and Helm plugin hooks. |
 | [`action.yml`](../action.yml) | GitHub Action with automatic CI sharding and artifact uploads. |
 | [`plugin.yaml`](../plugin.yaml) | Installable Helm plugin manifest. |
-| [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | Python checks, Helm integration and package build verification. |
+| [`.github/workflows/`](../.github/workflows/) | Separate code checks, chart validation, package verification, benchmarks, refresh and publication. |
 | [`.github/settings.yml`](../.github/settings.yml) | Declarative repository settings. |
 | [`docs/`](.) | Development setup, CLI behavior and testing limitations. |
 

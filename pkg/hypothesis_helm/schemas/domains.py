@@ -89,7 +89,10 @@ class InputDomains:
             if rule["quoted"] and kinds != {"string"}:
                 diagnostics.append({"path": list(path), "reason": "quote converts a non-string or unknown input; domain unchanged"})
                 continue
-            if not kinds or not kinds <= {"string", "integer", "number", "boolean"}:
+            allowed = {"string", "integer", "number", "boolean"}
+            if rule.get("serialized"):
+                allowed.update({"object", "array"})
+            if not kinds or not kinds <= allowed:
                 diagnostics.append({"path": list(path), "reason": "direct mapping has no unambiguous scalar input type"})
                 continue
             try:

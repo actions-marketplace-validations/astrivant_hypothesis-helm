@@ -21,7 +21,11 @@ jobs:
             git lfs pull
       - run: pip install poetry==2.1.3 pre-commit==4.6.0
       - run: poetry install --extras benchmarking
-      - run: sudo apt-get update && sudo apt-get install -y parallel
+      - run:
+          name: Install GNU Parallel and ShellCheck
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y parallel shellcheck
       - when:
           condition: << pipeline.parameters.binary-cache >>
           steps:
@@ -36,16 +40,18 @@ jobs:
             platform=linux
             architecture=amd64
             binary_root=".cache/hypothesis-helm/binaries"
-            if [[ "$BINARY_CACHE" != "true" ]]; then binary_root="$(mktemp -d)"; fi
+            if [[ "$BINARY_CACHE" != "true" ]]; then
+                binary_root="$(mktemp -d)"
+            fi
             binary_dir="$binary_root/helm-${HELM_VERSION}-${platform}-${architecture}"
             if [[ ! -x "$binary_dir/helm" ]]; then
-              download_dir="$(mktemp -d)"
-              curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
-              tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" "${platform}-${architecture}/helm"
-              mkdir -p "$binary_dir"
-              install "$download_dir/${platform}-${architecture}/helm" "$binary_dir/helm.pending"
-              mv "$binary_dir/helm.pending" "$binary_dir/helm"
-              rm -rf "$download_dir"
+                download_dir="$(mktemp -d)"
+                curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+                tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" "${platform}-${architecture}/helm"
+                mkdir -p "$binary_dir"
+                install "$download_dir/${platform}-${architecture}/helm" "$binary_dir/helm.pending"
+                mv "$binary_dir/helm.pending" "$binary_dir/helm"
+                rm -rf "$download_dir"
             fi
             sudo install "$binary_dir/helm" /usr/local/bin/helm
       - when:

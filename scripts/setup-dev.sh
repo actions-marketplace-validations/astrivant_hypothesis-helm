@@ -35,20 +35,21 @@ install_system_packages() {
 
     if [[ "$platform" == darwin ]]; then
         require_command brew
-        brew install git git-lfs parallel
+        brew install git git-lfs parallel shellcheck
     elif command -v apt-get >/dev/null 2>&1; then
         if [[ "$EUID" != 0 ]]; then
             require_command sudo
             privilege=sudo
         fi
         $privilege apt-get update
-        $privilege apt-get install -y ca-certificates curl git git-lfs parallel build-essential
+        $privilege apt-get install -y ca-certificates curl git git-lfs parallel shellcheck build-essential
     else
-        echo 'Install curl, git, git-lfs and GNU Parallel with your Linux package manager, then rerun.' >&2
+        echo 'Install curl, git, git-lfs, GNU Parallel and ShellCheck with your Linux package manager, then rerun.' >&2
         require_command curl
         require_command git
         require_command git-lfs
         require_command parallel
+        require_command shellcheck
     fi
 }
 
@@ -171,7 +172,7 @@ main() {
     export PATH="$project_root/.venv/bin:$tool_root/bin:$tool_root/go/bin:$PATH"
 
     if [[ "$check_only" == true ]]; then
-        for argument in git git-lfs parallel go helm poetry pre-commit shfmt python; do
+        for argument in git git-lfs parallel go helm poetry pre-commit shfmt shellcheck python; do
             require_command "$argument"
         done
         python -c 'import sys; assert sys.version_info >= (3, 13), "Python 3.13+ is required"'
@@ -209,6 +210,7 @@ main() {
         hypothesis-helm-catalog --cache-dir schemas
     fi
 
+    # shellcheck disable=SC2016 # Print a command for the caller, preserving their future PATH expansion.
     printf 'Development environment ready. In your current shell, run:\n  export PATH="%s/.venv/bin:%s/bin:%s/go/bin:$PATH"\n' \
         "$project_root" "$tool_root" "$tool_root"
     popd >/dev/null

@@ -60,10 +60,23 @@ The rebuild combines pinned OpenAPI schemas, supported Go validation annotations
 With `--validate-schemas`, generation also uses the selected cached schema version. A locally rebuilt catalog in the same
 cache supplements that version; its digest becomes part of the test cache identity.
 
-The compiler follows direct `.Values.field` references to entire manifest scalar values, including string `| quote`.
-It retains supported Boolean and string-equality branch conditions. A restriction applies only when the branch emits
-that field. Helpers, loops, computed values, concatenation, ambiguous types and more than 64 branch variants remain
-unresolved. A template containing unsupported output is left unchanged and its limitation is reported.
+The compiler follows `.Values.field` references through direct output and pure helper wrappers with named arguments
+and local aliases. It handles string `quote` and collection `toYaml`, including `indent` and `nindent`. Collection
+constraints retain object fields, required members, array item types and typed additional properties from the schema.
+The catalog includes fields that declare only a type, such as annotation values that must be strings.
+
+Supported Boolean and string-equality conditions remain attached to each restriction, which applies only when that
+branch emits the field. Loops, transformed helper output, ambiguous types and more than 64 branch variants remain
+unresolved in this destination pass. A template containing unsupported output is left unchanged and its limitation
+is reported. The broader [rejection evaluator](../compiler/analysis.md#explicit-rejection-discovery) has a separate contract.
+Numeric-looking strings such as `"0"` remain eligible when their destination permits them, so missing YAML quoting
+can still be detected. Source schemas and supplied defaults are not rewritten.
+
+Helper analysis defaults to 16 nested calls. Set `compiler.max_call_depth` in the
+configuration below or pass `--compiler-call-depth 64` to analyze deeper chains.
+This controls both destination typing and rejection analysis, independently of Helm's
+rendering limits. Unresolved cases remain ordinary tests; see
+[compiler analysis budgets](../compiler/analysis.md#explicit-rejection-discovery).
 
 Reviewed chart bindings can bridge an opaque helper when the relevant template files match recorded SHA-256 hashes.
 The bundled MongoDB bindings cover `existingConfigmap`, `arbiter.existingConfigmap` and `hidden.existingConfigmap`, including
@@ -153,6 +166,8 @@ ignored: [HH2006]  # Other findings remain enabled.
 
 # Global defaults for fresh generated text; supplied values are preserved.
 downstream_inputs: true  # Use constraints from supported downstream field mappings.
+compiler:
+  max_call_depth: 16  # Nested helper calls analyzed; --compiler-call-depth overrides this.
 hypothesis:
   character_sets: ascii  # ascii or unicode; explicit enum/const literals retain their alphabet.
   control_characters:
