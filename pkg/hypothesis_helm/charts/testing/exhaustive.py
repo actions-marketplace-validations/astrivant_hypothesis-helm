@@ -11,7 +11,7 @@ from types import TracebackType
 from typing import Self
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render_output
+from hypothesis_helm.charts.testing.rendering import render_output
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
 from hypothesis_helm.reporting.budget import TimeLimitReached

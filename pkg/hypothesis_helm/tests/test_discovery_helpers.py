@@ -10,8 +10,9 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.templates import discover, parse
+from hypothesis_helm.charts.inspection.templates import discover, parse
+from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.schemas.policy import ENVIRONMENT
 from hypothesis_helm.tests.test_templates import scan
 
 
@@ -152,7 +153,7 @@ def test_dynamic_ambiguous_recursive_and_transformed_calls_stay_unknown(tmp_path
     Returns:
         None: Unsupported calls retain diagnostics and caller-local variables never leak into helpers.
     """
-    monkeypatch.setattr("hypothesis_helm.charts.templates.call_depth", lambda: 2)
+    monkeypatch.setenv(ENVIRONMENT, json.dumps({"compiler": {"max_call_depth": 2}}))
     refs, warnings = scan(
         tmp_path,
         dedent("""
@@ -222,7 +223,7 @@ def test_discovered_helper_branches_match_native_helm(tmp_path: Path) -> None:
         None: Every discovered branch field changes the manifest in its matching configuration.
     """
     from hypothesis_helm.charts.model import Chart
-    from hypothesis_helm.charts.rendering import render
+    from hypothesis_helm.charts.testing.rendering import render
     from hypothesis_helm.schemas.contracts import mapping
 
     (tmp_path / "Chart.yaml").write_text(yamlio.dump({"apiVersion": "v2", "name": "helper-test", "version": "1.0.0"}))

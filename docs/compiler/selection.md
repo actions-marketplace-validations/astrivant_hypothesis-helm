@@ -110,13 +110,13 @@ initially selected work from additional cases.<sup>[\[2\]](../execution/README.m
 
 ## Where the passes run
 
-[`charts/planning.py`](../../pkg/hypothesis_helm/charts/planning.py) assembles finite
+[`charts/testing/planning.py`](../../pkg/hypothesis_helm/charts/testing/planning.py) assembles finite
 plans using the schema, dependency interactions, trimming, and sampling policies.
 The planner applies the requested seeded traversal after selection. Per-path
 repository testing uses its own planning route; finite topology regions require a
 supported finite domain.
 
-[`charts/candidates.py`](../../pkg/hypothesis_helm/charts/candidates.py) coordinates
+[`charts/testing/candidates.py`](../../pkg/hypothesis_helm/charts/testing/candidates.py) coordinates
 schema checks, rejection verification, equivalence lookup, actual rendering, and
 assertions. The [execution guide](../execution/README.md) describes mode-specific
 parallelism and time limits. Enabling one analysis does not enable every policy

@@ -18,10 +18,11 @@ from ruamel.yaml.error import YAMLError
 from ruamel.yaml.nodes import MappingNode, ScalarNode, SequenceNode
 from ruamel.yaml.nodes import Node as YamlNode
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.conditions import condition_path
 from hypothesis_helm.compiler.asts.lattice import State
 from hypothesis_helm.compiler.asts.templates import Node, fold, lower, specialize, value_path, walk
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.branches import analyze
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
 from hypothesis_helm.schemas.model import ValuesModel
@@ -236,13 +237,14 @@ def snapshot(chart: Path) -> dict[str, bytes]:
     """
     result = {}
     size = 0
+    limit = active_limits()["max_proof_bytes"]
     for path in sorted(chart.rglob("*")):
         if path.is_symlink():
             raise ValueError("chart symlinks are outside the proof contract")
         if path.is_file():
             size += path.stat().st_size
-            if size > 16 * 1024 * 1024:
-                raise ValueError("chart exceeds the 16 MiB proof input limit")
+            if size > limit:
+                raise ValueError(f"chart exceeds compiler.max_proof_bytes={limit}")
             result[str(path.relative_to(chart))] = path.read_bytes()
     return result
 

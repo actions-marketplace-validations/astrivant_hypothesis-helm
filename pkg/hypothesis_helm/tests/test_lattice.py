@@ -14,7 +14,7 @@ from hypothesis import strategies as st
 from immutables import Map
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.asts.conditions import parse_condition
 from hypothesis_helm.compiler.asts.lattice import Domain, Scalar, State
 from hypothesis_helm.compiler.asts.templates import fold, lower, specialize, walk

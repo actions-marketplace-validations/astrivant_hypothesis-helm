@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from hypothesis_helm.charts.runner import Chart, check_chart
+from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.reporting.permutations import PermutationStatistics
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import mapping
@@ -32,7 +32,7 @@ def test_previous_counts_timing_and_remaining_work(
     """
     clock = [100.0]
     timer = SimpleNamespace(perf_counter=lambda: clock[0])
-    monkeypatch.setattr("hypothesis_helm.charts.runner.time", timer)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.time", timer)
     monkeypatch.setattr("hypothesis_helm.reporting.permutations.time", timer)
 
     def render(*args: object, **kwargs: object) -> list[dict[str, object]]:
@@ -49,7 +49,7 @@ def test_previous_counts_timing_and_remaining_work(
         clock[0] += 2
         return [{}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     caplog.set_level(logging.INFO, logger="hypothesis_helm")
     first = check_chart("examples/workload", permutations=2, artifact_dir=tmp_path, exhaustive_threshold=0)
     assert first["planned_iterations"] == 19
@@ -137,7 +137,7 @@ def test_failure_retains_incomplete_iterations(monkeypatch: pytest.MonkeyPatch, 
             raise ValueError("broken permutation")
         return [{}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     if interrupted:
         with pytest.raises(KeyboardInterrupt):
             check_chart("examples/workload", permutations=2, artifact_dir=tmp_path, exhaustive_threshold=0, traversal_strategy="linear")

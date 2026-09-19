@@ -15,35 +15,40 @@ from textwrap import dedent
 
 from attrs import define, field, frozen
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence
-
-MAX_CONTEXT_BYTES = 64 * 1024 * 1024
 
 
 class Unavailable(ValueError):
     """Keep unavailable native context outside the compiler's supported domain."""
 
 
-def archive_files(stream: io.BytesIO) -> dict[str, bytes]:
+def archive_files(stream: io.BytesIO, *, limits: dict[str, int] | None = None) -> dict[str, bytes]:
     """
     Read bounded regular chart members without extracting paths onto the filesystem.
 
     Args:
         stream (io.BytesIO): Helm chart archive, including its enclosing chart directory.
+        limits (dict[str, int] | None): Captured compiler budgets, or the inherited configuration.
 
     Returns:
         dict[str, bytes]: Chart-relative member names and their exact bytes.
     """
+    limits = active_limits() if limits is None else limits
+    if stream.getbuffer().nbytes > limits["max_context_bytes"]:
+        raise Unavailable(f"chart archive exceeds compiler.max_context_bytes={limits['max_context_bytes']}")
     result: dict[str, bytes] = {}
     total = 0
     with tarfile.open(fileobj=stream) as bundle:
         for index, member in enumerate(bundle):
             name = PurePosixPath(member.name)
             total += member.size
-            if index >= 10000 or total > MAX_CONTEXT_BYTES:
-                raise Unavailable("chart files exceed the compiler inspection budget")
+            if index >= limits["max_files"]:
+                raise Unavailable(f"chart files exceed compiler.max_files={limits['max_files']}")
+            if total > limits["max_context_bytes"]:
+                raise Unavailable(f"chart files exceed compiler.max_context_bytes={limits['max_context_bytes']}")
             if name.is_absolute() or ".." in name.parts or member.issym() or member.islnk():
                 raise Unavailable("chart archive contains unsupported paths or links")
             if not member.isfile():
@@ -94,7 +99,9 @@ class FileSet:
             raise Unavailable("binary chart file requires native Helm evaluation") from exc
 
 
-def chart_files(files: dict[str, bytes], scope: tuple[str, ...], names: dict[tuple[str, ...], str]) -> FileSet:
+def chart_members(
+    files: dict[str, bytes], scope: tuple[str, ...], names: dict[tuple[str, ...], str], *, limits: dict[str, int] | None = None
+) -> dict[str, bytes]:
     """
     Follow declared dependency aliases without exposing parent files to child contexts.
 
@@ -102,9 +109,10 @@ def chart_files(files: dict[str, bytes], scope: tuple[str, ...], names: dict[tup
         files (dict[str, bytes]): Loaded parent archive members.
         scope (tuple[str, ...]): Values namespace identifying the requested chart instance.
         names (dict[tuple[str, ...], str]): Discovered instance paths and original chart names.
+        limits (dict[str, int] | None): Captured compiler budgets for nested archives.
 
     Returns:
-        FileSet: Files visible to this chart's dot context.
+        dict[str, bytes]: Members of the selected chart, including its metadata and templates.
     """
     prefix: tuple[str, ...] = ()
     for alias in scope:
@@ -115,7 +123,7 @@ def chart_files(files: dict[str, bytes], scope: tuple[str, ...], names: dict[tup
             if len(parts) < 2 or parts[0] != "charts" or parts[1].startswith(("_", ".")):
                 continue
             if len(parts) == 2 and path.endswith(".tgz"):
-                candidates[parts[1]] = archive_files(io.BytesIO(data))
+                candidates[parts[1]] = archive_files(io.BytesIO(data), limits=limits)
             elif len(parts) > 2:
                 candidates.setdefault(parts[1], {})["/".join(parts[2:])] = data
         matching = [
@@ -126,6 +134,25 @@ def chart_files(files: dict[str, bytes], scope: tuple[str, ...], names: dict[tup
         if len(matching) != 1:
             raise Unavailable("dependency file context is missing or ambiguous")
         files = matching[0]
+    return files
+
+
+def chart_files(
+    files: dict[str, bytes], scope: tuple[str, ...], names: dict[tuple[str, ...], str], *, limits: dict[str, int] | None = None
+) -> FileSet:
+    """
+    Remove metadata, templates and dependencies from a chart's accessible files.
+
+    Args:
+        files (dict[str, bytes]): Loaded root chart archive.
+        scope (tuple[str, ...]): Calling chart's values namespace.
+        names (dict[tuple[str, ...], str]): Original dependency names indexed by their aliases.
+        limits (dict[str, int] | None): Captured compiler budgets.
+
+    Returns:
+        FileSet: Files exposed through Helm's Files object.
+    """
+    files = chart_members(files, scope, names, limits=limits)
     metadata = mapping(yamlio.load(files["Chart.yaml"].decode()))
     reserved = {"Chart.yaml", "Chart.lock", "values.yaml", "values.schema.json"}
     if metadata.get("apiVersion") != "v1":
@@ -204,6 +231,8 @@ class RendererContext:
         files (dict[tuple[str, ...], FileSet]): Chart-local file views, reused across candidates.
         offline (bool): Plain helm template has no cluster connection and lookup returns an empty map.
         enable_dns (bool): Whether the renderer was explicitly allowed to perform DNS queries.
+        limits (dict[str, int]): Compiler budgets captured before loading and caching context.
+        metadata (dict[tuple[str, ...], FixedFields]): Supported immutable metadata for each chart instance.
     """
 
     chart: Path
@@ -217,6 +246,8 @@ class RendererContext:
     files: dict[tuple[str, ...], FileSet] = field(factory=dict)
     offline: bool = True
     enable_dns: bool = False
+    limits: dict[str, int] = field(factory=active_limits, kw_only=True)
+    metadata: dict[tuple[str, ...], FixedFields] = field(factory=dict, kw_only=True)
 
     def capability_fields(self) -> dict[str, object]:
         """
@@ -244,8 +275,8 @@ class RendererContext:
         binary = shutil.which(self.helm)
         if binary is None:
             raise Unavailable("Helm is unavailable for version comparison")
-        if len(constraint) + len(version) > 4096:
-            raise Unavailable("version comparison exceeds the compiler inspection budget")
+        if len(constraint) + len(version) > self.limits["max_version_chars"]:
+            raise Unavailable(f"version comparison exceeds compiler.max_version_chars={self.limits['max_version_chars']}")
         result = probe(binary, Path(binary).stat().st_mtime_ns, self.kube_version, self.timeout, "semverCompare", (constraint, version))
         if type(result) is not bool:
             raise Unavailable("Helm version comparison returned a non-Boolean result")
@@ -262,22 +293,99 @@ class RendererContext:
             FileSet: Read-only loaded file contents, without templates or metadata.
         """
         if scope not in self.files:
-            if self.packed is None:
-                with tempfile.TemporaryDirectory(prefix="helm-context-files-") as temporary:
-                    result = Processes().run(
-                        [self.helm, "package", str(self.chart), "--destination", temporary],
-                        capture_output=True,
-                        text=True,
-                        timeout=self.timeout,
-                    )
-                    archives = list(Path(temporary).glob("*.tgz"))
-                    if result.returncode or len(archives) != 1:
-                        raise Unavailable("Helm could not load the chart's file context")
-                    if archives[0].stat().st_size > MAX_CONTEXT_BYTES:
-                        raise Unavailable("chart files exceed the compiler inspection budget")
-                    self.packed = archive_files(io.BytesIO(archives[0].read_bytes()))
-            self.files[scope] = chart_files(self.packed, scope, self.names)
+            self.files[scope] = chart_files(self.load_chart(), scope, self.names, limits=self.limits)
         return self.files[scope]
+
+    def load_chart(self) -> dict[str, bytes]:
+        """
+        Load one bounded chart snapshot through Helm, shared by files and metadata.
+
+        Returns:
+            dict[str, bytes]: Exact package members admitted by Helm's loader.
+        """
+        if self.packed is None:
+            with tempfile.TemporaryDirectory(prefix="helm-context-files-") as temporary:
+                result = Processes().run(
+                    [self.helm, "package", str(self.chart), "--destination", temporary],
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                )
+                archives = list(Path(temporary).glob("*.tgz"))
+                if result.returncode or len(archives) != 1:
+                    raise Unavailable("Helm could not load the chart's file context")
+                if archives[0].stat().st_size > self.limits["max_context_bytes"]:
+                    raise Unavailable(f"chart archive exceeds compiler.max_context_bytes={self.limits['max_context_bytes']}")
+                self.packed = archive_files(io.BytesIO(archives[0].read_bytes()), limits=self.limits)
+        return self.packed
+
+    def chart_metadata(self, scope: tuple[str, ...]) -> FixedFields:
+        """
+        Expose immutable Helm metadata while leaving dependency-processing fields unknown.
+
+        Args:
+            scope (tuple[str, ...]): Chart instance namespace, including dependency aliases.
+
+        Returns:
+            FixedFields: Supported metadata with Helm's field names and zero values.
+        """
+        if scope not in self.metadata:
+            members = chart_members(self.load_chart(), scope, self.names, limits=self.limits)
+            metadata = mapping(yamlio.load(members["Chart.yaml"].decode()))
+            fields: dict[str, object] = {
+                name: metadata.get(key, "")
+                for name, key in (
+                    ("Name", "name"),
+                    ("Version", "version"),
+                    ("AppVersion", "appVersion"),
+                    ("APIVersion", "apiVersion"),
+                    ("KubeVersion", "kubeVersion"),
+                    ("Description", "description"),
+                    ("Home", "home"),
+                    ("Icon", "icon"),
+                    ("Type", "type"),
+                )
+            }
+            fields.update(
+                Name=scope[-1] if scope else metadata["name"],
+                IsRoot=not scope,
+                Annotations=metadata.get("annotations", {}),
+                Deprecated=metadata.get("deprecated", False),
+                Keywords=metadata.get("keywords", []),
+                Sources=metadata.get("sources", []),
+            )
+            self.metadata[scope] = FixedFields(fields)
+        return self.metadata[scope]
+
+    def template_context(self, scope: tuple[str, ...], source: str) -> dict[str, object]:
+        """
+        Resolve the executing template's Helm name using dependency aliases.
+
+        Args:
+            scope (tuple[str, ...]): Namespace of the chart owning the root template.
+            source (str): Compiler source filename, including archived dependency prefixes.
+
+        Returns:
+            dict[str, object]: Native Template Name and BasePath.
+        """
+        root_name = str(self.chart_metadata(()).values["Name"])
+        prefix = root_name + "".join(f"/charts/{part}" for part in scope) + "/templates"
+        relative = ("/" + source).rsplit("/templates/", 1)
+        if len(relative) != 2:
+            raise Unavailable("template source has no resolved chart-relative filename")
+        return {"Name": f"{prefix}/{relative[1]}", "BasePath": prefix}
+
+
+@frozen
+class FixedFields:
+    """
+    Distinguish a partially modeled Go structure from an open template dictionary.
+
+    Attributes:
+        values (dict[str, object]): Supported fields; absent fields remain unknown rather than nil.
+    """
+
+    values: dict[str, object]
 
 
 @frozen
@@ -287,13 +395,15 @@ class ContextReference:
 
     Attributes:
         renderer (RendererContext | None): Fixed execution settings, absent in purely static analysis.
-        kind (str): Files or Capabilities.
+        kind (str): Files, Capabilities, Chart or Template.
         scope (tuple[str, ...]): Source chart namespace for file access.
+        source (str): Root template source used to resolve Template fields.
     """
 
     renderer: RendererContext | None
     kind: str
     scope: tuple[str, ...] = ()
+    source: str = ""
 
     def value(self) -> object:
         """
@@ -306,6 +416,12 @@ class ContextReference:
             raise Unavailable(f"{self.kind} requires the fixed Helm renderer context")
         if self.kind == "Files":
             return self.renderer.chart_files(self.scope)
+        if self.kind == "Chart":
+            return self.renderer.chart_metadata(self.scope)
+        if self.kind == "Template":
+            return self.renderer.template_context(self.scope, self.source)
+        if self.kind != "Capabilities":
+            raise Unavailable(f"unsupported fixed context: {self.kind}")
         result = dict(self.renderer.capability_fields())
         result["APIVersions"] = APIVersions(tuple(str(item) for item in sequence(result["APIVersions"])))
         return result

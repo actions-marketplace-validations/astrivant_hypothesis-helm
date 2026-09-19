@@ -10,7 +10,7 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from hypothesis.strategies import DataObject
 from hypothesis_helm import Chart
-from hypothesis_helm.charts.generated import RenderOptions, check_path, prepared_chart
+from hypothesis_helm.charts.suites.runtime import RenderOptions, check_path, prepared_chart
 from hypothesis_helm.schemas.contracts import schema_strategy as from_schema
 from hypothesis_helm.schemas.contracts import supported_generated_text
 

@@ -9,9 +9,9 @@ from textwrap import dedent
 import pytest
 from hypothesis import given, settings
 
-from hypothesis_helm.charts.generate import ValuePath
-from hypothesis_helm.charts.paths import check_paths, path_strategy
-from hypothesis_helm.charts.runner import Chart
+from hypothesis_helm.charts.suites.generate import ValuePath
+from hypothesis_helm.charts.testing.paths import check_paths, path_strategy
+from hypothesis_helm.charts.testing.runner import Chart
 from hypothesis_helm.execution.sampling import Sampling
 
 
@@ -82,8 +82,8 @@ def test_scan_visits_each_path_once(chart: Chart, tmp_path: Path, monkeypatch: p
         calls.append(kwargs)
         return {"status": "passed", "attempts": 3}
 
-    monkeypatch.setattr("hypothesis_helm.charts.paths.check_chart", check)
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.check_chart", check)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     result = check_paths(
         chart,
         budget=5,
@@ -121,7 +121,7 @@ def test_timeout_retains_unique_seeded_prefix(chart: Chart, tmp_path: Path, monk
     Returns:
         None: Repeated seeds reproduce the prefix; a changed seed changes its subset.
     """
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     prefixes = []
     calls: list[dict[str, object]] = []
     for run, seed in enumerate((0, 0, 1)):
@@ -141,7 +141,7 @@ def test_timeout_retains_unique_seeded_prefix(chart: Chart, tmp_path: Path, monk
             calls.append(kwargs)
             return {"status": "time-limit" if len(calls) == 3 else "passed", "attempts": 1}
 
-        monkeypatch.setattr("hypothesis_helm.charts.paths.check_chart", check)
+        monkeypatch.setattr("hypothesis_helm.charts.testing.paths.check_chart", check)
         result = check_paths(chart, budget=5, max_examples=1, seed=seed, helm="helm", timeout=1, artifacts=tmp_path / str(run))
         traversal = result["traversal"]
         assert isinstance(traversal, dict)
@@ -198,8 +198,8 @@ def test_ignored_work_cannot_hide_chart_deadline(chart: Chart, tmp_path: Path, m
         None: The chart budget takes precedence over an ignored result.
     """
     clock = [0.0]
-    monkeypatch.setattr("hypothesis_helm.charts.paths.time.monotonic", lambda: clock[0])
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.time.monotonic", lambda: clock[0])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
 
     def execute(context: dict[str, object], queue: Path, jobs: int) -> list[dict[str, object]]:
         """

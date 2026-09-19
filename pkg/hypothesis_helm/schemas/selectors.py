@@ -7,7 +7,7 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 from types import TracebackType
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 SOURCE_ENVIRONMENT = "HYPOTHESIS_HELM_CHART_SOURCE"

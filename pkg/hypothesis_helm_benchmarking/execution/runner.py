@@ -19,7 +19,7 @@ from pathlib import Path
 
 from attrs import field, frozen
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination

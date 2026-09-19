@@ -14,7 +14,7 @@ from pathlib import Path
 
 from attrs import asdict
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer, parse_time_limit
 from hypothesis_helm.schemas.combinations import plan_interactions

@@ -209,7 +209,7 @@ def test_scan_dependency_deduplication(tmp_path: Path, monkeypatch: pytest.Monke
         calls.append(name)
         return {"status": "failed", "error": diagnostic(name), "attempts": 2}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", exercise)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", exercise)
     assert (
         main(
             [

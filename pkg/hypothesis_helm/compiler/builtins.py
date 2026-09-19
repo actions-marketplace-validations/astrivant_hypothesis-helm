@@ -1,8 +1,8 @@
 """
-Classify every function exposed by the pinned Helm, Sprig and Go template engines.
+Load source-derived facts for the pinned Helm, Sprig and Go template engines.
 
 Effects describe analysis barriers, not a promise to evaluate every function in Python.
-Unknown future functions remain opaque. Concrete semantics belong to individual passes.
+Unresolved source calls remain explicit. Concrete semantics belong to individual passes.
 """
 
 import json
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from attrs import frozen
 
-from hypothesis_helm.schemas.contracts import mapping
+from hypothesis_helm.schemas.contracts import mapping, sequence
 
 
 @frozen
@@ -21,9 +21,14 @@ class Builtin:
     Attributes:
         name (str): Template function identifier.
         provider (str): Pinned source that supplies or overrides the function.
-        meaning (str): Operation family, expanded in the generated reference.
-        shape (str): Scalar, sequence, map, certificate, version or unconstrained result.
-        effects (frozenset[str]): Reasons analysis must retain uncertainty or invalidate state.
+        meaning (str): Implementation identity extracted from upstream source.
+        shape (str): Result family derived from the upstream Go return declaration.
+        effects (frozenset[str]): Detected effects; an empty set does not prove purity.
+        signature (str): Upstream declaration, if resolved within the provider package.
+        fields (tuple[str, ...]): Exported fields of a locally declared record result.
+        unresolved (tuple[str, ...]): Calls and writes requiring further semantic analysis.
+        source (str): Provider-relative source filename.
+        line (int): One-based source declaration line.
     """
 
     name: str
@@ -31,142 +36,67 @@ class Builtin:
     meaning: str
     shape: str
     effects: frozenset[str]
-
-
-# Every name is assigned explicitly. New upstream entries must be reviewed, not presumed pure.
-FAMILIES = (
-    (
-        "Transform, format or escape text",
-        "scalar",
-        "abbrev abbrevboth camelcase cat contains hasPrefix hasSuffix hello html indent initials js kebabcase lower nindent "
-        "nospace plural print printf println quote repeat replace snakecase squote substr swapcase title toString trim trimAll "
-        "trimPrefix trimSuffix trimall trunc untitle upper urlquery wrap wrapWith",
-    ),
-    (
-        "Convert numbers or calculate arithmetic",
-        "scalar",
-        "add add1 add1f addf atoi biggest ceil div divf float64 floor int int64 max maxf min minf mod mul mulf round sub subf toDecimal",
-    ),
-    ("Compare values or inspect their types", "scalar", "deepEqual eq ge gt kindIs kindOf le len lt ne typeIs typeIsLike typeOf"),
-    ("Choose values by emptiness or a condition", "any", "all and any coalesce default empty not or ternary required"),
-    ("Construct or select dictionary entries", "map", "dict omit pick set unset merge mergeOverwrite mustMerge mustMergeOverwrite"),
-    ("Read dictionary or collection entries", "any", "dig get index"),
-    ("Test dictionary membership", "scalar", "hasKey"),
-    ("Collect dictionary entries into a list", "sequence", "keys pluck values"),
-    (
-        "Construct, select or reorder a list",
-        "sequence",
-        "append chunk compact concat initial list mustAppend mustChunk mustCompact mustInitial mustPrepend mustPush mustRest "
-        "mustReverse mustSlice mustUniq mustWithout prepend push rest reverse slice sortAlpha toStrings tuple uniq without",
-    ),
-    ("Read a list endpoint", "any", "first last mustFirst mustLast"),
-    ("Test list membership", "scalar", "has mustHas"),
-    ("Join a list into text", "scalar", "join"),
-    ("Split text into numbered dictionary entries", "map", "split splitn"),
-    ("Split text into a list", "sequence", "splitList"),
-    ("Generate an integer sequence", "sequence", "until untilStep"),
-    ("Generate a space-separated integer sequence", "scalar", "seq"),
-    ("Copy a value and its nested containers", "any", "deepCopy mustDeepCopy"),
-    (
-        "Serialize a value to JSON, YAML or TOML text",
-        "scalar",
-        "mustToJson mustToPrettyJson mustToRawJson mustToToml mustToYaml toJson toPrettyJson toRawJson toToml toYaml toYamlPretty",
-    ),
-    ("Parse JSON, YAML or TOML text", "any", "fromJson fromToml fromYaml mustFromJson"),
-    ("Parse an array document", "sequence", "fromJsonArray fromYamlArray"),
-    (
-        "Format, parse or calculate dates and durations",
-        "scalar",
-        "ago date dateInZone date_in_zone duration durationDays durationHours durationMicroseconds "
-        "durationMilliseconds durationMinutes durationNanoseconds durationRound durationRoundTo durationSeconds durationTruncateTo "
-        "durationWeeks htmlDate htmlDateInZone mustToDuration unixEpoch",
-    ),
-    ("Parse, adjust or read a timestamp", "timestamp", "dateModify date_modify mustDateModify must_date_modify mustToDate now toDate"),
-    ("Manipulate slash-separated paths", "scalar", "base clean dir ext isAbs"),
-    ("Manipulate operating-system paths", "scalar", "osBase osClean osDir osExt osIsAbs"),
-    ("Encode or decode base32/base64 text", "scalar", "b32dec b32enc b64dec b64enc"),
-    ("Compute a deterministic checksum", "scalar", "adler32sum sha1sum sha256sum sha512sum"),
-    ("Hash passwords, derive keys or encrypt/decrypt text", "scalar", "bcrypt decryptAES derivePassword encryptAES genPrivateKey htpasswd"),
-    ("Decode certificate material", "certificate", "buildCustomCert"),
-    (
-        "Generate certificate material",
-        "certificate",
-        "genCA genCAWithKey genSelfSignedCert genSelfSignedCertWithKey genSignedCert genSignedCertWithKey",
-    ),
-    ("Generate random data or shuffle text", "scalar", "randAlpha randAlphaNum randAscii randBytes randInt randNumeric shuffle uuidv4"),
-    ("Parse a semantic version", "version", "semver"),
-    ("Compare semantic versions", "scalar", "semverCompare"),
-    (
-        "Match, extract, quote or replace regular expressions",
-        "scalar",
-        "mustRegexFind mustRegexMatch mustRegexReplaceAll mustRegexReplaceAllLiteral regexFind regexMatch regexQuoteMeta "
-        "regexReplaceAll regexReplaceAllLiteral",
-    ),
-    ("Extract or split multiple regex matches", "sequence", "mustRegexFindAll mustRegexSplit regexFindAll regexSplit"),
-    ("Parse a URL into fields", "map", "urlParse"),
-    ("Assemble URL fields into text", "scalar", "urlJoin"),
-    ("Read Kubernetes resources from renderer context", "map", "lookup"),
-    ("Resolve a hostname when Helm DNS access is enabled", "scalar", "getHostByName"),
-    ("Execute a named template or template string", "scalar", "include tpl"),
-    ("Invoke a function supplied through context", "any", "call"),
-    ("Reject the current render explicitly", "scalar", "fail"),
-)
-
-EFFECTS = {
-    "mutation": frozenset("set unset merge mergeOverwrite mustMerge mustMergeOverwrite".split()),
-    "dynamic-code": frozenset({"include", "tpl", "call"}),
-    "randomness": frozenset(
-        "bcrypt htpasswd encryptAES genPrivateKey genCA genCAWithKey genSelfSignedCert genSelfSignedCertWithKey "
-        "genSignedCert genSignedCertWithKey randAlpha randAlphaNum randAscii randBytes randInt randNumeric shuffle uuidv4".split()
-    ),
-    "clock-or-timezone": frozenset(
-        "ago now date dateInZone date_in_zone htmlDate htmlDateInZone toDate mustToDate durationRound "
-        "genCA genCAWithKey genSelfSignedCert genSelfSignedCertWithKey genSignedCert genSignedCertWithKey".split()
-    ),
-    "external-state": frozenset({"lookup", "getHostByName"}),
-    "platform": frozenset("osBase osClean osDir osExt osIsAbs".split()),
-    "unordered": frozenset({"keys", "values"}),
-    "rejection": frozenset({"fail", "required"}),
-}
+    signature: str
+    fields: tuple[str, ...]
+    unresolved: tuple[str, ...]
+    source: str
+    line: int
 
 
 def inventory() -> dict[str, Builtin]:
     """
-    Load the reviewed source inventory, rejecting missing or duplicate classifications.
+    Load generated source facts, rejecting obsolete or incomplete inventory formats.
 
     Returns:
-        dict[str, Builtin]: Complete pinned function registry.
+        dict[str, Builtin]: Pinned function registry with explicit analysis boundaries.
 
     Raises:
-        ValueError: A source function has no classification, or classifications disagree with sources.
+        ValueError: The source inventory format is unsupported or lacks provenance.
     """
-    providers = mapping(json.loads(Path(__file__).with_name("builtin_inventory.json").read_text())["functions"])
+    snapshot = mapping(json.loads(Path(__file__).with_name("builtin_inventory.json").read_text()))
+    if snapshot.get("format") != 2 or not snapshot.get("sources") or not snapshot.get("extractor_sha256"):
+        raise ValueError("Rebuild the compiler inventory with hypothesis-helm-builtins")
     result: dict[str, Builtin] = {}
-    for meaning, shape, names in FAMILIES:
-        for name in names.split():
-            if name in result or name not in providers:
-                raise ValueError(f"invalid builtin classification: {name}")
-            effects = frozenset(effect for effect, members in EFFECTS.items() if name in members)
-            result[name] = Builtin(name, str(providers[name]), meaning, shape, effects)
-    if result.keys() != providers.keys():
-        raise ValueError(f"unclassified Helm builtins: {sorted(providers.keys() - result.keys())}")
+    for name, raw in mapping(snapshot["functions"]).items():
+        record = mapping(raw)
+        result[name] = Builtin(
+            name=name,
+            provider=str(record["provider"]),
+            meaning="Upstream implementation: " + str(record["implementation"]),
+            shape=str(record["shape"]),
+            effects=frozenset(str(effect) for effect in sequence(record["effects"])),
+            signature=str(record["signature"]),
+            fields=tuple(str(field) for field in sequence(record["fields"])),
+            unresolved=tuple(str(call) for call in sequence(record["unresolved"])),
+            source=str(record["source"]),
+            line=int(str(record["line"])),
+        )
     return result
 
 
 BUILTINS = inventory()
+EFFECTS = {
+    effect: frozenset(name for name, spec in BUILTINS.items() if effect in spec.effects)
+    for effect in {effect for spec in BUILTINS.values() for effect in spec.effects}
+}
+UNRESOLVED_EFFECTS = frozenset(name for name, spec in BUILTINS.items() if spec.unresolved)
 MUTATIONS = EFFECTS["mutation"]
 NATIVE_STATE = frozenset.union(*(members for effect, members in EFFECTS.items() if effect not in {"mutation", "rejection", "dynamic-code"}))
 
 
 def reference() -> str:
     """
-    Generate the reviewed builtin matrix for documentation without inferring evaluator support.
+    Generate the source-derived matrix without confusing recognition with evaluator support.
 
     Returns:
-        str: Markdown table of every exposed function, operation family, shape and effects.
+        str: Markdown table of upstream implementations, result families, effects and unresolved calls.
     """
-    lines = ["| Function | Meaning | Result | Effects |", "| --- | --- | --- | --- |"]
+    lines = [
+        "| Function | Upstream implementation | Result | Detected effects | Unresolved calls/writes |",
+        "| --- | --- | --- | --- | ---: |",
+    ]
     for name, spec in sorted(BUILTINS.items()):
-        effects = ", ".join(sorted(spec.effects)) or "Argument-dependent; no external effects classified"
-        lines.append(f"| `{name}` | {spec.meaning} | {spec.shape} | {effects} |")
+        effects = ", ".join(sorted(spec.effects)) or "None detected (not a purity proof)"
+        implementation = spec.meaning.removeprefix("Upstream implementation: ").split("\n", 1)[0].replace("|", "&#124;")
+        lines.append(f"| `{name}` | `{implementation}` | {spec.shape} | {effects} | {len(spec.unresolved)} |")
     return "\n".join(lines)

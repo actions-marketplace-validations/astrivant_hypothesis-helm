@@ -12,10 +12,10 @@ from textwrap import dedent
 import pytest
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
 from hypothesis_helm.rules import ENVIRONMENT
@@ -74,6 +74,9 @@ def configured(chart: Chart, kube_version: str = "1.35.0") -> Contracts:
 @pytest.mark.parametrize(
     "guard",
     [
+        'and (eq .Chart.Name "context") (eq .Chart.Version "0.1.0")',
+        'and (eq .Chart.APIVersion "v2") .Chart.IsRoot',
+        'and (eq .Template.BasePath "context/templates") (eq .Template.Name "context/templates/NOTES.txt")',
         'and (.Capabilities.APIVersions.Has "v1") (eq .Capabilities.KubeVersion.Minor "35")',
         'and ((.Capabilities.APIVersions).Has "v1") (eq (.Capabilities.KubeVersion).Minor "35")',
         'semverCompare ">=1.35.0-0" .Capabilities.KubeVersion.Version',
@@ -186,6 +189,95 @@ def test_dependency_file_scope(context_chart: Chart, tmp_path: Path, packed: boo
     with pytest.raises(RenderFailure) as failure:
         render(context_chart, {}, kube_version="1.35.0")
     assert matches_rejection(str(failure.value), rejected)
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+@pytest.mark.parametrize("packed", [False, True])
+def test_dependency_metadata_and_template_alias(context_chart: Chart, packed: bool) -> None:
+    """
+    Match native chart metadata and template names for directory and archived aliases.
+
+    Args:
+        context_chart (Chart): Root source with independent valid output.
+        packed (bool): Load the dependency from a directory or an archive.
+
+    Returns:
+        None: A guarded rejection sees the same alias, annotations and source path as Helm.
+    """
+    child = context_chart.path / "charts/original"
+    (child / "templates").mkdir(parents=True)
+    (child / "Chart.yaml").write_text(
+        yamlio.dump({"apiVersion": "v2", "name": "original", "version": "0.1.0", "annotations": {"images": "child"}})
+    )
+    (child / "templates/NOTES.txt").write_text(
+        dedent("""
+        {{ if and (eq .Chart.Name "alias") (not .Chart.IsRoot)
+                  (eq .Chart.Annotations.images "child")
+                  (eq .Template.Name "context/charts/alias/templates/NOTES.txt")
+                  (eq .Template.BasePath "context/charts/alias/templates") }}
+        {{ fail "resolved child metadata" }}
+        {{ end }}
+        """)
+    )
+    metadata = mapping(yamlio.load((context_chart.path / "Chart.yaml").read_text()))
+    metadata["dependencies"] = [{"name": "original", "alias": "alias", "version": "0.1.0", "repository": ""}]
+    (context_chart.path / "Chart.yaml").write_text(yamlio.dump(metadata))
+    if packed:
+        with tarfile.open(child.parent / "original-0.1.0.tgz", "w:gz") as archive:
+            archive.add(child, arcname="original")
+        shutil.rmtree(child)
+    contracts = configured(context_chart)
+    rejection = contracts.predict(context_chart.defaults)
+    assert rejection is not None, contracts.fallbacks
+    assert rejection.contextual
+    with pytest.raises(RenderFailure) as failure:
+        render(context_chart, {})
+    assert matches_rejection(str(failure.value), rejection)
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_filename_include_uses_known_template_base_path(context_chart: Chart) -> None:
+    """
+    Resolve a filename include assembled from the caller's fixed Template context.
+
+    Args:
+        context_chart (Chart): Chart with a partial addressed by filename rather than a define name.
+
+    Returns:
+        None: Native rendering and the compiler reach the same partial and rejection.
+    """
+    (context_chart.path / "templates/_fragment.tpl").write_text("{{ .Values.mode }}")
+    (context_chart.path / "templates/NOTES.txt").write_text(
+        dedent("""
+        {{ if eq (include (print $.Template.BasePath "/_fragment.tpl") .) "bad" }}
+        {{ fail "filename include rejects mode" }}
+        {{ end }}
+        """)
+    )
+    contracts = configured(context_chart)
+    rejection = contracts.predict({"mode": "bad"})
+    assert rejection is not None, contracts.fallbacks
+    with pytest.raises(RenderFailure) as failure:
+        render(context_chart, {"mode": "bad"})
+    assert matches_rejection(str(failure.value), rejection)
+    assert contracts.predict(context_chart.defaults) is None
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_unmodeled_metadata_does_not_become_missing(context_chart: Chart) -> None:
+    """
+    Keep unsupported metadata fields unknown instead of claiming they are absent.
+
+    Args:
+        context_chart (Chart): Chart inspecting dependency-processing metadata.
+
+    Returns:
+        None: An unsupported field cannot justify pruning a candidate.
+    """
+    (context_chart.path / "templates/NOTES.txt").write_text('{{ if empty .Chart.Dependencies }}{{ fail "missing" }}{{ end }}')
+    contracts = configured(context_chart)
+    assert contracts.predict(context_chart.defaults) is None
+    assert any("unsupported fixed context field" in str(note["reason"]) for note in contracts.fallbacks)
 
 
 @pytest.mark.parametrize("body", ["{{ now }}", '{{ lookup "v1" "Secret" "default" "example" }}', "{{ randAlphaNum 4 }}"])

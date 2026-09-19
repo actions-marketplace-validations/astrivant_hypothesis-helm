@@ -14,13 +14,13 @@ from hypothesis import strategies as st
 from hypothesis_helm_catalog.builder import DATA, build
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generate import generate_tests
-from hypothesis_helm.charts.generated import prepared_chart
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.paths import path_strategy
-from hypothesis_helm.charts.rendering import RenderFailure, validate_resources
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.suites.generate import generate_tests
+from hypothesis_helm.charts.suites.runtime import prepared_chart
+from hypothesis_helm.charts.testing.paths import path_strategy
+from hypothesis_helm.charts.testing.rendering import RenderFailure, validate_resources
+from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.cache import fingerprint
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.finite import enumerate_values
@@ -250,7 +250,7 @@ def test_supplied_defaults_are_not_rewritten(tmp_path: Path, monkeypatch: pytest
         observed.append(copy.deepcopy(values))
         return [{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "ok"}}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     report = check_chart(chart, input_strategy=st.just({**chart.defaults, "secretName": "good"}), max_examples=1)
     assert report["status"] == "passed"
     assert observed[0] == {}
@@ -533,7 +533,7 @@ def test_helper_domain_keeps_numeric_strings_and_real_encoding_failures(tmp_path
     Returns:
         None: The input remains eligible and native Helm output still fails manifest validation.
     """
-    from hypothesis_helm.charts.rendering import render
+    from hypothesis_helm.charts.testing.rendering import render
 
     chart = fixture_chart(tmp_path)
     (tmp_path / "templates/_helpers.tpl").write_text('{{- define "name" -}}{{- .Values.secretName -}}{{- end -}}')

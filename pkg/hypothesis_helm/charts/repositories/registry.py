@@ -21,8 +21,8 @@ from urllib.parse import urlsplit, urlunsplit
 from attrs import define
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.repository import RepositorySource
+from hypothesis_helm.charts.repositories.repository import RepositorySource
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence, text
 

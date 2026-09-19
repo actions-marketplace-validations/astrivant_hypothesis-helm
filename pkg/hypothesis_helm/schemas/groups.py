@@ -6,7 +6,7 @@ from pathlib import Path
 
 from attrs import field, frozen
 
-from hypothesis_helm.charts.templates import Action, discover, parse
+from hypothesis_helm.charts.inspection.templates import Action, discover, parse
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.schemas.model import ValueReference, ValuesModel
 

@@ -11,6 +11,7 @@ from functools import lru_cache
 from attrs import frozen
 
 from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
+from hypothesis_helm.compiler.limits import active_limits
 
 FUNCTIONS = frozenset(
     {
@@ -36,6 +37,12 @@ FUNCTIONS = frozenset(
         "toString",
         "regexMatch",
         "mustRegexMatch",
+        "trunc",
+        "splitList",
+        "ternary",
+        "print",
+        "int",
+        "int64",
     }
 )
 MIN_INTEGER = -(2**63)
@@ -47,12 +54,13 @@ class UnsupportedTransformation(ValueError):
 
 
 @lru_cache(maxsize=1024)
-def regular_expression(pattern: str) -> re.Pattern[str]:
+def regular_expression(pattern: str, max_pattern_chars: int) -> re.Pattern[str]:
     """
     Translate a small shared Go/Python regex subset without accepting Python-only constructs.
 
     Args:
         pattern (str): ASCII literals, character classes, anchors and at most one variable repetition.
+        max_pattern_chars (int): Configured length bound, included in the cache key.
 
     Returns:
         re.Pattern[str]: Bounded pattern with Go's strict end-of-text anchor.
@@ -60,8 +68,10 @@ def regular_expression(pattern: str) -> re.Pattern[str]:
     Raises:
         UnsupportedTransformation: Regex syntax, size, or repetition exceeds the supported subset.
     """
-    if not pattern.isascii() or len(pattern) > 256:
-        raise UnsupportedTransformation("regex exceeds the supported ASCII pattern budget")
+    if len(pattern) > max_pattern_chars:
+        raise UnsupportedTransformation(f"regex exceeds compiler.max_regex_pattern_chars={max_pattern_chars}")
+    if not pattern.isascii():
+        raise UnsupportedTransformation("regex requires the supported ASCII subset")
     atom = re.compile(r"\[\^?(?:[A-Za-z0-9 _-]|\\[-\\\]^])+\]|\\[.\\+*?()|\[\]{}^$nrtfv]|[A-Za-z0-9 _:/,.-]")
     position = 1 if pattern.startswith("^") else 0
     output = ["^"] if position else []
@@ -97,13 +107,14 @@ def regular_expression(pattern: str) -> re.Pattern[str]:
         raise UnsupportedTransformation("invalid supported regex") from exc
 
 
-def calculate(function: str, arguments: tuple[object, ...]) -> object:
+def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str, int] | None = None) -> object:
     """
     Evaluate supported concrete operands without coercing unknown Go types or Unicode rules.
 
     Args:
         function (str): Sprig function name.
         arguments (tuple[object, ...]): Evaluated operands in Go-template argument order.
+        limits (dict[str, int] | None): Captured compiler budgets, or inherited settings.
 
     Returns:
         object: Concrete result with Helm-compatible semantics in the supported subset.
@@ -111,16 +122,39 @@ def calculate(function: str, arguments: tuple[object, ...]) -> object:
     Raises:
         UnsupportedTransformation: The operation cannot be modeled with the required confidence.
     """
+    limits = active_limits() if limits is None else limits
     args = tuple(native(value) for value in arguments)
-    if any(isinstance(value, str) and len(value) > 16384 for value in args):
-        raise UnsupportedTransformation("transformation exceeds the string analysis budget")
+    if any(isinstance(value, str) and len(value) > limits["max_string_chars"] for value in args):
+        raise UnsupportedTransformation(f"transformation exceeds compiler.max_string_chars={limits['max_string_chars']}")
     if function in {"default", "coalesce"}:
-        if any(value is not None and type(value) not in (str, bool, int, float, list, dict) for value in args):
+        if any(value is not None and not isinstance(value, (str, bool, int, float, list, dict)) for value in args):
             raise UnsupportedTransformation("unknown emptiness semantics")
         if function == "default" and len(args) == 2:
             return args[1] if args[1] else args[0]
         if function == "coalesce":
             return next((value for value in args if value), None)
+    if function == "trunc" and len(args) == 2 and type(args[0]) is int and isinstance(args[1], str):
+        width, text = args[0], args[1]
+        if not text.isascii():
+            raise UnsupportedTransformation("byte truncation requires the supported ASCII subset")
+        return text[:width] if width >= 0 else text[max(0, len(text) + width) :]
+    if function == "splitList" and len(args) == 2 and all(isinstance(value, str) for value in args):
+        separator, text = str(args[0]), str(args[1])
+        if not separator:
+            if not text.isascii():
+                raise UnsupportedTransformation("empty-separator splitting requires the supported ASCII subset")
+            return list(text)
+        return text.split(separator)
+    if function == "ternary" and len(args) == 3 and type(args[2]) is bool:
+        return args[0] if args[2] else args[1]
+    if function == "print" and all(isinstance(value, str) for value in args):
+        if sum(len(str(value)) for value in args) > limits["max_string_chars"]:
+            raise UnsupportedTransformation(f"transformation exceeds compiler.max_string_chars={limits['max_string_chars']}")
+        return "".join(str(value) for value in args)
+    if function in {"int", "int64"} and len(args) == 1 and type(args[0]) is int:
+        if not MIN_INTEGER <= args[0] <= MAX_INTEGER:
+            raise UnsupportedTransformation("integer conversion exceeds the supported signed 64-bit range")
+        return args[0]
     if function in {"lower", "upper", "trim"} and len(args) == 1 and isinstance(args[0], str):
         if not args[0].isascii():
             raise UnsupportedTransformation("Unicode case and whitespace transformations remain unresolved")
@@ -130,9 +164,13 @@ def calculate(function: str, arguments: tuple[object, ...]) -> object:
     if len(args) == 2 and all(isinstance(value, str) for value in args):
         pattern, value = str(args[0]), str(args[1])
         if function in {"regexMatch", "mustRegexMatch"}:
-            if not value.isascii() or len(value) > 4096:
-                raise UnsupportedTransformation("regex subject exceeds the supported ASCII analysis budget")
-            return regular_expression(pattern).search(value) is not None
+            if len(value) > limits["max_regex_subject_chars"]:
+                raise UnsupportedTransformation(
+                    f"regex subject exceeds compiler.max_regex_subject_chars={limits['max_regex_subject_chars']}"
+                )
+            if not value.isascii():
+                raise UnsupportedTransformation("regex subject requires the supported ASCII subset")
+            return regular_expression(pattern, limits["max_regex_pattern_chars"]).search(value) is not None
         if function == "trimAll":
             return value.strip(pattern) if pattern else value
         if function == "trimPrefix":
@@ -147,8 +185,8 @@ def calculate(function: str, arguments: tuple[object, ...]) -> object:
             return value.endswith(pattern)
     if function == "replace" and len(args) == 3 and all(isinstance(value, str) for value in args):
         old, new, value = str(args[0]), str(args[1]), str(args[2])
-        if len(value) + value.count(old) * (len(new) - len(old)) > 16384:
-            raise UnsupportedTransformation("replacement exceeds the string analysis budget")
+        if len(value) + value.count(old) * (len(new) - len(old)) > limits["max_string_chars"]:
+            raise UnsupportedTransformation(f"replacement exceeds compiler.max_string_chars={limits['max_string_chars']}")
         return value.replace(old, new)
     if function == "toString" and len(args) == 1 and type(args[0]) in (str, int, bool):
         return str(args[0]).lower() if type(args[0]) is bool else str(args[0])
@@ -331,14 +369,15 @@ class TransformedDomain:
         Returns:
             dict[str, list[object]]: Per-path proposals, bounded and awaiting whole-chart checks.
         """
-        pending: list[tuple[object, object]] = [(self.expression, target) for target in self.outputs[:16]]
+        limits = active_limits()
+        pending: list[tuple[object, object]] = [(self.expression, target) for target in self.outputs[: limits["max_preimage_choices"]]]
         proposals: dict[str, list[object]] = {}
-        for _ in range(128):
+        for _ in range(limits["max_preimage_steps"]):
             if not pending:
                 break
             value, target = pending.pop(0)
             if isinstance(value, DerivedValue):
-                pending.extend(inverse_targets(value, target)[:16])
+                pending.extend(inverse_targets(value, target)[: limits["max_preimage_choices"]])
             elif isinstance(value, BoundValue) and value.path and (native(value) is None or type(native(value)) is type(target)):
                 try:
                     if replay(self.expression, value.path, target) not in self.outputs:

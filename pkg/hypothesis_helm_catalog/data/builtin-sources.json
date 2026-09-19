@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "sources": [
+    {
+      "name": "Go",
+      "version": "1.26.0",
+      "url": "https://raw.githubusercontent.com/golang/go/go1.26.0/src/text/template/funcs.go",
+      "sha256": "6cc9d22f1a20a993f38810128bcb21f0bdd2d1bf612f4a279107773b7e207f30",
+      "prefix": null,
+      "subdirectory": null
+    },
+    {
+      "name": "Sprig",
+      "version": "3.3.0",
+      "url": "https://proxy.golang.org/github.com/%21masterminds/sprig/v3/@v/v3.3.0.zip",
+      "sha256": "c731370f7601711d1df9b4b0c9bb8488fc381b32fd3e7de97a03673e8287b719",
+      "prefix": "github.com/Masterminds/sprig/v3@v3.3.0/",
+      "subdirectory": ""
+    },
+    {
+      "name": "Helm",
+      "version": "4.3.0",
+      "url": "https://proxy.golang.org/helm.sh/helm/v4/@v/v4.3.0.zip",
+      "sha256": "7279f8d7e9903d6c15714dcea4c5eb43ff8d19c32e4dfa7c17f71654e6eacae9",
+      "prefix": "helm.sh/helm/v4@v4.3.0/",
+      "subdirectory": "pkg/engine/"
+    }
+  ]
+}

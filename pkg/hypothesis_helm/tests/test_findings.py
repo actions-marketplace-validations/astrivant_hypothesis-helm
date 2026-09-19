@@ -11,8 +11,8 @@ import pytest
 from hypothesis import strategies as st
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.generator import FindingGenerator

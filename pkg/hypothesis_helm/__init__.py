@@ -5,9 +5,9 @@ Property-based tests for Helm charts.
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from hypothesis_helm.charts.generate import coalesce, generate_tests
     from hypothesis_helm.charts.model import Chart
-    from hypothesis_helm.charts.runner import check_chart
+    from hypothesis_helm.charts.suites.generate import coalesce, generate_tests
+    from hypothesis_helm.charts.testing.runner import check_chart
 
 __all__ = ["Chart", "check_chart", "coalesce", "generate_tests"]
 
@@ -24,9 +24,9 @@ def __getattr__(name: str) -> object:
     """
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    from hypothesis_helm.charts.generate import coalesce, generate_tests
     from hypothesis_helm.charts.model import Chart
-    from hypothesis_helm.charts.runner import check_chart
+    from hypothesis_helm.charts.suites.generate import coalesce, generate_tests
+    from hypothesis_helm.charts.testing.runner import check_chart
 
     exports: dict[str, object] = {
         "Chart": Chart,

@@ -10,8 +10,8 @@ from textwrap import dedent
 import pytest
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.runner import Chart, check_chart
+from hypothesis_helm.charts.testing.runner import Chart, check_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 
@@ -161,7 +161,7 @@ def test_render_input_variation_is_not_presence(chart: Chart, monkeypatch: pytes
     Returns:
         None: Successful rendering does not imply every named field was varied.
     """
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     report = check_chart(chart, max_examples=1, input_strategy=st.just({"used": True}))
     assert report["status"] == "passed"
     measured = report["field_coverage"]
@@ -268,7 +268,7 @@ def test_scan_exports_each_chart(
           name: child
     """)
     )
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", lambda *args: {"status": "passed"})
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", lambda *args: {"status": "passed"})
     output = tmp_path / "dumps"
     assert (
         main(
@@ -354,7 +354,7 @@ def test_phase_coverage_unions_field_identities(chart: Chart, tmp_path: Path, mo
     Returns:
         None: Aggregate variation uses a union, not a sum or a new denominator.
     """
-    from hypothesis_helm.charts.prioritized import check_prioritized
+    from hypothesis_helm.charts.testing.prioritized import check_prioritized
 
     calls = []
 
@@ -378,7 +378,7 @@ def test_phase_coverage_unions_field_identities(chart: Chart, tmp_path: Path, mo
             "field_coverage": {"present_fields": varied, "varied_fields": varied},
         }
 
-    monkeypatch.setattr("hypothesis_helm.charts.prioritized.check_chart", phase)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.prioritized.check_chart", phase)
     result = check_prioritized(
         chart,
         budget=3,
@@ -425,7 +425,7 @@ def test_failure_retains_field_coverage(chart: Chart, tmp_path: Path, monkeypatc
             raise AssertionError("changed input failed")
         return [{"kind": "ConfigMap"}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     output = tmp_path / "failure"
     result = check_chart(chart, max_examples=1, input_strategy=st.just({"used": True}), artifact_dir=output)
     assert result["status"] == "failed"

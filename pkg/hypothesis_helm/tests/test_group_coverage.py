@@ -179,7 +179,7 @@ def test_automatic_dry_run_is_read_only(tmp_path: Path, monkeypatch: pytest.Monk
         """
         raise AssertionError("dry run invoked Helm")
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     target = tmp_path / "reports"
     assert main(["test", "--log-file", "/dev/stderr", "examples/workload", "--dry-run", "--artifact-dir", str(target)]) == 0
     output = capsys.readouterr()

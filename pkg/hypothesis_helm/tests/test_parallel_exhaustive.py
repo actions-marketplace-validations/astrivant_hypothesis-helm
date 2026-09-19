@@ -12,11 +12,11 @@ from pathlib import Path
 import pytest
 from hypothesis_helm_benchmarking.charts.generator import generate
 
-from hypothesis_helm.charts.exhaustive import ExhaustiveRenders
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure
-from hypothesis_helm.charts.runner import check_chart
-from hypothesis_helm.charts.yamlio import load_all
+from hypothesis_helm.charts.testing.exhaustive import ExhaustiveRenders
+from hypothesis_helm.charts.testing.rendering import RenderFailure
+from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.charts.values.yamlio import load_all
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.replay import Replay
 
@@ -49,7 +49,7 @@ def test_parallel_matches_serial_and_validates_on_coordinator(tmp_path: Path, mo
     Returns:
         None: Parallelism preserves validated outputs and leaves shared validation on the main thread.
     """
-    from hypothesis_helm.charts import exhaustive, rendering
+    from hypothesis_helm.charts.testing import exhaustive, rendering
 
     generate(tmp_path, input_complexity=3, output_bins=4)
     chart = Chart.load(tmp_path)
@@ -135,7 +135,7 @@ def test_prefetch_is_bounded_and_preserves_order(tmp_path: Path, monkeypatch: py
         created.append(index)
         return {"index": index}
 
-    monkeypatch.setattr("hypothesis_helm.charts.exhaustive.render_output", lambda chart, values, **kwargs: str(values["index"]))
+    monkeypatch.setattr("hypothesis_helm.charts.testing.exhaustive.render_output", lambda chart, values, **kwargs: str(values["index"]))
     pool = scheduler(Chart.load(tmp_path), [])
     pool.values = Replay(10**9, value)
     pool.workers = 3
@@ -191,7 +191,7 @@ def test_failure_cleans_up_other_process_trees(tmp_path: Path, monkeypatch: pyte
         )
         return owner.run([sys.executable, "-c", code, str(markers[index - 1])], capture_output=True, timeout=30).stdout
 
-    monkeypatch.setattr("hypothesis_helm.charts.exhaustive.render_output", run)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.exhaustive.render_output", run)
     pool = scheduler(Chart.load(tmp_path / "chart"), [{"index": index} for index in range(3)])
     with pytest.raises(RenderFailure, match="first input failed"), pool:
         for _, future in pool:
@@ -233,7 +233,7 @@ def test_parallel_timeout_is_incomplete(tmp_path: Path, monkeypatch: pytest.Monk
         assert isinstance(owner, Processes)
         return owner.run([sys.executable, "-c", "import time;time.sleep(30)"], capture_output=True, timeout=30).stdout
 
-    monkeypatch.setattr("hypothesis_helm.charts.exhaustive.render_output", slow)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.exhaustive.render_output", slow)
     report = check_chart(Chart.load(tmp_path), exhaustive=True, jobs=3, time_limit=0.3)
     assert report["status"] == "time-limit" and report["coverage_complete"] is False
     evidence = report["parallel_execution"]

@@ -75,6 +75,7 @@ pytest-xdist = ">=3.8,<4"
 setuptools = ">=77"
 
 [tool.poetry.scripts]
+hypothesis-helm-builtins = "hypothesis_helm_catalog.builtins:main"
 hypothesis-helm-catalog = "hypothesis_helm_catalog.builder:main"
 hypothesis-helm-docs = "hypothesis_helm.reporting.contents:main"
 hypothesis-helm-sensitivity = "hypothesis_helm.analysis.cli:main"

@@ -10,8 +10,8 @@ from pathlib import Path
 
 from attrs import asdict, evolve
 from cattrs import Converter
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.reporting.contents import with_contents

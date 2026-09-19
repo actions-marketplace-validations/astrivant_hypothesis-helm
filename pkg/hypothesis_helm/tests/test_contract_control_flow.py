@@ -9,9 +9,9 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contract_values import BoundValue
 from hypothesis_helm.compiler.asts.contracts import Contracts, Evaluation, FieldAccess, Unknown, calls, expression
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
@@ -364,7 +364,7 @@ def test_joint_repair_keeps_enabled_branch_and_authored_failures(control_chart: 
 
     from hypothesis import strategies as st
 
-    from hypothesis_helm.charts.runner import check_chart
+    from hypothesis_helm.charts.testing.runner import check_chart
     from hypothesis_helm.schemas.contracts import mapping
 
     control_chart.defaults.update(enabled=False, repository="", branch="")

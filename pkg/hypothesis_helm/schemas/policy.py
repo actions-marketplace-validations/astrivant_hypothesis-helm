@@ -13,7 +13,7 @@ from pathlib import Path
 from hypothesis_helm_catalog.profiles import schema as profile_schema
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.limits import compiler_limits
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.schemas.characters import validate_character_sets

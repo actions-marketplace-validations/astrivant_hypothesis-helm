@@ -43,7 +43,7 @@ jobs:
         uses: ./.github/actions/setup-project
         with:
           binary-cache: ${{ github.event_name == 'pull_request' || github.event_name == 'push' || inputs.binary-cache }}
-      - name: Check the Kubernetes source extractor
+      - name: Check the Kubernetes and compiler source extractors
         run: go -C pkg/hypothesis_helm_catalog/upstream test ./...
       - name: Run every pre-commit hook
         run: bash scripts/project-run.sh pre-commit run --all-files --show-diff-on-failure

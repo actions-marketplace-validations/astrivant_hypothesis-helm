@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts.audit import audit
+from hypothesis_helm.charts.inspection.audit import audit
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render, validate_resources
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render, validate_resources
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.execution.cache import fingerprint
 from hypothesis_helm.execution.render_hashes import RenderHashes
@@ -167,7 +167,7 @@ def test_blocking_ignored_failure_is_not_a_witness(tmp_path: Path, monkeypatch: 
     Returns:
         None: Ignored cases remain explicit and never enter successful render caches.
     """
-    from hypothesis_helm.charts import runner
+    from hypothesis_helm.charts.testing import runner
 
     chart = Chart(tmp_path, {"type": "object", "properties": {"flag": {"type": "boolean"}}, "additionalProperties": False}, {"flag": False})
 
@@ -351,7 +351,7 @@ def test_disable_codes_keeps_structured_fields_enabled(tmp_path: Path, capsys: p
     Returns:
         None: Disabled codes merge without dropping paths or suppressing independent findings.
     """
-    from hypothesis_helm.charts import yamlio
+    from hypothesis_helm.charts.values import yamlio
 
     (tmp_path / "Chart.yaml").write_text(yamlio.dump({"apiVersion": "v2", "name": "opaque-policy", "version": "1.0.0"}))
     (tmp_path / "values.yaml").write_text(yamlio.dump({"opaque": {}, "structured": {}}))

@@ -7,11 +7,12 @@ from pathlib import Path
 
 from ruamel.yaml.scalarstring import ScalarString
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import _schema_nodes
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.conditions import parse_condition
 from hypothesis_helm.compiler.asts.contracts import Contracts, expression
 from hypothesis_helm.compiler.asts.templates import Node, fold, lower, value_path
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.domain_helpers import inline
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.schemas.policy import restrict
@@ -60,6 +61,7 @@ def project_file(
     references: dict[str, tuple[tuple[str, ...], int, bool, bool]] = {}
     name = str(file.relative_to(chart))
     source = file.read_text()
+    limits = contracts.limits if contracts is not None else active_limits()
     prefix = "HHINPUTDOMAINMARKER"
     if prefix in source:
         diagnostics.append({"file": name, "reason": "reserved analysis marker occurs in source"})
@@ -73,7 +75,7 @@ def project_file(
             nodes (tuple[Node, ...]): Structured, constant-folded template nodes.
 
         Returns:
-            list[tuple[str, list[dict[str, object]]]]: Symbolic YAML and its guards, bounded at 64 variants.
+            list[tuple[str, list[dict[str, object]]]]: Symbolic YAML and its guards, bounded by the configured variant limit.
         """
         result: list[tuple[str, list[dict[str, object]]]] = [("", [])]
         for node in nodes:
@@ -105,8 +107,10 @@ def project_file(
                 parsed = expression(node.text)
                 prefixes: list[str] = []
                 while isinstance(parsed, tuple) and parsed[0] in {"nindent", "indent"} and len(parsed) == 3:
-                    if not isinstance(parsed[1], str) or not parsed[1].isdigit() or int(parsed[1]) > 128:
+                    if not isinstance(parsed[1], str) or not parsed[1].isdigit():
                         raise ValueError("unresolved indentation")
+                    if int(parsed[1]) > limits["max_indent_width"]:
+                        raise ValueError(f"indentation exceeds compiler.max_indent_width={limits['max_indent_width']}")
                     prefixes.append(("\n" if parsed[0] == "nindent" else "") + " " * int(parsed[1]))
                     parsed = parsed[2]
                 quoted = isinstance(parsed, tuple) and len(parsed) == 2 and parsed[0] == "quote"
@@ -125,8 +129,8 @@ def project_file(
                     choices = [("".join(prefixes) + marker, [])]
             else:
                 raise ValueError(f"unsupported template block at line {node.line}")
-            if len(result) * len(choices) > 64:
-                raise ValueError("more than 64 symbolic branch variants")
+            if len(result) * len(choices) > limits["max_symbolic_variants"]:
+                raise ValueError(f"symbolic branch variants exceed compiler.max_symbolic_variants={limits['max_symbolic_variants']}")
             result = [(a + b, [*ga, *gb]) for (a, ga), (b, gb) in itertools.product(result, choices)]
         return result
 

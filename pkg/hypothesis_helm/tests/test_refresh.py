@@ -19,7 +19,7 @@ from hypothesis_helm_benchmarking.refresh.plan import source_path
 from hypothesis_helm_benchmarking.studies.error_surface import METHODS, METRICS, RATES
 from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.traversal import SELECTION_ORDER
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
 

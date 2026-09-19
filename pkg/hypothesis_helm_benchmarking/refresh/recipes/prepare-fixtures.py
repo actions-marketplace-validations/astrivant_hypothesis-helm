@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from attrs import asdict
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm_benchmarking.charts.parameters import Parameters
 from hypothesis_helm_benchmarking.studies.discovery import faults
 

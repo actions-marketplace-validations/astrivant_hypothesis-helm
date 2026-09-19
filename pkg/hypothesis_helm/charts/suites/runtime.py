@@ -20,9 +20,9 @@ from hypothesis import strategies as st
 from hypothesis.strategies import DataObject
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.rules import check, ignored
@@ -179,7 +179,15 @@ def _replace(
                 current[segment] = context(path[: i + 1], next_segment)
         else:
             raise ValueError("path requires an object")
-        current = current[segment] if isinstance(current, list) and isinstance(segment, int) else mapping(current)[str(segment)]
+        child = current[segment] if isinstance(current, list) and isinstance(segment, int) else mapping(current)[str(segment)]
+        # Helm expands aliases while loading values; overriding one path must not
+        # mutate another path that shared the same YAML anchor in the source.
+        detached = dict(child) if isinstance(child, dict) else list(child) if isinstance(child, list) else child
+        if isinstance(current, list) and isinstance(segment, int):
+            current[segment] = detached
+        else:
+            mapping(current)[str(segment)] = detached
+        current = detached
     final = path[-1]
     if isinstance(final, int):
         if not isinstance(current, list):

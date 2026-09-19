@@ -13,8 +13,8 @@ import pytest
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import TaggedScalar
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.runner import Chart, check_chart, render
+from hypothesis_helm.charts.testing.runner import Chart, check_chart, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.render_hashes import (
     ALGORITHM,
     RenderHashes,
@@ -146,9 +146,9 @@ def test_render_reuse_preserves_properties_and_stream(monkeypatch: pytest.Monkey
     validator = Mock()
     stream = Mock()
     prop = Mock(side_effect=[None, AssertionError("custom failure")])
-    monkeypatch.setattr("hypothesis_helm.charts.rendering.Processes.run", lambda self, *args, **kwargs: helm(*args, **kwargs))
-    monkeypatch.setattr("hypothesis_helm.charts.rendering.validate", validator)
-    monkeypatch.setattr("hypothesis_helm.charts.rendering.emit_manifest", stream)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.Processes.run", lambda self, *args, **kwargs: helm(*args, **kwargs))
+    monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.validate", validator)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.emit_manifest", stream)
     chart = Chart(
         tmp_path,
         {

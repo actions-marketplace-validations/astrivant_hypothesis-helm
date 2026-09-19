@@ -16,12 +16,13 @@ from attrs import frozen
 from jsonschema import validators
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.rendering import RenderFailure, validate_resources
+from hypothesis_helm.charts.testing.rendering import RenderFailure, validate_resources
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.conditions import condition_path
 from hypothesis_helm.compiler.asts.templates import Node, specialize, value_path, walk
 from hypothesis_helm.compiler.complexity import maximum_score, output_profile
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.pruning import Pruner, safe_values
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
 from hypothesis_helm.schemas.factors import FactorSpace, factor_space
@@ -167,7 +168,7 @@ def bound(components: Sequence[Component], assigned: dict[int, int]) -> int:
     return max(totals, default=0) * len(totals)
 
 
-def measure(chart: Chart, *, max_cases: int = 4096, time_limit: float = 5.0) -> dict[str, object]:
+def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | None = None) -> dict[str, object]:
     """
     Maximize allowed output structure using template influence tables and branch-and-bound.
 
@@ -178,12 +179,15 @@ def measure(chart: Chart, *, max_cases: int = 4096, time_limit: float = 5.0) -> 
 
     Args:
         chart (Chart): Loaded schema, defaults and chart source.
-        max_cases (int): Maximum template assignments plus complete witnesses evaluated.
-        time_limit (float): Positive analysis budget checked between bounded work units.
+        max_cases (int | None): Assignments and witnesses allowed; defaults to compiler.max_complexity_cases.
+        time_limit (float | None): Seconds checked between work units; defaults to compiler.max_complexity_seconds.
 
     Returns:
         dict[str, object]: Compiled maximum or explicit uncertainty, with search accounting.
     """
+    limits = active_limits()
+    max_cases = limits["max_complexity_cases"] if max_cases is None else max_cases
+    time_limit = float(limits["max_complexity_seconds"]) if time_limit is None else time_limit
     if max_cases < 1 or not math.isfinite(time_limit) or time_limit <= 0:
         raise ValueError("complexity limits must be positive and finite")
     started = time.perf_counter()

@@ -8,7 +8,7 @@ import os
 from contextlib import ExitStack
 from contextvars import ContextVar
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 
 MANIFEST_FD: ContextVar[int | None] = ContextVar("manifest_fd", default=None)
 MANIFEST_FORMAT: ContextVar[str | None] = ContextVar("manifest_format", default=None)

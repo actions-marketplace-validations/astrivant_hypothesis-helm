@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.schemas.combinations import trim_values
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -61,7 +61,7 @@ def test_trim_reports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         rendered.append(values)
         return [{}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     baseline = check_chart("examples/workload", permutations=2, artifact_dir=tmp_path)
     assert baseline["coverage_complete"] is True
     rendered.clear()
@@ -109,7 +109,7 @@ def test_topology_sampling(tmp_path: Path) -> None:
     """
     from hypothesis_helm_benchmarking.charts.generator import generate
 
-    from hypothesis_helm.charts.runner import Chart
+    from hypothesis_helm.charts.testing.runner import Chart
     from hypothesis_helm.cli import argument_parser
     from hypothesis_helm.compiler.passes.topology import trim_topology
     from hypothesis_helm.schemas.finite import enumerate_values
@@ -149,7 +149,7 @@ def test_topology_generator_oracle(tmp_path: Path) -> None:
     from hypothesis_helm_benchmarking.charts.generator import generate
     from hypothesis_helm_benchmarking.charts.topology import validate_topology
 
-    from hypothesis_helm.charts.runner import Chart, render
+    from hypothesis_helm.charts.testing.runner import Chart, render
 
     if not shutil.which("helm"):
         pytest.skip("Helm required")

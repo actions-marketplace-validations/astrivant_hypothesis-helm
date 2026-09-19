@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.charts.cache import RETENTION_SECONDS, ChartCache
-from hypothesis_helm.charts.changes import MINIMAL_TRAILER, chart_changed, comparison, git
+from hypothesis_helm.charts.repositories.cache import RETENTION_SECONDS, ChartCache
+from hypothesis_helm.charts.repositories.changes import MINIMAL_TRAILER, chart_changed, comparison, git
 from hypothesis_helm.cli import main
 
 
@@ -249,7 +249,7 @@ def test_recursive_cli_reuses_only_unchanged_completed_charts(
         visited.append((path / "values.yaml").read_text())
         return {"status": "passed", "attempts": 10}
 
-    monkeypatch.setattr(importlib.import_module("hypothesis_helm.charts.scan"), "exercise_chart", exercise)
+    monkeypatch.setattr(importlib.import_module("hypothesis_helm.charts.repositories.scan"), "exercise_chart", exercise)
     arguments = [
         "test",
         "--log-file",

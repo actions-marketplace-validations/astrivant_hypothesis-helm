@@ -18,15 +18,15 @@ from collections import Counter
 from contextlib import ExitStack
 from pathlib import Path
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.audit import audit_findings
-from hypothesis_helm.charts.cache import ChartCache
-from hypothesis_helm.charts.changes import comparison
+from hypothesis_helm.charts.inspection.audit import audit_findings
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.paths import check_paths
-from hypothesis_helm.charts.registry import prepare_helm_source
-from hypothesis_helm.charts.repository import RepositorySource, remote_name
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.repositories.cache import ChartCache
+from hypothesis_helm.charts.repositories.changes import comparison
+from hypothesis_helm.charts.repositories.registry import prepare_helm_source
+from hypothesis_helm.charts.repositories.repository import RepositorySource, remote_name
+from hypothesis_helm.charts.testing.paths import check_paths
+from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
@@ -119,6 +119,9 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
     except (ValueError, OSError) as exc:
         return {"status": "unsupported-schema", "error": str(exc), "coverage": "audit unavailable"}
     observed = [mapping(item) for item in [*sequence(findings["findings"]), *sequence(findings["unresolved"])]]
+    from hypothesis_helm.reporting.logs import chart_name
+
+    name = chart_name(path)
     seen: set[tuple[str, str, str]] = set()
     for finding in observed:
         location = (
@@ -129,7 +132,7 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
         message = str(finding.get("message", finding.get("issue", "Unresolved value access")))
         identity = (str(finding["code"]), location, message)
         if identity not in seen:
-            LOGGER.warning("[%s] Audit finding: chart=%s; %s; at=%s", finding["code"], path.name, message, location)
+            LOGGER.warning("[%s] Audit finding: chart=%s; %s; at=%s", finding["code"], name, message, location)
             seen.add(identity)
         if args.fail:
             return {

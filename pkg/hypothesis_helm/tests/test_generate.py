@@ -17,13 +17,13 @@ from hypothesis_jsonschema import from_schema
 from jsonschema import validate
 
 from hypothesis_helm import Chart
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generate import (
+from hypothesis_helm.charts.suites.generate import (
     coalesce,
     enumerate_paths,
     generate_tests,
     strategy_source,
 )
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping, number, schema_strategy, sequence
 
 

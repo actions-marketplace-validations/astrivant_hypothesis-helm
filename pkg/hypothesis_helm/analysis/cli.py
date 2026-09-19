@@ -10,7 +10,7 @@ from pathlib import Path
 from hypothesis_helm.analysis.report import write_report
 from hypothesis_helm.analysis.sensitivity import Mutation, analyze
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
 

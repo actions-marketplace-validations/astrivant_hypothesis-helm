@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from textwrap import dedent
 
-from hypothesis_helm.charts.scan import discover_charts
+from hypothesis_helm.charts.repositories.scan import discover_charts
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.traversal import SELECTION_ORDER
 from hypothesis_helm_benchmarking.execution.provenance import code_digest
@@ -52,6 +52,7 @@ sources = [
     *(path for package in packages for path in package.rglob("*.py")),
     *Path("pkg/hypothesis_helm_catalog/data").glob("*.json"),
     *Path("pkg/hypothesis_helm_benchmarking/assets").rglob("*"),
+    Path("pkg/hypothesis_helm/compiler/builtin_inventory.json"),
     Path("pkg/hypothesis_helm/execution/calibration.json"),
     Path("pkg/hypothesis_helm/reporting/assets/logo.png"),
 ]

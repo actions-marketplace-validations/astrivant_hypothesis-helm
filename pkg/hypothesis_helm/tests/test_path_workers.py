@@ -16,7 +16,7 @@ from textwrap import dedent
 import pytest
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.paths import check_paths
+from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.cli import argument_parser
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -122,7 +122,7 @@ def test_deadline_stops_workers_and_helm_children(tmp_path: Path, monkeypatch: p
             """).lstrip()
     )
     slow.chmod(0o755)
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     expired_at: float | None = None
 
     def expire_after_children_start(
@@ -181,7 +181,7 @@ def test_deadline_before_first_path_keeps_all_paths_unvisited(tmp_path: Path, mo
         None: All eight paths remain unvisited after a successful baseline and startup timeout.
     """
     chart = fixture_chart(tmp_path)
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
 
     def expire(context: dict[str, object], directory: Path, workers: int) -> list[dict[str, object]]:
         """
@@ -241,7 +241,7 @@ def test_empty_chart_queue_starts_no_workers(tmp_path: Path, monkeypatch: pytest
     chart.defaults = {}
     chart.schema = {"type": "object", "additionalProperties": False, "properties": {}}
     (chart.path / "templates/config.yaml").write_text("")
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     result = check_paths(
         chart, budget=5, max_examples=10, seed=0, helm="helm", timeout=1, artifacts=tmp_path / "results", jobs=6, filtering=True
     )
@@ -264,7 +264,7 @@ def test_returned_interrupt_stops_scheduling(tmp_path: Path, monkeypatch: pytest
         None: No later path runs and an empty interrupted queue cannot be reported as passed.
     """
     chart = fixture_chart(tmp_path)
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     calls = []
 
     def cancelled(*args: object, **kwargs: object) -> dict[str, object]:
@@ -297,7 +297,7 @@ def test_returned_interrupt_stops_scheduling(tmp_path: Path, monkeypatch: pytest
         (directory / "interrupted").touch()
         return []
 
-    monkeypatch.setattr("hypothesis_helm.charts.paths.check_chart", cancelled)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.check_chart", cancelled)
     monkeypatch.setattr("hypothesis_helm.execution.path_queue.execute", empty_queue)
     result = check_paths(
         chart, budget=30, max_examples=10, seed=0, helm="helm", timeout=5, artifacts=tmp_path / "results", jobs=jobs, filtering=True

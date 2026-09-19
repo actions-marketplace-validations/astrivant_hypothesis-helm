@@ -9,7 +9,7 @@ from textwrap import dedent
 import pytest
 from hypothesis_helm_benchmarking.charts.generator import generate
 
-from hypothesis_helm.charts.runner import Chart, check_chart
+from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.execution.estimate import estimate_suite
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.execution.suite import run_suite
@@ -90,7 +90,7 @@ def test_finite_sampling_preserves_defaults_and_topology(
         observed.append(values)
         return [{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "test"}, "data": {"value": "valid"}}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", rendered)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", rendered)
     result = check_chart(
         chart,
         permutations=None if exhaustive else 2,

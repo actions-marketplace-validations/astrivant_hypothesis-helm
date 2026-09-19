@@ -5,6 +5,7 @@
 
 - [Input discovery and test generation](#input-discovery-and-test-generation)
 - [Execution and validation](#execution-and-validation)
+- [Chart package layout](#chart-package-layout)
 - [Syntax trees and compiler passes](#syntax-trees-and-compiler-passes)
 - [Finite permutation planning](#finite-permutation-planning)
 - [Cooperative workload balancing](#cooperative-workload-balancing)
@@ -54,9 +55,8 @@ A property can test multiple inputs and render multiple manifests. JUnit records
 the property's result; execution reports retain the input and render counts.
 Selection, caching, traversal, and sharding determine which properties execute.
 
-The chart runner coordinates separate modules: `charts/model.py` owns loaded contracts,
-`charts/planning.py` builds finite plans and estimates, `charts/candidates.py` evaluates one candidate,
-`charts/rendering.py` owns Helm rendering, and `charts/audit.py` assembles audit findings.
+The chart runner coordinates case planning, candidate checks and Helm rendering.
+The shared chart model holds the loaded values and schema; inspection assembles audit findings.
 
 `execution/processes.py` owns external commands and worker process groups until descendants have stopped
 and direct children have been joined. Git, Helm, schema validators, collection, and benchmark commands use
@@ -68,6 +68,28 @@ The benchmark process pool also waits for its replicas to exit when a result rai
 an exception.<sup>[\[3\]](../execution/README.md#shutdown-and-partial-results)</sup>
 Benchmark commands pass arguments and chart workspace owners
 explicitly, without changing the process command line or selecting a workspace through ambient context.
+
+## Chart package layout
+
+[`charts/`](../../pkg/hypothesis_helm/charts) groups code by its role in working with a chart:
+
+| Package | Responsibility |
+| --- | --- |
+| [`inspection/`](../../pkg/hypothesis_helm/charts/inspection) | Audit inputs, discover template references and inspect available `tpl` source. |
+| [`testing/`](../../pkg/hypothesis_helm/charts/testing) | Plan cases, render and validate manifests, and execute path properties or exhaustive tests. |
+| [`repositories/`](../../pkg/hypothesis_helm/charts/repositories) | Acquire Git and registry sources, discover charts recursively, compare revisions and reuse cached results. |
+| [`suites/`](../../pkg/hypothesis_helm/charts/suites) | Generate editable Python suites and provide their runtime helpers. |
+| [`values/`](../../pkg/hypothesis_helm/charts/values) | Read and write YAML values and check whether input paths are present. |
+
+[`model.py`](../../pkg/hypothesis_helm/charts/model.py) remains at the package root because
+each group uses the same `Chart` representation. The public `from hypothesis_helm import Chart`
+import and CLI commands retain their existing names. New generated suites import runtime
+helpers from `hypothesis_helm.charts.suites.runtime`. Update that import in existing saved
+suites, or regenerate them if they contain no custom edits.
+
+`charts/testing` coordinates chart-specific work. The separate
+[`execution/`](../../pkg/hypothesis_helm/execution) package owns worker processes, queues,
+signals and scheduling shared by those operations.
 
 ## Syntax trees and compiler passes
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from textwrap import dedent
 
 from attrs import asdict, evolve, frozen
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping
 
 from hypothesis_helm_benchmarking.charts.manifests import configmap

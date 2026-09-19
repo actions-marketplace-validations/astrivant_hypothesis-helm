@@ -15,9 +15,9 @@ from typing import TYPE_CHECKING
 from attrs import asdict, define, field
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.presence import has_path
-from hypothesis_helm.charts.templates import Reference, discover
+from hypothesis_helm.charts.inspection.templates import Reference, discover
+from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.charts.values.presence import has_path
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.schemas.contracts import configuration_key, json_value
 from hypothesis_helm.schemas.model import ValueReference, ValuesModel

@@ -14,10 +14,10 @@ from hypothesis_helm_catalog.builder import scalar_domain
 from hypothesis_helm_catalog.profiles import schema as profile_schema
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generate import coalesce
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render
+from hypothesis_helm.charts.suites.generate import coalesce
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings
 from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
 from hypothesis_helm.schemas.paths import enumerate_paths

@@ -13,7 +13,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from hypothesis_helm.analysis.cli import main as measure
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.reporting.contents import with_contents

@@ -13,12 +13,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from hypothesis_helm.charts.audit import audit, audit_findings
-from hypothesis_helm.charts.generate import generate_tests
-from hypothesis_helm.charts.generated import RenderOptions
+from hypothesis_helm.charts.inspection.audit import audit, audit_findings
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.runner import check_chart
-from hypothesis_helm.charts.scan import discover_charts, scan
+from hypothesis_helm.charts.repositories.scan import discover_charts, scan
+from hypothesis_helm.charts.suites.generate import generate_tests
+from hypothesis_helm.charts.suites.runtime import RenderOptions
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.compiler.limits import DEFAULT_CALL_DEPTH
 from hypothesis_helm.compiler.passes.exports import export_repository
 from hypothesis_helm.compiler.passes.graph import export_graph

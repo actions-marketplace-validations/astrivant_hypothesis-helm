@@ -9,8 +9,8 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.runner import Chart
+from hypothesis_helm.charts.testing.runner import Chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.constants import fill_missing, zero_candidate
 from hypothesis_helm.compiler.passes.minimum import export_minimal
 from hypothesis_helm.schemas.contracts import mapping
@@ -138,7 +138,7 @@ def test_invalid_zero_stays_in_example(tmp_path: Path, monkeypatch: pytest.Monke
 
     monkeypatch.setenv("HYPOTHESIS_HELM_INPUT_POLICY", json.dumps({"resource_schemas": {"example.test/v1/Indexed": {"type": "object"}}}))
     if downstream_rejects:
-        monkeypatch.setattr("hypothesis_helm.charts.rendering.validate", reject)
+        monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.validate", reject)
     chart = Chart(tmp_path, schema, {})
     target = tmp_path / "values-minimal.yaml"
     result = export_minimal(chart, target)

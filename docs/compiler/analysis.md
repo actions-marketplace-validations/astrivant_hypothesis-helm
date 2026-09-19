@@ -113,6 +113,15 @@ retain the source, conditions, original inputs, and choices under
 | `atoi`, `toString` | Model decimal string conversion and string/integer/Boolean formatting; ambiguous conversions remain unresolved. |
 | `regexMatch`, `mustRegexMatch` | Evaluate the bounded ASCII regex subset described below. |
 
+Empty `dict` and `list` expressions are supported. `default` and `coalesce` accept the YAML loader's mapping and sequence types,
+including anchored values and resolved merge keys, without modifying them. When generating a changed path, aliases are treated as
+independent loaded values, matching Helm overrides; changing one occurrence does not change its siblings.
+
+Additional bounded operations include ASCII `trunc`, `splitList`, Boolean `ternary`, string-only `print`, and `int`/`int64` on
+supported integer operands. Mixed `printf` supports `%s`, `%d` and `%%`. Integer formatting requires an explicit conversion or a
+known integer-producing operation: a raw number loaded from values can have a different Go runtime type. Unsupported formats,
+conversions and oversized strings remain native Helm work.
+
 These scope rules follow [Go's template language](https://pkg.go.dev/text/template#hdr-Variables)
 and are checked against native Helm. The compiler analyzes up to 16 nested helper
 calls by default, counting the first call as level 1. This is our analysis budget,
@@ -133,11 +142,39 @@ make unsupported expressions or cyclic destination helpers safe to interpret.
 Helm has its own [repeated-include recursion guard](https://github.com/helm/helm/blob/v4.3.0/pkg/engine/engine.go),
 which this setting does not change.
 
-Other analysis safeguards remain in place, including Python's recursion limit.
-Rejection analysis stops after 10,000 statements and
-iterations per root template; a range containing more than 4,096 elements remains
-unresolved. List-member evidence retains its containing values path and does not
-invent an editable scalar enum for the whole list.
+Other resource budgets are configurable in the same `compiler:` mapping. For example:
+
+```yaml
+compiler:
+  max_files: 20000
+  max_context_bytes: 134217728  # 128 MiB per archive, packed and unpacked.
+  max_steps: 20000
+  max_range_items: 8192
+```
+
+The defaults allow 10,000 archive members and 64 MiB per archive. Both `.Files`
+inspection and dependency unpacking use those limits. Nested archives are checked
+individually, so the byte budget is not a cap on total process memory. Path and link
+safety checks still apply when limits are raised.
+
+Rejection analysis defaults to 10,000 statements and iterations per root template
+and 4,096 elements per range. Discovery and helper projection have their own
+10,000-node budget (`max_discovery_nodes`). Dynamic template size, dependency depth,
+string operations, symbolic branch expansion, proof snapshots, complexity searches,
+and repair searches also have configurable budgets. See the
+[complete configuration](../input-domains/README.md#complete-configuration-example)
+for every setting, default and unit, or export it with `helm hypothesis --generate-config`.
+All budgets must be positive integers; omitted settings retain their defaults.
+Workers inherit every setting, and a changed setting invalidates cached results.
+
+These settings govern analysis effort, not Helm semantics or test-case validity.
+An exhausted analysis budget produces uncertainty; it does not justify excluding a
+candidate. Existing finding suppression and `--fail` behavior still apply. Search
+budgets may leave a complexity maximum unknown or a repair unproven. Diagnostic
+retention limits only bound the number of distinct diagnostic records kept.
+Python's recursion limit, supported expression syntax, Go integer ranges and Go
+regex repetition rules remain independent safeguards. List-member evidence retains
+its containing values path without inventing an editable scalar enum for the whole list.
 
 Unknown expressions remain ordinary Helm tests. The remaining boundaries are:
 
@@ -166,13 +203,18 @@ chart files, or a concrete `tpl` string:
 | `.Files.Get` and `.Files.Lines` | Helm packages a temporary snapshot, applying its own loader and `.helmignore` rules. Analysis reads each chart's accessible files, including dependencies and aliases. |
 | `tpl` | The compiler parses the current candidate's actual string, including file-backed text, and evaluates supported expressions with a fresh helper scope. |
 
+Supported `.Chart` metadata comes from the same Helm-loaded snapshot, including names, versions, annotations and `IsRoot`.
+Dependency aliases retain their own chart names and metadata. Fields affected by unmodeled dependency processing remain unknown,
+rather than being treated as missing. `.Template.Name` and `.Template.BasePath` identify the calling chart and source file;
+filename includes constructed from that base path can resolve to parsed templates within the configured call-depth budget.
+
 Schema availability does not establish cluster API availability. These capabilities describe
 the current offline `helm template` invocation, not a live cluster. The context probes do not
-execute the chart's original templates or modify its files. File snapshots are bounded to
-64 MiB and 10,000 archive entries; individual `tpl` strings are bounded to 1 MiB and share
-the configured helper call-depth limit.
+execute the chart's original templates or modify its files. File snapshots respect
+`compiler.max_context_bytes` and `compiler.max_files`; individual `tpl` strings respect
+`compiler.max_template_bytes` and share the configured helper call-depth limit.
 
-Every rejection involving capabilities, file contents or `tpl` requires a native Helm
+Every rejection involving capabilities, chart metadata, template context, file contents or `tpl` requires a native Helm
 verification render, even after earlier candidates matched. Authored-schema contradictions
 remain findings. This support guides rejection filtering; it does not extend the separate
 [exact-equivalence proof contract](selection.md#exact-equivalence-pruning).

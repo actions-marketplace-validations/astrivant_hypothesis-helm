@@ -10,10 +10,10 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.inspection.templates import discover
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
-from hypothesis_helm.charts.templates import discover
+from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler import builtins
 from hypothesis_helm.compiler.asts.contracts import Contracts, context_effects
 from hypothesis_helm.compiler.asts.origins import Dictionary, Literal, Sequence, paths
@@ -27,14 +27,15 @@ from hypothesis_helm.tests.test_templates import scan
 
 def test_inventory_covers_every_upstream_entry() -> None:
     """
-    Require explicit classifications for all pinned engine functions and every effect alias.
+    Require generated definitions for all pinned engine functions and every detected effect alias.
 
     Returns:
-        None: Source unions, removals and reviewed specifications agree exactly.
+        None: Generated definitions, source hashes and compiler specifications agree exactly.
     """
     snapshot = mapping(json.loads(Path(builtins.__file__).with_name("builtin_inventory.json").read_text()))
-    names = {str(name) for source in sequence(snapshot["sources"]) for name in sequence(mapping(source)["functions"])}
-    names.difference_update(str(name) for name in sequence(snapshot["removed"]))
+    names = set(mapping(snapshot["functions"]))
+    assert snapshot["format"] == 2
+    assert all(mapping(source)["files"] and mapping(source)["sha256"] for source in sequence(snapshot["sources"]))
     assert names == builtins.BUILTINS.keys()
     assert len(names) == 251
     assert set().union(*builtins.EFFECTS.values()) <= names

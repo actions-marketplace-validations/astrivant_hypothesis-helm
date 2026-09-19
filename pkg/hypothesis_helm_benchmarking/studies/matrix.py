@@ -17,7 +17,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.topology import trim_topology

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from hypothesis_helm_catalog.builder import DATA
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.resources import library
 

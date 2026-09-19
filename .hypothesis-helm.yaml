@@ -41,8 +41,37 @@ ignored:
 # Complete optional configuration; see docs/input-domains/README.md.
 # # Global defaults for fresh generated text; supplied values are preserved.
 # downstream_inputs: true  # Use constraints from supported downstream field mappings.
+# # Compiler budgets are positive integers; bytes, characters and counts are separate units.
 # compiler:
-#   max_call_depth: 16  # Nested helper calls analyzed; --compiler-call-depth overrides this.
+#   max_call_depth: 16  # Nested helper/tpl calls; --compiler-call-depth overrides this.
+#   max_files: 10000  # Members inspected per chart archive, including directories.
+#   max_context_bytes: 67108864  # Packed archive bytes and total unpacked member bytes, per archive.
+#   max_template_bytes: 1048576  # UTF-8 bytes in each dynamically analyzed tpl source.
+#   max_steps: 10000  # Statements and range iterations per root rejection evaluation.
+#   max_discovery_nodes: 10000  # Actions per discovery traversal or nodes per helper projection.
+#   max_tpl_depth: 32  # Nested tpl expansions during value-path discovery.
+#   max_range_items: 4096  # Elements in a collection evaluated by a range.
+#   max_dependency_depth: 16  # Dependency nesting inspected from the root chart.
+#   max_dependencies: 512  # Dependency instances inspected per chart.
+#   max_version_chars: 4096  # Combined characters in a semantic-version constraint and version.
+#   max_string_chars: 16384  # Characters in a transformation operand or replacement result.
+#   max_regex_pattern_chars: 256  # Characters in an analyzed ASCII regex pattern.
+#   max_regex_subject_chars: 4096  # Characters in an analyzed ASCII regex subject.
+#   max_symbolic_variants: 64  # Branch variants per destination projection.
+#   max_indent_width: 128  # Spaces in a projected indent/nindent operation.
+#   max_proof_bytes: 16777216  # Chart bytes retained for an exact-pruning proof snapshot.
+#   max_output_nodes: 100000  # Manifest nodes inspected per complexity measurement.
+#   max_complexity_cases: 4096  # Template assignments and witnesses in a complexity search.
+#   max_complexity_seconds: 5  # Whole seconds allowed for a complexity search.
+#   max_sampling_domain_values: 4096  # Values per factor when computing a sampling profile.
+#   max_fallbacks: 128  # Distinct incomplete-analysis diagnostics retained per chart.
+#   max_preimage_steps: 128  # Search steps when proposing inputs for a transformed allowlist.
+#   max_preimage_choices: 16  # Targets and proposals per transformed-allowlist search step.
+#   max_rejections: 64  # Distinct rejection contracts used to guide generation.
+#   max_repair_attempts: 48  # Candidate changes tried for a rejected configuration.
+#   max_repair_branch_attempts: 16  # Candidate changes tried at one repair search node.
+#   max_repair_depth: 3  # Successive changes considered along a repair search branch.
+#   max_repair_length: 16  # Largest proposed list length during rejection repair.
 # hypothesis:
 #   character_sets: ascii  # ascii or unicode; explicit enum/const literals retain their alphabet.
 #   control_characters:

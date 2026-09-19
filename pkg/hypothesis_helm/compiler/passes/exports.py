@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from hypothesis_helm.charts.scan import discover_charts
+from hypothesis_helm.charts.repositories.scan import discover_charts
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
 

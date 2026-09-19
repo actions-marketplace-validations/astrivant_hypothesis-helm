@@ -48,7 +48,7 @@ class InputDomains:
         Returns:
             InputDomains: Domain policy with explicit evidence and limitations.
         """
-        from hypothesis_helm.charts.generate import coalesce
+        from hypothesis_helm.charts.suites.generate import coalesce
         from hypothesis_helm.compiler.passes.dependencies import Dependencies
         from hypothesis_helm.compiler.passes.domains import project
         from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings

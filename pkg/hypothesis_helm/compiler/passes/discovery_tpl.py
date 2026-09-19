@@ -4,7 +4,7 @@ Recover available tpl source strings through aliases and supported serialization
 
 import json
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.origins import Choice, Literal, Origin, Text
 
 

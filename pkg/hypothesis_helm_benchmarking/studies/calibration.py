@@ -15,7 +15,7 @@ from pathlib import Path
 
 from attrs import asdict
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.passes.sampling import profile
 from hypothesis_helm.compiler.passes.topology import trim_topology
 from hypothesis_helm.execution.aggressive import CALIBRATION_VERSION, changed_fields, descriptor

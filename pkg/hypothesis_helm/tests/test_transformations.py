@@ -10,13 +10,67 @@ from textwrap import dedent
 import pytest
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts
+from hypothesis_helm.compiler.asts.transformations import calculate
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
 from hypothesis_helm.schemas.contracts import mapping
+
+
+def test_yaml_aliases_and_merge_keys_preserve_coalesce_semantics() -> None:
+    """
+    Accept round-trip YAML containers without rewriting anchors or merge precedence.
+
+    Returns:
+        None: Coalescing selects the original aliased object and preserves explicit overrides.
+    """
+    values = mapping(
+        yamlio.load(
+            dedent("""
+            base: &base
+              minimum: 1
+              maximum: 4
+            alias: *base
+            merged:
+              <<: *base
+              minimum: 3
+            items: &items [one, two]
+            aliasedItems: *items
+            empty: &empty {}
+            emptyAlias: *empty
+            """)
+        )
+    )
+    before = yamlio.dump(values)
+    assert values["base"] is values["alias"]
+    assert calculate("coalesce", (values["emptyAlias"], values["alias"])) is values["base"]
+    assert calculate("default", (values["base"], values["empty"])) is values["base"]
+    assert calculate("coalesce", ([], values["aliasedItems"])) is values["items"]
+    assert calculate("coalesce", (values["empty"], values["merged"])) == {"minimum": 3, "maximum": 4}
+    assert yamlio.dump(values) == before
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_printf_raw_values_number_remains_unknown(transformed_chart: Chart) -> None:
+    """
+    Avoid treating Helm's raw values number as an explicitly converted Go integer.
+
+    Args:
+        transformed_chart (Chart): Chart with a numeric values entry.
+
+    Returns:
+        None: An unsupported formatting type cannot establish a rejection.
+    """
+    (transformed_chart.path / "templates/NOTES.txt").write_text(
+        '{{ if eq (printf "%d" .Values.count) "2" }}{{ fail "integer formatting" }}{{ end }}'
+    )
+    contracts = Contracts.build(transformed_chart.path)
+    assert contracts.predict(transformed_chart.defaults) is None
+    assert any("explicit integer conversion" in str(note["reason"]) for note in contracts.fallbacks)
+    render(transformed_chart, {})
 
 
 @pytest.fixture
@@ -71,6 +125,7 @@ def transformed_chart(tmp_path: Path) -> Chart:
         ('eq (coalesce .Values.other .Values.text "backup") " SMALL "', {}),
         ('eq (coalesce .Values.missing .Values.other "backup") "backup"', {}),
         ("empty (coalesce .Values.other false)", {}),
+        ('eq (get (coalesce (dict) (dict "mode" "small")) "mode") "small"', {}),
         ("eq (add .Values.count 3 4) 9", {}),
         ("eq (add1 .Values.count) 3", {}),
         ("eq (.Values.count | sub 10) 8", {}),
@@ -85,6 +140,16 @@ def transformed_chart(tmp_path: Path) -> Chart:
         ("eq (atoi .Values.text) 0", {"text": " 2 "}),
         ('regexMatch "^[A-Z ]+$" .Values.text', {}),
         ('mustRegexMatch "SMALL" .Values.text', {}),
+        ('eq (trunc 3 .Values.text) " SM"', {}),
+        ('eq (trunc -3 .Values.text) "LL "', {}),
+        ('eq (trunc -100 .Values.text) " SMALL "', {}),
+        ('eq (trunc 0 .Values.text) ""', {}),
+        ('eq (join "," (splitList " " .Values.text)) ",SMALL,"', {}),
+        ('eq (join "," (splitList "" "ab")) "a,b"', {}),
+        ('eq (ternary "yes" "no" .Values.enabled) "yes"', {}),
+        ('eq (printf "%s:%d%%" "rate" (int .Values.count)) "rate:2%"', {}),
+        ('eq (printf "%d" (int64 .Values.count)) "2"', {}),
+        ('eq (print "mode=" .Values.text) "mode= SMALL "', {}),
         ('regexMatch "^[a-z][a-z0-9-]{0,62}$" .Values.text', {"text": "hello-2"}),
         ('not (regexMatch "^small$" .Values.text)', {"text": "small\n"}),
         ('regexMatch "^a.b$" .Values.text', {"text": "a\rb"}),

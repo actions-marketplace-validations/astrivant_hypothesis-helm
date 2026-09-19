@@ -4,7 +4,7 @@ Verify finite.
 
 import pytest
 
-from hypothesis_helm.charts.runner import Chart
+from hypothesis_helm.charts.testing.runner import Chart
 from hypothesis_helm.schemas.finite import NonFiniteSchema, enumerate_values
 
 

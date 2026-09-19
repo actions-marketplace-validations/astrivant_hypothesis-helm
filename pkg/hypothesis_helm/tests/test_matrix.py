@@ -11,7 +11,7 @@ from hypothesis_helm_benchmarking.charts.generator import generate
 from hypothesis_helm_benchmarking.charts.structures import STRUCTURES, expected_manifests
 from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES, measure, reference_space
 
-from hypothesis_helm.charts.runner import Chart, RenderFailure
+from hypothesis_helm.charts.testing.runner import Chart, RenderFailure
 
 
 @pytest.mark.parametrize("structure", STRUCTURES)
@@ -103,7 +103,7 @@ def test_numeric_boundary_helm(tmp_path: Path) -> None:
 
     from hypothesis_helm_benchmarking.studies.matrix import bundle_key
 
-    from hypothesis_helm.charts.runner import render
+    from hypothesis_helm.charts.testing.runner import render
 
     if not shutil.which("helm"):
         pytest.skip("Helm required")
@@ -173,7 +173,7 @@ def test_benchmark_preset_matches_native_calibrated_selection(tmp_path: Path) ->
     from hypothesis_helm_benchmarking.analysis.selection import select
     from hypothesis_helm_benchmarking.charts.faults import Fault, write_faults
 
-    from hypothesis_helm.charts.runner import check_chart
+    from hypothesis_helm.charts.testing.runner import check_chart
     from hypothesis_helm.execution.sampling import Sampling
     from hypothesis_helm.schemas.combinations import plan_interactions
     from hypothesis_helm.schemas.contracts import mapping, sequence

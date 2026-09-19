@@ -11,8 +11,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.runner import Chart, check_chart, merge_values, render
+from hypothesis_helm.charts.testing.runner import Chart, check_chart, merge_values, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.reporting.changes import compare, digest, replay
 from hypothesis_helm.reporting.repository import write_reports

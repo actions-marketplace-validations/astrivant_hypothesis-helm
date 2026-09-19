@@ -10,7 +10,7 @@ from pathlib import Path
 from attrs import define, field
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.reporting.reproductions import changed_values
@@ -78,10 +78,12 @@ def diagnostic_line(message: str) -> str:
         str: First explicit error line, or the original first nonempty line as a fallback.
     """
     lines = [re.sub(r"^\[HH\d+\]\s*", "", line.strip()) for line in message.splitlines() if line.strip()]
-    return next(
-        (line for line in lines if line.lower().startswith(("error:", "fatal:")) or re.search(r"\blevel=ERROR\b", line)),
-        lines[0] if lines else "",
-    )
+    for index, line in enumerate(lines):
+        if line.lower().startswith(("error:", "fatal:")) or re.search(r"\blevel=ERROR\b", line):
+            if "execution error at (" in line and line.endswith(":"):
+                return " ".join(item for item in lines[index : index + 4] if not item.startswith("Use --debug"))
+            return line
+    return lines[0] if lines else ""
 
 
 def chart_name(directory: Path) -> str:
@@ -222,7 +224,11 @@ class WorkerLogFormatter(logging.Formatter):
                 "name": record.name,
                 "level": record.levelno,
                 "message": record.getMessage(),
-                **{key: record.__dict__[key] for key in ("chart", "finding_code", "value_paths") if key in record.__dict__},
+                **{
+                    key: record.__dict__[key]
+                    for key in ("chart", "finding_code", "value_paths", "diagnostic_key")
+                    if key in record.__dict__
+                },
             }
         )
 
@@ -236,11 +242,13 @@ class WorkerLogs:
         directory (Path): Queue directory containing per-worker diagnostic logs.
         workers (int): Number of worker log files to inspect.
         offsets (dict[int, int]): Byte position after the last complete line from each worker.
+        diagnostics (set[str]): Compiler diagnostics already forwarded for this chart queue.
     """
 
     directory: Path
     workers: int
     offsets: dict[int, int] = field(factory=dict)
+    diagnostics: set[str] = field(factory=set)
 
     def drain(self) -> None:
         """
@@ -270,11 +278,16 @@ class WorkerLogs:
                     level = record.get("level")
                     if not isinstance(level, int) or not logging.INFO <= level <= logging.CRITICAL:
                         continue
+                    diagnostic = record.get("diagnostic_key")
+                    if isinstance(diagnostic, str):
+                        if diagnostic in self.diagnostics:
+                            continue
+                        self.diagnostics.add(diagnostic)
                     name = str(record.get("name", ""))
                     logger = logging.getLogger(name if name.startswith("hypothesis_helm.") else "hypothesis_helm.workers")
                     logger.log(
                         level,
                         "%s",
                         record["message"],
-                        extra={key: record[key] for key in ("chart", "finding_code", "value_paths") if key in record},
+                        extra={key: record[key] for key in ("chart", "finding_code", "value_paths", "diagnostic_key") if key in record},
                     )

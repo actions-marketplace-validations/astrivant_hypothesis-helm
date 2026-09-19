@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 from textwrap import dedent
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path, record_change

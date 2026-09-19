@@ -42,7 +42,11 @@ def result(function: str, arguments: list[Origin], *, offline: bool = False) -> 
     scalar = Derived(inputs)
     if function in FUNCTIONS and all(isinstance(argument, Literal) for argument in arguments):
         try:
-            return Literal(calculate(function, tuple(argument.value for argument in arguments if isinstance(argument, Literal))))
+            value = calculate(function, tuple(argument.value for argument in arguments if isinstance(argument, Literal)))
+            if not isinstance(value, (dict, list)):
+                return Literal(value)
+            # Collection-producing functions need the structured origins below;
+            # folding their result into a scalar loses exact loop/key traversal.
         except UnsupportedTransformation:
             pass  # Share the reviewed Go-compatible subset; never fall back to Python coercion.
     if function in {"toString", "toYaml", "toJson"} and len(arguments) == 1:
@@ -196,4 +200,9 @@ def result(function: str, arguments: list[Origin], *, offline: bool = False) -> 
     if specification is not None and specification.shape == "scalar" and not specification.effects & {"mutation", "dynamic-code"}:
         # A known result type does not establish a value, truthiness, enum, or equality proof.
         return scalar
+    if specification is not None and not specification.effects & {"mutation", "dynamic-code"}:
+        if specification.shape == "record" and specification.fields:
+            return Record({name: Derived(inputs, external=True) for name in specification.fields})
+        if specification.shape == "sequence":
+            return Sequence((Derived(inputs, external=True),), exact=False)
     return None

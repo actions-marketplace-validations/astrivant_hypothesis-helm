@@ -9,11 +9,12 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.compiler.asts.contracts import Contracts
+from hypothesis_helm.compiler.limits import DEFAULT_LIMITS
 from hypothesis_helm.compiler.passes.domains import project
 from hypothesis_helm.compiler.passes.rejections import matches_rejection
 from hypothesis_helm.execution.cache import fingerprint
@@ -217,7 +218,7 @@ def test_parallel_workers_inherit_compiler_override(tmp_path: Path, capfd: pytes
     """
     chart = helper_chart(tmp_path, 20)
     config = tmp_path / "policy.yaml"
-    config.write_text(yamlio.dump({"compiler": {"max_call_depth": 1}}))
+    config.write_text(yamlio.dump({"compiler": {"max_call_depth": 1, "max_files": 4321, "max_steps": 23456}}))
     assert (
         main(
             [
@@ -244,7 +245,9 @@ def test_parallel_workers_inherit_compiler_override(tmp_path: Path, capfd: pytes
         == 0
     )
     report = json.loads(capfd.readouterr().out)
-    assert report["settings"]["input_policy"]["compiler"] == {"max_call_depth": 32}
+    expected = {**DEFAULT_LIMITS, "max_call_depth": 32, "max_files": 4321, "max_steps": 23456}
+    assert report["settings"]["input_policy"]["compiler"] == expected
     phases = [phase for phase in report["charts"][0]["phases"] if "worker_pid" in phase]
     assert len(phases) == 2
     assert all(phase["configuration_rejections"]["max_call_depth"] == 32 for phase in phases)
+    assert all(phase["configuration_rejections"]["compiler_limits"] == expected for phase in phases)

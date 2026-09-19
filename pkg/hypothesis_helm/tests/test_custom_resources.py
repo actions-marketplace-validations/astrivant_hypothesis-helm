@@ -13,12 +13,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generate import generate_tests
-from hypothesis_helm.charts.generated import prepared_chart
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render, validate_resources
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.suites.generate import generate_tests
+from hypothesis_helm.charts.suites.runtime import prepared_chart
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render, validate_resources
+from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.schemas import conformity
 from hypothesis_helm.schemas.contracts import json_value, mapping

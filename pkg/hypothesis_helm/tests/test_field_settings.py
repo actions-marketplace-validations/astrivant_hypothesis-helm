@@ -10,10 +10,10 @@ import pytest
 from hypothesis import find, given, settings
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generate import generate_tests, strategy_source
-from hypothesis_helm.charts.generated import prepared_chart
-from hypothesis_helm.charts.paths import check_paths
+from hypothesis_helm.charts.suites.generate import generate_tests, strategy_source
+from hypothesis_helm.charts.suites.runtime import prepared_chart
+from hypothesis_helm.charts.testing.paths import check_paths
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.configuration import COMPLETE_EXAMPLE
 from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy

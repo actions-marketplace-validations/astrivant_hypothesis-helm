@@ -12,7 +12,7 @@ from hypothesis_helm_benchmarking.charts.mixtures import normalized_weights
 from hypothesis_helm_benchmarking.charts.structures import expected_manifests
 from hypothesis_helm_benchmarking.studies.matrix import bundle_key, reference_space
 
-from hypothesis_helm.charts.runner import Chart, render
+from hypothesis_helm.charts.testing.runner import Chart, render
 from hypothesis_helm.schemas.contracts import mapping
 
 

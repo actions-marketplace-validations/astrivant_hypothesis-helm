@@ -40,7 +40,7 @@ under `.cache/dev-tools/`. Python linting, formatting, typing and testing depend
 It creates `.venv` only when absent, installs the benchmarking extra and pre-commit hooks, and registers the Helm plugin.
 It prints the PATH command to use in your current shell. Other Linux distributions need their OS packages installed first.
 
-Ordinary chart testing needs Python and Helm. Go is required only for rebuilding the source-derived catalog; GNU Parallel
+Ordinary chart testing needs Python and Helm. Go is required only for rebuilding source-derived catalogs and compiler facts; GNU Parallel
 also supports optional Kubesec scanning. Kubesec itself is optional and is installed by the CI integrations when enabled.
 Generated [schema caches](../schemas/README.md) are ignored by Git and can be restored from CI cache or rebuilt at any time.
 
@@ -263,7 +263,7 @@ The package root contains the CLI and the lazy public API (`Chart`, `check_chart
 | `integrations/` | CI provider configuration, shard detection, and the GitHub Action adapter. |
 | `tests/` | Package-local unit and integration tests. |
 
-Generated suites import runtime helpers from `hypothesis_helm.charts.generated`.
+Generated suites import runtime helpers from `hypothesis_helm.charts.suites.runtime`.
 Regenerate previously saved suites with `helm hypothesis generate` after upgrading
 from the flat module layout, or update that import in a manually maintained suite.
 Helm commands and the public package exports retain their existing names. Result

@@ -5,7 +5,7 @@ Give the shared fixture varied values depths without changing its rendered behav
 import json
 from pathlib import Path
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path, record_change

@@ -14,7 +14,7 @@ from collections import Counter
 from pathlib import Path
 from textwrap import dedent
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.traversal import SELECTION_ORDER
 from hypothesis_helm.reporting.contents import with_contents

@@ -15,7 +15,7 @@ from attrs import define, field
 from hypothesis.strategies import SearchStrategy
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 
 if TYPE_CHECKING:
     from hypothesis_helm.compiler.passes.dependencies import Dependencies

@@ -95,7 +95,11 @@ class RejectionPolicy:
             Rejection | None: Supported enabled rejection or no filtering decision.
         """
         rejection = self.contracts.predict(values)
-        if rejection is None or rejection.key in self.disabled or (rejection.key not in self.records and len(self.records) >= 64):
+        if (
+            rejection is None
+            or rejection.key in self.disabled
+            or (rejection.key not in self.records and len(self.records) >= self.contracts.limits["max_rejections"])
+        ):
             return None
         return rejection
 
@@ -165,6 +169,7 @@ class RejectionPolicy:
         """
         if self.preserves(rejection):
             return None
+        limits = self.contracts.limits
 
         def options(state: dict[str, object], current_rejection: Rejection) -> Iterator[tuple[tuple[str, ...], list[object]]]:
             """
@@ -177,7 +182,9 @@ class RejectionPolicy:
             Yields:
                 tuple[tuple[str, ...], list[object]]: Editable input path and deterministic alternatives.
             """
-            lengths = sorted({value for value in current_rejection.inputs.values() if type(value) is int and 0 <= value <= 16})
+            lengths = sorted(
+                {value for value in current_rejection.inputs.values() if type(value) is int and 0 <= value <= limits["max_repair_length"]}
+            )
             suggestions: dict[str, list[object]] = {}
             for domain in current_rejection.transformed_domains:
                 for name, choices in domain.suggestions().items():
@@ -220,12 +227,12 @@ class RejectionPolicy:
         pending = deque([(values, rejection, 0)])
         seen = {configuration_key(values)}
         attempts = 0
-        while pending and attempts < 48:
+        while pending and attempts < limits["max_repair_attempts"]:
             state, current_rejection, depth = pending.popleft()
             local_attempts = 0
             for path, alternatives in options(state, current_rejection):
                 for alternative in alternatives:
-                    if local_attempts >= 16 or attempts >= 48:
+                    if local_attempts >= limits["max_repair_branch_attempts"] or attempts >= limits["max_repair_attempts"]:
                         break
                     candidate = copy.deepcopy(state)
                     current = candidate
@@ -244,11 +251,11 @@ class RejectionPolicy:
                         local_attempts += 1
                         if accept(candidate):
                             return candidate
-                        if depth < 2:
+                        if depth + 1 < limits["max_repair_depth"]:
                             following = self.predict(merge_values(self.defaults, candidate))
                             if following is not None and not self.preserves(following):
                                 pending.append((candidate, following, depth + 1))
-                if local_attempts >= 16 or attempts >= 48:
+                if local_attempts >= limits["max_repair_branch_attempts"] or attempts >= limits["max_repair_attempts"]:
                     break
         return None
 
@@ -272,6 +279,7 @@ class RejectionPolicy:
             "schema_conflicts": self.schema_conflicts,
             "requirements": copy.deepcopy(list(self.records.values())),
             "unsupported_sources": self.contracts.diagnostics,
+            "compiler_limits": {**self.contracts.limits, "max_call_depth": self.contracts.max_call_depth},
             "analysis_fallbacks": copy.deepcopy(self.contracts.fallbacks),
             "incomplete_evaluations": self.contracts.incomplete_evaluations,
             "scope": "Explicit chart rejection contracts; unknown branches are tested normally. Not a proof of valid chart semantics.",

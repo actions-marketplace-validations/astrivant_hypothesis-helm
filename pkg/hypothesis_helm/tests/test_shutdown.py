@@ -18,8 +18,8 @@ from unittest.mock import Mock
 import pytest
 from hypothesis_helm_benchmarking.execution.runner import Job, measure
 
-from hypothesis_helm.charts.registry import HelmTransport
-from hypothesis_helm.charts.repository import run_git
+from hypothesis_helm.charts.repositories.registry import HelmTransport
+from hypothesis_helm.charts.repositories.repository import run_git
 from hypothesis_helm.execution.parallel import run_parallel
 from hypothesis_helm.execution.processes import Processes, _signal_group
 

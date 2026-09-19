@@ -18,18 +18,18 @@ from hypothesis import HealthCheck, Phase, assume, given, seed, settings
 from hypothesis.errors import Unsatisfiable
 from hypothesis.strategies import SearchStrategy
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.audit import audit as audit
-from hypothesis_helm.charts.candidates import CandidateChecks
-from hypothesis_helm.charts.exhaustive import ExhaustiveRenders
+from hypothesis_helm.charts.inspection.audit import audit as audit
 from hypothesis_helm.charts.model import Chart as Chart
 from hypothesis_helm.charts.model import _default_paths as _default_paths
 from hypothesis_helm.charts.model import _schema_nodes as _schema_nodes
 from hypothesis_helm.charts.model import merge_values as merge_values
-from hypothesis_helm.charts.planning import PlanningOptions, build_plan
-from hypothesis_helm.charts.rendering import RenderFailure as RenderFailure
-from hypothesis_helm.charts.rendering import render as render
-from hypothesis_helm.charts.rendering import validate_resources as validate_resources
+from hypothesis_helm.charts.testing.candidates import CandidateChecks
+from hypothesis_helm.charts.testing.exhaustive import ExhaustiveRenders
+from hypothesis_helm.charts.testing.planning import PlanningOptions, build_plan
+from hypothesis_helm.charts.testing.rendering import RenderFailure as RenderFailure
+from hypothesis_helm.charts.testing.rendering import render as render
+from hypothesis_helm.charts.testing.rendering import validate_resources as validate_resources
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
@@ -41,6 +41,7 @@ from hypothesis_helm.execution.traversal import order_configurations, validate_s
 from hypothesis_helm.findings.policy import chart_rules
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.changes import compare
+from hypothesis_helm.reporting.checkpoints import save as save_checkpoint
 from hypothesis_helm.reporting.logs import FindingLog, chart_name, input_baseline
 from hypothesis_helm.reporting.reproductions import changed_values
 from hypothesis_helm.rules import effective_ignored_codes, ignored_codes
@@ -369,6 +370,29 @@ def check_chart(
     )
     check = checks.check
 
+    def checkpoint_failure(record: dict[str, object]) -> None:
+        """
+        Preserve an observed counterexample even if its worker cannot finish shrinking.
+
+        Args:
+            record (dict[str, object]): Latest check failure with exact submitted values.
+
+        Returns:
+            None: Atomic evidence is available for coordinator recovery.
+        """
+        if artifact_dir is not None:
+            save_checkpoint(
+                artifact_dir / "observed-failure.json",
+                {
+                    **record,
+                    "chart": str(chart.path),
+                    "seed": random_seed,
+                    "input_changes": changed_values(mapping(record["values"]), chart.defaults),
+                },
+            )
+
+    checks.failure_sink = checkpoint_failure
+
     def expansion_report(result: dict[str, object]) -> None:
         """
         Report observed failures and scheduled work separately from inference.
@@ -455,10 +479,10 @@ def check_chart(
 
     def stopped_report() -> dict[str, object]:
         """
-        Preserve incomplete coverage and successful measurements on a budget stop.
+        Preserve incomplete coverage and any failure already observed on a budget stop.
 
         Returns:
-            dict[str, object]: Graceful time-limit report without a false counterexample.
+            dict[str, object]: A failed report with retained evidence, or a timeout without inventing a failure.
         """
         total = len(finite_values) + 1 if finite_values is not None else None
         result: dict[str, object] = {
@@ -484,11 +508,22 @@ def check_chart(
         LOGGER.info(message)
         hashes.log_summary()
         if statistics is not None:
-            result.update(statistics.finish("time-limit", message))
+            outcome = "failed" if checks.failure_record is not None else "time-limit"
+            detail = f"{checks.failure_record['error']}; {message}" if checks.failure_record is not None else message
+            result.update(statistics.finish(outcome, detail))
         expansion_report(result)
+        result["stop_reason"] = "time-limit"
+        if checks.failure_record is not None:
+            result.update(checks.failure_record)
+            result["attempts"] = checks.count
+            result["exit_code"] = 1
+            result["input_changes"] = changed_values(mapping(result["values"]), chart.defaults)
+            if checks.last_failure is not None:
+                result["comparisons"] = comparisons(checks.last_failure[0], checks.last_failure[2])
         if artifact_dir is not None:
-            artifact_dir.mkdir(parents=True, exist_ok=True)
-            (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
+            if checks.failure_record is not None:
+                save_checkpoint(artifact_dir / "values.json", mapping(result["values"]))
+            save_checkpoint(artifact_dir / "report.json", result)
         return result
 
     def comparisons(values: dict[str, object], documents: list[object] | None) -> dict[str, object]:
@@ -534,7 +569,7 @@ def check_chart(
                 pruner.rendered,
                 len(pruner.certificates),
             )
-        values, message, documents = checks.last_failure or ({}, str(exc), None)
+        values, message, documents = checks.last_failure or (checks.interrupted_values or {}, str(exc), None)
         result = {
             **coverage,
             "status": "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",

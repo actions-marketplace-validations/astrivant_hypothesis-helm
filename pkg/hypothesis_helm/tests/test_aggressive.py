@@ -9,7 +9,7 @@ import pytest
 from hypothesis_helm_benchmarking.charts.generator import generate
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.compiler.passes.sampling import profile
 from hypothesis_helm.compiler.passes.topology import trim_topology
@@ -159,7 +159,7 @@ def test_repeated_visits_recompute_complexity(tmp_path: Path, monkeypatch: pytes
         calls.append(result)
         return result
 
-    monkeypatch.setattr("hypothesis_helm.charts.planning.sampling_profile", measured)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.planning.sampling_profile", measured)
     sampling = Sampling(aggressive=True, calibration=str(calibration))
     for _ in range(2):
         check_chart(chart, permutations=2, trim_topology=2, sampling=sampling, dry_run=True)

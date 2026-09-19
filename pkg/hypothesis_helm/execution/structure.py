@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from attrs import frozen
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.cache import seed_key
 from hypothesis_helm.reporting.progress import format_path
 

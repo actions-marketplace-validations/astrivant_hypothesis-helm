@@ -8,6 +8,7 @@
 - [Findings addressed](#findings-addressed)
 - [Function matrix](#function-matrix)
 - [Sources and upgrades](#sources-and-upgrades)
+  - [What comes from source, and what still needs a contract](#what-comes-from-source-and-what-still-needs-a-contract)
 <!-- toc:end -->
 
 [Compiler guide](README.md) · [Syntax trees](syntax-trees.md) · [Rejection analysis](analysis.md#explicit-rejection-discovery)
@@ -19,12 +20,26 @@ between otherwise identical renders.
 
 ## Coverage and limits
 
-The inventory covers **251 functions** from Helm 4.3.0, Sprig 3.3.0 and Go 1.26.0.
-It includes aliases and Helm overrides, and excludes `env` and `expandenv`, which
-Helm removes. The checked-in [source inventory](../../pkg/hypothesis_helm/compiler/builtin_inventory.json)
-records upstream versions, source checksums and function names. Tests check that
-every name has a classification and ask a matching native Helm parser to resolve
-all names without executing them.
+<!-- [[[cog
+import json
+from pathlib import Path
+from hypothesis_helm.compiler import builtins
+snapshot = json.loads(Path(builtins.__file__).with_name("builtin_inventory.json").read_text())
+versions = ", ".join(source["version"] for source in snapshot["sources"])
+cog.outl(f"The inventory covers **{len(builtins.BUILTINS)} functions** from {versions}.")
+]]] -->
+The inventory covers **251 functions** from Go 1.26.0, Sprig 3.3.0, Helm 4.3.0.
+<!-- [[[end]]] -->
+A Go AST extractor reads their function maps, aliases, removals and renderer
+assignments. The compiler loads its generated JSON instead of maintaining a
+second list of function families.
+
+The [source lock](../../pkg/hypothesis_helm_catalog/data/builtin-sources.json)
+pins artifact checksums. The [generated inventory](../../pkg/hypothesis_helm/compiler/builtin_inventory.json)
+records package file hashes, implementations, signatures, return shapes,
+call relationships, effect evidence and unresolved operations. No upstream Go
+function is executed during extraction. A changed registration syntax fails the
+rebuild instead of silently losing entries.
 
 Three levels of support are separate:
 
@@ -34,7 +49,7 @@ Three levels of support are separate:
 | Discovery model | Possible input dependencies, collection members, scalar arguments and selected result fields. | An accepted input domain or identical manifests. |
 | Concrete evaluation or equality proof | A result within a pass's explicitly supported subset. | The behavior of unsupported arguments, functions or renderer modes. |
 
-Every listed function has an effect classification. Only supported operations
+Every listed function has a generated source record. Only supported operations
 have concrete models. A known return shape is insufficient to prove truthiness,
 an enum or equivalent manifests. Unsupported expressions retain uncertainty and
 remain eligible for Helm testing. A new function absent from this pinned inventory
@@ -94,266 +109,268 @@ that the intended data survived. Helm remains the authority for rendered output.
 ## Function matrix
 
 Result families describe possible shapes after a successful call, not exact
-values. The operation column groups related functions; the pinned upstream
-sources below define their signatures and complete behavior.
+values. The implementation column identifies the upstream code; the source inventory
+contains signatures and evidence. An unresolved count includes imported calls,
+method dispatch and writes the extractor cannot resolve. Zero detected effects
+is not a purity proof, even when no unresolved calls were recorded.
 
 <!-- [[[cog
 from hypothesis_helm.compiler.builtins import reference
 cog.outl(reference())
 ]]] -->
-| Function | Meaning | Result | Effects |
-| --- | --- | --- | --- |
-| `abbrev` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `abbrevboth` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `add` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `add1` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `add1f` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `addf` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `adler32sum` | Compute a deterministic checksum | scalar | Argument-dependent; no external effects classified |
-| `ago` | Format, parse or calculate dates and durations | scalar | clock-or-timezone |
-| `all` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `and` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `any` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `append` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `atoi` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `b32dec` | Encode or decode base32/base64 text | scalar | Argument-dependent; no external effects classified |
-| `b32enc` | Encode or decode base32/base64 text | scalar | Argument-dependent; no external effects classified |
-| `b64dec` | Encode or decode base32/base64 text | scalar | Argument-dependent; no external effects classified |
-| `b64enc` | Encode or decode base32/base64 text | scalar | Argument-dependent; no external effects classified |
-| `base` | Manipulate slash-separated paths | scalar | Argument-dependent; no external effects classified |
-| `bcrypt` | Hash passwords, derive keys or encrypt/decrypt text | scalar | randomness |
-| `biggest` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `buildCustomCert` | Decode certificate material | certificate | Argument-dependent; no external effects classified |
-| `call` | Invoke a function supplied through context | any | dynamic-code |
-| `camelcase` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `cat` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `ceil` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `chunk` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `clean` | Manipulate slash-separated paths | scalar | Argument-dependent; no external effects classified |
-| `coalesce` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `compact` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `concat` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `contains` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `date` | Format, parse or calculate dates and durations | scalar | clock-or-timezone |
-| `dateInZone` | Format, parse or calculate dates and durations | scalar | clock-or-timezone |
-| `dateModify` | Parse, adjust or read a timestamp | timestamp | Argument-dependent; no external effects classified |
-| `date_in_zone` | Format, parse or calculate dates and durations | scalar | clock-or-timezone |
-| `date_modify` | Parse, adjust or read a timestamp | timestamp | Argument-dependent; no external effects classified |
-| `decryptAES` | Hash passwords, derive keys or encrypt/decrypt text | scalar | Argument-dependent; no external effects classified |
-| `deepCopy` | Copy a value and its nested containers | any | Argument-dependent; no external effects classified |
-| `deepEqual` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `default` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `derivePassword` | Hash passwords, derive keys or encrypt/decrypt text | scalar | Argument-dependent; no external effects classified |
-| `dict` | Construct or select dictionary entries | map | Argument-dependent; no external effects classified |
-| `dig` | Read dictionary or collection entries | any | Argument-dependent; no external effects classified |
-| `dir` | Manipulate slash-separated paths | scalar | Argument-dependent; no external effects classified |
-| `div` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `divf` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `duration` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationDays` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationHours` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationMicroseconds` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationMilliseconds` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationMinutes` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationNanoseconds` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationRound` | Format, parse or calculate dates and durations | scalar | clock-or-timezone |
-| `durationRoundTo` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationSeconds` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationTruncateTo` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `durationWeeks` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `empty` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `encryptAES` | Hash passwords, derive keys or encrypt/decrypt text | scalar | randomness |
-| `eq` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `ext` | Manipulate slash-separated paths | scalar | Argument-dependent; no external effects classified |
-| `fail` | Reject the current render explicitly | scalar | rejection |
-| `first` | Read a list endpoint | any | Argument-dependent; no external effects classified |
-| `float64` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `floor` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `fromJson` | Parse JSON, YAML or TOML text | any | Argument-dependent; no external effects classified |
-| `fromJsonArray` | Parse an array document | sequence | Argument-dependent; no external effects classified |
-| `fromToml` | Parse JSON, YAML or TOML text | any | Argument-dependent; no external effects classified |
-| `fromYaml` | Parse JSON, YAML or TOML text | any | Argument-dependent; no external effects classified |
-| `fromYamlArray` | Parse an array document | sequence | Argument-dependent; no external effects classified |
-| `ge` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `genCA` | Generate certificate material | certificate | clock-or-timezone, randomness |
-| `genCAWithKey` | Generate certificate material | certificate | clock-or-timezone, randomness |
-| `genPrivateKey` | Hash passwords, derive keys or encrypt/decrypt text | scalar | randomness |
-| `genSelfSignedCert` | Generate certificate material | certificate | clock-or-timezone, randomness |
-| `genSelfSignedCertWithKey` | Generate certificate material | certificate | clock-or-timezone, randomness |
-| `genSignedCert` | Generate certificate material | certificate | clock-or-timezone, randomness |
-| `genSignedCertWithKey` | Generate certificate material | certificate | clock-or-timezone, randomness |
-| `get` | Read dictionary or collection entries | any | Argument-dependent; no external effects classified |
-| `getHostByName` | Resolve a hostname when Helm DNS access is enabled | scalar | external-state |
-| `gt` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `has` | Test list membership | scalar | Argument-dependent; no external effects classified |
-| `hasKey` | Test dictionary membership | scalar | Argument-dependent; no external effects classified |
-| `hasPrefix` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `hasSuffix` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `hello` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `html` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `htmlDate` | Format, parse or calculate dates and durations | scalar | clock-or-timezone |
-| `htmlDateInZone` | Format, parse or calculate dates and durations | scalar | clock-or-timezone |
-| `htpasswd` | Hash passwords, derive keys or encrypt/decrypt text | scalar | randomness |
-| `include` | Execute a named template or template string | scalar | dynamic-code |
-| `indent` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `index` | Read dictionary or collection entries | any | Argument-dependent; no external effects classified |
-| `initial` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `initials` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `int` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `int64` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `isAbs` | Manipulate slash-separated paths | scalar | Argument-dependent; no external effects classified |
-| `join` | Join a list into text | scalar | Argument-dependent; no external effects classified |
-| `js` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `kebabcase` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `keys` | Collect dictionary entries into a list | sequence | unordered |
-| `kindIs` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `kindOf` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `last` | Read a list endpoint | any | Argument-dependent; no external effects classified |
-| `le` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `len` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `list` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `lookup` | Read Kubernetes resources from renderer context | map | external-state |
-| `lower` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `lt` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `max` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `maxf` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `merge` | Construct or select dictionary entries | map | mutation |
-| `mergeOverwrite` | Construct or select dictionary entries | map | mutation |
-| `min` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `minf` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `mod` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `mul` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `mulf` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `mustAppend` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustChunk` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustCompact` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustDateModify` | Parse, adjust or read a timestamp | timestamp | Argument-dependent; no external effects classified |
-| `mustDeepCopy` | Copy a value and its nested containers | any | Argument-dependent; no external effects classified |
-| `mustFirst` | Read a list endpoint | any | Argument-dependent; no external effects classified |
-| `mustFromJson` | Parse JSON, YAML or TOML text | any | Argument-dependent; no external effects classified |
-| `mustHas` | Test list membership | scalar | Argument-dependent; no external effects classified |
-| `mustInitial` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustLast` | Read a list endpoint | any | Argument-dependent; no external effects classified |
-| `mustMerge` | Construct or select dictionary entries | map | mutation |
-| `mustMergeOverwrite` | Construct or select dictionary entries | map | mutation |
-| `mustPrepend` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustPush` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustRegexFind` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `mustRegexFindAll` | Extract or split multiple regex matches | sequence | Argument-dependent; no external effects classified |
-| `mustRegexMatch` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `mustRegexReplaceAll` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `mustRegexReplaceAllLiteral` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `mustRegexSplit` | Extract or split multiple regex matches | sequence | Argument-dependent; no external effects classified |
-| `mustRest` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustReverse` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustSlice` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustToDate` | Parse, adjust or read a timestamp | timestamp | clock-or-timezone |
-| `mustToDuration` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `mustToJson` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `mustToPrettyJson` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `mustToRawJson` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `mustToToml` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `mustToYaml` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `mustUniq` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `mustWithout` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `must_date_modify` | Parse, adjust or read a timestamp | timestamp | Argument-dependent; no external effects classified |
-| `ne` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `nindent` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `nospace` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `not` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `now` | Parse, adjust or read a timestamp | timestamp | clock-or-timezone |
-| `omit` | Construct or select dictionary entries | map | Argument-dependent; no external effects classified |
-| `or` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `osBase` | Manipulate operating-system paths | scalar | platform |
-| `osClean` | Manipulate operating-system paths | scalar | platform |
-| `osDir` | Manipulate operating-system paths | scalar | platform |
-| `osExt` | Manipulate operating-system paths | scalar | platform |
-| `osIsAbs` | Manipulate operating-system paths | scalar | platform |
-| `pick` | Construct or select dictionary entries | map | Argument-dependent; no external effects classified |
-| `pluck` | Collect dictionary entries into a list | sequence | Argument-dependent; no external effects classified |
-| `plural` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `prepend` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `print` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `printf` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `println` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `push` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `quote` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `randAlpha` | Generate random data or shuffle text | scalar | randomness |
-| `randAlphaNum` | Generate random data or shuffle text | scalar | randomness |
-| `randAscii` | Generate random data or shuffle text | scalar | randomness |
-| `randBytes` | Generate random data or shuffle text | scalar | randomness |
-| `randInt` | Generate random data or shuffle text | scalar | randomness |
-| `randNumeric` | Generate random data or shuffle text | scalar | randomness |
-| `regexFind` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `regexFindAll` | Extract or split multiple regex matches | sequence | Argument-dependent; no external effects classified |
-| `regexMatch` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `regexQuoteMeta` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `regexReplaceAll` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `regexReplaceAllLiteral` | Match, extract, quote or replace regular expressions | scalar | Argument-dependent; no external effects classified |
-| `regexSplit` | Extract or split multiple regex matches | sequence | Argument-dependent; no external effects classified |
-| `repeat` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `replace` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `required` | Choose values by emptiness or a condition | any | rejection |
-| `rest` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `reverse` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `round` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `semver` | Parse a semantic version | version | Argument-dependent; no external effects classified |
-| `semverCompare` | Compare semantic versions | scalar | Argument-dependent; no external effects classified |
-| `seq` | Generate a space-separated integer sequence | scalar | Argument-dependent; no external effects classified |
-| `set` | Construct or select dictionary entries | map | mutation |
-| `sha1sum` | Compute a deterministic checksum | scalar | Argument-dependent; no external effects classified |
-| `sha256sum` | Compute a deterministic checksum | scalar | Argument-dependent; no external effects classified |
-| `sha512sum` | Compute a deterministic checksum | scalar | Argument-dependent; no external effects classified |
-| `shuffle` | Generate random data or shuffle text | scalar | randomness |
-| `slice` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `snakecase` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `sortAlpha` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `split` | Split text into numbered dictionary entries | map | Argument-dependent; no external effects classified |
-| `splitList` | Split text into a list | sequence | Argument-dependent; no external effects classified |
-| `splitn` | Split text into numbered dictionary entries | map | Argument-dependent; no external effects classified |
-| `squote` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `sub` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `subf` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `substr` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `swapcase` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `ternary` | Choose values by emptiness or a condition | any | Argument-dependent; no external effects classified |
-| `title` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `toDate` | Parse, adjust or read a timestamp | timestamp | clock-or-timezone |
-| `toDecimal` | Convert numbers or calculate arithmetic | scalar | Argument-dependent; no external effects classified |
-| `toJson` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `toPrettyJson` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `toRawJson` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `toString` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `toStrings` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `toToml` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `toYaml` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `toYamlPretty` | Serialize a value to JSON, YAML or TOML text | scalar | Argument-dependent; no external effects classified |
-| `tpl` | Execute a named template or template string | scalar | dynamic-code |
-| `trim` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `trimAll` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `trimPrefix` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `trimSuffix` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `trimall` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `trunc` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `tuple` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `typeIs` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `typeIsLike` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `typeOf` | Compare values or inspect their types | scalar | Argument-dependent; no external effects classified |
-| `uniq` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `unixEpoch` | Format, parse or calculate dates and durations | scalar | Argument-dependent; no external effects classified |
-| `unset` | Construct or select dictionary entries | map | mutation |
-| `until` | Generate an integer sequence | sequence | Argument-dependent; no external effects classified |
-| `untilStep` | Generate an integer sequence | sequence | Argument-dependent; no external effects classified |
-| `untitle` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `upper` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `urlJoin` | Assemble URL fields into text | scalar | Argument-dependent; no external effects classified |
-| `urlParse` | Parse a URL into fields | map | Argument-dependent; no external effects classified |
-| `urlquery` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `uuidv4` | Generate random data or shuffle text | scalar | randomness |
-| `values` | Collect dictionary entries into a list | sequence | unordered |
-| `without` | Construct, select or reorder a list | sequence | Argument-dependent; no external effects classified |
-| `wrap` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
-| `wrapWith` | Transform, format or escape text | scalar | Argument-dependent; no external effects classified |
+| Function | Upstream implementation | Result | Detected effects | Unresolved calls/writes |
+| --- | --- | --- | --- | ---: |
+| `abbrev` | `abbrev` | scalar | None detected (not a purity proof) | 1 |
+| `abbrevboth` | `abbrevboth` | scalar | None detected (not a purity proof) | 1 |
+| `add` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `add1` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `add1f` | `closure` | scalar | None detected (not a purity proof) | 5 |
+| `addf` | `closure` | scalar | None detected (not a purity proof) | 6 |
+| `adler32sum` | `adler32sum` | scalar | None detected (not a purity proof) | 3 |
+| `ago` | `dateAgo` | scalar | clock-or-timezone | 5 |
+| `all` | `all` | scalar | None detected (not a purity proof) | 10 |
+| `and` | `and` | any | None detected (not a purity proof) | 0 |
+| `any` | `any` | scalar | None detected (not a purity proof) | 10 |
+| `append` | `push` | sequence | None detected (not a purity proof) | 8 |
+| `atoi` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `b32dec` | `base32decode` | scalar | None detected (not a purity proof) | 2 |
+| `b32enc` | `base32encode` | scalar | None detected (not a purity proof) | 2 |
+| `b64dec` | `base64decode` | scalar | None detected (not a purity proof) | 2 |
+| `b64enc` | `base64encode` | scalar | None detected (not a purity proof) | 2 |
+| `base` | `path.Base` | any | None detected (not a purity proof) | 1 |
+| `bcrypt` | `bcrypt` | scalar | randomness | 3 |
+| `biggest` | `max` | scalar | None detected (not a purity proof) | 1 |
+| `buildCustomCert` | `buildCustomCertificate` | record | None detected (not a purity proof) | 13 |
+| `call` | `emptyCall` | any | dynamic-code | 0 |
+| `camelcase` | `xstrings.ToPascalCase` | any | None detected (not a purity proof) | 1 |
+| `cat` | `cat` | scalar | None detected (not a purity proof) | 3 |
+| `ceil` | `ceil` | scalar | None detected (not a purity proof) | 2 |
+| `chunk` | `chunk` | sequence | None detected (not a purity proof) | 11 |
+| `clean` | `path.Clean` | any | None detected (not a purity proof) | 1 |
+| `coalesce` | `coalesce` | any | None detected (not a purity proof) | 10 |
+| `compact` | `compact` | sequence | None detected (not a purity proof) | 16 |
+| `concat` | `concat` | any | None detected (not a purity proof) | 7 |
+| `contains` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `date` | `date` | scalar | clock-or-timezone | 5 |
+| `dateInZone` | `dateInZone` | scalar | clock-or-timezone | 5 |
+| `dateModify` | `dateModify` | any | None detected (not a purity proof) | 2 |
+| `date_in_zone` | `dateInZone` | scalar | clock-or-timezone | 5 |
+| `date_modify` | `dateModify` | any | None detected (not a purity proof) | 2 |
+| `decryptAES` | `decryptAES` | scalar | None detected (not a purity proof) | 5 |
+| `deepCopy` | `deepCopy` | any | None detected (not a purity proof) | 2 |
+| `deepEqual` | `reflect.DeepEqual` | any | None detected (not a purity proof) | 1 |
+| `default` | `dfault` | any | None detected (not a purity proof) | 10 |
+| `derivePassword` | `derivePassword` | scalar | None detected (not a purity proof) | 12 |
+| `dict` | `dict` | map | None detected (not a purity proof) | 4 |
+| `dig` | `dig` | any | None detected (not a purity proof) | 1 |
+| `dir` | `path.Dir` | any | None detected (not a purity proof) | 1 |
+| `div` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `divf` | `closure` | scalar | None detected (not a purity proof) | 5 |
+| `duration` | `duration` | scalar | None detected (not a purity proof) | 3 |
+| `durationDays` | `durationDays` | scalar | None detected (not a purity proof) | 14 |
+| `durationHours` | `durationHours` | scalar | None detected (not a purity proof) | 14 |
+| `durationMicroseconds` | `durationMicroseconds` | scalar | None detected (not a purity proof) | 14 |
+| `durationMilliseconds` | `durationMilliseconds` | scalar | None detected (not a purity proof) | 14 |
+| `durationMinutes` | `durationMinutes` | scalar | None detected (not a purity proof) | 14 |
+| `durationNanoseconds` | `durationNanoseconds` | scalar | None detected (not a purity proof) | 14 |
+| `durationRound` | `durationRound` | scalar | clock-or-timezone | 4 |
+| `durationRoundTo` | `durationRoundTo` | any | None detected (not a purity proof) | 14 |
+| `durationSeconds` | `durationSeconds` | scalar | None detected (not a purity proof) | 14 |
+| `durationTruncateTo` | `durationTruncateTo` | any | None detected (not a purity proof) | 14 |
+| `durationWeeks` | `durationWeeks` | scalar | None detected (not a purity proof) | 14 |
+| `empty` | `empty` | scalar | None detected (not a purity proof) | 10 |
+| `encryptAES` | `encryptAES` | scalar | randomness | 8 |
+| `eq` | `eq` | scalar | None detected (not a purity proof) | 26 |
+| `ext` | `path.Ext` | any | None detected (not a purity proof) | 1 |
+| `fail` | `closure` | scalar | rejection | 2 |
+| `first` | `first` | any | None detected (not a purity proof) | 7 |
+| `float64` | `toFloat64` | scalar | None detected (not a purity proof) | 1 |
+| `floor` | `floor` | scalar | None detected (not a purity proof) | 2 |
+| `fromJson` | `fromJSON` | any | None detected (not a purity proof) | 4 |
+| `fromJsonArray` | `fromJSONArray` | sequence | None detected (not a purity proof) | 3 |
+| `fromToml` | `fromTOML` | map | None detected (not a purity proof) | 4 |
+| `fromYaml` | `fromYAML` | map | None detected (not a purity proof) | 4 |
+| `fromYamlArray` | `fromYAMLArray` | sequence | None detected (not a purity proof) | 3 |
+| `ge` | `ge` | scalar | None detected (not a purity proof) | 13 |
+| `genCA` | `generateCertificateAuthority` | record | clock-or-timezone, external-state, randomness | 24 |
+| `genCAWithKey` | `generateCertificateAuthorityWithPEMKey` | record | clock-or-timezone, external-state, randomness | 31 |
+| `genPrivateKey` | `generatePrivateKey` | scalar | randomness | 12 |
+| `genSelfSignedCert` | `generateSelfSignedCertificate` | record | clock-or-timezone, external-state, randomness | 22 |
+| `genSelfSignedCertWithKey` | `generateSelfSignedCertificateWithPEMKey` | record | clock-or-timezone, external-state, randomness | 29 |
+| `genSignedCert` | `generateSignedCertificate` | record | clock-or-timezone, external-state, randomness | 31 |
+| `genSignedCertWithKey` | `generateSignedCertificateWithPEMKey` | record | clock-or-timezone, external-state, randomness | 30 |
+| `get` | `get` | any | None detected (not a purity proof) | 0 |
+| `getHostByName` | `closure` | scalar | external-state, randomness | 2 |
+| `gt` | `gt` | scalar | None detected (not a purity proof) | 31 |
+| `has` | `has` | scalar | None detected (not a purity proof) | 8 |
+| `hasKey` | `hasKey` | scalar | None detected (not a purity proof) | 0 |
+| `hasPrefix` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `hasSuffix` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `hello` | `closure` | scalar | None detected (not a purity proof) | 0 |
+| `html` | `HTMLEscaper` | scalar | mutation | 7 |
+| `htmlDate` | `htmlDate` | scalar | clock-or-timezone | 5 |
+| `htmlDateInZone` | `htmlDateInZone` | scalar | clock-or-timezone | 5 |
+| `htpasswd` | `htpasswd` | scalar | randomness | 4 |
+| `include` | `includeFun` | scalar | dynamic-code | 5 |
+| `indent` | `indent` | scalar | None detected (not a purity proof) | 2 |
+| `index` | `index` | any | None detected (not a purity proof) | 25 |
+| `initial` | `initial` | sequence | None detected (not a purity proof) | 8 |
+| `initials` | `initials` | scalar | None detected (not a purity proof) | 1 |
+| `int` | `toInt` | scalar | None detected (not a purity proof) | 1 |
+| `int64` | `toInt64` | scalar | None detected (not a purity proof) | 1 |
+| `isAbs` | `path.IsAbs` | any | None detected (not a purity proof) | 1 |
+| `join` | `join` | scalar | None detected (not a purity proof) | 9 |
+| `js` | `JSEscaper` | scalar | mutation | 10 |
+| `kebabcase` | `xstrings.ToKebabCase` | any | None detected (not a purity proof) | 1 |
+| `keys` | `keys` | sequence | unordered | 0 |
+| `kindIs` | `kindIs` | scalar | None detected (not a purity proof) | 3 |
+| `kindOf` | `kindOf` | scalar | None detected (not a purity proof) | 3 |
+| `last` | `last` | any | None detected (not a purity proof) | 7 |
+| `le` | `le` | scalar | None detected (not a purity proof) | 31 |
+| `len` | `length` | scalar | None detected (not a purity proof) | 5 |
+| `list` | `list` | sequence | None detected (not a purity proof) | 0 |
+| `lookup` | `newLookupFunction(ctx, *e.clientProvider)` | any | external-state | 1 |
+| `lower` | `strings.ToLower` | any | None detected (not a purity proof) | 1 |
+| `lt` | `lt` | scalar | None detected (not a purity proof) | 13 |
+| `max` | `max` | scalar | None detected (not a purity proof) | 1 |
+| `maxf` | `maxf` | scalar | None detected (not a purity proof) | 2 |
+| `merge` | `merge` | any | mutation | 1 |
+| `mergeOverwrite` | `mergeOverwrite` | any | mutation | 1 |
+| `min` | `min` | scalar | None detected (not a purity proof) | 1 |
+| `minf` | `minf` | scalar | None detected (not a purity proof) | 2 |
+| `mod` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `mul` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `mulf` | `closure` | scalar | None detected (not a purity proof) | 5 |
+| `mustAppend` | `mustPush` | sequence | None detected (not a purity proof) | 8 |
+| `mustChunk` | `mustChunk` | sequence | None detected (not a purity proof) | 11 |
+| `mustCompact` | `mustCompact` | sequence | None detected (not a purity proof) | 16 |
+| `mustDateModify` | `mustDateModify` | any | None detected (not a purity proof) | 2 |
+| `mustDeepCopy` | `mustDeepCopy` | any | None detected (not a purity proof) | 1 |
+| `mustFirst` | `mustFirst` | any | None detected (not a purity proof) | 7 |
+| `mustFromJson` | `mustFromJson` | any | None detected (not a purity proof) | 2 |
+| `mustHas` | `mustHas` | scalar | None detected (not a purity proof) | 8 |
+| `mustInitial` | `mustInitial` | sequence | None detected (not a purity proof) | 8 |
+| `mustLast` | `mustLast` | any | None detected (not a purity proof) | 7 |
+| `mustMerge` | `mustMerge` | any | mutation | 1 |
+| `mustMergeOverwrite` | `mustMergeOverwrite` | any | mutation | 1 |
+| `mustPrepend` | `mustPrepend` | sequence | None detected (not a purity proof) | 8 |
+| `mustPush` | `mustPush` | sequence | None detected (not a purity proof) | 8 |
+| `mustRegexFind` | `mustRegexFind` | scalar | None detected (not a purity proof) | 2 |
+| `mustRegexFindAll` | `mustRegexFindAll` | sequence | None detected (not a purity proof) | 2 |
+| `mustRegexMatch` | `mustRegexMatch` | scalar | None detected (not a purity proof) | 1 |
+| `mustRegexReplaceAll` | `mustRegexReplaceAll` | scalar | None detected (not a purity proof) | 2 |
+| `mustRegexReplaceAllLiteral` | `mustRegexReplaceAllLiteral` | scalar | None detected (not a purity proof) | 2 |
+| `mustRegexSplit` | `mustRegexSplit` | sequence | None detected (not a purity proof) | 2 |
+| `mustRest` | `mustRest` | sequence | None detected (not a purity proof) | 8 |
+| `mustReverse` | `mustReverse` | sequence | None detected (not a purity proof) | 8 |
+| `mustSlice` | `mustSlice` | any | None detected (not a purity proof) | 8 |
+| `mustToDate` | `mustToDate` | any | clock-or-timezone | 1 |
+| `mustToDuration` | `mustToDuration` | any | None detected (not a purity proof) | 13 |
+| `mustToJson` | `mustToJSON` | scalar | None detected (not a purity proof) | 1 |
+| `mustToPrettyJson` | `mustToPrettyJson` | scalar | None detected (not a purity proof) | 1 |
+| `mustToRawJson` | `mustToRawJson` | scalar | None detected (not a purity proof) | 5 |
+| `mustToToml` | `mustToTOML` | scalar | None detected (not a purity proof) | 4 |
+| `mustToYaml` | `mustToYAML` | scalar | None detected (not a purity proof) | 2 |
+| `mustUniq` | `mustUniq` | sequence | None detected (not a purity proof) | 8 |
+| `mustWithout` | `mustWithout` | sequence | None detected (not a purity proof) | 8 |
+| `must_date_modify` | `mustDateModify` | any | None detected (not a purity proof) | 2 |
+| `ne` | `ne` | scalar | None detected (not a purity proof) | 26 |
+| `nindent` | `nindent` | scalar | None detected (not a purity proof) | 2 |
+| `nospace` | `util.DeleteWhiteSpace` | any | None detected (not a purity proof) | 1 |
+| `not` | `not` | scalar | None detected (not a purity proof) | 2 |
+| `now` | `time.Now` | any | clock-or-timezone | 1 |
+| `omit` | `omit` | map | None detected (not a purity proof) | 2 |
+| `or` | `or` | any | None detected (not a purity proof) | 0 |
+| `osBase` | `filepath.Base` | any | platform | 1 |
+| `osClean` | `filepath.Clean` | any | platform | 1 |
+| `osDir` | `filepath.Dir` | any | platform | 1 |
+| `osExt` | `filepath.Ext` | any | platform | 1 |
+| `osIsAbs` | `filepath.IsAbs` | any | platform | 1 |
+| `pick` | `pick` | map | None detected (not a purity proof) | 1 |
+| `pluck` | `pluck` | sequence | None detected (not a purity proof) | 0 |
+| `plural` | `plural` | scalar | None detected (not a purity proof) | 0 |
+| `prepend` | `prepend` | sequence | None detected (not a purity proof) | 8 |
+| `print` | `fmt.Sprint` | any | None detected (not a purity proof) | 1 |
+| `printf` | `fmt.Sprintf` | any | None detected (not a purity proof) | 1 |
+| `println` | `fmt.Sprintln` | any | None detected (not a purity proof) | 1 |
+| `push` | `push` | sequence | None detected (not a purity proof) | 8 |
+| `quote` | `quote` | scalar | None detected (not a purity proof) | 4 |
+| `randAlpha` | `randAlpha` | scalar | randomness | 1 |
+| `randAlphaNum` | `randAlphaNumeric` | scalar | randomness | 1 |
+| `randAscii` | `randAscii` | scalar | randomness | 1 |
+| `randBytes` | `randBytes` | scalar | randomness | 2 |
+| `randInt` | `closure` | scalar | randomness | 1 |
+| `randNumeric` | `randNumeric` | scalar | randomness | 1 |
+| `regexFind` | `regexFind` | scalar | None detected (not a purity proof) | 2 |
+| `regexFindAll` | `regexFindAll` | sequence | None detected (not a purity proof) | 2 |
+| `regexMatch` | `regexMatch` | scalar | None detected (not a purity proof) | 1 |
+| `regexQuoteMeta` | `regexQuoteMeta` | scalar | None detected (not a purity proof) | 1 |
+| `regexReplaceAll` | `regexReplaceAll` | scalar | None detected (not a purity proof) | 2 |
+| `regexReplaceAllLiteral` | `regexReplaceAllLiteral` | scalar | None detected (not a purity proof) | 2 |
+| `regexSplit` | `regexSplit` | sequence | None detected (not a purity proof) | 2 |
+| `repeat` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `replace` | `replace` | scalar | None detected (not a purity proof) | 1 |
+| `required` | `closure` | any | rejection | 2 |
+| `rest` | `rest` | sequence | None detected (not a purity proof) | 8 |
+| `reverse` | `reverse` | sequence | None detected (not a purity proof) | 8 |
+| `round` | `round` | scalar | None detected (not a purity proof) | 5 |
+| `semver` | `semver` | any | None detected (not a purity proof) | 1 |
+| `semverCompare` | `semverCompare` | scalar | None detected (not a purity proof) | 3 |
+| `seq` | `seq` | scalar | None detected (not a purity proof) | 4 |
+| `set` | `set` | map | mutation | 0 |
+| `sha1sum` | `sha1sum` | scalar | None detected (not a purity proof) | 3 |
+| `sha256sum` | `sha256sum` | scalar | None detected (not a purity proof) | 3 |
+| `sha512sum` | `sha512sum` | scalar | None detected (not a purity proof) | 3 |
+| `shuffle` | `xstrings.Shuffle` | any | randomness | 1 |
+| `slice` | `slice` | any | None detected (not a purity proof) | 22 |
+| `snakecase` | `xstrings.ToSnakeCase` | any | None detected (not a purity proof) | 1 |
+| `sortAlpha` | `sortAlpha` | sequence | None detected (not a purity proof) | 12 |
+| `split` | `split` | map | None detected (not a purity proof) | 3 |
+| `splitList` | `closure` | sequence | None detected (not a purity proof) | 1 |
+| `splitn` | `splitn` | map | None detected (not a purity proof) | 3 |
+| `squote` | `squote` | scalar | None detected (not a purity proof) | 2 |
+| `sub` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `subf` | `closure` | scalar | None detected (not a purity proof) | 5 |
+| `substr` | `substring` | scalar | None detected (not a purity proof) | 0 |
+| `swapcase` | `util.SwapCase` | any | None detected (not a purity proof) | 1 |
+| `ternary` | `ternary` | any | None detected (not a purity proof) | 0 |
+| `title` | `strings.Title` | any | None detected (not a purity proof) | 1 |
+| `toDate` | `toDate` | any | clock-or-timezone | 1 |
+| `toDecimal` | `toDecimal` | scalar | None detected (not a purity proof) | 2 |
+| `toJson` | `toJSON` | scalar | None detected (not a purity proof) | 1 |
+| `toPrettyJson` | `toPrettyJson` | scalar | None detected (not a purity proof) | 1 |
+| `toRawJson` | `toRawJson` | scalar | None detected (not a purity proof) | 5 |
+| `toString` | `strval` | scalar | None detected (not a purity proof) | 3 |
+| `toStrings` | `strslice` | sequence | None detected (not a purity proof) | 8 |
+| `toToml` | `toTOML` | scalar | None detected (not a purity proof) | 5 |
+| `toYaml` | `toYAML` | scalar | None detected (not a purity proof) | 2 |
+| `toYamlPretty` | `toYAMLPretty` | scalar | None detected (not a purity proof) | 5 |
+| `tpl` | `tplFun` | any | dynamic-code | 12 |
+| `trim` | `strings.TrimSpace` | any | None detected (not a purity proof) | 1 |
+| `trimAll` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `trimPrefix` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `trimSuffix` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `trimall` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `trunc` | `trunc` | scalar | None detected (not a purity proof) | 0 |
+| `tuple` | `list` | sequence | None detected (not a purity proof) | 0 |
+| `typeIs` | `typeIs` | scalar | None detected (not a purity proof) | 1 |
+| `typeIsLike` | `typeIsLike` | scalar | None detected (not a purity proof) | 1 |
+| `typeOf` | `typeOf` | scalar | None detected (not a purity proof) | 1 |
+| `uniq` | `uniq` | sequence | None detected (not a purity proof) | 8 |
+| `unixEpoch` | `unixEpoch` | scalar | None detected (not a purity proof) | 2 |
+| `unset` | `unset` | map | mutation | 0 |
+| `until` | `until` | sequence | None detected (not a purity proof) | 0 |
+| `untilStep` | `untilStep` | sequence | None detected (not a purity proof) | 0 |
+| `untitle` | `untitle` | scalar | None detected (not a purity proof) | 1 |
+| `upper` | `strings.ToUpper` | any | None detected (not a purity proof) | 1 |
+| `urlJoin` | `urlJoin` | scalar | None detected (not a purity proof) | 9 |
+| `urlParse` | `urlParse` | map | None detected (not a purity proof) | 12 |
+| `urlquery` | `URLQueryEscaper` | scalar | mutation | 4 |
+| `uuidv4` | `uuidv4` | scalar | randomness | 2 |
+| `values` | `values` | sequence | unordered | 0 |
+| `without` | `without` | sequence | None detected (not a purity proof) | 8 |
+| `wrap` | `closure` | scalar | None detected (not a purity proof) | 1 |
+| `wrapWith` | `closure` | scalar | None detected (not a purity proof) | 1 |
 <!-- [[[end]]] -->
 
 ## Sources and upgrades
@@ -363,9 +380,59 @@ cog.outl(reference())
 - [Sprig function map and aliases](https://github.com/Masterminds/sprig/blob/v3.3.0/functions.go).
 - [Go template builtin functions](https://github.com/golang/go/blob/go1.26.0/src/text/template/funcs.go).
 
-When updating the pinned versions, compare the upstream function tables, update
-the source inventory and review effects for every added or changed entry. Do not
-rely only on Sprig's list of non-hermetic functions: the compiler also accounts
-for random password hashing, encryption, certificates and unordered map results.
-Regenerate this matrix with `cog -r docs/compiler/functions.md`, then run the
-builtin and compiler regression tests.
+Rebuild the inventory and its reference before releasing:
+
+```bash
+poetry install --only-root
+poetry run hypothesis-helm-builtins
+poetry run cog -r docs/compiler/functions.md
+```
+
+Use `hypothesis-helm-builtins --check` to regenerate and compare without writing.
+Use `--offline` after the sources are cached, `--go /path/to/go` to select the
+Go executable, and `--source-lock path.json` to test a reviewed upstream upgrade.
+The source downloads and Go build cache live under `.cache/compiler-builtins/`
+by default. Ordinary chart tests load the bundled JSON and need neither Go nor
+network access. Tagged release builds verify the inventory before packaging.
+
+### What comes from source, and what still needs a contract
+
+```mermaid
+flowchart LR
+    A[Checksum-locked upstream sources] --> B[Go syntax trees]
+    B --> C[Function registrations and runtime overrides]
+    B --> D[Signatures, return shapes and local calls]
+    D --> E[Detected effects and unresolved boundaries]
+    C --> F[Generated compiler inventory]
+    E --> F
+    F --> G[Symbolic result shapes and effect barriers]
+    G --> H[Supported evaluator or native Helm]
+```
+
+Local-call traversal propagates detected effects through wrappers and aliases,
+including recursive call graphs. Primitive API contracts identify randomness,
+clock access, network access and map merging; Helm's rejection and renderer
+intrinsics need explicit contracts too. These are small semantic boundaries,
+not a classification of every exposed function name. Imported implementations
+and unresolved method calls remain recorded as analysis gaps.
+
+This is a conservative source-fact extractor, not a complete Go effect system.
+It does not prove purity, infer arbitrary interface behavior, invert functions,
+or synthesize exact evaluators. Its reported effects can include internal helper
+work; their presence is conservative, and their absence is not evidence that a
+call has no effects. Conditional renderer replacements retain effects from both
+implementations, so an offline placeholder cannot hide a live-cluster operation.
+Compiler passes retain their reviewed argument-level semantics; generated facts
+alone cannot prove a rejection, accepted input domain or equivalent manifests.
+
+Return declarations can improve the symbolic IR automatically: for example, a
+new slice-returning function yields a collection of unknown length, retaining its
+input dependencies. A known scalar return does not supply a value or truthiness.
+Imported or interface-valued return types remain unconstrained until a supported
+model establishes more.
+
+The extractor uses Go's [syntax-tree parser](https://pkg.go.dev/go/parser).
+A future inter-package analysis could use [Go SSA](https://pkg.go.dev/golang.org/x/tools/go/ssa)
+for typed call and memory-flow analysis; reflection, callbacks and renderer state
+would still require explicit conservative boundaries. No runtime speedup from
+using Go is claimed here: this command runs during release preparation.

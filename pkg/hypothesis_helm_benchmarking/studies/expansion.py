@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer, parse_time_limit

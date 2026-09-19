@@ -15,13 +15,13 @@ from typing import TextIO
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.paths import check_paths
-from hypothesis_helm.charts.prioritized import check_prioritized
-from hypothesis_helm.charts.rendering import RenderFailure
-from hypothesis_helm.charts.runner import check_chart
-from hypothesis_helm.charts.scan import exercise_chart
+from hypothesis_helm.charts.repositories.scan import exercise_chart
+from hypothesis_helm.charts.testing.paths import check_paths
+from hypothesis_helm.charts.testing.prioritized import check_prioritized
+from hypothesis_helm.charts.testing.rendering import RenderFailure
+from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.execution.path_queue import execute
 from hypothesis_helm.execution.processes import Processes
@@ -49,8 +49,10 @@ def test_audit_logs_source_locations_without_duplicates(
     """
     chart = fixture_chart(tmp_path)
     finding = {"code": "HH2005", "file": "templates/worker.yaml", "line": 188, "message": "helper context is unresolved"}
-    monkeypatch.setattr("hypothesis_helm.charts.scan.audit_findings", lambda chart: {"findings": [], "unresolved": [finding, finding]})
-    monkeypatch.setattr("hypothesis_helm.charts.scan._exercise_chart", lambda *args: {"status": "passed"})
+    monkeypatch.setattr(
+        "hypothesis_helm.charts.repositories.scan.audit_findings", lambda chart: {"findings": [], "unresolved": [finding, finding]}
+    )
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan._exercise_chart", lambda *args: {"status": "passed"})
     with caplog.at_level(logging.WARNING):
         result = exercise_chart(chart.path, Namespace(fail=fail), tmp_path / "results")
     assert caplog.text.count("Audit finding:") == 1
@@ -127,7 +129,7 @@ def test_observed_and_final_findings(tmp_path: Path, monkeypatch: pytest.MonkeyP
         """
         raise RenderFailure("YAML parse error\nprivate raw manifest follows", code="HH1101")
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", fail)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", fail)
     with caplog.at_level(logging.WARNING):
         result = check_chart(
             chart,
@@ -289,8 +291,8 @@ def test_input_baseline_once_per_chart_run(
     # Permit deferred arbitrary-key cases so both prioritized phases execute.
     chart.schema.pop("additionalProperties")
     resource = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "workers"}}
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", lambda *args, **kwargs: [resource])
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [resource])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", lambda *args, **kwargs: [resource])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [resource])
     with caplog.at_level(logging.INFO):
         for repeat in range(2):
             if mode == "standalone":

@@ -7,6 +7,7 @@ import time
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.compiler.asts.templates import Node, value_path, walk
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.complexity import measure
 from hypothesis_helm.compiler.passes.pruning import Pruner, snapshot
 from hypothesis_helm.schemas.contracts import configuration_key
@@ -74,7 +75,7 @@ def profile(chart: Chart, complexity: dict[str, object] | None = None) -> dict[s
         if measured["status"] != "compiled-maximum":
             raise ValueError(str(measured.get("reason", "maximum output complexity is unknown")))
         model = ValuesModel.from_schema(chart.schema)
-        space = factor_space(model, 4096)
+        space = factor_space(model, active_limits()["max_sampling_domain_values"])
         compiler = Pruner(chart.path, chart.defaults, model)
         if compiler.disabled:
             raise ValueError(compiler.disabled)

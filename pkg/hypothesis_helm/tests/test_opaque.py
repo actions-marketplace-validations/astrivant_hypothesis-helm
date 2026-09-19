@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.charts.audit import audit
+from hypothesis_helm.charts.inspection.audit import audit
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.rules import ENVIRONMENT, load_ignored
 from hypothesis_helm.schemas.contracts import mapping, sequence

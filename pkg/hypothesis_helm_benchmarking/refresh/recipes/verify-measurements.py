@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from attrs import asdict
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm_benchmarking.charts.stress import Stress, progression
 from hypothesis_helm_benchmarking.charts.structures import STRUCTURES
 from hypothesis_helm_benchmarking.refresh.plan import STUDIES

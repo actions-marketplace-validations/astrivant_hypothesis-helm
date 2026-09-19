@@ -124,7 +124,7 @@ def unfinished(chart: Mapping[str, object]) -> bool:
     Returns:
         bool: Whether meaningful test results are absent or selected work remains unfinished.
     """
-    if chart.get("status") not in FINISHED or str(chart.get("coverage", "")).endswith("only"):
+    if chart.get("status") not in FINISHED or chart.get("stop_reason") or str(chart.get("coverage", "")).endswith("only"):
         return True
     traversal = mapping(chart.get("traversal", {}))
     if any((measured_seconds(traversal.get(key)) or 0) > 0 for key in ("remaining_paths", "incomplete_paths")):
@@ -133,6 +133,7 @@ def unfinished(chart: Mapping[str, object]) -> bool:
         return True
     return any(
         mapping(phase).get("status") in {"interrupted", "time-limit", "timeout", "error", "generation-error", "pending"}
+        or bool(mapping(phase).get("stop_reason"))
         for phase in sequence(chart.get("phases", []))
     )
 

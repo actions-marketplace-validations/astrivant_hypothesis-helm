@@ -14,11 +14,11 @@ from pathlib import Path
 from hypothesis import strategies as st
 from jsonschema import validators
 
-from hypothesis_helm.charts.generate import Model, coalesce
-from hypothesis_helm.charts.generated import path_values
 from hypothesis_helm.charts.model import Chart, _default_paths, merge_values
-from hypothesis_helm.charts.rendering import RenderFailure, render
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.suites.generate import Model, coalesce
+from hypothesis_helm.charts.suites.runtime import path_values
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
@@ -231,7 +231,9 @@ def check_paths(
                 queue_root = Path(tempfile.mkdtemp(prefix="path-workers-", dir=artifacts))
                 phases.extend(execute(context, queue_root / "queue", jobs))
                 interrupted = (queue_root / "queue" / "interrupted").exists()
-                stopped = time.monotonic() - started >= budget or any(phase["status"] == "time-limit" for phase in phases)
+                stopped = time.monotonic() - started >= budget or any(
+                    phase["status"] == "time-limit" or phase.get("stop_reason") == "time-limit" for phase in phases
+                )
             for entry in ordered if jobs == 1 else []:
                 remaining = budget - (time.monotonic() - started)
                 if remaining <= 0:
@@ -275,7 +277,7 @@ def check_paths(
                 if phase["status"] == "interrupted":
                     interrupted = True
                     break
-                if phase["status"] == "time-limit":
+                if phase["status"] == "time-limit" or phase.get("stop_reason") == "time-limit":
                     stopped = True
                     break
                 if fail_fast and phase["status"] == "failed":
@@ -315,7 +317,7 @@ def check_paths(
             measured.varied.update(tuple(path) for path in observed.get("varied_fields", []))
     measured.refresh()
     failures = [phase for phase in phases if phase["status"] == "failed"]
-    completed = sum(phase["status"] in {"passed", "failed", "configuration-rejected"} for phase in phases)
+    completed = sum(phase["status"] in {"passed", "failed", "configuration-rejected"} and not phase.get("stop_reason") for phase in phases)
     worker_errors = any(phase["status"] == "error" for phase in phases)
     generation_errors = any(phase["status"] == "generation-error" for phase in phases)
     status = (
@@ -392,16 +394,32 @@ def check_paths(
                 if "worker_pid" in phase and "configuration_rejections" in phase
             }
             rejection_summary["worker_reports"] = worker_rejections
+            rejection_summary["worker_reports_scope"] = "Last property snapshot per worker; aggregate counters sum every property delta"
             for key in (
                 "rejected_candidates",
                 "filtered_candidates",
                 "adjusted_candidates",
                 "verification_renders",
                 "classifier_disagreements",
+                "schema_conflicts",
+                "incomplete_evaluations",
             ):
                 rejection_summary[key] = sum(
-                    int(str(snapshot.get(key, 0))) for snapshot in worker_rejections.values() if isinstance(snapshot, dict)
+                    int(str(snapshot.get(key, 0)))
+                    for phase in phases
+                    if isinstance(snapshot := phase.get("configuration_rejections"), dict)
                 )
+            rejection_summary["verify_every_candidate"] = any(
+                snapshot.get("verify_every_candidate") for snapshot in worker_rejections.values() if isinstance(snapshot, dict)
+            )
+            for key in ("analysis_fallbacks", "unsupported_sources"):
+                records: list[object] = []
+                for snapshot in worker_rejections.values():
+                    if isinstance(snapshot, dict):
+                        for record in snapshot.get(key, []):
+                            if record not in records:
+                                records.append(record)
+                rejection_summary[key] = records
         result["configuration_rejections"] = rejection_summary
     (artifacts / "report.json").write_text(json.dumps(result, indent=2) + "\n")
     return result

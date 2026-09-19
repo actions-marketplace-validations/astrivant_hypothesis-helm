@@ -11,7 +11,7 @@ from unittest.mock import Mock
 import pytest
 
 from hypothesis_helm import Chart, check_chart
-from hypothesis_helm.charts.runner import render
+from hypothesis_helm.charts.testing.runner import render
 from hypothesis_helm.cli import main
 from hypothesis_helm.compiler.asts.templates import fold, lex, lower, specialize
 from hypothesis_helm.compiler.passes.pruning import DistanceBounds, Pruner
@@ -323,7 +323,7 @@ def test_pruning_dry_run_does_not_render_or_create_artifacts(
         None: Dry runs contain zero runtime certificates and write no artifacts.
     """
     renderer = Mock(side_effect=AssertionError("unexpected render"))
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", renderer)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", renderer)
     target = tmp_path / "reports"
     assert (
         main(
@@ -440,7 +440,7 @@ def test_progressive_forecast_is_read_only(proof_chart: Chart, monkeypatch: pyte
     """
     renderer = Mock(side_effect=AssertionError("dry-run rendered"))
     prop = Mock(side_effect=AssertionError("dry-run asserted"))
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", renderer)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", renderer)
     before = {path: path.read_bytes() for path in proof_chart.path.rglob("*") if path.is_file()}
     report = check_chart(
         proof_chart,

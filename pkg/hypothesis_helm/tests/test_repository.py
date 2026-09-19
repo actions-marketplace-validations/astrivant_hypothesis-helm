@@ -12,7 +12,7 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts.repository import remote_name, run_git
+from hypothesis_helm.charts.repositories.repository import remote_name, run_git
 from hypothesis_helm.cli import main
 
 
@@ -38,7 +38,7 @@ def test_remote_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: py
     Returns:
         None: Reports identify the original URL and commit after checkout cleanup.
     """
-    import hypothesis_helm.charts.scan as scanner
+    import hypothesis_helm.charts.repositories.scan as scanner
 
     if shutil.which("git") is None:
         pytest.skip("Git required")
@@ -172,7 +172,7 @@ def test_checkout_failure_reports(
             raise subprocess.TimeoutExpired(command, timeout)
         return subprocess.CompletedProcess(command, 128, "", "Permission denied (publickey)")
 
-    monkeypatch.setattr("hypothesis_helm.charts.repository.run_git", fail)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.repository.run_git", fail)
     arguments = [
         "scan",
         "--log-file",

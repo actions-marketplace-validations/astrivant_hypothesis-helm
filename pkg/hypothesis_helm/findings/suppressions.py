@@ -16,8 +16,8 @@ from pathlib import Path
 from types import TracebackType
 from uuid import uuid4
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.policy import candidate_paths, resolve_codes
 from hypothesis_helm.reporting.errors import chart_errors

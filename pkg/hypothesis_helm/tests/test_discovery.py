@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from hypothesis_helm_benchmarking.studies.discovery import Fault, faults, fixture
 
-from hypothesis_helm.charts.runner import render
+from hypothesis_helm.charts.testing.runner import render
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import mapping
 

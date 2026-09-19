@@ -16,9 +16,9 @@ from pathlib import Path
 
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.constants import fill_missing
 from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.execution.processes import Processes

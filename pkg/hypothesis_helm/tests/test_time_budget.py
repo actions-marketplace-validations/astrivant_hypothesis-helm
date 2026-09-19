@@ -14,7 +14,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -66,7 +66,7 @@ def test_default_budget_retains_completed_statistics(
     """
     clock = [0.0]
     timer = SimpleNamespace(perf_counter=lambda: clock[0])
-    monkeypatch.setattr("hypothesis_helm.charts.runner.time", timer)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.time", timer)
     monkeypatch.setattr("hypothesis_helm.reporting.permutations.time", timer)
 
     def render(*args: object, **kwargs: object) -> list[dict[str, object]]:
@@ -84,7 +84,7 @@ def test_default_budget_retains_completed_statistics(
         return [{}]
 
     renderer = Mock(side_effect=render)
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", renderer)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", renderer)
     report = check_chart("examples/workload", permutations=2, artifact_dir=tmp_path)
     assert report["status"] == "time-limit"
     assert report["exit_code"] == 124
@@ -116,7 +116,7 @@ def test_active_assertion_is_stopped_and_alarm_restored(monkeypatch: pytest.Monk
     Returns:
         None: Partial work stays incomplete and the temporary timer is removed.
     """
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", Mock(return_value=[{}]))
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", Mock(return_value=[{}]))
     previous = signal.getsignal(signal.SIGALRM)
     started = time.monotonic()
     report = check_chart(

@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer, parse_time_limit

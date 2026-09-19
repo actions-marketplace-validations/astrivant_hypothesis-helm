@@ -11,7 +11,7 @@ from textwrap import dedent
 import pytest
 
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.execution.sensitivity import SensitivityOrder, mutations, validate_order
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
@@ -168,7 +168,7 @@ def test_profile_cases_are_checked_once(tmp_path: Path, monkeypatch: pytest.Monk
         rendered.append(configuration_key(values))
         return [{"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "test"}, "data": {"pair": str(values["a"] and values["b"])}}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     result = check_chart(
         chart,
         permutations=2,
@@ -211,7 +211,7 @@ def test_profiling_consumes_execution_budget(tmp_path: Path, monkeypatch: pytest
         """
         raise TimeLimitReached()
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", stop)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", stop)
     result = check_chart(chart, permutations=2, traversal_strategy="sensitivity-first")
     assert result["status"] == "time-limit"
     assert mapping(result["sensitivity"])["observed_references"] == 0
@@ -271,7 +271,7 @@ def test_profile_failure_is_a_bug_test(tmp_path: Path, monkeypatch: pytest.Monke
         """
         assert not resources[0]["broken"], "pair defect"
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     result = check_chart(
         chart, permutations=2, traversal_strategy="sensitivity-first", properties=(property_check,), expand_failures=expansion
     )
@@ -356,9 +356,11 @@ def test_expansion_ranking_timeout_retains_failed_iteration(tmp_path: Path, monk
             raise TimeLimitReached()
         return rank(self, values)
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     monkeypatch.setattr(SensitivityOrder, "rank", deadline)
     result = check_chart(chart, permutations=2, traversal_strategy="sensitivity-first", properties=(assertion,), expand_failures=True)
-    assert result["status"] == "time-limit"
+    assert result["status"] == "failed"
+    assert result["stop_reason"] == "time-limit"
+    assert result["minimization_complete"] is False
     assert result["completed_iterations"] == result["attempts"]
     assert result["failed_iterations"] == 1

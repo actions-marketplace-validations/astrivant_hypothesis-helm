@@ -10,7 +10,7 @@ from pathlib import Path
 from deepdiff import DeepDiff, Delta
 from deepdiff.delta import DeltaError
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.reporting.reproductions import value_path
 from hypothesis_helm.schemas.contracts import mapping
 

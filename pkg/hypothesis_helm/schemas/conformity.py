@@ -17,7 +17,7 @@ from pathlib import Path
 from jsonschema import FormatChecker, ValidationError, validators
 from jsonschema.protocols import Validator
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.rules import ignored
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence

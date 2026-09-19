@@ -7,6 +7,8 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 
+from hypothesis_helm.compiler.limits import active_limits
+
 
 def maximum_score(nodes: int) -> int:
     """
@@ -26,7 +28,7 @@ def maximum_score(nodes: int) -> int:
     return (nodes + 1) ** 2 // 4 if nodes else 0
 
 
-def output_profile(resources: Sequence[object], *, node_limit: int = 100000) -> dict[str, int]:
+def output_profile(resources: Sequence[object], *, node_limit: int | None = None) -> dict[str, int]:
     """
     Score the rendered forest, counting resource roots, field values and array entries.
 
@@ -35,11 +37,12 @@ def output_profile(resources: Sequence[object], *, node_limit: int = 100000) -> 
 
     Args:
         resources (Sequence[object]): Parsed manifest documents, excluding empty documents.
-        node_limit (int): Maximum output nodes inspected before declining analysis.
+        node_limit (int | None): Maximum inspected nodes; defaults to compiler.max_output_nodes.
 
     Returns:
         dict[str, int]: Measured size, breadth, depth, score and unrestricted size ceiling.
     """
+    node_limit = active_limits()["max_output_nodes"] if node_limit is None else node_limit
     counts: Counter[int] = Counter()
     pending: list[tuple[object, int, frozenset[int]]] = [(resource, 1, frozenset()) for resource in resources]
     visited = 0
@@ -47,7 +50,7 @@ def output_profile(resources: Sequence[object], *, node_limit: int = 100000) -> 
         value, depth, ancestors = pending.pop()
         visited += 1
         if visited > node_limit:
-            raise ValueError("manifest tree exceeds the complexity node limit")
+            raise ValueError(f"manifest tree exceeds the complexity node limit: compiler.max_output_nodes={node_limit}")
         counts[depth] += 1
         if isinstance(value, (dict, list)):
             if id(value) in ancestors:

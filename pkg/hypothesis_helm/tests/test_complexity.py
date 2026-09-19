@@ -10,9 +10,9 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts.audit import audit
+from hypothesis_helm.charts.inspection.audit import audit
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.complexity import maximum_score, output_profile
 from hypothesis_helm.compiler.passes.complexity import measure
 

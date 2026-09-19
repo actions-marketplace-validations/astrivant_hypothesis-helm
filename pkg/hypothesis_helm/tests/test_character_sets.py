@@ -13,9 +13,9 @@ from hypothesis import find, given, settings
 from hypothesis import strategies as st
 from jsonschema import validate
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generate import generate_tests, strategy_source
-from hypothesis_helm.charts.generated import prepared_chart
+from hypothesis_helm.charts.suites.generate import generate_tests, strategy_source
+from hypothesis_helm.charts.suites.runtime import prepared_chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.execution.cache import fingerprint
 from hypothesis_helm.schemas.characters import character_sets

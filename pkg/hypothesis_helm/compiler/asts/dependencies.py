@@ -4,7 +4,7 @@ Describe dependency activation controls and values namespaces independently of t
 
 from attrs import frozen
 
-from hypothesis_helm.charts.templates import Reference
+from hypothesis_helm.charts.inspection.templates import Reference
 from hypothesis_helm.compiler.asts.templates import Node
 
 

@@ -16,10 +16,10 @@ from pathlib import Path
 from attrs import asdict, define
 from ruamel.yaml.comments import CommentedMap
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generated import RenderOptions
+from hypothesis_helm.charts.inspection.templates import Action, Reference, discover, parse
 from hypothesis_helm.charts.model import Chart, _default_paths, _schema_nodes
-from hypothesis_helm.charts.templates import Action, Reference, discover, parse
+from hypothesis_helm.charts.suites.runtime import RenderOptions
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
@@ -506,7 +506,7 @@ def generate_tests(
         "from hypothesis.strategies import DataObject",
         "from hypothesis_helm.schemas.contracts import schema_strategy as from_schema, supported_generated_text",
         "from hypothesis_helm import Chart",
-        "from hypothesis_helm.charts.generated import RenderOptions, check_path, prepared_chart",
+        "from hypothesis_helm.charts.suites.runtime import RenderOptions, check_path, prepared_chart",
         "",
         "HERE = Path(__file__).resolve().parent",
         f"OPTIONS = RenderOptions(**{asdict(options or RenderOptions())!r})",

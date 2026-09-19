@@ -18,7 +18,7 @@ from hypothesis_helm_benchmarking.studies.error_surface import METHODS, main, ve
 from hypothesis_helm_benchmarking.studies.matrix import bundle_key, measure, reference_space
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.reporting.budget import TimeLimitReached
 
 

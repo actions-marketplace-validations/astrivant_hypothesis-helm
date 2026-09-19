@@ -28,11 +28,11 @@ from hypothesis_helm.compiler.asts.contract_values import (
     UnorderedKeys,
     native,
 )
-from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, RendererContext, Unavailable
+from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext, Unavailable
 from hypothesis_helm.compiler.asts.templates import Node, lower, walk
 from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, TransformedDomain, UnsupportedTransformation, calculate, inputs
 from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE
-from hypothesis_helm.compiler.limits import call_depth
+from hypothesis_helm.compiler.limits import active_limits, call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 
 TOKENS = re.compile(r'\s*("(?:\\.|[^"\\])*"|`[^`]*`|[()|]|[^\s()|]+)')
@@ -331,6 +331,8 @@ class Contracts:
         fallbacks (list[dict[str, object]]): Distinct unsupported evaluations, including suppressed warnings.
         incomplete_evaluations (int): Incomplete predictions, including repeated inputs and repair probes.
         fail_fast (bool): Stop on an unsuppressed compiler warning when requested by the executor.
+        templates (dict[str, tuple[Node, ...]]): All parsed template bodies for statically resolved filename includes.
+        limits (dict[str, int]): Resource budgets captured before evaluating candidates.
     """
 
     helpers: dict[str, tuple[str, tuple[Node, ...]]] = field(factory=dict)
@@ -348,6 +350,8 @@ class Contracts:
     fallbacks: list[dict[str, object]] = field(factory=list)
     incomplete_evaluations: int = 0
     fail_fast: bool = False
+    templates: dict[str, tuple[Node, ...]] = field(factory=dict)
+    limits: dict[str, int] = field(factory=active_limits, kw_only=True)
 
     def configure(self, *, helm: str, kube_version: str | None, timeout: float, release: str, namespace: str, fail_fast: bool) -> None:
         """
@@ -371,7 +375,14 @@ class Contracts:
             != (helm, kube_version, timeout, release, namespace)
         ):
             self.renderer = RendererContext(
-                self.chart, {node.path: node.name for node in self.dependencies.nodes}, helm, kube_version, timeout, release, namespace
+                self.chart,
+                {node.path: node.name for node in self.dependencies.nodes},
+                helm,
+                kube_version,
+                timeout,
+                release,
+                namespace,
+                limits=self.limits,
             )
         self.fail_fast = fail_fast
 
@@ -407,6 +418,8 @@ class Contracts:
             if dependency.declared_schema:
                 result.schemas[dependency.path] = dependency.schema
         for source, nodes, scope in sources:
+            result.templates[source] = nodes
+            result.scopes[source] = scope
             for node in walk(nodes):
                 match = re.match(r'(?:define|block)\s+"([^"\\]+)"(?:\s|$)', node.text) if node.kind == "opaque" else None
                 if match:
@@ -490,6 +503,8 @@ class Contracts:
                 "Values": BoundValue(local, scope),
                 "Capabilities": ContextReference(self.renderer, "Capabilities"),
                 "Files": ContextReference(self.renderer, "Files", scope),
+                "Chart": ContextReference(self.renderer, "Chart", scope),
+                "Template": ContextReference(self.renderer, "Template", scope, source),
             }
             if self.renderer is not None:
                 context["Release"] = {
@@ -559,10 +574,15 @@ class Contracts:
         }
         message = f"{source}:{line}: {reason}; affected expressions retained for Helm rendering; no pruning based on this result"
         if record not in self.fallbacks:
-            if len(self.fallbacks) < 128:
+            if len(self.fallbacks) < self.limits["max_fallbacks"]:
                 self.fallbacks.append(record)
                 if not suppressed:
-                    LOGGER.warning("[HH2007] Compiler analysis incomplete: chart=%s; %s", self.chart, message)
+                    LOGGER.warning(
+                        "[HH2007] Compiler analysis incomplete: chart=%s; %s",
+                        self.chart,
+                        message,
+                        extra={"diagnostic_key": json.dumps([str(self.chart), source, line, reason])},
+                    )
         if self.fail_fast and not suppressed:
             raise RenderFailure(message, "HH2007")
 
@@ -733,6 +753,11 @@ class Evaluation:
         """
         for index, key in enumerate(parts):
             current = self.context_value(current)
+            if isinstance(current, FixedFields):
+                if key not in current.values:
+                    raise Unknown(f"unsupported fixed context field: {key}")
+                current = current.values[key]
+                continue
             container = native(current)
             if not isinstance(container, dict) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key):
                 raise Unknown("unsupported context lookup")
@@ -829,6 +854,8 @@ class Evaluation:
                 return int(expr)
             if expr == "list":
                 return ConstantList(())
+            if expr == "dict":
+                return ConstantMap({})
             if expr == "nil":
                 return None
             raise Unknown(f"unsupported expression: {expr}")
@@ -838,12 +865,27 @@ class Evaluation:
         if function in {"include", "template"}:
             if len(arguments) not in ({2} if function == "include" else {1, 2}):
                 raise Unknown("include requires a name and context")
-            name = self.evaluate(arguments[0], source, line, variables)
-            if not isinstance(name, str) or name not in self.contracts.helpers:
+            name = native(self.evaluate(arguments[0], source, line, variables))
+            helper = self.contracts.helpers.get(name) if isinstance(name, str) else None
+            if helper is None and isinstance(name, str) and self.contracts.renderer is not None:
+                states = self.contracts.dependencies.states({}, self.values)
+                for template_source, body in self.contracts.templates.items():
+                    scope = self.contracts.scopes[template_source]
+                    if scope and states.get(scope) is not True:
+                        continue
+                    try:
+                        template = self.contracts.renderer.template_context(scope, template_source)
+                    except (Unavailable, OSError, ValueError, KeyError, subprocess.SubprocessError, tarfile.TarError) as exc:
+                        raise Unknown("native template filename is unavailable") from exc
+                    if template["Name"] == name:
+                        helper = (template_source, body)
+                        self.contextual = True
+                        break
+            if helper is None:
                 raise Unknown("unknown or ambiguous helper")
             if self.depth >= self.contracts.max_call_depth:
                 raise Unknown(f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}")
-            helper_source, nodes = self.contracts.helpers[name]
+            helper_source, nodes = helper
             context = self.evaluate(arguments[1], source, line, variables) if len(arguments) == 2 else None
             previous_context = self.context
             previous_loops = self.loops
@@ -908,8 +950,8 @@ class Evaluation:
                 raise Unknown("tpl requires a concrete string")
             if self.depth >= self.contracts.max_call_depth:
                 raise Unknown(f"tpl call depth exceeds compiler limit {self.contracts.max_call_depth}")
-            if len(args[0].encode("utf-8")) > 1024 * 1024:
-                raise Unknown("tpl source exceeds the compiler inspection budget")
+            if len(args[0].encode("utf-8")) > self.contracts.limits["max_template_bytes"]:
+                raise Unknown(f"tpl source exceeds compiler.max_template_bytes={self.contracts.limits['max_template_bytes']}")
             try:
                 nodes = tpl_nodes(args[0])
             except (ValueError, RecursionError) as exc:
@@ -957,7 +999,7 @@ class Evaluation:
             return args[1]
         if function in FUNCTIONS:
             try:
-                result = calculate(str(function), tuple(evaluated))
+                result = calculate(str(function), tuple(evaluated), limits=self.contracts.limits)
             except UnsupportedTransformation as exc:
                 raise Unknown(str(exc)) from exc
             self.transformed = True
@@ -1033,6 +1075,38 @@ class Evaluation:
                 return (
                     ContractText(tuple(parts)) if any(isinstance(part, KeyList) for part in parts) else "".join(str(part) for part in parts)
                 )
+        if function == "printf" and args and isinstance(args[0], str):
+            pieces = re.split(r"(%s|%d|%%)", args[0])
+            rendered: list[str] = []
+            position = 1
+            for piece in pieces:
+                if piece == "%%":
+                    rendered.append("%")
+                elif piece in {"%s", "%d"}:
+                    if position >= len(args):
+                        raise Unknown("printf argument count does not match its format")
+                    item = args[position]
+                    if (piece == "%s" and not isinstance(item, str)) or (piece == "%d" and type(item) is not int):
+                        raise Unknown("printf argument type does not match its format")
+                    operand = evaluated[position]
+                    if piece == "%d" and not (
+                        type(operand) is int
+                        or isinstance(operand, DerivedValue)
+                        and operand.function in {"int", "int64", "atoi", "add", "add1", "sub", "mul", "min", "max"}
+                    ):
+                        raise Unknown("printf integer formatting requires an explicit integer conversion or known integer result")
+                    if isinstance(evaluated[position], ContractText):
+                        raise Unknown("mixed printf formatting with unordered output requires native evaluation")
+                    rendered.append(str(item))
+                    position += 1
+                elif "%" in piece:
+                    raise Unknown("unsupported printf format")
+                else:
+                    rendered.append(piece)
+            if position != len(args) or sum(map(len, rendered)) > self.contracts.limits["max_string_chars"]:
+                raise Unknown("printf output or argument count exceeds supported limits")
+            self.transformed = True
+            return "".join(rendered)
         raise Unknown(f"unsupported function: {function}")
 
     def pipeline(self, text: str, source: str, line: int, variables: Scope) -> object:
@@ -1128,8 +1202,8 @@ class Evaluation:
             collection = []
         if not isinstance(collection, list | dict) or (isinstance(collection, dict) and not all(isinstance(k, str) for k in collection)):
             raise Unknown("range requires a finite list or string-key map")
-        if len(collection) > 4096:
-            raise Unknown("range exceeds the contract analysis budget")
+        if len(collection) > self.contracts.limits["max_range_items"]:
+            raise Unknown(f"range exceeds compiler.max_range_items={self.contracts.limits['max_range_items']}")
         names = [name for name in (binding[1], binding[2]) if name] if binding else []
         if binding:
             for name in names:
@@ -1144,8 +1218,8 @@ class Evaluation:
             keys = sorted(collection) if isinstance(collection, dict) else range(len(collection))
             for key in keys:
                 self.steps += 1
-                if self.steps > 10000:
-                    raise Unknown("contract analysis statement budget exceeded")
+                if self.steps > self.contracts.limits["max_steps"]:
+                    raise Unknown(f"contract analysis statement budget exceeded: compiler.max_steps={self.contracts.limits['max_steps']}")
                 element = collection[key]
                 # Map fields retain editable paths. List members retain the collection's
                 # already-recorded evidence without inventing a dotted numeric field.
@@ -1188,8 +1262,8 @@ class Evaluation:
         try:
             for node in nodes:
                 self.steps += 1
-                if self.steps > 10000:
-                    raise Unknown("contract analysis statement budget exceeded")
+                if self.steps > self.contracts.limits["max_steps"]:
+                    raise Unknown(f"contract analysis statement budget exceeded: compiler.max_steps={self.contracts.limits['max_steps']}")
                 if node.kind == "text":
                     output.append(node.text)
                     continue

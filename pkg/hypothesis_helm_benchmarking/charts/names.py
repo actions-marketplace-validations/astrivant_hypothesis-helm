@@ -5,7 +5,7 @@ Give generated input fields stable names describing their downstream roles.
 import json
 from pathlib import Path
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping
 
 

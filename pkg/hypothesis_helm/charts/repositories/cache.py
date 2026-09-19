@@ -13,7 +13,7 @@ from pathlib import Path
 
 from attrs import define, field
 
-from hypothesis_helm.charts.changes import chart_changed
+from hypothesis_helm.charts.repositories.changes import chart_changed
 from hypothesis_helm.execution.cache import fingerprint, merge_outcomes, read_outcomes
 
 LOGGER = logging.getLogger(__name__)

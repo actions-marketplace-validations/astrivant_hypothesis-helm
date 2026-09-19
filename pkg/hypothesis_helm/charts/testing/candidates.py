@@ -12,7 +12,7 @@ from attrs import define, field
 from jsonschema import validators
 
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.rendering import RenderFailure
+from hypothesis_helm.charts.testing.rendering import RenderFailure
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
@@ -61,6 +61,9 @@ class CandidateChecks:
             latest failed candidate.
         observe (Callable[[dict[str, object], list[dict[str, object]]], None] | None): Optional successful-output sensitivity collector.
         findings (FindingLog | None): Live observations, deduplicated across shrink attempts.
+        failure_record (dict[str, object] | None): Latest observed failure, separate from unfinished execution.
+        failure_sink (Callable[[dict[str, object]], None] | None): Immediate durable checkpoint for a failed candidate.
+        interrupted_values (dict[str, object] | None): In-flight input when cancellation occurred, not evidence of failure.
     """
 
     chart: Chart
@@ -86,6 +89,37 @@ class CandidateChecks:
     last_failure: tuple[dict[str, object], str, list[object] | None] | None = None
     observe: Callable[[dict[str, object], list[dict[str, object]]], None] | None = None
     findings: FindingLog | None = None
+    failure_record: dict[str, object] | None = None
+    failure_sink: Callable[[dict[str, object]], None] | None = None
+    interrupted_values: dict[str, object] | None = None
+
+    def remember_failure(self, values: dict[str, object], error: Exception, documents: list[object] | None) -> None:
+        """
+        Retain an observed failure before Hypothesis starts or continues shrinking.
+
+        Args:
+            values (dict[str, object]): Exact overrides submitted to the failing check.
+            error (Exception): Observed check failure, never cancellation itself.
+            documents (list[object] | None): Parsed output when rendering reached that stage.
+
+        Returns:
+            None: In-memory and optional durable evidence refer to the same input.
+        """
+        values = copy.deepcopy(values)
+        self.last_failure = (values, str(error), documents)
+        self.failure_record = {
+            "status": "failed",
+            "values": values,
+            "error": str(error),
+            "code": getattr(error, "code", None),
+            "failure_type": type(error).__name__,
+            "attempts": self.count,
+            "coverage_complete": False,
+            "proof_of_totality": False,
+            "minimization_complete": False,
+        }
+        if self.failure_sink is not None:
+            self.failure_sink(self.failure_record)
 
     def check(self, values: dict[str, object], *, force_render: bool = False, baseline: bool = False) -> bool:
         """
@@ -217,6 +251,7 @@ class CandidateChecks:
                 record_ignored(exc.code, str(exc))
                 self.ignored_failures[exc.code] = self.ignored_failures.get(exc.code, 0) + 1
                 return False
+            self.remember_failure(values, exc, observed if observed is not None else exc.resources)
             if self.policy is not None and exc.code != "HH2007":
                 try:
                     declared_rejection = self.policy.predict(merge_values(self.chart.defaults, values))
@@ -234,15 +269,20 @@ class CandidateChecks:
                     self.policy.verified(declared_rejection, merge_values(self.chart.defaults, values))
                     conflict_record = self.policy.records[declared_rejection.key]
                     conflict_record["occurrences"] = int(str(conflict_record["occurrences"])) + 1
-            self.last_failure = (values, str(exc), observed if observed is not None else exc.resources)
             if self.findings is not None:
                 self.findings.observed(exc.code, str(exc), values)
             raise
-        except (Exception, KeyboardInterrupt) as exc:
+        except KeyboardInterrupt:
+            self.interrupted_values = copy.deepcopy(values)
             if not attempted:
                 self.count += 1
                 attempted = True
-            self.last_failure = (values, str(exc), observed)
+            raise
+        except Exception as exc:
+            if not attempted:
+                self.count += 1
+                attempted = True
+            self.remember_failure(values, exc, observed)
             if self.findings is not None and isinstance(exc, AssertionError):
                 self.findings.observed("property", str(exc), values)
             raise

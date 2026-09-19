@@ -12,9 +12,9 @@ from textwrap import dedent
 import pytest
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.runner import RenderFailure, check_chart, render
+from hypothesis_helm.charts.testing.runner import RenderFailure, check_chart, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts, declares_path
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
 from hypothesis_helm.schemas.contracts import mapping

@@ -9,9 +9,9 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.audit import audit_findings
-from hypothesis_helm.charts.rendering import render
+from hypothesis_helm.charts.inspection.audit import audit_findings
+from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.execution.suite import run_suite
@@ -234,7 +234,7 @@ def test_symbolic_pruning_respects_enabled_checks(tmp_path: Path, monkeypatch: p
         None: Re-enabling the duplicate-resource check exposes the otherwise equivalent failure.
     """
     from hypothesis_helm.charts.model import Chart
-    from hypothesis_helm.charts.runner import check_chart
+    from hypothesis_helm.charts.testing.runner import check_chart
 
     fixture_chart(tmp_path)
     schema: dict[str, object] = {
@@ -263,7 +263,7 @@ def test_symbolic_pruning_respects_enabled_checks(tmp_path: Path, monkeypatch: p
         """
         return render(chart, values, rendered_output=output, stream=False)
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", rendered)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", rendered)
     result = check_chart(chart, exhaustive=True, prune_equivalent=True, time_limit=10, max_examples=2)
     assert result["status"] == "failed" and "HH1106" in str(result["error"])
 
@@ -327,7 +327,7 @@ def test_scan_audit_findings_continue_or_fail_fast(
         executed.append(path)
         return {"status": "passed", "attempts": 1}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan._exercise_chart", exercise)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan._exercise_chart", exercise)
     arguments = [
         "test",
         str(tmp_path),
@@ -379,10 +379,12 @@ def test_fail_honors_every_observed_code(tmp_path: Path, monkeypatch: pytest.Mon
     Returns:
         None: No category is exempt from an explicit --fail request.
     """
-    from hypothesis_helm.charts.scan import exercise_chart
+    from hypothesis_helm.charts.repositories.scan import exercise_chart
 
     chart = fixture_chart(tmp_path)
-    monkeypatch.setattr("hypothesis_helm.charts.scan.audit_findings", lambda chart: {"findings": [{"code": code}], "unresolved": []})
+    monkeypatch.setattr(
+        "hypothesis_helm.charts.repositories.scan.audit_findings", lambda chart: {"findings": [{"code": code}], "unresolved": []}
+    )
     args = argument_parser().parse_args(["scan", "remote", "--fail"])
     result = exercise_chart(chart.path, args, tmp_path / "results")
     assert result["status"] == "failed" and result["code"] == code
@@ -441,7 +443,7 @@ def test_path_workers_inherit_scoped_checks(tmp_path: Path, monkeypatch: pytest.
         None: Both workers finish and a disabled blocking render failure remains explicitly ignored.
     """
     from hypothesis_helm.charts.model import Chart
-    from hypothesis_helm.charts.paths import check_paths
+    from hypothesis_helm.charts.testing.paths import check_paths
 
     chart = fixture_chart(tmp_path)
     chart.schema = {

@@ -13,9 +13,9 @@ import pytest
 from hypothesis_helm_catalog import builder, sources
 from jsonschema import validators
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT

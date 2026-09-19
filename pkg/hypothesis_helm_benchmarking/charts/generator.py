@@ -12,7 +12,7 @@ from textwrap import dedent
 
 from attrs import asdict
 from cattrs import Converter
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.faults import select_faults, write_faults

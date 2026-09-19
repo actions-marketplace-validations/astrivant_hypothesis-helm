@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from deepdiff import DeepDiff
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.reporting.reproductions import leaves
 from hypothesis_helm.schemas.contracts import sequence
 from hypothesis_helm.schemas.policy import path_parts

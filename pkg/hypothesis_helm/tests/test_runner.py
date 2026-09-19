@@ -12,7 +12,7 @@ from hypothesis import given, settings
 from jsonschema import validate
 
 from hypothesis_helm import Chart, check_chart
-from hypothesis_helm.charts.runner import RenderFailure, audit, merge_values, validate_resources
+from hypothesis_helm.charts.testing.runner import RenderFailure, audit, merge_values, validate_resources
 from hypothesis_helm.cli import main
 from hypothesis_helm.schemas.contracts import mapping, number, sequence, text
 
@@ -232,7 +232,7 @@ def test_timeout_is_a_counterexample(monkeypatch: pytest.MonkeyPatch, tmp_path: 
         """
         raise subprocess.TimeoutExpired(str(args[0]), number(kwargs["timeout"]))
 
-    monkeypatch.setattr("hypothesis_helm.charts.rendering.Processes.run", lambda self, *args, **kwargs: timeout(*args, **kwargs))
+    monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.Processes.run", lambda self, *args, **kwargs: timeout(*args, **kwargs))
     report = check_chart(ROOT / "examples/configmap", timeout=0.1, artifact_dir=tmp_path)
     assert report["status"] == "failed"
     assert "exceeded 0.1s" in text(report["error"])

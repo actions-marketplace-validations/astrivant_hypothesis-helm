@@ -9,7 +9,7 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts.scan import discover_charts
+from hypothesis_helm.charts.repositories.scan import discover_charts
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.reporting.repository import wrap_markdown, write_reports
 
@@ -58,8 +58,8 @@ def test_local_testing_never_fetches_source(tmp_path: Path, monkeypatch: pytest.
         """
         pytest.fail("Local testing attempted remote source preparation")
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.prepare_helm_source", remote)
-    monkeypatch.setattr("hypothesis_helm.charts.scan.RepositorySource.prepare", remote)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.prepare_helm_source", remote)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.RepositorySource.prepare", remote)
     assert main(["test", str(tmp_path), "--helm", "/usr/bin/true", "--artifact-dir", str(tmp_path / "results")]) == 2
 
 
@@ -196,14 +196,14 @@ def test_scan_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys:
     Returns:
         None: Status, artifacts, and paired reports agree.
     """
-    import hypothesis_helm.charts.scan as module
+    import hypothesis_helm.charts.repositories.scan as module
 
     for name in ("a", "b"):
         chart = tmp_path / name
         chart.mkdir()
         (chart / "values.yaml").write_text("{}\n")
         (chart / "Chart.yaml").write_text(f"apiVersion: v2\nname: {name}\nversion: '1.0.0'\n")
-    monkeypatch.setattr("hypothesis_helm.charts.scan.shutil.which", lambda name: "/bin/true")
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.shutil.which", lambda name: "/bin/true")
     monkeypatch.setattr(
         module,
         "exercise_chart",
@@ -288,7 +288,7 @@ def test_scan_fail_flag(
         (artifacts / "values.json").write_text('{"flag": true}\n')
         return {"status": outcome if len(calls) == 1 else "passed", "attempts": 3}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", exercise)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", exercise)
     options = [
         "test",
         "--log-file",
@@ -417,9 +417,9 @@ def test_values_override_and_dependency_build(tmp_path: Path, monkeypatch: pytes
         assert (path / "values.yaml").read_text() == "enabled: true\n"
         return {"status": "passed", "attempts": 1}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.Processes.run", lambda self, *args, **kwargs: command(*args, **kwargs))
-    monkeypatch.setattr("hypothesis_helm.charts.scan.comparison", lambda *args: {"status": "unavailable"})
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", exercise)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.Processes.run", lambda self, *args, **kwargs: command(*args, **kwargs))
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.comparison", lambda *args: {"status": "unavailable"})
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", exercise)
     assert (
         main(
             [
@@ -479,7 +479,7 @@ def test_interrupt_preserves_remaining_charts(
             return {"status": "interrupted", "attempts": 2}
         raise KeyboardInterrupt()
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", interrupt)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", interrupt)
     assert (
         main(
             [
@@ -597,7 +597,7 @@ def test_timeout_during_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     (tmp_path / "Chart.yaml").write_text("apiVersion: v2\nname: a\nversion: '1.0.0'\n")
     monkeypatch.chdir(tmp_path)  # Keep the slow chart parser separate from caller policy loading.
-    monkeypatch.setattr("hypothesis_helm.charts.scan.yamlio.load", lambda text: time.sleep(2))
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.yamlio.load", lambda text: time.sleep(2))
     assert (
         main(
             [
@@ -641,7 +641,7 @@ def test_dependency_timing_accounting(
     import time
     from types import SimpleNamespace
 
-    import hypothesis_helm.charts.scan as module
+    import hypothesis_helm.charts.repositories.scan as module
 
     for name in ("a", "b"):
         chart = tmp_path / name
@@ -693,7 +693,7 @@ def test_dependency_timing_accounting(
         clock[0] += 0.25
         return {"status": "passed", "attempts": 1, "execution_seconds": 0.2}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.Processes.run", lambda self, *args, **kwargs: prepare(*args, **kwargs))
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.Processes.run", lambda self, *args, **kwargs: prepare(*args, **kwargs))
     monkeypatch.setattr(module, "comparison", lambda *args: {"status": "unavailable"})
     monkeypatch.setattr(module, "exercise_chart", exercise)
     code = main(
@@ -778,7 +778,7 @@ def test_scan_deadline_preserves_runner_statistics(
             "remaining_iterations": 7,
         }
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", exercise)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", exercise)
     assert (
         main(
             [
@@ -850,9 +850,9 @@ def test_scan_filter_support(
         called.update(kwargs)
         return {"status": "passed", "attempts": 1}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.check_chart", check)
-    monkeypatch.setattr("hypothesis_helm.charts.paths.check_chart", check)
-    monkeypatch.setattr("hypothesis_helm.charts.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.check_chart", check)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.check_chart", check)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
     assert (
         main(
             [

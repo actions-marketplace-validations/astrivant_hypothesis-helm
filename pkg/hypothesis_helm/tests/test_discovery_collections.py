@@ -8,10 +8,10 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.inspection.templates import discover
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
-from hypothesis_helm.charts.templates import discover
+from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.tests.test_templates import scan
 

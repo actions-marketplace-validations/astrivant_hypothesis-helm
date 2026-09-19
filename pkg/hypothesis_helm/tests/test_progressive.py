@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.charts.runner import Chart, check_chart, merge_values
+from hypothesis_helm.charts.testing.runner import Chart, check_chart, merge_values
 from hypothesis_helm.cli import main
 from hypothesis_helm.reporting.progressive import duration_estimate
 from hypothesis_helm.schemas.combinations import plan_interactions

@@ -9,8 +9,8 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.runner import Chart, render
+from hypothesis_helm.charts.testing.runner import Chart, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.minimum import export_minimal

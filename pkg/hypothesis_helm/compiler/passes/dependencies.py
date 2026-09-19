@@ -14,10 +14,11 @@ from pathlib import Path, PurePosixPath
 from attrs import define, field
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.templates import Reference, discover
+from hypothesis_helm.charts.inspection.templates import Reference, discover
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.dependencies import Dependency
 from hypothesis_helm.compiler.asts.templates import Node, lower
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
 
@@ -99,17 +100,21 @@ def fill_defaults(defaults: dict[str, object], supplied: dict[str, object]) -> d
     return result
 
 
-def unpack(archive: Path, destination: Path) -> None:
+def unpack(archive: Path, destination: Path, *, limits: dict[str, int] | None = None) -> None:
     """
     Materialize bounded regular chart files for existing template discovery, without links.
 
     Args:
         archive (Path): Local dependency archive already prepared by Helm.
         destination (Path): Fresh temporary directory owned by this compiler invocation.
+        limits (dict[str, int] | None): Captured compiler budgets, or the inherited configuration.
 
     Returns:
         None: Chart content is available for recursive metadata and template discovery.
     """
+    limits = active_limits() if limits is None else limits
+    if archive.stat().st_size > limits["max_context_bytes"]:
+        raise ValueError(f"dependency archive exceeds compiler.max_context_bytes={limits['max_context_bytes']}")
     total = 0
     with tarfile.open(archive) as bundle:
         for index, member in enumerate(bundle):
@@ -117,8 +122,10 @@ def unpack(archive: Path, destination: Path) -> None:
             if name.is_absolute() or ".." in name.parts or member.issym() or member.islnk():
                 raise ValueError("dependency archive contains unsafe paths or links")
             total += member.size
-            if index >= 10000 or total > 64 * 1024 * 1024:
-                raise ValueError("dependency archive exceeds compiler inspection limit")
+            if index >= limits["max_files"]:
+                raise ValueError(f"dependency archive exceeds compiler.max_files={limits['max_files']}")
+            if total > limits["max_context_bytes"]:
+                raise ValueError(f"dependency archive exceeds compiler.max_context_bytes={limits['max_context_bytes']}")
             if not member.isfile():
                 continue
             stream = bundle.extractfile(member)
@@ -140,6 +147,7 @@ class Dependencies:
         guided (int): Candidates for which a valid enabled context was constructed.
         unavailable (int): Candidates whose activation context could not be constructed.
         baseline (dict[str, object]): Original root defaults for inventory reporting.
+        limits (dict[str, int]): Compiler budgets captured for this dependency tree.
     """
 
     nodes: list[Dependency] = field(factory=list)
@@ -147,6 +155,7 @@ class Dependencies:
     guided: int = 0
     unavailable: int = 0
     baseline: dict[str, object] = field(factory=dict)
+    limits: dict[str, int] = field(factory=active_limits, kw_only=True)
 
     @classmethod
     def build(cls, chart: Path) -> Dependencies:
@@ -180,8 +189,8 @@ class Dependencies:
         Returns:
             None: Discovered instances and source limitations are appended.
         """
-        if len(prefix) >= 16 or chart.resolve() in ancestors or len(self.nodes) >= 512:
-            self.diagnostics.append({"file": source + "Chart.yaml", "message": "Dependency recursion limit reached"})
+        if chart.resolve() in ancestors:
+            self.diagnostics.append({"file": source + "Chart.yaml", "message": "Dependency cycle requires review"})
             return
         metadata_file = chart / "Chart.yaml"
         if not metadata_file.is_file():
@@ -193,6 +202,14 @@ class Dependencies:
         if not isinstance(declared, list):
             self.diagnostics.append({"file": source + "Chart.yaml", "message": "Malformed dependency list"})
             return
+        if len(prefix) >= self.limits["max_dependency_depth"] and (declared or any((chart / "charts").glob("*"))):
+            self.diagnostics.append(
+                {
+                    "file": source + "Chart.yaml",
+                    "message": f"Dependency depth exceeds compiler.max_dependency_depth={self.limits['max_dependency_depth']}",
+                }
+            )
+            return
         available: dict[str, list[Path]] = {}
         for child in sorted((chart / "charts").glob("*")):
             try:
@@ -200,7 +217,7 @@ class Dependencies:
                 if child.suffix == ".tgz":
                     extraction = temporary / str(len(list(temporary.iterdir())))
                     extraction.mkdir()
-                    unpack(child, extraction)
+                    unpack(child, extraction, limits=self.limits)
                     roots = [p.parent for p in extraction.glob("*/Chart.yaml")]
                 for candidate_root in roots:
                     if (candidate_root / "Chart.yaml").is_file():
@@ -212,6 +229,14 @@ class Dependencies:
         requested = [mapping(item) for item in declared if isinstance(item, dict)]
         requested += [{"name": name} for name in available if not any(item.get("name") == name for item in requested)]
         for item in requested:
+            if len(self.nodes) >= self.limits["max_dependencies"]:
+                self.diagnostics.append(
+                    {
+                        "file": source + "Chart.yaml",
+                        "message": f"Dependency count exceeds compiler.max_dependencies={self.limits['max_dependencies']}",
+                    }
+                )
+                break
             name, alias = item.get("name"), item.get("alias", item.get("name"))
             if not isinstance(name, str) or not isinstance(alias, str) or not alias or "/" in alias:
                 self.diagnostics.append({"file": source + "Chart.yaml", "message": "Unsupported dependency name or alias"})

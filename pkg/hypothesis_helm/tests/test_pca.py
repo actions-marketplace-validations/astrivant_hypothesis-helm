@@ -12,7 +12,7 @@ from hypothesis_helm_benchmarking.charts.generator import generate
 from hypothesis_helm_benchmarking.charts.structures import configmap
 from hypothesis_helm_benchmarking.studies.pca import run_case
 
-from hypothesis_helm.charts.runner import Chart, render
+from hypothesis_helm.charts.testing.runner import Chart, render
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 
 

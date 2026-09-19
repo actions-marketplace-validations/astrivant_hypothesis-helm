@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from pathlib import Path
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 
 
 def arguments(tokens: list[str]) -> list[list[str]]:

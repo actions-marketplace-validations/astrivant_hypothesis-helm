@@ -14,11 +14,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.generate import ValuePath, coalesce
-from hypothesis_helm.charts.generated import check_path
-from hypothesis_helm.charts.paths import path_strategy
-from hypothesis_helm.charts.runner import Chart, RenderFailure, check_chart, render
+from hypothesis_helm.charts.suites.generate import ValuePath, coalesce
+from hypothesis_helm.charts.suites.runtime import check_path
+from hypothesis_helm.charts.testing.paths import path_strategy
+from hypothesis_helm.charts.testing.runner import Chart, RenderFailure, check_chart, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, unpack
 from hypothesis_helm.compiler.passes.graph import export_graph

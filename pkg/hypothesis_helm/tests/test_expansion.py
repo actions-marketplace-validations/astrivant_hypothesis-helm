@@ -12,7 +12,7 @@ from hypothesis_helm_benchmarking.charts.structures import configmap
 from hypothesis_helm_benchmarking.studies.expansion import compare
 from hypothesis_helm_benchmarking.studies.matrix import bundle_key
 
-from hypothesis_helm.charts.runner import Chart, check_chart
+from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
 from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
@@ -132,7 +132,7 @@ def test_fail_fast_preserves_first_failure(expansion_chart: Chart, monkeypatch: 
         calls.append(values)
         return error_output(values)
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     report = check_chart(
         expansion_chart,
         permutations=None if sampled else 2,
@@ -195,7 +195,7 @@ def test_expansion_execution(
             raise TimeLimitReached()
         return error_output(values)
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     report = check_chart(
         expansion_chart,
         permutations=2,
@@ -214,7 +214,10 @@ def test_expansion_execution(
         assert mapping(report["pruning"])["rendered_candidates"] == len(calls)
     assert len({configuration_key(value) for value in calls}) == len(calls)
     if limited:
-        assert report["status"] == "time-limit"
+        assert report["status"] == "failed"
+        assert report["stop_reason"] == "time-limit"
+        assert report["minimization_complete"] is False
+        assert "error" in report and "values" in report
         assert report["failed_iterations"] == 1
         assert details["additional_executed"] == 0
         assert details["additional_remaining"] == report["remaining_iterations"] == 3
@@ -368,7 +371,7 @@ def test_filter_cli_expands_observed_failures(
             raise ValueError("faulty output region")
         return error_output(values)
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     assert (
         main(
             [

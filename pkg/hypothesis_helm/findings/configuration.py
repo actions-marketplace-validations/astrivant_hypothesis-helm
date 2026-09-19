@@ -4,12 +4,17 @@ Keep the complete user configuration example shared by exports and documentation
 
 from textwrap import dedent
 
-GENERATION_EXAMPLE = dedent(
-    """
+from hypothesis_helm.compiler.limits import LIMITS
+
+COMPILER_EXAMPLE = "compiler:\n" + "".join(f"  {name}: {default}  # {description}\n" for name, (default, description) in LIMITS.items())
+
+GENERATION_EXAMPLE = (
+    dedent(
+        """
     # Global defaults for fresh generated text; supplied values are preserved.
     downstream_inputs: true  # Use constraints from supported downstream field mappings.
-    compiler:
-      max_call_depth: 16  # Nested helper calls analyzed; --compiler-call-depth overrides this.
+    # Compiler budgets are positive integers; bytes, characters and counts are separate units.
+    __COMPILER_EXAMPLE__
     hypothesis:
       character_sets: ascii  # ascii or unicode; explicit enum/const literals retain their alphabet.
       control_characters:
@@ -72,6 +77,9 @@ GENERATION_EXAMPLE = dedent(
     resource_schemas:
       example.org/v1/Widget: ./schemas/widget.json
     """
-).lstrip()
+    )
+    .lstrip()
+    .replace("__COMPILER_EXAMPLE__\n", COMPILER_EXAMPLE)
+)
 
 COMPLETE_EXAMPLE = "ignored: [HH2006]  # Other findings remain enabled.\n\n" + GENERATION_EXAMPLE

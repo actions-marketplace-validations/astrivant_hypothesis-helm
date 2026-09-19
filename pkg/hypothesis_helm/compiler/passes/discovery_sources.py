@@ -11,10 +11,10 @@ from pathlib import Path
 
 from attrs import define, field
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.actions import Action, parse
 from hypothesis_helm.compiler.asts.renderer import archive_files
-from hypothesis_helm.compiler.limits import call_depth
+from hypothesis_helm.compiler.limits import active_limits
 
 
 def signature(nodes: list[Action]) -> tuple[object, ...]:
@@ -109,6 +109,7 @@ class DiscoverySources:
             DiscoverySources: Root trees, callable helpers, and explicit failures to inspect sources.
         """
         result = cls()
+        limits = active_limits()
         metadata = yamlio.load((chart / "Chart.yaml").read_text()) if (chart / "Chart.yaml").is_file() else {}
         name = metadata.get("name", chart.name) if isinstance(metadata, dict) else chart.name
         result.base_path = f"{name}/templates"
@@ -125,10 +126,12 @@ class DiscoverySources:
             Returns:
                 None: Helper definitions and bounded-loading diagnostics are recorded.
             """
-            if depth >= call_depth():
-                result.diagnostics.append((source, 1, "dependency helper inspection exceeds compiler call depth"))
+            if depth >= limits["max_dependency_depth"]:
+                result.diagnostics.append(
+                    (source, 1, f"dependency helper inspection exceeds compiler.max_dependency_depth={limits['max_dependency_depth']}")
+                )
                 return
-            for name, content in archive_files(io.BytesIO(data)).items():
+            for name, content in archive_files(io.BytesIO(data), limits=limits).items():
                 parts = Path(name).parts
                 if parts[0] == "templates" or (parts[0] == "charts" and "templates" in parts):
                     result.add(f"{source}/{name}", content.decode(), root=False)
@@ -143,6 +146,8 @@ class DiscoverySources:
                 root = directory.name == "templates"
                 try:
                     if not root and file.suffix == ".tgz":
+                        if file.stat().st_size > limits["max_context_bytes"]:
+                            raise ValueError(f"dependency archive exceeds compiler.max_context_bytes={limits['max_context_bytes']}")
                         archive(file.read_bytes(), source, 0)
                     elif root or "templates" in file.relative_to(directory).parts:
                         result.add(source, file.read_text(), root=root)

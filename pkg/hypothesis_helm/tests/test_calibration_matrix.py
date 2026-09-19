@@ -291,7 +291,7 @@ def test_shaped_fixture_replays_the_same_fault_outputs(tmp_path: Path) -> None:
     from hypothesis_helm_benchmarking.charts.shape import fault_outputs, reshape_faults
 
     from hypothesis_helm.charts.model import Chart
-    from hypothesis_helm.charts.rendering import render
+    from hypothesis_helm.charts.testing.rendering import render
 
     source, target = tmp_path / "source", tmp_path / "replayed"
     generate(source, input_complexity=3, output_bins=2)

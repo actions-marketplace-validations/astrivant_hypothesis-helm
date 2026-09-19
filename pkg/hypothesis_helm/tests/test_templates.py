@@ -5,7 +5,7 @@ Verify templates.
 from pathlib import Path
 from textwrap import dedent
 
-from hypothesis_helm.charts.templates import Diagnostic, Reference, discover, parse
+from hypothesis_helm.charts.inspection.templates import Diagnostic, Reference, discover, parse
 
 
 def scan(tmp_path: Path, text: str) -> tuple[list[Reference], list[Diagnostic]]:
@@ -146,7 +146,7 @@ def test_tpl_sources_and_contexts(tmp_path: Path) -> None:
     Returns:
         None: Resolved tpl inputs expose nested paths without dynamic diagnostics.
     """
-    from hypothesis_helm.charts import yamlio
+    from hypothesis_helm.charts.values import yamlio
 
     (tmp_path / "values.yaml").write_text(
         yamlio.dump(
@@ -193,7 +193,7 @@ def test_tpl_dynamic_recursive_and_invalid(tmp_path: Path) -> None:
     Returns:
         None: Recursion terminates and unsupported inputs remain visible.
     """
-    from hypothesis_helm.charts import yamlio
+    from hypothesis_helm.charts.values import yamlio
 
     (tmp_path / "values.yaml").write_text(
         yamlio.dump(
@@ -240,9 +240,9 @@ def test_tpl_coalescing_and_helm_render(tmp_path: Path) -> None:
 
     import pytest
 
-    from hypothesis_helm.charts import yamlio
-    from hypothesis_helm.charts.generate import coalesce
-    from hypothesis_helm.charts.runner import Chart, render
+    from hypothesis_helm.charts.suites.generate import coalesce
+    from hypothesis_helm.charts.testing.runner import Chart, render
+    from hypothesis_helm.charts.values import yamlio
     from hypothesis_helm.schemas.contracts import mapping
 
     if shutil.which("helm") is None:

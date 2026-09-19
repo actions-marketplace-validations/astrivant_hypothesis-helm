@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.reporting.reproductions import failing_input

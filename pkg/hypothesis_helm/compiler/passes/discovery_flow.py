@@ -4,7 +4,7 @@ Compute conservative branch, collection and mutation facts for values discovery.
 
 from collections.abc import Callable
 
-from hypothesis_helm.charts import tpl
+from hypothesis_helm.charts.inspection import tpl
 from hypothesis_helm.compiler.asts.origins import (
     Choice,
     Dictionary,

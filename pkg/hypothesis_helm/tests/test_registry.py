@@ -15,7 +15,7 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts.registry import HelmTransport, prepare_helm_source, unpack_chart
+from hypothesis_helm.charts.repositories.registry import HelmTransport, prepare_helm_source, unpack_chart
 from hypothesis_helm.cli import main
 
 
@@ -110,7 +110,7 @@ def test_helm_source_partial_reports(
         return subprocess.CompletedProcess(command, 0, "", "")
 
     monkeypatch.setattr(HelmTransport, "run", run)
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", lambda *args: {"status": "passed", "attempts": 2})
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", lambda *args: {"status": "passed", "attempts": 2})
     code = main(
         [
             "scan",

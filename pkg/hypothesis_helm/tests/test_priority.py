@@ -13,8 +13,8 @@ import pytest
 from hypothesis import find, given, settings
 from jsonschema import validators
 
-from hypothesis_helm.charts.prioritized import check_prioritized
-from hypothesis_helm.charts.runner import Chart, render
+from hypothesis_helm.charts.testing.prioritized import check_prioritized
+from hypothesis_helm.charts.testing.runner import Chart, render
 from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy
 from hypothesis_helm.schemas.priority import PriorityInputs
 
@@ -178,7 +178,7 @@ def test_known_inputs_preserve_dynamic_maps(tmp_path: Path) -> None:
         settings=settings(max_examples=50, deadline=None),
     )
     assert validators.validator_for(schema)(schema).is_valid(json_value(deferred))
-    from hypothesis_helm.charts.runner import merge_values
+    from hypothesis_helm.charts.testing.runner import merge_values
 
     assert not validators.validator_for(priority.schema)(priority.schema).is_valid(json_value(merge_values(chart.defaults, deferred)))
 
@@ -242,7 +242,7 @@ def test_phase_order_and_failure_preservation(tmp_path: Path, monkeypatch: pytes
             "error": "known-input failure" if len(calls) == 1 else "",
         }
 
-    monkeypatch.setattr("hypothesis_helm.charts.prioritized.check_chart", check)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.prioritized.check_chart", check)
     result = check_prioritized(
         chart,
         budget=2,

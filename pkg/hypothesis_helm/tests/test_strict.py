@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.charts.presence import has_path
-from hypothesis_helm.charts.runner import Chart, audit
+from hypothesis_helm.charts.testing.runner import Chart, audit
+from hypothesis_helm.charts.values.presence import has_path
 from hypothesis_helm.cli import main
 from hypothesis_helm.schemas.contracts import mapping, sequence
 

@@ -12,7 +12,7 @@ from pathlib import Path
 from types import TracebackType
 
 from attrs import define, field
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping
 
 

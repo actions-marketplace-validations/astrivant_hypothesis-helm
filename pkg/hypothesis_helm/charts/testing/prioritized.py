@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.runner import check_chart
+from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
 from hypothesis_helm.reporting.logs import input_baseline
@@ -173,7 +173,7 @@ def check_prioritized(
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "report.json").write_text(json.dumps(phase, indent=2) + "\n")
     failures = [phase for phase in phases if phase["status"] == "failed"]
-    incomplete = any(phase["status"] not in {"passed", "failed", "not-needed"} for phase in phases)
+    incomplete = any(phase["status"] not in {"passed", "failed", "not-needed"} or phase.get("stop_reason") for phase in phases)
     status = (
         "failed"
         if failures

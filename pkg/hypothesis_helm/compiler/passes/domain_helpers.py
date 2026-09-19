@@ -143,7 +143,7 @@ def inline(chart: Path, nodes: tuple[Node, ...], contracts: Contracts) -> tuple[
     Returns:
         tuple[Node, ...]: Rebound nodes accepted only if the downstream projection understands every operation.
     """
-    remaining = 10000
+    remaining = contracts.limits["max_discovery_nodes"]
 
     def expand(items: tuple[Node, ...], context: object, variables: dict[str, object], stack: tuple[str, ...]) -> tuple[Node, ...]:
         """
@@ -163,7 +163,9 @@ def inline(chart: Path, nodes: tuple[Node, ...], contracts: Contracts) -> tuple[
         for node in items:
             remaining -= 1
             if remaining < 0:
-                raise Unknown("helper projection statement budget exceeded")
+                raise Unknown(
+                    f"helper projection statement budget exceeded: compiler.max_discovery_nodes={contracts.limits['max_discovery_nodes']}"
+                )
             if node.kind == "text":
                 if node.text:
                     result.append(node)

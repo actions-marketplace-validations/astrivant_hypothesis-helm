@@ -8,8 +8,23 @@ from pathlib import Path
 import pytest
 
 from hypothesis_helm.reporting.errors import deduplicate_errors
-from hypothesis_helm.reporting.overview import grid_shape, measured_seconds, summarize, write_overview
+from hypothesis_helm.reporting.overview import grid_shape, measured_seconds, summarize, unfinished, write_overview
 from hypothesis_helm.reporting.repository import write_reports
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_failure_at_deadline_keeps_incomplete_marker(nested: bool) -> None:
+    """
+    Keep the report's incomplete-work marker when a confirmed failure survives a deadline.
+
+    Args:
+        nested (bool): Read a direct chart result or a retained property phase.
+
+    Returns:
+        None: Failure severity does not conceal unfinished sampling or minimization.
+    """
+    failure: dict[str, object] = {"status": "failed", "stop_reason": "time-limit", "error": "observed error"}
+    assert unfinished({"status": "failed", "phases": [failure]} if nested else failure)
 
 
 def test_chart_findings_and_unknown_times_stay_separate() -> None:

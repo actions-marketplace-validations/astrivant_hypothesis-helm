@@ -22,27 +22,12 @@ from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
 from hypothesis_helm.reporting.budget import TimeLimitReached
+from hypothesis_helm.reporting.checkpoints import save
 from hypothesis_helm.reporting.logs import WorkerLogFormatter, WorkerLogs
 from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.paths import ValuePath
-
-
-def save(path: Path, value: dict[str, object]) -> None:
-    """
-    Publish one worker record atomically without sharing a writable report.
-
-    Args:
-        path (Path): Destination owned by this task.
-        value (dict[str, object]): JSON record.
-
-    Returns:
-        None: Readers see the previous complete record or the new complete record.
-    """
-    temporary = path.with_suffix(f".{os.getpid()}.tmp")
-    temporary.write_text(json.dumps(value, indent=2) + "\n")
-    temporary.replace(path)
 
 
 def execute(context: dict[str, object], directory: Path, workers: int) -> list[dict[str, object]]:
@@ -155,6 +140,13 @@ def execute(context: dict[str, object], directory: Path, workers: int) -> list[d
                 "status": "interrupted" if interrupted else "cancelled" if failed_early else "time-limit" if cancelled else "error",
             }
         )
+        checkpoint = Path(str(started["artifacts"])) / "observed-failure.json"
+        if not result.exists() and checkpoint.is_file():
+            evidence = mapping(json.loads(checkpoint.read_text()))
+            reason = str(phase["status"])
+            phase.update(evidence, **started, stop_reason=reason)
+            if interrupted:
+                phase["status"] = "interrupted"
         records.append(phase)
     return records
 
@@ -169,8 +161,8 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero after exhausting the queue or reaching its common deadline.
     """
-    from hypothesis_helm.charts.paths import GENERATION_ERRORS, path_strategy
-    from hypothesis_helm.charts.runner import check_chart
+    from hypothesis_helm.charts.testing.paths import GENERATION_ERRORS, path_strategy
+    from hypothesis_helm.charts.testing.runner import check_chart
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
@@ -258,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
                 (directory / "interrupted").touch()
                 (directory / "stop").touch()
                 break
-            if result["status"] == "time-limit":
+            if result["status"] == "time-limit" or result.get("stop_reason") == "time-limit":
                 break
             if context["fail_fast"] and result["status"] == "failed":
                 (directory / "stop").touch()

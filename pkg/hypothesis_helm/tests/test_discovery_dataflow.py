@@ -8,10 +8,10 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
+from hypothesis_helm.charts.inspection.templates import discover
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import render
-from hypothesis_helm.charts.templates import discover
+from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.tests.test_templates import scan
 
@@ -179,7 +179,8 @@ def test_unknown_alternatives_and_malformed_helper_arguments_remain_visible(tmp_
     messages = {warning.message for warning in warnings}
     assert "unresolved variable context: $value.name" in messages
     assert any(message.startswith("unresolved parenthesized context:") for message in messages)
-    assert "helper context is dynamic or unsupported: merge" in messages
+    assert any("dict has an unpaired key" in message for message in messages)
+    assert "helper context is dynamic or unsupported: merge" not in messages
 
 
 def test_derived_records_and_external_results_keep_input_dependencies(tmp_path: Path) -> None:

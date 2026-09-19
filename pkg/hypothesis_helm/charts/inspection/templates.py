@@ -12,13 +12,14 @@ from pathlib import Path
 
 from attrs import define
 
-from hypothesis_helm.charts import tpl, yamlio
+from hypothesis_helm.charts.inspection import tpl
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.actions import TOKEN
 from hypothesis_helm.compiler.asts.actions import Action as Action
 from hypothesis_helm.compiler.asts.actions import parse as parse
 from hypothesis_helm.compiler.asts.origins import Derived, Dictionary, Literal, Origin, identity, join, paths, select, unresolved
 from hypothesis_helm.compiler.builtins import BUILTINS, MUTATIONS, NATIVE_STATE
-from hypothesis_helm.compiler.limits import call_depth
+from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.discovery_flow import invalidate, iterations, key_guards, truth, widen
 from hypothesis_helm.compiler.passes.discovery_functions import CERTIFICATES
 from hypothesis_helm.compiler.passes.discovery_functions import result as function_result
@@ -78,7 +79,8 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
     active_helpers: list[str] = []
     visited_helpers: dict[tuple[object, ...], bool] = {}
     mutations = 0
-    remaining = 10000
+    limits = active_limits()
+    remaining = limits["max_discovery_nodes"]
     sources = DiscoverySources.build(path)
     refs: list[Reference] = []
     diagnostics = [Diagnostic(*item) for item in sources.diagnostics]
@@ -110,7 +112,13 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
             declared: set[str] = set()
             for node in nodes:
                 if remaining <= 0:
-                    diagnostics.append(Diagnostic(source_name, node.line, "template discovery statement budget exceeded"))
+                    diagnostics.append(
+                        Diagnostic(
+                            source_name,
+                            node.line,
+                            f"template discovery statement budget exceeded: compiler.max_discovery_nodes={limits['max_discovery_nodes']}",
+                        )
+                    )
                     return {}
                 remaining -= 1
                 tokens = node.tokens
@@ -364,9 +372,15 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
                             if context is None:
                                 raise ValueError("tpl context is dynamic or unsupported")
                             for content in contents:
+                                if len(content.encode("utf-8")) > limits["max_template_bytes"]:
+                                    warn(f"tpl source exceeds compiler.max_template_bytes={limits['max_template_bytes']}")
+                                    continue
                                 tpl_identity = (content, identity(context))
-                                if tpl_identity in active_tpl or len(active_tpl) >= 32:
+                                if tpl_identity in active_tpl:
                                     warn("recursive tpl expansion requires review")
+                                    continue
+                                if len(active_tpl) >= limits["max_tpl_depth"]:
+                                    warn(f"tpl expansion exceeds compiler.max_tpl_depth={limits['max_tpl_depth']}")
                                     continue
                                 try:
                                     nested = parse(content)
@@ -404,15 +418,17 @@ def discover(path: Path, *, prune_literals: bool = False, offline: bool = False)
                         if target is None or helper in sources.ambiguous:
                             warn(f"{t} helper is missing or ambiguous: {helper}")
                             continue
-                        if helper in active_helpers or len(active_helpers) >= call_depth():
+                        if helper in active_helpers or len(active_helpers) >= limits["max_call_depth"]:
                             warn("helper is recursive or exceeds compiler call depth: " + helper)
                             if len(args) == 2:
                                 invalidate(expression(args[1]))
                             mutations += 1
                             continue
+                        before_context_diagnostics = len(diagnostics)
                         bound_context = expression(args[1]) if len(args) == 2 else Literal(None)
                         if bound_context is None:
-                            warn("helper context is dynamic or unsupported: " + helper)
+                            if len(diagnostics) == before_context_diagnostics:
+                                warn("helper context is dynamic or unsupported: " + helper)
                             continue
                         visit = (helper, identity(bound_context), tuple(active_helpers), frozenset(active_tpl), guards)
                         if visit in visited_helpers:

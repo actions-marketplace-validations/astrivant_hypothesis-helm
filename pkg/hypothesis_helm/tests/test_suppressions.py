@@ -13,8 +13,8 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.findings.policy import candidate_paths, resolve_codes
 from hypothesis_helm.findings.suppressions import ENVIRONMENT, SuppressionCapture, observe, observed_paths
@@ -298,8 +298,8 @@ def test_recursive_export_precedes_next_chart(
             raise KeyboardInterrupt
         return {"status": "failed", "error": "[HH1101] bad YAML", "values": {"key": ">"}}
 
-    monkeypatch.setattr("hypothesis_helm.charts.scan.exercise_chart", exercise)
-    monkeypatch.setattr("hypothesis_helm.charts.scan.shutil.which", lambda name: "/bin/true")
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", exercise)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.shutil.which", lambda name: "/bin/true")
     arguments = [
         "test",
         str(source),

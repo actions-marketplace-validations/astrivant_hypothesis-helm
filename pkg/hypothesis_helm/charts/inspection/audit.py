@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import logging
 
+from hypothesis_helm.charts.inspection.templates import discover
 from hypothesis_helm.charts.model import Chart, _default_paths, _schema_nodes
-from hypothesis_helm.charts.presence import has_path
-from hypothesis_helm.charts.templates import discover
+from hypothesis_helm.charts.values.presence import has_path
 from hypothesis_helm.compiler.passes.complexity import measure
 from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
@@ -39,7 +39,9 @@ def audit_findings(chart: Chart) -> dict[str, object]:
     references, diagnostics = discover(chart.path, prune_literals=True, offline=True)
     defaults = set(_default_paths(chart.defaults))
     declared = {entry.path: entry.schema for entry in enumerate_paths(chart.schema)}
-    paths = defaults | {r.path for r in references if r.path} | declared.keys()
+    # A wildcard reference records an access pattern, not a required concrete field.
+    # Keep explicit schema/default paths, including their collection item contracts.
+    paths = defaults | {r.path for r in references if r.path and "*" not in r.path} | declared.keys()
     findings: list[dict[str, object]] = []
     for path in sorted(paths, key=repr):
         LOGGER.info("Auditing path %s", format_path(path))
@@ -90,6 +92,7 @@ def audit_findings(chart: Chart) -> dict[str, object]:
     return {
         "chart": str(chart.path),
         "references": [asdict(r) for r in references],
+        "dynamic_references": [asdict(r) for r in references if not r.path or "*" in r.path],
         "findings": [finding for finding in visible if finding["code"] != "HH2005"],
         "unresolved": [finding for finding in visible if finding["code"] == "HH2005"],
         "ignored_findings": suppressed,

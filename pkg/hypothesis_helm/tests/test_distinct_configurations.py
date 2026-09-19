@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.charts.runner import Chart, check_chart, merge_values
+from hypothesis_helm.charts.testing.runner import Chart, check_chart, merge_values
 from hypothesis_helm.schemas.contracts import configuration_key
 from hypothesis_helm.schemas.factors import factor_space
 
@@ -47,7 +47,7 @@ def test_defaults_and_omitted_values_are_not_rendered_twice(monkeypatch: pytest.
         rendered.append(configuration_key(merge_values(chart.defaults, values)))
         return [{}]
 
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", render)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     report = check_chart(
         chart,
         exhaustive=exhaustive,

@@ -13,9 +13,9 @@ from pathlib import Path
 
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.charts import yamlio
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.rendering import validate_resources
+from hypothesis_helm.charts.testing.rendering import validate_resources
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.conditions import condition_path
 from hypothesis_helm.compiler.asts.templates import fold, lower, specialize, walk
 from hypothesis_helm.compiler.passes.inputs import InputInventory

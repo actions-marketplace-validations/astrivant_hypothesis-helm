@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from jsonschema import validators
 
-from hypothesis_helm.charts.runner import Chart, check_chart
+from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import json_value
@@ -180,14 +180,14 @@ def test_cli_interactions_and_failure_report(monkeypatch: pytest.MonkeyPatch, ca
     Returns:
         None: Assertions verify dispatch, case accounting and failure reporting.
     """
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", lambda *args, **kwargs: [{}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", lambda *args, **kwargs: [{}])
     assert main(["test", "--log-file", "/dev/stderr", "examples/workload", "--permutations", "2", "--shard", "none"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["mode"] == "permutations"
     assert report["coverage_complete"] is True
     assert report["attempts"] == report["planned_cases"] + 1
     assert "domain_size" not in report
-    monkeypatch.setattr("hypothesis_helm.charts.runner.render", lambda *args, **kwargs: [])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", lambda *args, **kwargs: [])
     failed = check_chart("examples/workload", permutations=2, artifact_dir=tmp_path)
     assert failed["status"] == "failed"
     assert failed["coverage_complete"] is False

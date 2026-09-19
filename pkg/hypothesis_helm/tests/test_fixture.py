@@ -18,8 +18,8 @@ from hypothesis_helm_benchmarking.charts.workload import source_digest
 from hypothesis_helm_benchmarking.cli import main
 from hypothesis_helm_benchmarking.studies.matrix import bundle_key, reference_space
 
-from hypothesis_helm.charts import yamlio
-from hypothesis_helm.charts.runner import Chart, render
+from hypothesis_helm.charts.testing.runner import Chart, render
+from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.topology import trim_topology
 from hypothesis_helm.schemas.contracts import mapping
 

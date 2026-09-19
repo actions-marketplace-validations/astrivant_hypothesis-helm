@@ -100,7 +100,10 @@ strings will execute or prove output equivalence.
 Unknown helper names, conflicting definitions, unsupported argument transformations,
 recursion and exhausted analysis budgets still produce `HH2005` diagnostics.
 Helper traversal respects `compiler.max_call_depth`; discovery also stops after
-10,000 visited actions and reports that limit. Uncalled helper definitions do not
+`compiler.max_discovery_nodes` visited actions (10,000 by default) and reports that
+limit. Dynamic template expansion uses `max_tpl_depth` and `max_template_bytes`;
+dependency inspection uses `max_dependency_depth`, `max_files` and `max_context_bytes`.
+See the [analysis budgets](analysis.md#explicit-rejection-discovery). Uncalled helper definitions do not
 execute and are not treated as root templates. These are discovery rules, not
 proofs of equivalent rendered output. Scans show remaining diagnostics with their
 template filename and line number, deduplicated per chart, and still honor

@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.charts.generate import generate_tests
-from hypothesis_helm.charts.yamlio import load_all
+from hypothesis_helm.charts.suites.generate import generate_tests
+from hypothesis_helm.charts.values.yamlio import load_all
 from hypothesis_helm.cli import main
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.suite import run_suite
