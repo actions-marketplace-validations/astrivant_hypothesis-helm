@@ -4346,6 +4346,43 @@
         "json-schema"
       ]
     },
+    "b8ab9ff4503d3e9114c4": {
+      "evidence": [
+        {
+          "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+          "reviewed": "servicespec.type",
+          "schema": {
+            "enum": [
+              "ClusterIP",
+              "NodePort",
+              "LoadBalancer",
+              "ExternalName",
+              "",
+              null
+            ]
+          },
+          "type_field": "io.k8s.api.core.v1.ServiceSpec/type"
+        }
+      ],
+      "schema": {
+        "enum": [
+          "ClusterIP",
+          "NodePort",
+          "LoadBalancer",
+          "ExternalName",
+          "",
+          null
+        ],
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sources": [
+        "json-schema",
+        "servicespec.type"
+      ]
+    },
     "b8f1d0a335fb64dca1f2": {
       "schema": {
         "enum": [
@@ -5985,6 +6022,39 @@
       },
       "sources": [
         "json-schema"
+      ]
+    },
+    "fc7e4e1d57fd5c4fbb64": {
+      "evidence": [
+        {
+          "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+          "reviewed": "servicespec.sessionAffinity",
+          "schema": {
+            "enum": [
+              "ClientIP",
+              "None",
+              "",
+              null
+            ]
+          },
+          "type_field": "io.k8s.api.core.v1.ServiceSpec/sessionAffinity"
+        }
+      ],
+      "schema": {
+        "enum": [
+          "ClientIP",
+          "None",
+          "",
+          null
+        ],
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sources": [
+        "json-schema",
+        "servicespec.sessionAffinity"
       ]
     },
     "fd0c654af036780156e5": {
@@ -45904,12 +45974,12 @@
       "spec/publishNotReadyAddresses": "8c3732ac08eeda342695",
       "spec/selector": "0ba21a5874c31f6ec005",
       "spec/selector/*": "b61191ad4bdab57e4a5c",
-      "spec/sessionAffinity": "b61191ad4bdab57e4a5c",
+      "spec/sessionAffinity": "fc7e4e1d57fd5c4fbb64",
       "spec/sessionAffinityConfig": "0ba21a5874c31f6ec005",
       "spec/sessionAffinityConfig/clientIP": "0ba21a5874c31f6ec005",
       "spec/sessionAffinityConfig/clientIP/timeoutSeconds": "668a4cadfc9c71afb718",
       "spec/trafficDistribution": "b61191ad4bdab57e4a5c",
-      "spec/type": "b61191ad4bdab57e4a5c",
+      "spec/type": "b8ab9ff4503d3e9114c4",
       "status": "0ba21a5874c31f6ec005",
       "status/conditions": "969837d4b51c4b9dda01",
       "status/conditions/*": "71bb4aa625ca8505a306",
@@ -46114,12 +46184,12 @@
       "items/*/spec/publishNotReadyAddresses": "8c3732ac08eeda342695",
       "items/*/spec/selector": "0ba21a5874c31f6ec005",
       "items/*/spec/selector/*": "b61191ad4bdab57e4a5c",
-      "items/*/spec/sessionAffinity": "b61191ad4bdab57e4a5c",
+      "items/*/spec/sessionAffinity": "fc7e4e1d57fd5c4fbb64",
       "items/*/spec/sessionAffinityConfig": "0ba21a5874c31f6ec005",
       "items/*/spec/sessionAffinityConfig/clientIP": "0ba21a5874c31f6ec005",
       "items/*/spec/sessionAffinityConfig/clientIP/timeoutSeconds": "668a4cadfc9c71afb718",
       "items/*/spec/trafficDistribution": "b61191ad4bdab57e4a5c",
-      "items/*/spec/type": "b61191ad4bdab57e4a5c",
+      "items/*/spec/type": "b8ab9ff4503d3e9114c4",
       "items/*/status": "0ba21a5874c31f6ec005",
       "items/*/status/conditions": "969837d4b51c4b9dda01",
       "items/*/status/conditions/*": "71bb4aa625ca8505a306",
@@ -46294,6 +46364,50 @@
         ]
       },
       "type_field": "io.k8s.api.core.v1.VolumeMount/mountPath"
+    },
+    {
+      "defaulting_reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/v1/defaults.go#L106-L125",
+      "description": "type determines how the Service is exposed. Defaults to ClusterIP. Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. \"ClusterIP\" allocates a cluster-internal IP address for load-balancing to endpoints. Endpoints are determined by the selector or if that is not specified, by manual construction of an Endpoints object or EndpointSlice objects. If clusterIP is \"None\", no virtual IP is allocated and the endpoints are published as a set of endpoints rather than a virtual IP. \"NodePort\" builds on ClusterIP and allocates a port on every node which routes to the same endpoints as the clusterIP. \"LoadBalancer\" builds on NodePort and creates an external load-balancer (if supported in the current cloud) which routes to the same endpoints as the clusterIP. \"ExternalName\" aliases this service to the specified externalName. Several other fields do not apply to ExternalName services. More info: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types",
+      "file": "servicespec.json",
+      "id": "servicespec.type",
+      "path": [
+        "type"
+      ],
+      "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+      "retire_when": "Upstream machine-readable schemas encode this domain, including defaulting, at the same API field.",
+      "schema": {
+        "enum": [
+          "ClusterIP",
+          "NodePort",
+          "LoadBalancer",
+          "ExternalName",
+          "",
+          null
+        ]
+      },
+      "shim_reason": "OpenAPI declares a string and documents allowed values, but omits the enum. Empty and null preserve API defaulting.",
+      "type_field": "io.k8s.api.core.v1.ServiceSpec/type"
+    },
+    {
+      "defaulting_reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/v1/defaults.go#L106-L125",
+      "description": "Supports \"ClientIP\" and \"None\". Used to maintain session affinity. Enable client IP based session affinity. Must be ClientIP or None. Defaults to None. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
+      "file": "servicespec.json",
+      "id": "servicespec.sessionAffinity",
+      "path": [
+        "sessionAffinity"
+      ],
+      "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+      "retire_when": "Upstream machine-readable schemas encode this domain, including defaulting, at the same API field.",
+      "schema": {
+        "enum": [
+          "ClientIP",
+          "None",
+          "",
+          null
+        ]
+      },
+      "shim_reason": "OpenAPI declares a string and documents allowed values, but omits the enum. Empty and null preserve API defaulting.",
+      "type_field": "io.k8s.api.core.v1.ServiceSpec/sessionAffinity"
     }
   ],
   "revision": "970cc70507e1880a7a3b64184b6aad417a1d8d85",

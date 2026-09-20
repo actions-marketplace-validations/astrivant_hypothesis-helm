@@ -24,6 +24,65 @@ from hypothesis_helm.schemas.policy import ENVIRONMENT
 from hypothesis_helm.schemas.resources import destination
 
 
+@pytest.mark.parametrize(
+    ("field", "allowed"),
+    [("type", ["ClusterIP", "NodePort", "LoadBalancer", "ExternalName"]), ("sessionAffinity", ["None", "ClientIP"])],
+)
+def test_service_enum_shims_preserve_defaulting_and_exact_destinations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, field: str, allowed: list[str]
+) -> None:
+    """
+    Rebuild Service enums without restricting unrelated strings or Kubernetes defaulting.
+
+    Args:
+        tmp_path (Path): Isolated source and schema snapshots.
+        monkeypatch (pytest.MonkeyPatch): Select only the supplement under test.
+        field (str): Exact ServiceSpec field.
+        allowed (list[str]): Values accepted by the pinned upstream validator.
+
+    Returns:
+        None: Generated and bundled catalogs reject invalid enums with explicit shim provenance.
+    """
+    row = next(
+        mapping(item)
+        for item in sequence(json.loads((builder.DATA / "reviewed-domains.json").read_text()))
+        if mapping(item)["id"] == f"servicespec.{field}"
+    )
+    spec = {"type": "object", "properties": {field: {"type": ["string", "null"], "description": row["description"]}}}
+    service = {
+        "type": "object",
+        "x-kubernetes-group-version-kind": [{"group": "", "version": "v1", "kind": "Service"}],
+        "properties": {"spec": {"$ref": "#/definitions/io.k8s.api.core.v1.ServiceSpec"}, "unrelated": spec},
+    }
+    source = tmp_path / "api/openapi-spec/swagger.json"
+    source.parent.mkdir(parents=True)
+    source.write_text(json.dumps({"definitions": {"io.k8s.api.core.v1.ServiceSpec": spec, "io.k8s.api.core.v1.Service": service}}))
+    resources = sources.destinations(tmp_path, {"fields": {}, "profiles": {}}, reviewed=[row])
+    assert set(mapping(resources["v1/Service"])) == {f"spec/{field}"}
+    (tmp_path / "reviewed-domains.json").write_text(json.dumps([row]))
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "servicespec.json").write_text(json.dumps(spec))
+    mapping(service["properties"])["spec"] = spec
+    (snapshot / "service-v1.json").write_text(json.dumps(service))
+    monkeypatch.setattr(builder, "DATA", tmp_path)
+    rebuilt = builder.build(snapshot, "fixture", upstream={"resources": resources, "version": "fixture", "revision": "test"})
+    bundled = mapping(json.loads(builder.LIBRARY.read_text()))
+    for catalog in (rebuilt, bundled):
+        paths = mapping(mapping(catalog["resources"])["v1/Service"])
+        record = mapping(mapping(catalog["domains"])[str(paths[f"spec/{field}"])])
+        validator = validators.Draft7Validator(mapping(record["schema"]))
+        for value in [*allowed, "", None]:
+            assert validator.is_valid(value), value
+        for invalid in ["'", "[Ma", "Unknown", 0, False]:
+            assert not validator.is_valid(json_value(invalid)), invalid
+        assert row["id"] in sequence(record["sources"])
+        assert mapping(sequence(record["evidence"])[0])["type_field"] == row["type_field"]
+    paths = mapping(mapping(rebuilt["resources"])["v1/Service"])
+    unrelated = mapping(mapping(rebuilt["domains"])[str(paths[f"unrelated/{field}"])])
+    assert validators.Draft7Validator(mapping(unrelated["schema"])).is_valid("'")
+
+
 def test_upstream_destinations_use_api_types_not_field_names(tmp_path: Path) -> None:
     """
     Apply reference-name bounds only at reviewed API types reached through OpenAPI references.

@@ -98,6 +98,7 @@ Conflicting helper definitions are analyzed as alternatives, and only constraint
 | A helper forwards a string into a Secret or ConfigMap reference | Generate names accepted by the destination's schema. |
 | An empty value selects a fallback name | Keep the empty input; constrain the nonempty reference branch. |
 | Literal maps are serialized and merged into annotations | Generate scalar contributions accepted by the annotation schema. |
+| Helpers loop over input arrays, append elements and apply `uniq` | Follow each element into its destination, including branches that select an object's `name` field. |
 | A quoted expression is unsupported | Leave that expression unresolved; preserve independent field mappings. |
 | An unknown fragment can change YAML structure | Block mappings in the affected structure. |
 | Input mutation, imported origins, or a resource identity is unresolved | Do not infer constraints that depend on that result. |
@@ -105,6 +106,15 @@ Conflicting helper definitions are analyzed as alternatives, and only constraint
 This pass narrows the **generation domain**. It does not establish exact-output equivalence or authorize render pruning.
 It preserves source-schema contradictions as diagnostics, and the supplied defaults still go to Helm unchanged.
 See [input domains](../input-domains/README.md#default-destination-catalog) for supported operations and remaining limits.
+
+Collection analysis follows possible element origins, not a guessed list length. For example, a helper may accept
+both `"registry-secret"` and `{name: "registry-secret"}` and forward either to `imagePullSecrets[].name`.
+The resulting constraint checks each element separately, so mixed valid representations remain allowed while
+an element such as `[{}]` is rejected. Resource-enabling conditions still control where the constraint applies.
+The pass supports append-only accumulators and element-preserving deduplication. Arbitrary loop reassignment,
+unknown element conditions, nested wildcard bindings and unknown conversions remain unresolved. Quoting an
+item does not prove that its input must already be a string. Explicit source-type conflicts stay visible rather
+than disappearing through automatic narrowing.
 
 ## Explicit rejection discovery
 
@@ -138,9 +148,10 @@ retain the source, conditions, original inputs, and choices under
 | Named `include` with `.`, `$`, or nested `dict` arguments | Follow helper calls and local `:=` aliases; retain the original values path across context changes. |
 | `with`, `else with`; declarations and `=` assignments | Change dot within the selected block, retain the invocation's `$`, and update the nearest enclosing declaration without leaking shadowed variables. |
 | `range` over lists or string-key maps; `else`, `break`, `continue` | Follow concrete elements and sorted map keys. Keep loop variables scoped and preserve surrounding assignments. |
-| Statically named `template` and `block` | Bind a fresh helper scope to the argument pipeline; an omitted argument supplies nil. Conflicting definitions remain unresolved. |
+| Statically named `template` and `block` | Bind a fresh helper scope to the argument pipeline; an omitted argument supplies nil. Identical bodies may have different source line numbers; different bodies remain unresolved. |
 | Literal `dict` + `hasKey`; literal string `list` + `has` / `mustHas` | Retain source-authored choices when membership fails on a rejecting branch. |
-| String-key `index` / `get` | Follow map lookups whose input path can be represented unambiguously. |
+| String-key `index` / `get` | Follow map lookups and preserve the source of values selected from transformed dictionaries. |
+| `urlParse`, `splitList`, list `index` | Ask the selected Helm binary to parse concrete URLs, then follow supported selections while retaining input paths. Out-of-range indexing remains a potential chart defect. |
 | Parenthesized field access, such as `(.Values.global).imagePullSecrets` | Select a field from the enclosed expression; retain its original input path and distinguish field access from method calls. |
 | Forwarded dependency globals | Trace selected fields to the ancestor supplying them, including nested dependencies and aliases. Verify every resulting rejection with Helm. |
 | `keys`, `sortAlpha`, `join`, `printf` with string `%s` arguments | Construct rejection messages. Unsorted keys may occur in any order, but native verification requires every key exactly once. |
@@ -162,6 +173,14 @@ Additional bounded operations include ASCII `trunc`, `splitList`, Boolean `terna
 supported integer operands. Mixed `printf` supports `%s`, `%d` and `%%`. Integer formatting requires an explicit conversion or a
 known integer-producing operation: a raw number loaded from values can have a different Go runtime type. Unsupported formats,
 conversions and oversized strings remain native Helm work.
+
+URL parsing uses a cached, bounded Helm probe with data passed through a values file. It makes no network request, but each new URL
+can require an additional local Helm invocation. The compiler does not infer a universal URL format or an enum from successful parses.
+For example, indexing a missing port before applying `default 389` can be a template bug and remains eligible for testing.
+
+Sprig permits a trailing dictionary key without a value and supplies an empty string. The compiler follows that rule for string keys.
+Other key types receive a diagnostic identifying the argument whose Go-specific coercion remains unresolved; this does not label a
+valid Sprig call as a syntax error.
 
 These scope rules follow [Go's template language](https://pkg.go.dev/text/template#hdr-Variables)
 and are checked against native Helm. The compiler analyzes up to 16 nested helper

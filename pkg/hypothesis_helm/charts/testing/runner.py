@@ -33,7 +33,7 @@ from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
-from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
@@ -576,6 +576,29 @@ def check_chart(
         Returns:
             dict[str, object]: Resulting schema, values mapping, or structured report.
         """
+        if isinstance(exc, ChartUnavailable):
+            unavailable: dict[str, object] = {
+                **coverage,
+                "status": "error",
+                "error_kind": "execution",
+                "error": str(exc),
+                "failure_type": type(exc).__name__,
+                "chart": str(chart.path),
+                "attempts": checks.count,
+                "coverage_complete": False,
+                "proof_of_totality": False,
+                "render_hashes": hashes.snapshot(),
+            }
+            # Preserve prior observations, but never label an unavailable chart
+            # as a counterexample or retry rendering it for a comparison.
+            if checks.failure_record is not None:
+                unavailable["observed_failure"] = checks.failure_record
+            expansion_report(unavailable)
+            if artifact_dir is not None:
+                artifact_dir.mkdir(parents=True, exist_ok=True)
+                (artifact_dir / "report.json").write_text(json.dumps(unavailable, indent=2) + "\n")
+            LOGGER.error("%s", exc)
+            return unavailable
         hashes.log_summary()
         if pruner is not None:
             LOGGER.info(
@@ -649,6 +672,8 @@ def check_chart(
                 failed = sum(int(str(record["occurrences"])) for record in checks.nonblocking_findings.values()) > findings_before
             except TimeLimitReached:
                 return stopped_report()
+            except ChartUnavailable as exc:
+                return save_failure(exc)
             except KeyboardInterrupt as exc:
                 save_failure(exc)
                 raise
@@ -715,7 +740,7 @@ def check_chart(
         if statistics is not None or pruner is not None:
             save_failure(exc)
         raise
-    except Exception as exc:
+    except (Exception, ChartUnavailable) as exc:
         return save_failure(exc)
 
     if finite_values is not None:
@@ -747,7 +772,7 @@ def check_chart(
             if statistics is not None or pruner is not None:
                 save_failure(exc)
             raise
-        except Exception as exc:
+        except (Exception, ChartUnavailable) as exc:
             return save_failure(exc)
         hashes.log_summary()
         if pruner is not None:
@@ -868,7 +893,7 @@ def check_chart(
             artifact_dir.mkdir(parents=True, exist_ok=True)
             (artifact_dir / "report.json").write_text(json.dumps(result, indent=2) + "\n")
         return result
-    except Exception as exc:
+    except (Exception, ChartUnavailable) as exc:
         return save_failure(exc)
     hashes.log_summary()
     if pruner is not None:

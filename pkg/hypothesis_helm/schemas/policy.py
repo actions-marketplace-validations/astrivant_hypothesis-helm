@@ -14,6 +14,7 @@ from hypothesis_helm_catalog.profiles import schema as profile_schema
 from jsonschema import validators
 
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.charts.values.parsers import validate_backend
 from hypothesis_helm.compiler.limits import compiler_limits
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.severity import validate as validate_findings
@@ -62,6 +63,7 @@ def configuration(config: Path | None) -> dict[str, object]:
         "input_constraints",
         "resource_schemas",
         "downstream_inputs",
+        "yaml_parser",
         "compiler",
         "findings",
         *SETTING_KEYS,
@@ -130,6 +132,7 @@ def load_policy(
     *,
     character_sets: str | None = None,
     max_examples: int | None = None,
+    yaml_parser: str | None = None,
 ) -> dict[str, object]:
     """
     Resolve chart-scoped restrictions and freeze supplied resource schemas for workers.
@@ -138,11 +141,17 @@ def load_policy(
         config (Path | None): Policy file; schema filenames are relative to this file.
         character_sets (str | None): Optional CLI override for the configured character domain.
         max_examples (int | None): Explicit CLI override for the global Hypothesis example budget.
+        yaml_parser (str | None): Explicit CLI override for the manifest parser backend.
 
     Returns:
         dict[str, object]: JSON-compatible policy with resource schema contents embedded.
     """
     document = configuration(config)
+    parser_policy = (
+        {"yaml_parser": validate_backend(yaml_parser if yaml_parser is not None else document["yaml_parser"])}
+        if yaml_parser is not None or "yaml_parser" in document
+        else {}
+    )
     findings = validate_findings(document.get("findings", {}))
     limits = compiler_limits(document.get("compiler", {}))
     defaults = validate_settings(document)
@@ -222,6 +231,7 @@ def load_policy(
         supplied[identity] = schema
     return {
         **defaults,
+        **parser_policy,
         "input_constraints": resolved,
         "resource_schemas": supplied,
         "downstream_inputs": document.get("downstream_inputs", True),

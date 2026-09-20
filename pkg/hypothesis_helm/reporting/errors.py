@@ -104,6 +104,9 @@ def chart_errors(record: dict[str, object], chart: Path | None = None) -> list[d
     )
     sources = list(phases)
     for source in [record, *phases]:
+        observed = source.get("observed_failure")
+        if isinstance(observed, dict) and observed.get("error"):
+            sources.append({**{key: source[key] for key in ("phase", "artifacts") if key in source}, **observed})
         sources.extend(
             {**{key: source[key] for key in ("phase", "artifacts") if key in source}, **item}
             for item in sequence(source.get("findings", []))
@@ -134,7 +137,9 @@ def chart_errors(record: dict[str, object], chart: Path | None = None) -> list[d
                 }
             )
             matching_primary |= case.get("values") == source.get("values") and case["error"] == source.get("error")
-        if source.get("error") and not matching_primary:
+        # A later execution error cannot erase defects already seen during
+        # expansion, but the execution error itself is not a chart defect.
+        if source.get("error") and not matching_primary and source.get("error_kind") != "execution":
             expanded_sources.append(source)
     errors: list[dict[str, object]] = []
     for source in expanded_sources:

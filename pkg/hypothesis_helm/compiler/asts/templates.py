@@ -15,7 +15,7 @@ from hypothesis_helm.compiler.asts.lexing import lex as lex
 from hypothesis_helm.schemas.contracts import configuration_key
 from hypothesis_helm.schemas.model import ValuesModel
 
-__all__ = ("Node", "SymbolicOutput", "Token", "VALUE", "fold", "lex", "lower", "specialize", "value_path", "walk")
+__all__ = ("Node", "SymbolicOutput", "Token", "VALUE", "fold", "lex", "lower", "specialize", "structure", "value_path", "walk")
 
 
 VALUE = re.compile(r"\.Values((?:\.[A-Za-z_][A-Za-z_0-9]*)+)\Z")
@@ -39,6 +39,19 @@ class Node:
     line: int
     children: tuple[Node, ...] = ()
     otherwise: tuple[Node, ...] = ()
+
+
+def structure(nodes: tuple[Node, ...]) -> tuple[object, ...]:
+    """
+    Compare template bodies independently of their diagnostic source positions.
+
+    Args:
+        nodes (tuple[Node, ...]): Parsed body whose literal output must remain significant.
+
+    Returns:
+        tuple[object, ...]: Immutable structure retaining expressions, whitespace and both branches.
+    """
+    return tuple((node.kind, node.text, structure(node.children), structure(node.otherwise)) for node in nodes)
 
 
 def lower(source: str) -> tuple[Node, ...]:

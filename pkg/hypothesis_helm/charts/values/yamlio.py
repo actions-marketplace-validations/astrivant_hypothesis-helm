@@ -85,7 +85,7 @@ def dump(value: object, *, explicit_null: bool = False) -> str:
 
 def load_all(text: str) -> list[object]:
     """
-    Parse every document in a rendered manifest stream.
+    Parse a manifest stream with the configured backend while keeping values I/O round-trip.
 
     Args:
         text (str): YAML or template text to process.
@@ -93,7 +93,9 @@ def load_all(text: str) -> list[object]:
     Returns:
         list[object]: Parsed documents in their original order, including empty documents.
     """
-    return list(yaml().load_all(text))
+    from hypothesis_helm.charts.values.parsers import load_all as parse_manifests
+
+    return parse_manifests(text)
 
 
 def json_for_helm(value: object, *, indent: int | None = None) -> str:

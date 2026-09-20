@@ -2,7 +2,13 @@
 Stop work at execution boundaries without treating cancellation as a test failure.
 """
 
-__all__ = ("TimeLimitReached",)
+__all__ = ("ChartUnavailable", "TimeLimitReached")
+
+
+class ChartUnavailable(BaseException):
+    """
+    Abort testing when its source disappears, without shrinking an infrastructure failure.
+    """
 
 
 class TimeLimitReached(BaseException):

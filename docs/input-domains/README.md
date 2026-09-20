@@ -4,6 +4,7 @@
 **Table of contents**
 
 - [Character sets](#character-sets)
+- [YAML parser backends](#yaml-parser-backends)
 - [Default destination catalog](#default-destination-catalog)
 - [Chart-specific constraints](#chart-specific-constraints)
 - [Complete configuration example](#complete-configuration-example)
@@ -52,6 +53,41 @@ produce a generation diagnostic rather than relaxing the schema.
 
 The underlying generators support an [encoding constraint](https://github.com/python-jsonschema/hypothesis-jsonschema#api).
 We also constrain nested values from unconstrained schemas, where a generic JSON strategy may produce Unicode.
+
+## YAML parser backends
+
+If a rendered manifest appears valid but the parser rejects it, rerun the same chart and seed with another parser:
+
+```sh
+helm hypothesis test ./chart --seed 42 --yaml-parser pyyaml
+```
+
+`--yaml-parser` is available on `audit`, `generate`, `test`, `scan` and `run`. To set a project default:
+
+```yaml
+yaml_parser: pyyaml
+```
+
+| Backend | Manifest reader | When to use it |
+| --- | --- | --- |
+| `ruamel` | ruamel.yaml round-trip reader; the default | Keep the existing parsing behavior. |
+| `ruamel-safe` | ruamel.yaml safe reader, using LibYAML when installed | Compare ruamel's safe and round-trip readers. |
+| `pyyaml` | PyYAML SafeLoader | Compare against an independent reader. |
+
+The selected reader parses every rendered document. A rejection remains an `HH1101` finding and names the backend;
+there is no automatic fallback. All three reject explicit duplicate mapping keys while allowing ordinary YAML anchors
+and merge overrides. They do not execute Python object tags. Values-file reading and editing continue to use ruamel's
+round-trip reader so comments and anchors are preserved.
+
+Readers can disagree about both syntax and scalar types. For example, PyYAML treats an unquoted `on` as a boolean,
+whereas ruamel's default YAML 1.2 reader treats it as a string. Safe readers also reject unknown tags that the round-trip
+reader can preserve for subsequent JSON validation. A different result identifies a compatibility question; acceptance
+by one reader does not establish that Kubernetes accepts the manifest. Existing structural and optional API schema
+validation still run after parsing. The implementation used by `ruamel-safe` depends on whether LibYAML is installed.
+
+Workers inherit the selection, reports record it in their input-domain metadata, and saved suites remember it.
+An explicit CLI or configuration setting overrides a saved suite's choice. Parser selection separates cached test results;
+the manifest-validation cache also records the parser package version and implementation.
 
 ## Default destination catalog
 
@@ -103,8 +139,9 @@ The catalog imports explicit scalar constraints and integer format limits. It al
 | Deployment `replicas` | Nonnegative integers, including zero | Replica semantics and the published int32 format |
 | Secret and ConfigMap volume/key references | DNS subdomain names, at most 253 characters | Upstream `IsDNS1123Subdomain` and reviewed API field bindings |
 | Service port `protocol` | `TCP`, `UDP`, `SCTP` | Published supported protocols |
+| Service `type` / `sessionAffinity` | Service types: `ClusterIP`, `NodePort`, `LoadBalancer`, `ExternalName`; affinity: `None`, `ClientIP` | Pinned Go validation; empty and null preserve API defaulting |
 | Pod `restartPolicy` | `Always`, `OnFailure`, `Never` | Published alternatives; a particular workload can require a subset |
-| Volume `mountPath` | Nonempty strings without `:` | Published mount-path restriction |
+| Volume `mountPath` | Nonempty strings, including Windows drive paths | Reviewed upstream behavior; a blanket colon ban would exclude supported paths |
 | PDB `minAvailable` / `maxUnavailable` | Integers 0 through 2,147,483,647, or percentages 0% through 100% | Pinned PDB validation, `IntOrString` storage, and the API machinery percentage validator |
 
 Nullable upstream fields retain their nullable domain; a chart's narrower type still takes precedence.
@@ -182,6 +219,7 @@ ignored: [HH2006]  # Other findings remain enabled.
 
 # Global defaults for fresh generated text; supplied values are preserved.
 downstream_inputs: true  # Use constraints from supported downstream field mappings.
+yaml_parser: ruamel  # Rendered manifests: ruamel, ruamel-safe or pyyaml. Values files retain round-trip editing.
 findings:
   fail_on: null  # null: existing exit behavior; info, warning or error: fail fast at that severity or higher.
   severity:  # Optional per-code overrides; ignored/enabled still control whether a finding is emitted.
@@ -463,6 +501,9 @@ validation rule has been translated.
 Exact API type/field bindings connect those primitives to destinations such as `ConfigMapVolumeSource.name`.
 Reviewed supplements also bind to exact API types and fields, followed through OpenAPI references into each resource.
 Descriptions are checked for upstream changes; identical wording on another field never copies a constraint there.
+Service enum supplements are temporary schema shims: their records link both validation and defaulting sources,
+explain the missing machine-readable enum, and state when to remove the shim. The
+[README inventory](../../README.md#upstream-schema-shims) lists the current reviewed supplements.
 For example, the `SecretKeySelector.name` rule does not restrict `imagePullSecrets[].name`.
 Mount paths must be nonempty, but the catalog allows Windows drive letters such as `C:\data`; it does not infer a colon ban from the description.
 No bound is inferred solely from a Helm values key's name. Conditional annotations, unsupported types, arbitrary Go validation

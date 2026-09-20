@@ -6,11 +6,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-__all__ = ("RenderFailure",)
+__all__ = ("ManifestParseError", "RenderFailure")
 
 
 if TYPE_CHECKING:
     from hypothesis_helm.findings.generator import Finding
+
+
+class ManifestParseError(ValueError):
+    """
+    Report a manifest syntax error independently of the selected YAML library.
+    """
 
 
 class RenderFailure(AssertionError):

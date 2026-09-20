@@ -332,3 +332,27 @@ def test_unreadable_source_is_conservative(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr("hypothesis_helm.reporting.errors.yamlio.load", invalid)
     assert template_source(tmp_path / "first", "first/charts/alias/templates/_validate.tpl") is None
     assert template_source(tmp_path / "first", "first/../templates/secret") is None
+
+
+def test_execution_failure_is_excluded_from_chart_defect_counts() -> None:
+    """
+    Keep an unavailable source out of findings while preserving an earlier real defect.
+
+    Returns:
+        None: Shared worker failures add no duplicate chart errors or invented check codes.
+    """
+    unavailable: dict[str, object] = {
+        "status": "error",
+        "error_kind": "execution",
+        "error": "Chart source unavailable: Chart.yaml",
+        "failure_type": "ChartUnavailable",
+    }
+    record = {**unavailable, "phases": [{**unavailable, "phase": "$.first"}, {**unavailable, "phase": "$.second"}]}
+    assert chart_errors(record) == []
+    record["observed_failure"] = {"status": "failed", "error": "[HH1101] invalid rendered YAML", "code": "HH1101"}
+    errors = chart_errors(record)
+    assert len(errors) == 1
+    assert errors[0]["code"] == "HH1101"
+    record["failure_expansion"] = {"failures": [{"error": "[HH1105] resource has no metadata.name", "values": {"name": ""}}]}
+    errors = chart_errors(record)
+    assert [error["code"] for error in errors] == ["HH1101", "HH1105"]

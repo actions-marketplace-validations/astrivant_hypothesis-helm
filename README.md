@@ -15,6 +15,7 @@
 - [CLI help](#cli-help)
 - [License](#license)
 - [Citation](#citation)
+- [Upstream schema shims](#upstream-schema-shims)
 <!-- toc:end -->
 
 Test Helm charts with automatically generated `values.yaml` inputs. Built on Python's
@@ -410,6 +411,7 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
+                            [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
                             SOURCE
 
@@ -506,6 +508,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -525,6 +530,7 @@ usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMP
                                 [--export-minimal-values [FILENAME]]
                                 [--log-color [{auto,always,never}]] [--log-file PATH]
                                 [--config CONFIG] [--character-sets {ascii,unicode}]
+                                [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                                 [--ignore CODE] [--disable-codes CODE[,CODE...]]
                                 chart
 
@@ -561,6 +567,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -580,6 +589,7 @@ usage: helm hypothesis audit [-h] [--fail [{info,warning,error}]]
                              [--export-minimal-values [FILENAME]]
                              [--log-color [{auto,always,never}]] [--log-file PATH]
                              [--config CONFIG] [--character-sets {ascii,unicode}]
+                             [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                              [--ignore CODE] [--disable-codes CODE[,CODE...]]
                              chart
 
@@ -619,6 +629,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -644,7 +657,8 @@ usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
                            [--export-suppressions] [--fail [{info,warning,error}]]
                            [--log-color [{auto,always,never}]] [--log-file PATH]
                            [--config CONFIG] [--character-sets {ascii,unicode}]
-                           [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                           [--yaml-parser {ruamel,ruamel-safe,pyyaml}] [--ignore CODE]
+                           [--disable-codes CODE[,CODE...]]
                            suite
 
 Execute a property-test suite previously created by generate. Generate values for its
@@ -709,6 +723,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -755,6 +772,7 @@ usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
+                            [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
                             [chart]
 
@@ -882,6 +900,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
   --ignore CODE         disable one built-in check; repeat to add codes
   --disable-codes CODE[,CODE...]
                         disable comma-delimited finding codes; adds to --ignore and
@@ -933,3 +954,24 @@ paper in their [citation guidance](https://github.com/HypothesisWorks/hypothesis
 
 MacIver et al. (2019). [Hypothesis: A new approach to property-based testing](https://doi.org/10.21105/joss.01891).
 *Journal of Open Source Software*, 4(43), 1891.
+
+## Upstream schema shims
+
+Some Kubernetes rules are enforced by Go validators or described in prose but are missing from the published JSON schemas.
+Catalog rebuilds apply these [reviewed supplements](pkg/hypothesis_helm_catalog/data/reviewed-domains.json) to exact API fields:
+
+| API field | Supplement |
+| --- | --- |
+| `ServiceSpec.type`, `ServiceSpec.sessionAffinity` | Allowed enums; empty and null values retain Kubernetes defaulting. |
+| `ServicePort.protocol`, `PodSpec.restartPolicy` | Documented enum values. |
+| `ContainerPort.containerPort` | Port range, 1-65535. |
+| `DeploymentSpec.replicas` | Nonnegative replica count. |
+| `SecretVolumeSource.secretName`, `SecretKeySelector.name` | Secret-name syntax and length. |
+| `VolumeMount.mountPath` | Nonempty path, preserving Windows and Unix forms. |
+
+These are API schema shims, not chart-name exceptions. Each records its upstream reference and description;
+rebuilds require review if that description changes. The Service enum shims also record the upstream defaulting
+reference and when they can be retired. Remove a shim once the upstream schema supplies the equivalent constraint.
+Other fields remain unconstrained where neither upstream data nor a reviewed supplement establishes their domain.
+See [catalog rebuilding](docs/input-domains/README.md#rebuilding-the-catalog-before-release) and the
+[Bitnami diagnostic review](docs/reports/bitnami-findings-review-1789870241.md) for remaining gaps.

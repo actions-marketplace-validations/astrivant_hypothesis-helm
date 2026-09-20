@@ -95,6 +95,56 @@ def test_workers_share_one_chart_without_duplicate_paths(tmp_path: Path, monkeyp
             os.kill(int(str(phase["worker_pid"])), 0)
 
 
+@pytest.mark.parametrize("jobs", [1, 3])
+def test_missing_chart_stops_queue_without_counterexamples(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, jobs: int) -> None:
+    """
+    Stop serial and parallel paths when the prepared source vanishes during a render.
+
+    Args:
+        tmp_path (Path): Chart, fake Helm executable and result records.
+        monkeypatch (pytest.MonkeyPatch): Supply the verified baseline and worker executable path.
+        jobs (int): Serial or shared-queue execution.
+
+    Returns:
+        None: Lost input is an execution error, no shrinking occurs, and every owned worker exits.
+    """
+    monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    chart = fixture_chart(tmp_path)
+    binary = tmp_path / "disappearing-helm"
+    binary.write_text(
+        dedent(f"""
+        #!{sys.executable}
+        import os
+        import sys
+        from pathlib import Path
+        source = Path(sys.argv[3])
+        (source / ("invocation-" + str(os.getpid()))).touch()
+        (source / "Chart.yaml").unlink(missing_ok=True)
+        sys.stderr.write("Error: unable to detect chart: Chart.yaml: no such file or directory")
+        sys.exit(1)
+        """).lstrip()
+    )
+    binary.chmod(0o755)
+    monkeypatch.setattr("hypothesis_helm.charts.testing.paths.render", lambda *args, **kwargs: [{"kind": "ConfigMap"}])
+    started = time.monotonic()
+    result = check_paths(
+        chart, budget=30, max_examples=10, seed=0, helm=str(binary), timeout=10, artifacts=tmp_path / "results", jobs=jobs, filtering=False
+    )
+    assert time.monotonic() - started < 20
+    assert result["status"] == "error"
+    assert result["error_kind"] == "execution"
+    assert "Chart source unavailable" in str(result["error"])
+    assert 1 <= len(list(tmp_path.glob("invocation-*"))) <= jobs
+    assert mapping(result["traversal"])["completed_paths"] == 0
+    assert not list((tmp_path / "results").rglob("observed-failure.json"))
+    for phase in sequence(result["phases"]):
+        item = mapping(phase)
+        assert not item.get("code")
+        if "worker_pid" in item:
+            with pytest.raises(ProcessLookupError):
+                os.kill(int(str(item["worker_pid"])), 0)
+
+
 @pytest.mark.parametrize("stop_signal", [signal.SIGALRM, signal.SIGINT, signal.SIGTERM])
 def test_deadline_stops_workers_and_helm_children(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop_signal: int) -> None:
     """

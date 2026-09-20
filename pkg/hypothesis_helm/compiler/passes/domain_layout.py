@@ -11,7 +11,7 @@ from attrs import define, field
 
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.projections import Input, LocalMap, Operation, Piece
-from hypothesis_helm.compiler.passes.domain_constraints import constraints, guard_bounds, normalize, predicate
+from hypothesis_helm.compiler.passes.domain_constraints import constraints, guard_bounds, input_origins, normalize, predicate
 from hypothesis_helm.schemas.resources import destination
 
 __all__ = ("Document", "Layout", "Position", "literals", "scalar", "unresolved")
@@ -308,8 +308,9 @@ class Layout:
             for path, piece, conditions in document.fields:
                 if not path or any(path[: len(barrier)] == barrier for barrier in document.barriers):
                     continue
-                exact_guards = [predicate(condition) for condition in conditions]
-                guards = [guard_bounds(condition)[0] for condition in conditions]
+                global_conditions = [condition for condition in conditions if not any("*" in path for path in input_origins(condition))]
+                exact_guards = [predicate(condition) for condition in global_conditions]
+                guards = [guard_bounds(condition)[0] for condition in global_conditions]
                 if {"not": {}} in guards:
                     self.notes.append(
                         {"file": piece.file, "line": piece.line, "reason": "unresolved activation guard; field domain unchanged"}
@@ -325,7 +326,7 @@ class Layout:
                 schemas = [match[0] for match in matches if match is not None]
                 if any(schema != schemas[0] for schema in schemas[1:]):
                     continue
-                found = constraints(piece.value, schemas[0], guards=tuple(guard for guard in guards if guard is not None))
+                found = constraints(piece.value, schemas[0], conditions=conditions)
                 for rule in found:
                     result.append(
                         {

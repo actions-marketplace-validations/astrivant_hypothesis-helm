@@ -16,6 +16,7 @@ GENERATION_EXAMPLE = (
         """
     # Global defaults for fresh generated text; supplied values are preserved.
     downstream_inputs: true  # Use constraints from supported downstream field mappings.
+    yaml_parser: ruamel  # Rendered manifests: ruamel, ruamel-safe or pyyaml. Values files retain round-trip editing.
     findings:
       fail_on: null  # null: existing exit behavior; info, warning or error: fail fast at that severity or higher.
       severity:  # Optional per-code overrides; ignored/enabled still control whether a finding is emitted.

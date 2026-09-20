@@ -5,6 +5,7 @@ Verify chart-grouped diagnostics retain exact triggering paths and joint values.
 import copy
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -220,3 +221,53 @@ def test_public_pdf_links(tmp_path: Path) -> None:
     literal = '`$.input = "[literal](../../outside)"`'
     assert publish_links(literal, markdown, publication) == literal
     assert "<link " not in linked_prose(literal)
+
+
+@pytest.mark.parametrize("filename", ["report.json", "observed-failure.json"])
+@pytest.mark.parametrize("relative", [False, True])
+def test_local_pdf_diagnostic_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str, relative: bool) -> None:
+    """
+    Open actual saved evidence from a PDF independently of the generator's working directory.
+
+    Args:
+        tmp_path (Path): Report location with spaces and reserved characters in the artifact path.
+        monkeypatch (pytest.MonkeyPatch): Run the writer from an unrelated directory.
+        filename (str): Complete report or checkpoint left by an interrupted run.
+        relative (bool): Whether the recorded artifact directory is report-relative or absolute.
+
+    Returns:
+        None: Markdown stays portable while PDF annotations use correctly escaped absolute file URLs.
+    """
+    directory = tmp_path / "reports"
+    artifacts = directory / "saved inputs (one) # café"
+    artifacts.mkdir(parents=True)
+    evidence = artifacts / filename
+    evidence.write_text('{"values": {"enabled": true}, "error": "invalid output"}')
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    report: dict[str, object] = {
+        "directory": "charts",
+        "started_epoch": 1,
+        "elapsed_seconds": 1,
+        "charts_discovered": 1,
+        "counts": {"failed": 1},
+        "settings": {},
+        "charts": [
+            {
+                "chart": "demo",
+                "status": "failed",
+                "error": "invalid output",
+                "artifacts": artifacts.name if relative else str(artifacts),
+            }
+        ],
+    }
+    markdown, pdf = write_reports(report, directory / "report")
+    target = quote(evidence.relative_to(directory).as_posix(), safe="/._-")
+    assert f"[Full input and diagnostic](<{target}>)" in markdown.read_text()
+    uris = re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
+    assert evidence.resolve().as_uri().encode() in uris
+    assert artifacts.resolve().as_uri().encode() in uris
+    assert all(uri.startswith(b"file:///") for uri in uris)
+    assert b"/Dest" in pdf.read_bytes()
+    assert str(tmp_path) not in markdown.read_text()

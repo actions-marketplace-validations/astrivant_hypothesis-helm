@@ -149,7 +149,7 @@ def write_pdf(
                 overview_page = False
             size = 14 if level <= 2 else 12 if level == 3 else 10
             paragraph = Paragraph(
-                linked_prose(re.sub(r"^\s*#{1,6}\s+", "", line)),
+                linked_prose(re.sub(r"^\s*#{1,6}\s+", "", line), document=pdf),
                 ParagraphStyle("section", fontName="Helvetica-Bold", fontSize=size, leading=size + 4),
             )
             _, height = paragraph.wrap(540, 708)
@@ -188,7 +188,7 @@ def write_pdf(
             overview_page = True
             continue
         if not code_fence and LINK.search(line):
-            paragraph = Paragraph(linked_prose(line), ParagraphStyle("links", fontName="Courier", fontSize=8, leading=12))
+            paragraph = Paragraph(linked_prose(line, document=pdf), ParagraphStyle("links", fontName="Courier", fontSize=8, leading=12))
             _, height = paragraph.wrap(540, 708)
             if y - height < 42:
                 canvas.showPage()

@@ -91,7 +91,7 @@ def fingerprint(
     files = sorted(directory.glob("*.py")) + [
         directory / name for name in ("values.coalesced.yaml", "values.inferred.schema.json", "chart-source.json", "input-domains.json")
     ]
-    for package in ("hypothesis", "hypothesis-jsonschema", "jsonschema", "ruamel.yaml", "pytest", "lupa"):
+    for package in ("hypothesis", "hypothesis-jsonschema", "jsonschema", "ruamel.yaml", "PyYAML", "pytest", "lupa"):
         digest.update(f"{package}={version(package)}".encode())
     source = directory / "chart-source.json"
     if source.exists():

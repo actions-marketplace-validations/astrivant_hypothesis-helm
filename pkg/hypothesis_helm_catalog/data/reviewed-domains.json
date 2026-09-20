@@ -114,5 +114,49 @@
       "minLength": 1
     },
     "reference": "https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#volumes-1"
+  },
+  {
+    "id": "servicespec.type",
+    "type_field": "io.k8s.api.core.v1.ServiceSpec/type",
+    "file": "servicespec.json",
+    "path": [
+      "type"
+    ],
+    "description": "type determines how the Service is exposed. Defaults to ClusterIP. Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. \"ClusterIP\" allocates a cluster-internal IP address for load-balancing to endpoints. Endpoints are determined by the selector or if that is not specified, by manual construction of an Endpoints object or EndpointSlice objects. If clusterIP is \"None\", no virtual IP is allocated and the endpoints are published as a set of endpoints rather than a virtual IP. \"NodePort\" builds on ClusterIP and allocates a port on every node which routes to the same endpoints as the clusterIP. \"LoadBalancer\" builds on NodePort and creates an external load-balancer (if supported in the current cloud) which routes to the same endpoints as the clusterIP. \"ExternalName\" aliases this service to the specified externalName. Several other fields do not apply to ExternalName services. More info: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types",
+    "schema": {
+      "enum": [
+        "ClusterIP",
+        "NodePort",
+        "LoadBalancer",
+        "ExternalName",
+        "",
+        null
+      ]
+    },
+    "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+    "shim_reason": "OpenAPI declares a string and documents allowed values, but omits the enum. Empty and null preserve API defaulting.",
+    "defaulting_reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/v1/defaults.go#L106-L125",
+    "retire_when": "Upstream machine-readable schemas encode this domain, including defaulting, at the same API field."
+  },
+  {
+    "id": "servicespec.sessionAffinity",
+    "type_field": "io.k8s.api.core.v1.ServiceSpec/sessionAffinity",
+    "file": "servicespec.json",
+    "path": [
+      "sessionAffinity"
+    ],
+    "description": "Supports \"ClientIP\" and \"None\". Used to maintain session affinity. Enable client IP based session affinity. Must be ClientIP or None. Defaults to None. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
+    "schema": {
+      "enum": [
+        "ClientIP",
+        "None",
+        "",
+        null
+      ]
+    },
+    "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+    "shim_reason": "OpenAPI declares a string and documents allowed values, but omits the enum. Empty and null preserve API defaulting.",
+    "defaulting_reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/v1/defaults.go#L106-L125",
+    "retire_when": "Upstream machine-readable schemas encode this domain, including defaulting, at the same API field."
   }
 ]

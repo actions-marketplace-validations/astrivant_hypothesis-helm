@@ -355,6 +355,45 @@ def test_duplicate_helpers_only_block_their_callers(control_chart: Chart, indepe
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_identical_helpers_ignore_source_line_offsets(control_chart: Chart) -> None:
+    """
+    Keep equivalent helper definitions usable when vendored copies have different headers.
+
+    Args:
+        control_chart (Chart): Chart containing two copies of the same rejection helper.
+
+    Returns:
+        None: Source offsets do not create ambiguity and native Helm verifies the rejection.
+    """
+    body = '{{- define "same" -}}{{ if .Values.enabled }}{{ fail "enabled rejected" }}{{ end }}{{- end -}}'
+    (control_chart.path / "templates/_a.tpl").write_text(body)
+    (control_chart.path / "templates/_b.tpl").write_text("\n\n" + body)
+    (control_chart.path / "templates/NOTES.txt").write_text('{{ include "same" . }}')
+    contracts = Contracts.build(control_chart.path)
+    assert "same" not in contracts.ambiguous_helpers
+    rejection = contracts.predict({**control_chart.defaults, "enabled": True})
+    assert rejection is not None
+    with pytest.raises(RenderFailure) as observed:
+        render(control_chart, {"enabled": True})
+    assert matches_rejection(str(observed.value), rejection)
+
+
+def test_helper_comparison_preserves_literal_output(control_chart: Chart) -> None:
+    """
+    Preserve significant output differences while ignoring only source locations.
+
+    Args:
+        control_chart (Chart): Chart containing helpers with different emitted whitespace.
+
+    Returns:
+        None: The definitions remain ambiguous even though both look similar as source.
+    """
+    (control_chart.path / "templates/_a.tpl").write_text('{{ define "same" }}x {{ end }}')
+    (control_chart.path / "templates/_b.tpl").write_text('{{ define "same" }}x{{ end }}')
+    assert "same" in Contracts.build(control_chart.path).ambiguous_helpers
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
 def test_optional_and_yaml_scalar_globals_match_helm(control_chart: Chart) -> None:
     """
     Resolve missing optional leaves and YAML scalar subclasses without inventing global origins.

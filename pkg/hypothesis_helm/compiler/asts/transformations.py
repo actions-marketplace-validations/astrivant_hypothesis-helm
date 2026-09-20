@@ -208,8 +208,12 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
         else:
             pieces = text.split(separator)
         return pieces if function == "splitList" else {f"_{index}": piece for index, piece in enumerate(pieces)}
-    if function == "_field" and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
-        return args[0].get(args[1])
+    if function in {"_field", "_get"} and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
+        return args[0].get(args[1], "" if function == "_get" else None)
+    if function == "_index" and len(args) == 2 and isinstance(args[0], list) and type(args[1]) is int:
+        if not 0 <= args[1] < len(args[0]):
+            raise UnsupportedTransformation("list index is outside the source list")
+        return args[0][args[1]]
     if function == "concat" and all(isinstance(value, list) for value in args):
         collections = [value for value in args if isinstance(value, list)]
         if sum(map(len, collections)) > limits["max_range_items"]:

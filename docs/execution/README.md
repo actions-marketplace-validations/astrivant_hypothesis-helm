@@ -322,6 +322,10 @@ identities, shard ownership, and JUnit checksums must agree. Repeating the merge
 with identical inputs reuses the same final bundle; concurrent mergers targeting
 the same output directory cannot publish competing reports. Partial shard artifacts remain available separately.
 
+Scan reports link **Full input and diagnostic** directly to the saved JSON evidence, including failure checkpoints from interrupted runs.
+Markdown keeps relative paths; PDFs use absolute file URLs to open the data on the machine that generated the report.
+Keep those artifacts in place when reading a local PDF. Published HTTPS links and links within the report are unchanged.
+
 On separate CI runners, upload each shard’s `report.json` and pipe the downloaded
 files into a single downstream aggregation job, including after test failures.
 Reports embed their JUnit evidence; original runner paths are never opened. JSON
@@ -554,6 +558,9 @@ The baseline is checked first. Workers prefetch a bounded window of finite input
 updates one render-hash cache, streams complete JSON records, and writes the report. Schema validators and custom Python assertions run on the coordinator.
 
 A failure, timeout or interrupt stops all owned Helm process groups and joins the worker threads before returning.
+If the prepared chart's `Chart.yaml` disappears or becomes unreadable, testing stops for that chart with an execution error.
+Serial paths, parallel path workers and exhaustive execution do not shrink this error or count it as a chart defect.
+Earlier findings are retained, and a repository scan can continue to the next chart after the current workers have stopped.
 Prefetched inputs that have not reached coordinator validation do not count as completed coverage; their number appears in `parallel_execution`.
 The chart has one shared execution deadline, including coordinator validation. Cleanup can extend wall time slightly beyond that deadline.
 Parallel exhaustive execution requires equivalence pruning and rejection filtering to be disabled. Distributed sharding remains unavailable for this mode.

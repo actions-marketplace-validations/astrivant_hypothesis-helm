@@ -19,7 +19,7 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
-from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
 from hypothesis_helm.reporting.checkpoints import save
@@ -153,6 +153,9 @@ def execute(context: dict[str, object], directory: Path, workers: int) -> list[d
             if interrupted:
                 phase["status"] = "interrupted"
         records.append(phase)
+    unavailable = directory / "execution-error.json"
+    if unavailable.is_file() and not any(record.get("error_kind") == "execution" for record in records):
+        records.append({**mapping(json.loads(unavailable.read_text())), "phase": "execution", "kind": "execution"})
     return records
 
 
@@ -166,15 +169,37 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero after exhausting the queue or reaching its common deadline.
     """
-    from hypothesis_helm.charts.testing.paths import GENERATION_ERRORS, path_strategy
-    from hypothesis_helm.charts.testing.runner import check_chart
-
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
     args = parser.parse_args(argv)
     directory = args.directory
+    try:
+        return _run_queue(directory)
+    except ChartUnavailable as exc:
+        save(
+            directory / "execution-error.json",
+            {"status": "error", "error_kind": "execution", "error": str(exc), "failure_type": type(exc).__name__, "attempts": 0},
+        )
+        (directory / "stop").touch()
+        return 0
+
+
+def _run_queue(directory: Path) -> int:
+    """
+    Process paths while retaining source ownership and reporting shared execution failures.
+
+    Args:
+        directory (Path): Queue with immutable input context and atomic ownership records.
+
+    Returns:
+        int: Zero once this worker stops claiming paths.
+    """
+    from hypothesis_helm.charts.testing.paths import GENERATION_ERRORS, path_strategy
+    from hypothesis_helm.charts.testing.runner import check_chart
+
     context = mapping(json.loads((directory / "context.json").read_text()))
     chart = Chart(Path(str(context["chart"])), mapping(context["schema"]), mapping(context["defaults"]))
+    chart.require_source()
     if "input_domains" in context:
         from hypothesis_helm.schemas.domains import InputDomains
 
@@ -185,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
             str(domains["identity"]),
             str(domains.get("character_sets", "ascii")),
             mapping(domains.get("generation", {})),
+            str(domains.get("yaml_parser", "ruamel")),
         )
     inventory = InputInventory.build(chart)
     rejections = (
@@ -204,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
                 index = int(cursor.read())
                 if index >= len(paths) or (directory / "stop").exists() or time.monotonic() >= deadline:
                     break
+                chart.require_source()
                 item = mapping(paths[index])
                 segments = sequence(item["path"])
                 if not all(isinstance(segment, (str, int)) for segment in segments):
@@ -253,6 +280,10 @@ def main(argv: list[str] | None = None) -> int:
             artifacts.mkdir(parents=True, exist_ok=True)
             save(artifacts / "report.json", result)
             save(directory / f"result-{index:08}.json", result)
+            if result.get("error_kind") == "execution":
+                save(directory / "execution-error.json", result)
+                (directory / "stop").touch()
+                break
             if result["status"] == "interrupted":
                 (directory / "interrupted").touch()
                 (directory / "stop").touch()

@@ -11,6 +11,7 @@ from jsonschema import validators
 from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.charts.model import Chart, _schema_nodes
+from hypothesis_helm.charts.values.parsers import selected as selected_parser
 from hypothesis_helm.schemas.characters import character_sets as active_character_sets
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.policy import inherited_policy, path_parts, restrict
@@ -31,6 +32,7 @@ class InputDomains:
         identity (str): Stable content digest for reports and caching.
         character_sets (str): Generated text alphabet saved with this domain snapshot.
         generation (dict[str, object]): Frozen per-branch text and Hypothesis settings.
+        yaml_parser (str): Manifest parser used when establishing and executing these domains.
     """
 
     rules: list[dict[str, object]]
@@ -38,6 +40,7 @@ class InputDomains:
     identity: str
     character_sets: str = "ascii"
     generation: dict[str, object] = field(factory=dict)
+    yaml_parser: str = "ruamel"
 
     @classmethod
     def build(cls, chart: Chart) -> "InputDomains":
@@ -81,6 +84,16 @@ class InputDomains:
         diagnostics.extend(projection_diagnostics)
         for rule in projected:
             path = tuple(str(part) for part in sequence(rule["path"]))
+            if "element_path" in rule:
+                element_path = tuple(str(part) for part in sequence(rule["element_path"]))
+                try:
+                    for node in _schema_nodes(schema, element_path, schema):
+                        restrict(node, (), mapping(rule["element_schema"]))
+                except ValueError:
+                    diagnostics.append(
+                        {"path": list(element_path), "reason": "destination conflicts with declared element domain; domain unchanged"}
+                    )
+                    continue
             nodes = _schema_nodes(schema, path, schema)
             kinds = {
                 str(kind)
@@ -105,10 +118,13 @@ class InputDomains:
                 continue
             rules.append(rule)
         selected = active_character_sets()
+        parser = selected_parser()
         identity = hashlib.sha256(
-            json.dumps({"rules": rules, "character_sets": selected, "generation": generation}, sort_keys=True).encode()
+            json.dumps(
+                {"rules": rules, "character_sets": selected, "generation": generation, "yaml_parser": parser}, sort_keys=True
+            ).encode()
         ).hexdigest()
-        result = cls(rules, diagnostics, identity, selected, generation)
+        result = cls(rules, diagnostics, identity, selected, generation, parser)
         restricted = result.apply(schema)
         validator = validators.validator_for(restricted)(restricted)
         for error in validator.iter_errors(json_value(chart.defaults)):
@@ -154,6 +170,7 @@ class InputDomains:
             "identity": self.identity,
             "character_sets": self.character_sets,
             "generation": self.generation,
+            "yaml_parser": self.yaml_parser,
             "constraints": self.rules,
             "diagnostics": self.diagnostics,
             "scope": "generated cases satisfying these input domains; supplied defaults are tested unchanged",

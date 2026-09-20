@@ -27,7 +27,7 @@ __all__ = ("HELM_DEBUG_HINT", "artifact_link", "chart_heading", "display_error",
 HELM_DEBUG_HINT = re.compile(r"(?m)^[ \t]*Use --debug flag to render out invalid YAML[ \t]*\r?$\n?")
 
 
-def artifact_link(label: str, destination: object, report: Path) -> str:
+def artifact_link(label: str, destination: object, report: Path, *, prefer: tuple[str, ...] = ()) -> str:
     """
     Link artifacts relative to the report location rather than the working directory.
 
@@ -35,6 +35,7 @@ def artifact_link(label: str, destination: object, report: Path) -> str:
         label (str): Short human-readable link text.
         destination (object): Recorded filesystem artifact path or HTTPS URL.
         report (Path): Markdown report destination.
+        prefer (tuple[str, ...]): Existing files to prefer inside a local artifact directory, in order.
 
     Returns:
         str: Portable Markdown link with an escaped relative target.
@@ -45,6 +46,10 @@ def artifact_link(label: str, destination: object, report: Path) -> str:
     path = Path(str(destination))
     # Finalized scan archives already store paths relative to the human report.
     target = os.path.relpath(path, report.parent) if path.is_absolute() or path.exists() else str(path)
+    for filename in prefer:
+        if (report.parent / target / filename).is_file():
+            target = str(Path(target) / filename)
+            break
     return f"[{label}](<{quote(target, safe='/._-')}>)"
 
 
@@ -339,7 +344,17 @@ def write_reports(
                 lines.append("")
                 occurrence_artifacts = occurrence.get("artifacts")
                 if occurrence_artifacts and artifact_links:
-                    lines.extend([artifact_link("Full input and diagnostic", occurrence_artifacts, markdown), ""])
+                    lines.extend(
+                        [
+                            artifact_link(
+                                "Full input and diagnostic",
+                                occurrence_artifacts,
+                                markdown,
+                                prefer=("report.json", "observed-failure.json"),
+                            ),
+                            "",
+                        ]
+                    )
             if len(occurrences) > 2:
                 lines.extend([f"{len(occurrences) - 2} additional occurrences are retained in the JSON report and chart artifacts.", ""])
         artifacts = chart.get("artifacts")

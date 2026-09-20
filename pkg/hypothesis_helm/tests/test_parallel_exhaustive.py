@@ -16,6 +16,7 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.exhaustive import ExhaustiveRenders
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values.yamlio import load_all
+from hypothesis_helm.exceptions.execution import ChartUnavailable
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.replay import Replay
@@ -239,6 +240,51 @@ def test_parallel_timeout_is_incomplete(tmp_path: Path, monkeypatch: pytest.Monk
     evidence = report["parallel_execution"]
     assert isinstance(evidence, dict) and evidence["unverified_scheduled_renders"] > 0
     assert not any(thread.name.startswith("exhaustive-helm") for thread in threading.enumerate())
+
+
+def test_source_loss_joins_exhaustive_workers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Stop finite prefetching when the prepared chart disappears after its successful baseline.
+
+    Args:
+        tmp_path (Path): Small finite chart and result directory.
+        monkeypatch (pytest.MonkeyPatch): Simulate source loss inside the prefetch worker.
+
+    Returns:
+        None: An execution error replaces counterexample output and all worker threads are joined.
+    """
+    generate(tmp_path / "chart", input_complexity=3, output_bins=4)
+    chart = Chart.load(tmp_path / "chart")
+    threads: list[threading.Thread] = []
+    lock = threading.Lock()
+
+    def disappear(*args: object, **kwargs: object) -> str:
+        """
+        Remove metadata only after the coordinator completed its baseline render.
+
+        Args:
+            *args (object): Prefetch chart and input values.
+            **kwargs (object): Renderer invocation options.
+
+        Returns:
+            str: Never returned because the chart is unavailable.
+
+        Raises:
+            ChartUnavailable: The source was removed while finite work was active.
+        """
+        with lock:
+            threads.append(threading.current_thread())
+            (chart.path / "Chart.yaml").unlink(missing_ok=True)
+        chart.require_source()
+        raise AssertionError("Expected unavailable source")
+
+    monkeypatch.setattr("hypothesis_helm.charts.testing.exhaustive.render_output", disappear)
+    result = check_chart(chart, exhaustive=True, jobs=3, artifact_dir=tmp_path / "results")
+    assert result["status"] == "error"
+    assert result["failure_type"] == ChartUnavailable.__name__
+    assert result["error_kind"] == "execution"
+    assert not (tmp_path / "results/values.json").exists()
+    assert threads and all(not worker.is_alive() for worker in threads)
 
 
 @pytest.mark.parametrize("mode", ["--filter", "--exhaustive"])

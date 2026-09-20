@@ -14,9 +14,12 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.compiler.asts.contracts import Contracts
-from hypothesis_helm.compiler.asts.transformations import calculate
+from hypothesis_helm.compiler.asts.contract_scope import Scope
+from hypothesis_helm.compiler.asts.contract_values import BoundValue, native
+from hypothesis_helm.compiler.asts.contracts import Contracts, Evaluation, expression
+from hypothesis_helm.compiler.asts.transformations import calculate, inputs
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
+from hypothesis_helm.exceptions.compiler import Unknown
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import mapping
 
@@ -445,3 +448,129 @@ def test_repeated_input_occurrences_do_not_produce_false_preimages(transformed_c
     assert rejection is not None
     assert rejection.transformed_domains[0].suggestions() == {}
     assert contracts.predict({**transformed_chart.defaults, "count": 4}) is None
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+@pytest.mark.parametrize("value", ["ldap://directory.example:389", "ldaps://user:pass@directory.example:636"])
+def test_url_fields_and_list_indices_retain_origins(transformed_chart: Chart, value: str) -> None:
+    """
+    Follow required, native URL parsing, map selection and list indexing as one expression.
+
+    Args:
+        transformed_chart (Chart): Chart with an inferred string field.
+        value (str): URL accepted by the selected Helm binary.
+
+    Returns:
+        None: Native output agrees and the selected port retains its original input path.
+    """
+    statement = 'index (splitList ":" (get (urlParse (required "supply URL" .Values.text)) "host")) 1'
+    (transformed_chart.path / "templates/config.yaml").write_text(
+        dedent(f"""
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: transforms
+        data:
+          port: {{{{ {statement} | quote }}}}
+        """)
+    )
+    contracts = Contracts.build(transformed_chart.path)
+    contracts.configure(helm="helm", kube_version=None, timeout=10, release="hypothesis", namespace="default", fail_fast=False)
+    values = {**transformed_chart.defaults, "text": value}
+    evaluator = Evaluation(contracts, values, context={"Values": BoundValue(values, ())})
+    result = evaluator.evaluate(expression(statement), "test", 1, Scope())
+    actual = render(transformed_chart, values)
+    assert native(result) == mapping(actual[0]["data"])["port"]
+    assert inputs(result) == {("text",): value}
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+@pytest.mark.parametrize("value", ["example", "ldap://directory.example"])
+def test_url_index_failure_is_not_filtered_as_rejection(transformed_chart: Chart, value: str) -> None:
+    """
+    Retain a possible chart defect when a URL is indexed before its fallback can execute.
+
+    Args:
+        transformed_chart (Chart): Minimal chart with a URI-consuming helper.
+        value (str): Missing host or explicit port, including a syntactically valid URL.
+
+    Returns:
+        None: Bounds and source path are diagnosed while the native failure remains testable.
+    """
+    (transformed_chart.path / "templates/NOTES.txt").write_text(
+        '{{ $host := get (urlParse (required "supply URL" .Values.text)) "host" }}'
+        '{{ $port := index (splitList ":" $host) 1 | default 389 }}'
+        '{{ if eq $port "389" }}{{ fail "blocked port" }}{{ end }}'
+    )
+    contracts = Contracts.build(transformed_chart.path)
+    contracts.configure(helm="helm", kube_version=None, timeout=10, release="hypothesis", namespace="default", fail_fast=False)
+    values = {**transformed_chart.defaults, "text": value}
+    assert contracts.predict(values) is None
+    assert any(
+        "requires at least 2 list elements" in str(note["reason"]) and "$.text" in str(note["reason"]) for note in contracts.fallbacks
+    )
+    with pytest.raises(RenderFailure, match="slice index out of range"):
+        render(transformed_chart, values)
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_sprig_dictionary_trailing_key_has_empty_value(transformed_chart: Chart) -> None:
+    """
+    Support Sprig's odd argument count without inventing an invalid-call finding.
+
+    Args:
+        transformed_chart (Chart): Chart whose contract tests a trailing dictionary key.
+
+    Returns:
+        None: Helm and the rejection evaluator agree on the implicit empty value.
+    """
+    (transformed_chart.path / "templates/NOTES.txt").write_text(
+        '{{ if eq (get (dict "first" "value" "last") "last") "" }}{{ fail "empty trailing value" }}{{ end }}'
+    )
+    rejection = Contracts.build(transformed_chart.path).predict(transformed_chart.defaults)
+    assert rejection is not None
+    with pytest.raises(RenderFailure) as observed:
+        render(transformed_chart, {})
+    assert matches_rejection(str(observed.value), rejection)
+
+
+def test_dictionary_key_diagnostic_explains_unsupported_coercion(transformed_chart: Chart) -> None:
+    """
+    Identify the problematic argument without falsely claiming the dict builtin is unknown.
+
+    Args:
+        transformed_chart (Chart): Chart used to build an isolated contract evaluator.
+
+    Returns:
+        None: A map used as a dictionary key stays unresolved with a specific diagnostic.
+    """
+    evaluator = Evaluation(Contracts.build(transformed_chart.path), transformed_chart.defaults)
+    with pytest.raises(Unknown, match="dict key at argument 3 is dict"):
+        evaluator.evaluate(expression('dict "value" (dict) (dict) "context" (dict)'), "test", 1, Scope())
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_list_index_requires_native_integer(transformed_chart: Chart) -> None:
+    """
+    Keep numeric values unresolved until an explicit Go integer conversion.
+
+    Args:
+        transformed_chart (Chart): Chart with a numeric input used as a list index.
+
+    Returns:
+        None: Only the explicitly converted expression can establish a native rejection.
+    """
+    values = transformed_chart.defaults
+    notes = transformed_chart.path / "templates/NOTES.txt"
+    notes.write_text('{{ if eq (index (list "a" "b" "c") .Values.count) "c" }}{{ fail "blocked item" }}{{ end }}')
+    contracts = Contracts.build(transformed_chart.path)
+    assert contracts.predict(values) is None
+    assert any("explicitly converted integer" in str(note["reason"]) for note in contracts.fallbacks)
+    with pytest.raises(RenderFailure, match="cannot index slice/array"):
+        render(transformed_chart, values)
+    notes.write_text('{{ if eq (index (list "a" "b" "c") (int .Values.count)) "c" }}{{ fail "blocked item" }}{{ end }}')
+    rejection = Contracts.build(transformed_chart.path).predict(values)
+    assert rejection is not None
+    with pytest.raises(RenderFailure) as observed:
+        render(transformed_chart, values)
+    assert matches_rejection(str(observed.value), rejection)

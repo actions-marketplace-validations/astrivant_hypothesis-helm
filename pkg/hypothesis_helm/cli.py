@@ -23,6 +23,7 @@ from hypothesis_helm.compiler.passes.exports import export_repository
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
+from hypothesis_helm.exceptions.execution import ChartUnavailable
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.execution.estimate import estimate_suite
 from hypothesis_helm.execution.sampling import Sampling
@@ -654,6 +655,11 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             "--character-sets", choices=("ascii", "unicode"), help="generated text alphabet; overrides config; default: ascii"
         )
         command.add_argument(
+            "--yaml-parser",
+            choices=("ruamel", "ruamel-safe", "pyyaml"),
+            help="manifest parser backend; overrides yaml_parser in config; default: ruamel, or the saved suite's parser",
+        )
+        command.add_argument(
             "--ignore", action="append", default=[], metavar="CODE", help="disable one built-in check; repeat to add codes"
         )
         command.add_argument(
@@ -811,6 +817,7 @@ def main(argv: list[str] | None = None) -> int:
             args.input_policy = load_policy(
                 args.config,
                 character_sets=args.character_sets,
+                yaml_parser=args.yaml_parser,
                 max_examples=args.max_examples if getattr(args, "max_examples_explicit", False) else None,
             )
             if hasattr(args, "max_examples"):
@@ -1223,7 +1230,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         logger.info("Testing interrupted")
         return 130
-    except Exception as exc:
+    except (Exception, ChartUnavailable) as exc:
         print(json.dumps({"status": "error", "error": str(exc), "type": type(exc).__name__}))
         return 2
     finally:

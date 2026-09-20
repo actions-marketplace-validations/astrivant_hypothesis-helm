@@ -12,11 +12,10 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
-from ruamel.yaml.error import YAMLError
-
 from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.charts.values import parsers as manifest_parsers
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.exceptions.rendering import RenderFailure
+from hypothesis_helm.exceptions.rendering import ManifestParseError, RenderFailure
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.render_hashes import RenderHashes, process_hashes
 from hypothesis_helm.findings.generator import FindingGenerator
@@ -111,6 +110,7 @@ def render_output(
     Returns:
         str: Unvalidated rendered YAML; nonzero Helm exits remain reproducible failures.
     """
+    chart.require_source()
     with tempfile.TemporaryDirectory(prefix="hypothesis-helm-") as directory:
         value_file = Path(directory) / "values.json"
         value_file.write_text(yamlio.json_for_helm(values), encoding="utf-8")
@@ -131,6 +131,9 @@ def render_output(
         except subprocess.TimeoutExpired as exc:
             raise RenderFailure(f"helm exceeded {timeout}s", "HH1201") from exc
         if process.returncode:
+            # The source can disappear after dispatch. Do not classify that race
+            # as a template defect or feed it back into Hypothesis shrinking.
+            chart.require_source()
             finding = FindingGenerator.helm(process.stderr.strip() or f"helm exited {process.returncode}")
             raise RenderFailure(finding.evidence, finding.rule.code)
         return process.stdout
@@ -184,7 +187,7 @@ def render(
         )
         try:
             resources = [item for item in yamlio.load_all(output) if item is not None]
-        except YAMLError as exc:
+        except ManifestParseError as exc:
             raise RenderFailure(f"invalid rendered YAML: {exc}", "HH1101") from exc
         if stream:
             for resource in resources:
@@ -206,6 +209,7 @@ def render(
         context = json.dumps(
             {
                 "resource_contract": 1,
+                "yaml_parser": manifest_parsers.identity(),
                 "conformity": os.environ.get(ENVIRONMENT),
                 "timeout": timeout,
                 "ignored_rules": effective_ignored_codes(),

@@ -10,12 +10,14 @@ import json
 from attrs import define, field
 
 from hypothesis_helm.charts.model import _schema_nodes
+from hypothesis_helm.compiler.asts.contract_maps import dictionary
 from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, Scope
 from hypothesis_helm.compiler.asts.contracts import ASSIGNMENT, RANGE_ASSIGNMENT, Contracts, FieldAccess, context_effects, expression
-from hypothesis_helm.compiler.asts.projections import Input, LocalMap, Operation, Piece, output
+from hypothesis_helm.compiler.asts.projections import Collection, Input, LocalMap, Member, Operation, Piece, output
 from hypothesis_helm.compiler.asts.templates import Node, walk
 from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, calculate
 from hypothesis_helm.compiler.builtins import MUTATIONS
+from hypothesis_helm.compiler.passes.domain_collections import additions, members, truth
 from hypothesis_helm.exceptions.compiler import Unknown, UnsupportedTransformation
 
 __all__ = ("Interpreter", "emits", "fresh")
@@ -160,10 +162,19 @@ class Interpreter:
                 return Operation("render-text", (result,))
             finally:
                 self.stack = self.stack[:-1]
-        if name == "dict" and len(args) % 2 == 0 and all(isinstance(key, str) for key in args[::2]):
-            return LocalMap({str(key): value for key, value in zip(args[::2], args[1::2], strict=True)})
+        if name == "dict":
+            try:
+                return LocalMap(dictionary(tuple(args)))
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
         if name == "list":
             return list(args)
+        if name in {"append", "mustAppend"} and len(args) == 2:
+            return Operation(name, args)
+        if name in {"uniq", "mustUniq"} and len(args) == 1:
+            return Operation(name, args)
+        if name == "empty" and len(args) == 1 and members(args[0]) is not None:
+            return Operation("not", (truth(args[0]),))
         if name in {"index", "get"} and len(args) == 2 and isinstance(args[1], str):
             return self.select(args[0], (args[1],))
         if name in {"merge", "mustMerge", "mergeOverwrite", "mustMergeOverwrite"} and args:
@@ -225,6 +236,82 @@ class Interpreter:
                 pass
         return Operation(name, args)
 
+    def collection_range(self, node: Node, values: object, source: str, context: object, scope: Scope) -> list[Piece]:
+        """
+        Analyze representative items while summarizing only proven append-only recurrences.
+
+        Args:
+            node (Node): Range block whose runtime collection size is unknown.
+            values (object): Input array or supported local collection expression.
+            source (str): Template source for diagnostics.
+            context (object): Dot context outside the loop.
+            scope (Scope): Enclosing lexical bindings.
+
+        Returns:
+            list[Piece]: Guarded representative output, without enumerating the array's values.
+
+        Raises:
+            Unknown: Collection type, loop control or analysis budget is unsupported.
+        """
+        nonempty = truth(values)
+        candidates = members(values)
+        if isinstance(values, Input):
+            kinds = {item.get("type") for item in _schema_nodes(self.schema, values.path, self.schema) if isinstance(item.get("type"), str)}
+            if kinds == {"array"}:
+                candidates = (Member(Input((*values.path, "*"))),)
+        if candidates is None:
+            raise Unknown("projection range requires an array with established element origins")
+        if len(candidates) > self.contracts.limits["max_range_items"]:
+            raise Unknown("collection origins exceed compiler.max_range_items")
+        binding = RANGE_ASSIGNMENT.fullmatch(node.text.removeprefix("range "))
+        escaping_else = any((assignment := ASSIGNMENT.fullmatch(child.text)) and assignment[2] == "=" for child in walk(node.otherwise))
+        if binding and binding[3] == "=" or escaping_else or any(child.text in {"break", "continue"} for child in walk(node.children)):
+            raise Unknown("symbolic range control or escaping iteration bindings require review")
+        # Snapshot outer bindings so an unknown-length loop never leaves behind
+        # the apparent result of executing exactly one iteration.
+        owners = []
+        owner: Scope | None = scope
+        while owner is not None:
+            owners.append((owner, copy.deepcopy(owner.bindings)))
+            owner = owner.parent
+        body = []
+        for member in candidates:
+            previous_bindings = [(owner, copy.deepcopy(owner.bindings)) for owner, _ in owners]
+            local = Scope(parent=scope)
+            if binding:
+                names = [key for key in (binding[1], binding[2]) if key]
+                operands = (Operation("iteration-index"), member.value) if len(names) == 2 else (member.value,)
+                for key, item in zip(names, operands, strict=True):
+                    local.bind(key, item)
+            selected = output(self.visit(node.children, source, member.value, local))
+            for condition in reversed(member.conditions):
+                selected = Operation("choose", (condition, selected, ""))
+                for owner, before_bindings in previous_bindings:
+                    for key, before_member in before_bindings.items():
+                        if owner.bindings[key] != before_member:
+                            owner.bindings[key] = Operation("choose", (condition, owner.bindings[key], before_member))
+            body.append(Piece(selected, source, node.line))
+        for owner, before in owners:
+            for key, previous in before.items():
+                current = owner.bindings[key]
+                if current == previous:
+                    continue
+                delta = additions(previous, current)
+                initial = members(previous)
+                if delta is None or initial is None:
+                    owner.bindings[key] = Operation("unknown-loop-assignment")
+                    self.notes.append(
+                        {"file": source, "line": node.line, "reason": f"non-append loop assignment to {key}; origin unresolved"}
+                    )
+                    continue
+                added, definite = delta
+                if len(initial) + len(added) > self.contracts.limits["max_range_items"]:
+                    raise Unknown("collection origins exceed compiler.max_range_items")
+                active = nonempty if definite else Operation("unknown-collection-cardinality")
+                owner.bindings[key] = Collection((*initial, *added), Operation("or", (truth(previous), active)))
+        otherwise = output(self.visit(node.otherwise, source, context, Scope(parent=scope))) if node.otherwise else ""
+        return [Piece(Operation("choose", (nonempty, output(body), otherwise)), source, node.line)]
+
     def visit(self, nodes: tuple[Node, ...], source: str, context: object, scope: Scope) -> list[Piece]:
         """
         Expand lexical control flow into symbolic output choices.
@@ -258,6 +345,8 @@ class Interpreter:
                     changed_dot = node.kind == "opaque"
                     test = self.evaluate(expression(node.text[5:] if changed_dot else node.text), context, scope)
                     nested = test if changed_dot else context
+                    if isinstance(test, Collection) or isinstance(test, Operation) and members(test) is not None:
+                        test = truth(test)
                     if test is None or type(test) in {str, int, list, dict}:
                         test = bool(test)
                     elif isinstance(test, LocalMap) and not test.sources:
@@ -300,6 +389,9 @@ class Interpreter:
                     body = node.text.removeprefix("range ")
                     binding = RANGE_ASSIGNMENT.fullmatch(body)
                     values = self.evaluate(expression(binding[4] if binding else body), context, scope)
+                    if not isinstance(values, list):
+                        pieces.extend(self.collection_range(node, values, source, context, scope))
+                        continue
                     if not isinstance(values, list) or len(values) > self.contracts.limits["max_range_items"]:
                         raise Unknown("projection range requires a bounded literal list")
                     if not values:

@@ -25,7 +25,7 @@ from hypothesis_helm.compiler.complexity import maximum_score, output_profile
 from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.lua.bounds import BoundEvaluator
 from hypothesis_helm.compiler.passes.pruning import Pruner, safe_values
-from hypothesis_helm.exceptions.rendering import RenderFailure
+from hypothesis_helm.exceptions.rendering import ManifestParseError, RenderFailure
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
 from hypothesis_helm.schemas.factors import FactorSpace, factor_space
@@ -319,7 +319,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
                 try:
                     resources = _resources(program, values, model)
                     validate_resources(resources)
-                except (YAMLError, RenderFailure):
+                except (YAMLError, ManifestParseError, RenderFailure):
                     cases.append(OutputCase(local, None, ()))
                     result["invalid_outputs"] = int(str(result["invalid_outputs"])) + 1
                 else:

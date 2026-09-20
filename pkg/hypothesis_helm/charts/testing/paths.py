@@ -24,7 +24,7 @@ from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
-from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.traversal import ALGORITHM, SELECTION_ORDER, order_paths, validate_strategy
@@ -300,6 +300,8 @@ def check_paths(
                     break
                 if phase.get("fail_fast", fail_fast) and phase["status"] == "failed":
                     break
+                if phase.get("error_kind") == "execution":
+                    break
     except KeyboardInterrupt:
         interrupted = True
         if active is not None:
@@ -312,6 +314,12 @@ def check_paths(
             phases.append({"phase": format_path(active.path), "kind": "value-path", "path": list(active.path), "status": "time-limit"})
         elif baseline["status"] != "passed":
             baseline["status"] = "time-limit"
+    except ChartUnavailable as exc:
+        diagnostic = {"status": "error", "error_kind": "execution", "error": str(exc), "failure_type": type(exc).__name__}
+        if active is not None:
+            phases.append({"phase": format_path(active.path), "kind": "value-path", "path": list(active.path), **diagnostic})
+        else:
+            baseline.update(diagnostic)
     except Exception as exc:
         if baseline["status"] != "passed":
             baseline.update(
@@ -343,17 +351,17 @@ def check_paths(
     completed = sum(
         phase["status"] in {"passed", "failed", "findings", "configuration-rejected"} and not phase.get("stop_reason") for phase in phases
     )
-    worker_errors = any(phase["status"] == "error" for phase in phases)
+    worker_errors = baseline["status"] == "error" or any(phase["status"] == "error" for phase in phases)
     generation_errors = any(phase["status"] == "generation-error" for phase in phases)
     status = (
         "interrupted"
         if interrupted or any(phase["status"] == "interrupted" for phase in phases)
+        else "error"
+        if worker_errors
         else "failed"
         if failures or baseline["status"] == "failed"
         else "time-limit"
         if stopped
-        else "error"
-        if worker_errors
         else "generation-error"
         if generation_errors
         else "ignored"
@@ -418,7 +426,10 @@ def check_paths(
         },
         "scope": "One property per discovered path; multiple values and shrinking within a property; joint input coverage is incomplete",
     }
-    if failures:
+    execution_errors = [phase for phase in [baseline, *phases] if phase.get("error_kind") == "execution"]
+    if execution_errors:
+        result.update(error_kind="execution", error=execution_errors[0]["error"], coverage_complete=False)
+    elif failures:
         result["error"] = "\n\n".join(f"{phase['phase']}: {phase.get('error', '')}" for phase in failures)
     elif baseline.get("error"):
         result["error"] = baseline["error"]

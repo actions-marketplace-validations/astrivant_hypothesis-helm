@@ -149,6 +149,7 @@ def test_render_reuse_preserves_properties_and_stream(monkeypatch: pytest.Monkey
     monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.Processes.run", lambda self, *args, **kwargs: helm(*args, **kwargs))
     monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.validate", validator)
     monkeypatch.setattr("hypothesis_helm.charts.testing.rendering.emit_manifest", stream)
+    (tmp_path / "Chart.yaml").write_text(yamlio.dump({"apiVersion": "v2", "name": "cache-test", "version": "0.1.0"}))
     chart = Chart(
         tmp_path,
         {

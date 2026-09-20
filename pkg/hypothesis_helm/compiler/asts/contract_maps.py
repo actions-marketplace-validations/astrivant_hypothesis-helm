@@ -7,7 +7,32 @@ import re
 from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
 from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
-__all__ = ("fresh_merge", "merge_flat_sources")
+__all__ = ("dictionary", "fresh_merge", "merge_flat_sources")
+
+
+def dictionary(arguments: tuple[object, ...]) -> dict[str, object]:
+    """
+    Construct a Sprig dictionary without guessing coercion of non-string keys.
+
+    Args:
+        arguments (tuple[object, ...]): Alternating keys and values, retaining input provenance.
+
+    Returns:
+        dict[str, object]: Entries, including Sprig's empty-string value for a trailing key.
+
+    Raises:
+        UnsupportedTransformation: A key requires Go-specific conversion to a string.
+    """
+    entries: dict[str, object] = {}
+    for index in range(0, len(arguments), 2):
+        key = native(arguments[index])
+        if not isinstance(key, str):
+            raise UnsupportedTransformation(
+                f"dict key at argument {index + 1} is {type(key).__name__}; "
+                "Go key coercion is unresolved; check alternating key/value arguments"
+            )
+        entries[key] = arguments[index + 1] if index + 1 < len(arguments) else ""
+    return entries
 
 
 def fresh_merge(expression: object) -> bool:

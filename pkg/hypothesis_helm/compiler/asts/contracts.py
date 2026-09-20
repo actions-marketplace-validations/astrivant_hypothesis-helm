@@ -16,7 +16,7 @@ from pathlib import Path
 from attrs import define, evolve, field, frozen
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.compiler.asts.contract_maps import fresh_merge, merge_flat_sources
+from hypothesis_helm.compiler.asts.contract_maps import dictionary, fresh_merge, merge_flat_sources
 from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, Scope
 from hypothesis_helm.compiler.asts.contract_values import (
     BoundValue,
@@ -29,7 +29,7 @@ from hypothesis_helm.compiler.asts.contract_values import (
     native,
 )
 from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext
-from hypothesis_helm.compiler.asts.templates import Node, lower, walk
+from hypothesis_helm.compiler.asts.templates import Node, lower, structure, walk
 from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, TransformedDomain, calculate, inputs
 from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE
 from hypothesis_helm.compiler.limits import active_limits, call_depth
@@ -387,7 +387,7 @@ class Contracts:
                 match = re.match(r'(?:define|block)\s+"([^"\\]+)"(?:\s|$)', node.text) if node.kind == "opaque" else None
                 if match:
                     name = match[1]
-                    if name in result.helpers and result.helpers[name][1] != node.children:
+                    if name in result.helpers and structure(result.helpers[name][1]) != structure(node.children):
                         duplicates.add(name)
                     result.helpers[name] = (source, node.children)
             if not Path(source).name.startswith("_"):
@@ -929,6 +929,15 @@ class Evaluation:
                 self.contextual = True
                 return ""
             raise Unknown("DNS is external unless disabled by the verified renderer context")
+        if function == "urlParse" and len(args) == 1 and isinstance(args[0], str):
+            if self.contracts.renderer is None:
+                raise Unknown("urlParse requires the fixed Helm renderer context")
+            self.contextual = True
+            try:
+                result = self.contracts.renderer.url_parse(args[0])
+            except (Unavailable, OSError, ValueError, subprocess.SubprocessError, YAMLError) as exc:
+                raise Unknown(str(exc) if isinstance(exc, Unavailable) else "native URL parsing is unavailable") from exc
+            return DerivedValue(result, "urlParse", tuple(evaluated))
         if function == "semverCompare" and len(args) == 2 and all(isinstance(value, str) for value in args):
             if self.contracts.renderer is None:
                 raise Unknown("semverCompare requires the fixed Helm renderer context")
@@ -1006,7 +1015,7 @@ class Evaluation:
                     transformed=self.transformed,
                     contextual=self.contextual,
                 )
-            return args[1]
+            return evaluated[1]
         if function in FUNCTIONS:
             try:
                 result = calculate(str(function), tuple(evaluated), limits=self.contracts.limits)
@@ -1032,8 +1041,11 @@ class Evaluation:
             if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments):
                 return ConstantList(tuple(str(value) for value in args))
             return evaluated
-        if function == "dict" and len(args) % 2 == 0 and all(isinstance(key, str) for key in args[::2]):
-            entries = {str(args[index]): evaluated[index + 1] for index in range(0, len(args), 2)}
+        if function == "dict":
+            try:
+                entries = dictionary(tuple(evaluated))
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
             if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments[::2]):
                 return ConstantMap(entries)
             return entries
@@ -1082,7 +1094,34 @@ class Evaluation:
                     raise Unknown("input key cannot be represented by a dotted contract path")
                 value = args[0].get(args[1], "" if function == "get" else None)
                 return self.observe(BoundValue(value, path))
+            if isinstance(evaluated[0], DerivedValue):
+                return DerivedValue(
+                    args[0].get(args[1], "" if function == "get" else None),
+                    "_get" if function == "get" else "_field",
+                    (evaluated[0], args[1]),
+                )
             return args[0].get(args[1], "" if function == "get" else None)
+        if function == "index" and len(args) == 2 and isinstance(args[0], list) and type(args[1]) is int:
+            if not (
+                type(evaluated[1]) is int
+                or isinstance(evaluated[1], DerivedValue)
+                and evaluated[1].function in {"int", "int64", "atoi", "add", "add1", "sub", "mul", "min", "max"}
+            ):
+                raise Unknown("list index requires a literal or explicitly converted integer")
+            position = args[1]
+            if not 0 <= position < len(args[0]):
+                origins = ", ".join("$." + ".".join(path) for path in inputs(evaluated[0]))
+                bounds = (
+                    f"index {position} must be nonnegative"
+                    if position < 0
+                    else f"index {position} requires at least {position + 1} list elements; got {len(args[0])}"
+                )
+                raise Unknown(
+                    bounds
+                    + (f"; derived from {origins}" if origins else "")
+                    + "; this is a potential template failure, not an explicit input rejection"
+                )
+            return DerivedValue(args[0][position], "_index", tuple(evaluated))
         if function == "append" and len(args) == 2 and isinstance(args[0], list):
             return [*args[0], args[1]]
         if function == "without" and args and isinstance(args[0], list):

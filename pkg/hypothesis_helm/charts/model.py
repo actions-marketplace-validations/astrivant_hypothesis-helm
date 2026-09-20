@@ -16,6 +16,7 @@ from hypothesis.strategies import SearchStrategy
 from jsonschema import validators
 
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.exceptions.execution import ChartUnavailable
 
 __all__ = ("Chart", "merge_values")
 
@@ -51,6 +52,23 @@ class Chart:
     dependency_model: Dependencies | None = None
     domains: InputDomains | None = field(default=None, init=False)
     generated_schema: dict[str, object] | None = field(default=None, init=False)
+
+    def require_source(self) -> None:
+        """
+        Confirm that the prepared chart remains readable before testing another input.
+
+        Raises:
+            ChartUnavailable: Chart metadata disappeared or became unreadable during execution.
+
+        Returns:
+            None: The source still exists; this does not establish validity of the chart.
+        """
+        metadata = self.path / "Chart.yaml"
+        try:
+            with metadata.open("rb") as stream:
+                stream.read(1)
+        except OSError as exc:
+            raise ChartUnavailable(f"Chart source unavailable: {metadata} ({exc.strerror}); testing stopped; not a chart finding") from exc
 
     @classmethod
     def load(cls, path: str | Path) -> Chart:

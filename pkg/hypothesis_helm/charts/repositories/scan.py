@@ -30,7 +30,7 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
-from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.sampling import Sampling
@@ -554,7 +554,7 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
             break
         except subprocess.TimeoutExpired as exc:
             record.update(status="timeout", error=str(exc))
-        except Exception as exc:
+        except (Exception, ChartUnavailable) as exc:
             record.update(status="error", error=str(exc), failure_type=type(exc).__name__)
         finally:
             record["elapsed_seconds"] = time.monotonic() - tick

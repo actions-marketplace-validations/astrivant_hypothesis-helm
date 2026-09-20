@@ -185,13 +185,17 @@ def probe(binary: str, stamp: int, kube_version: str | None, timeout: float, ope
         stamp (int): Executable modification time, invalidating stale cached probes.
         kube_version (str | None): The same override supplied to the real render.
         timeout (float): Probe subprocess deadline.
-        operation (str): Capabilities or semverCompare; no arbitrary template source is accepted.
+        operation (str): Capabilities, semverCompare or urlParse; arbitrary template source is never accepted.
         arguments (tuple[str, ...]): Data-only arguments supplied through a values file.
 
     Returns:
-        object: Native capability fields or a semantic-version comparison result.
+        object: Native capability fields, parsed URL fields or a semantic-version comparison result.
     """
-    expressions = {"capabilities": ".Capabilities", "semverCompare": "semverCompare .Values.first .Values.second"}
+    expressions = {
+        "capabilities": ".Capabilities",
+        "semverCompare": "semverCompare .Values.first .Values.second",
+        "urlParse": "urlParse .Values.first",
+    }
     expression = expressions[operation]
     with tempfile.TemporaryDirectory(prefix="helm-capabilities-") as temporary:
         root = Path(temporary)
@@ -290,6 +294,29 @@ class RendererContext:
         if type(result) is not bool:
             raise Unavailable("Helm version comparison returned a non-Boolean result")
         return result
+
+    def url_parse(self, value: str) -> dict[str, object]:
+        """
+        Parse a concrete URL using Sprig in the selected Helm binary, without network access.
+
+        Args:
+            value (str): Candidate URL supplied as data, never interpreted as template code.
+
+        Returns:
+            dict[str, object]: Native URL fields within the compiler's existing string budget.
+
+        Raises:
+            Unavailable: Helm cannot parse the value or the configured budget is exceeded.
+        """
+        if len(value) > self.limits["max_string_chars"]:
+            raise Unavailable(f"URL exceeds compiler.max_string_chars={self.limits['max_string_chars']}")
+        binary = shutil.which(self.helm)
+        if binary is None:
+            raise Unavailable("Helm is unavailable for URL parsing")
+        result = probe(binary, Path(binary).stat().st_mtime_ns, self.kube_version, self.timeout, "urlParse", (value,))
+        if not isinstance(result, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in result.items()):
+            raise Unavailable("Helm URL parsing returned unexpected fields")
+        return mapping(result)
 
     def chart_files(self, scope: tuple[str, ...]) -> FileSet:
         """

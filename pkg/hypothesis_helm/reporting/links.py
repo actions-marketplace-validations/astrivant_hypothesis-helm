@@ -171,12 +171,13 @@ def publish_links(line: str, report: Path, publication: Publication) -> str:
     return line
 
 
-def linked_prose(line: str) -> str:
+def linked_prose(line: str, *, document: Path | None = None) -> str:
     """
     Convert Markdown links to visibly underlined, clickable ReportLab paragraph markup.
 
     Args:
         line (str): Prose that may contain multiple inline links.
+        document (Path | None): PDF location used to resolve local links into absolute file URLs.
 
     Returns:
         str: XML-escaped paragraph content with blue underlined links.
@@ -185,7 +186,15 @@ def linked_prose(line: str) -> str:
     offset = 0
     for match in link_matches(line):
         parts.append(escape(line[offset : match.start()]))
-        target = escape(match[2] or match[3], quote=True)
+        target = match[2] or match[3]
+        parsed = urlsplit(target)
+        if document is not None and not parsed.scheme and not parsed.netloc and not target.startswith("#"):
+            # PDF URI actions have no dependable working directory. Keep relative
+            # paths in Markdown, but give PDF viewers an explicit local file URL.
+            target = (document.parent / unquote(parsed.path)).resolve().as_uri()
+            if parsed.fragment:
+                target += "#" + parsed.fragment
+        target = escape(target, quote=True)
         parts.append(f'<link href="{target}" color="#1459a6"><u>{escape(match[1])}</u></link>')
         offset = match.end()
     parts.append(escape(line[offset:]))

@@ -23,6 +23,7 @@ from jsonschema import validators
 from hypothesis_helm.charts.model import Chart, merge_values
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.charts.values.parsers import SUITE_YAML_PARSER, validate_backend
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.policy import RuleScope
@@ -90,6 +91,8 @@ def prepared_chart(source: Path, generated: Path) -> Iterator[Chart]:
             from hypothesis_helm.schemas.domains import InputDomains
 
             frozen = mapping(json.loads(snapshot.read_text()))
+            parser_token = SUITE_YAML_PARSER.set(validate_backend(frozen.get("yaml_parser", "ruamel")))
+            contracts.callback(SUITE_YAML_PARSER.reset, parser_token)
             resource_token = SUITE_RESOURCE_SCHEMAS.set(
                 {**(SUITE_RESOURCE_SCHEMAS.get() or {}), **mapping(frozen.get("resource_schemas", {}))}
             )
@@ -100,9 +103,12 @@ def prepared_chart(source: Path, generated: Path) -> Iterator[Chart]:
             selected = validate_character_sets(frozen.get("character_sets", current.character_sets))
             generation = mapping(frozen.get("generation", current.generation))
             identity = hashlib.sha256(
-                json.dumps({"rules": rules, "character_sets": selected, "generation": generation}, sort_keys=True).encode()
+                json.dumps(
+                    {"rules": rules, "character_sets": selected, "generation": generation, "yaml_parser": current.yaml_parser},
+                    sort_keys=True,
+                ).encode()
             ).hexdigest()
-            chart.domains = InputDomains(rules, current.diagnostics, identity, selected, generation)
+            chart.domains = InputDomains(rules, current.diagnostics, identity, selected, generation, current.yaml_parser)
             character_token = SUITE_CHARACTER_SETS.set(selected)
 
         try:

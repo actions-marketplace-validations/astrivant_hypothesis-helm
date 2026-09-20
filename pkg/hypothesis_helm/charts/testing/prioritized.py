@@ -12,7 +12,7 @@ from pathlib import Path
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
-from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.reporting.budget import execution_timer
 from hypothesis_helm.reporting.logs import input_baseline
 from hypothesis_helm.rules import ignored_codes
@@ -87,18 +87,21 @@ def check_prioritized(
                 "error": "Known-input preparation or testing exhausted its phase budget",
             }
         )
-    except Exception as exc:
+    except (Exception, ChartUnavailable) as exc:
         phases.append(
             {
                 "phase": "known-inputs",
-                "status": "generation-error",
+                "status": "error" if isinstance(exc, ChartUnavailable) else "generation-error",
+                **({"error_kind": "execution"} if isinstance(exc, ChartUnavailable) else {}),
                 "attempts": 0,
                 "error": str(exc),
                 "failure_type": type(exc).__name__,
             }
         )
     remaining = budget - (time.monotonic() - started)
-    if any(
+    if any(phase.get("error_kind") == "execution" for phase in phases):
+        phases.append({"phase": "robustness", "status": "not-started", "attempts": 0, "reason": "Chart source unavailable"})
+    elif any(
         phase.get("fail_fast", fail_fast)
         and phase["status"] == "failed"
         and phase.get("failure_type") not in {"Unsatisfiable", "FailedHealthCheck", "SchemaError", "InvalidArgument"}
@@ -147,11 +150,12 @@ def check_prioritized(
                     "error": "Chart budget exhausted while preparing robustness cases",
                 }
             )
-        except Exception as exc:
+        except (Exception, ChartUnavailable) as exc:
             phases.append(
                 {
                     "phase": "robustness",
-                    "status": "generation-error",
+                    "status": "error" if isinstance(exc, ChartUnavailable) else "generation-error",
+                    **({"error_kind": "execution"} if isinstance(exc, ChartUnavailable) else {}),
                     "attempts": 0,
                     "error": str(exc),
                     "failure_type": type(exc).__name__,
@@ -180,7 +184,9 @@ def check_prioritized(
     failures = [phase for phase in phases if phase["status"] == "failed"]
     incomplete = any(phase["status"] not in {"passed", "failed", "findings", "not-needed"} or phase.get("stop_reason") for phase in phases)
     status = (
-        "failed"
+        "error"
+        if any(phase.get("error_kind") == "execution" for phase in phases)
+        else "failed"
         if failures
         else "generation-error"
         if any(phase["status"] == "generation-error" for phase in phases)
@@ -216,7 +222,10 @@ def check_prioritized(
             "diagnostics": priority.diagnostics if priority else [],
         },
     }
-    if failures:
+    execution_errors = [phase for phase in phases if phase.get("error_kind") == "execution"]
+    if execution_errors:
+        result.update(error_kind="execution", error=execution_errors[0]["error"])
+    elif failures:
         result["error"] = "\n\n".join(f"{phase['phase']}: {phase.get('error', '')}" for phase in failures)
     if inventory is not None:
         combined = FieldCoverage(inventory, chart.defaults)

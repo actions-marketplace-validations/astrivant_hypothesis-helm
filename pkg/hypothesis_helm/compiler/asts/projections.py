@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from attrs import define, field, frozen
 
-__all__ = ("Input", "LocalMap", "Operation", "Piece", "output")
+__all__ = ("Collection", "Input", "LocalMap", "Member", "Operation", "Piece", "output")
 
 
 @frozen
@@ -19,6 +19,34 @@ class Input:
     """
 
     path: tuple[str, ...]
+
+
+@frozen
+class Member:
+    """
+    Describe an element origin without asserting how many elements exist.
+
+    Attributes:
+        value (object): Element expression, including wildcard input origins.
+        conditions (tuple[object, ...]): Conditions selecting this element expression.
+    """
+
+    value: object
+    conditions: tuple[object, ...] = ()
+
+
+@frozen
+class Collection:
+    """
+    Summarize collection contributors separately from their runtime cardinality.
+
+    Attributes:
+        members (tuple[Member, ...]): Possible element origins, not a concrete list of elements.
+        nonempty (object): Symbolic condition under which the collection contains an element.
+    """
+
+    members: tuple[Member, ...]
+    nonempty: object
 
 
 @frozen
