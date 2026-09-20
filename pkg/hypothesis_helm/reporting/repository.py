@@ -12,10 +12,12 @@ from urllib.parse import quote
 
 from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.reporting.errors import deduplicate_errors
-from hypothesis_helm.reporting.links import Publication, publish_links
+from hypothesis_helm.reporting.links import Publication, chart_source_url, publish_links, web_url
 from hypothesis_helm.reporting.overview import summarize, write_overview
 from hypothesis_helm.reporting.pdf import write_pdf
 from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.reporting.provenance import trace_run
+from hypothesis_helm.reporting.references import with_finding_reference
 from hypothesis_helm.reporting.reproductions import input_summary
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -28,16 +30,39 @@ def artifact_link(label: str, destination: object, report: Path) -> str:
 
     Args:
         label (str): Short human-readable link text.
-        destination (object): Recorded filesystem artifact path.
+        destination (object): Recorded filesystem artifact path or HTTPS URL.
         report (Path): Markdown report destination.
 
     Returns:
         str: Portable Markdown link with an escaped relative target.
     """
+    url = web_url(destination)
+    if url is not None:
+        return f"[{label}](<{url}>)"
     path = Path(str(destination))
     # Finalized scan archives already store paths relative to the human report.
     target = os.path.relpath(path, report.parent) if path.is_absolute() or path.exists() else str(path)
     return f"[{label}](<{quote(target, safe='/._-')}>)"
+
+
+def chart_heading(chart: dict[str, object], source: dict[str, object], report: Path, *, artifact_links: bool = True) -> str:
+    """
+    Make chart names open their source code, falling back to retained run artifacts.
+
+    Args:
+        chart (dict[str, object]): Chart identity and available artifact destinations.
+        source (dict[str, object]): Stable repository provenance recorded by the scan.
+        report (Path): Markdown report location for relative artifact links.
+        artifact_links (bool): Whether the report publishes retained run artifacts.
+
+    Returns:
+        str: Chart heading with an optional source or artifact link.
+    """
+    title = str(chart["chart"]).replace("\n", " ")
+    destination = chart_source_url(chart, source)
+    if destination is None and artifact_links:
+        destination = str(chart.get("artifacts") or "") or None
+    return "### " + (artifact_link(title, destination, report) if destination else title)
 
 
 def wrap_markdown(content: str) -> str:
@@ -122,6 +147,7 @@ def write_reports(
         tuple[Path, Path]: Markdown and PDF output paths.
     """
     deduplicate_errors(report)
+    trace_run(report)
     if stem.suffix.lower() in (".md", ".pdf"):
         stem = stem.with_suffix("")
     markdown, pdf = Path(f"{stem}.md"), Path(f"{stem}.pdf")
@@ -162,6 +188,12 @@ def write_reports(
             f"Chart testing: {float(str(report['testing_seconds'])):.2f} seconds",
             f"Dependency preparation: {float(str(report['dependency_preparation_seconds'])):.2f} seconds (excluded from testing budgets)",
         ]
+    timing_note = " (estimated from recorded timing)" if str(report["finish_time_source"]).startswith("derived") else ""
+    lines[4:4] = [
+        f"Started (UTC): {report['started_at']}",
+        f"Finished (UTC): {report['finished_at']}{timing_note}",
+        f"Run fingerprint (SHA-256): `{report['run_hash']}`",
+    ]
     summary = report.get("summary", [])
     if isinstance(summary, list):
         lines[2:2] = [str(line) for line in summary] + [""]
@@ -197,8 +229,8 @@ def write_reports(
     assert isinstance(charts, list)
     for index, chart in enumerate(charts, 1):
         assert isinstance(chart, dict)
-        title = str(chart["chart"]).replace("\n", " ")
-        lines.extend([f"### {title}", "", f"Overview cell: {index:02d}", ""])
+        heading = chart_heading(chart, mapping(report.get("source", {})), markdown, artifact_links=artifact_links)
+        lines.extend([heading, "", f"Overview cell: {index:02d}", ""])
         package = chart.get("package")
         if isinstance(package, dict):
             lines.extend(
@@ -322,6 +354,7 @@ def write_reports(
         "## Scan summary",
         "",
     ]
+    lines = with_finding_reference("\n".join(lines)).splitlines()
     if publication is not None:
         fence = ""
         for index, line in enumerate(lines):

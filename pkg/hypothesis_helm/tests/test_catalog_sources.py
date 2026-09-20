@@ -21,6 +21,7 @@ from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.domains import InputDomains
 from hypothesis_helm.schemas.policy import ENVIRONMENT
+from hypothesis_helm.schemas.resources import destination
 
 
 def test_upstream_destinations_use_api_types_not_field_names(tmp_path: Path) -> None:
@@ -57,6 +58,163 @@ def test_upstream_destinations_use_api_types_not_field_names(tmp_path: Path) -> 
     pod = mapping(result["v1/Pod"])
     assert set(pod) == {"volumes/*/name"}
     assert mapping(mapping(pod["volumes/*/name"])["schema"])["pattern"] == schema["pattern"]
+
+
+def test_reviewed_supplements_follow_type_references_not_descriptions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Rebuild identical prose at two API types without leaking the selector's name constraint.
+
+    Args:
+        tmp_path (Path): Minimal OpenAPI source and standalone schema snapshot.
+        monkeypatch (pytest.MonkeyPatch): Select a small supplement inventory.
+
+    Returns:
+        None: Exact references carry supplements through arrays; unrelated same-description fields remain unrestricted.
+    """
+    reviewed = [
+        mapping(row)
+        for row in sequence(json.loads((builder.DATA / "reviewed-domains.json").read_text()))
+        if mapping(row)["id"] == "secretkeyselector.name"
+    ]
+    row = reviewed[0]
+    selector: dict[str, object] = {"type": "object", "properties": {"name": {"type": "string", "description": row["description"]}}}
+    # These structurally identical definitions have different validators in Kubernetes.
+    local_reference = copy.deepcopy(selector)
+    definitions: dict[str, object] = {
+        "io.k8s.api.core.v1.SecretKeySelector": selector,
+        "io.k8s.api.core.v1.LocalObjectReference": local_reference,
+        "io.k8s.api.core.v1.Pod": {
+            "x-kubernetes-group-version-kind": [{"group": "", "version": "v1", "kind": "Pod"}],
+            "type": "object",
+            "properties": {
+                "imagePullSecrets": {"type": "array", "items": {"$ref": "#/definitions/io.k8s.api.core.v1.LocalObjectReference"}},
+                "secretKeys": {"type": "array", "items": {"$ref": "#/definitions/io.k8s.api.core.v1.SecretKeySelector"}},
+            },
+        },
+    }
+    source = tmp_path / "api/openapi-spec/swagger.json"
+    source.parent.mkdir(parents=True)
+    source.write_text(json.dumps({"definitions": definitions}))
+    (tmp_path / "reviewed-domains.json").write_text(json.dumps(reviewed))
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "secretkeyselector.json").write_text(json.dumps(selector))
+    pod = mapping(copy.deepcopy(definitions["io.k8s.api.core.v1.Pod"]))
+    mapping(pod["properties"]).update(
+        imagePullSecrets={"type": "array", "items": local_reference}, secretKeys={"type": "array", "items": selector}
+    )
+    (snapshot / "pod.json").write_text(json.dumps(pod))
+    monkeypatch.setattr(builder, "DATA", tmp_path)
+    extracted: dict[str, object] = {"fields": {}, "profiles": {"dns1123-subdomain": {"schema": row["schema"]}}}
+    before = copy.deepcopy(extracted)
+    resources = sources.destinations(tmp_path, extracted, reviewed=reviewed)
+    assert extracted == before
+    assert set(mapping(resources["v1/Pod"])) == {"secretKeys/*/name"}
+    catalog = builder.build(snapshot, "fixture", upstream={"resources": resources, "version": "fixture", "revision": "test"})
+    paths = mapping(mapping(catalog["resources"])["v1/Pod"])
+    domains = mapping(catalog["domains"])
+    reference = mapping(domains[str(paths["imagePullSecrets/*/name"])])
+    secret = mapping(domains[str(paths["secretKeys/*/name"])])
+    assert reference == {"schema": {"type": "string"}, "sources": ["json-schema"]}
+    assert row["id"] in sequence(secret["sources"])
+    validator = validators.Draft7Validator(mapping(secret["schema"]))
+    assert validator.is_valid("config.v1")
+    assert not validator.is_valid("")
+    assert not validator.is_valid(">0")
+    assert mapping(sequence(secret["evidence"])[0])["type_field"] == row["type_field"]
+    # Flattened schemas alone cannot establish API type identity, even with identical prose and shape.
+    plain = builder.build(snapshot, "fixture")
+    plain_paths = mapping(mapping(plain["resources"])["v1/Pod"])
+    assert mapping(mapping(plain["domains"])[str(plain_paths["secretKeys/*/name"])])["schema"] == {"type": "string"}
+    mapping(mapping(selector["properties"])["name"])["description"] = "Changed upstream description"
+    source.write_text(json.dumps({"definitions": definitions}))
+    with pytest.raises(ValueError, match="Source description changed"):
+        sources.destinations(tmp_path, extracted, reviewed=reviewed)
+    del definitions["io.k8s.api.core.v1.SecretKeySelector"]
+    source.write_text(json.dumps({"definitions": definitions}))
+    with pytest.raises(ValueError, match="Reviewed API field missing"):
+        sources.destinations(tmp_path, extracted, reviewed=reviewed)
+
+
+@pytest.mark.parametrize(
+    ("identity", "prefix"),
+    [("v1/Pod", "spec"), ("apps/v1/Deployment", "spec/template/spec"), ("batch/v1/CronJob", "spec/jobTemplate/spec/template/spec")],
+)
+def test_bundled_catalog_preserves_windows_mounts_and_reference_types(identity: str, prefix: str) -> None:
+    """
+    Check released domains across Pod resources and embedded Pod templates.
+
+    Args:
+        identity (str): Resource API identity.
+        prefix (str): Resource path to the Pod spec.
+
+    Returns:
+        None: Windows and Unix mounts pass, empty mounts fail, and Secret bounds stay on their API types.
+    """
+    catalog = mapping(json.loads(builder.LIBRARY.read_text()))
+    paths = mapping(mapping(catalog["resources"])[identity])
+    domains = mapping(catalog["domains"])
+    mount = mapping(domains[str(paths[f"{prefix}/containers/*/volumeMounts/*/mountPath"])])
+    schema = mapping(mount["schema"])
+    validators.Draft7Validator.check_schema(schema)
+    validator = validators.Draft7Validator(schema)
+    for value in ("/var/run/config", r"C:\data", "C:/data"):
+        assert validator.is_valid(value), value
+    assert not validator.is_valid("")
+    assert "volumemount.mountPath" in sequence(mount["sources"])
+    for path, valid_empty in (("imagePullSecrets/*/name", True), ("containers/*/env/*/valueFrom/secretKeyRef/name", False)):
+        record = mapping(domains[str(paths[f"{prefix}/{path}"])])
+        assert validators.Draft7Validator(mapping(record["schema"])).is_valid("") == valid_empty
+        assert ("secretkeyselector.name" in sequence(record["sources"])) != valid_empty
+
+
+@pytest.mark.parametrize("version", ["1.35.0", "1.34.0"])
+def test_live_schema_cache_never_matches_supplements_by_description(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: str) -> None:
+    """
+    Apply exact catalog destinations only for the selected Kubernetes version during runtime lookup.
+
+    Args:
+        tmp_path (Path): Local schema cache containing deliberately repeated descriptions.
+        monkeypatch (pytest.MonkeyPatch): Activate the cache without source downloads or catalog rebuilding.
+        version (str): Matching or different Kubernetes schema version.
+
+    Returns:
+        None: Reference-name bounds do not leak to unrelated fields or across versions; Windows paths remain usable.
+    """
+    reviewed = {str(mapping(row)["id"]): mapping(row) for row in sequence(json.loads((builder.DATA / "reviewed-domains.json").read_text()))}
+    paths = {
+        "spec/imagePullSecrets/*/name": "secretkeyselector.name",
+        "spec/containers/*/env/*/valueFrom/secretKeyRef/name": "secretkeyselector.name",
+        "spec/containers/*/volumeMounts/*/mountPath": "volumemount.mountPath",
+        "unrelated": "secretkeyselector.name",
+    }
+    root: dict[str, object] = {}
+    for path, supplement in paths.items():
+        node = root
+        for part in path.split("/"):
+            if part == "*":
+                node["type"] = "array"
+                node = mapping(node.setdefault("items", {}))
+            else:
+                node["type"] = "object"
+                node = mapping(mapping(node.setdefault("properties", {})).setdefault(part, {}))
+        node.update(type="string", description=reviewed[supplement]["description"])
+    (tmp_path / "pod-v1.json").write_text(json.dumps(root))
+    monkeypatch.setenv("HYPOTHESIS_HELM_CONFORMITY", json.dumps({"version": version, "schemas": str(tmp_path)}))
+    for path in paths:
+        found = destination("v1/Pod", tuple(path.split("/")))
+        assert found is not None
+        schema, provenance = found
+        assert "+reviewed:" not in provenance
+        validator = validators.Draft7Validator(schema)
+        bound = version == "1.35.0" and path not in {"spec/imagePullSecrets/*/name", "unrelated"}
+        assert validator.is_valid("") is not bound
+        if path.endswith("mountPath"):
+            assert validator.is_valid(r"C:\data")
+        elif bound:
+            assert not validator.is_valid(">0")
+        else:
+            assert validator.is_valid(">0")
 
 
 def test_check_never_overwrites_the_catalog_under_comparison(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -78,6 +78,8 @@ def test_discovery(tmp_path: Path) -> None:
         apiVersion: v2
         name: root
         version: "1.2.3"
+        sources:
+          - https://github.com/example/charts/tree/main/root
     """)
     )
     nested = tmp_path / "nested"
@@ -90,6 +92,7 @@ def test_discovery(tmp_path: Path) -> None:
         ("nested", "invalid-metadata"),
     ]
     assert "apiVersion" in str(found[1]["error"])
+    assert found[0]["source_url"] == "https://github.com/example/charts/tree/main/root"
 
 
 @pytest.mark.parametrize(
@@ -146,7 +149,7 @@ def test_report_paths_and_pagination(tmp_path: Path) -> None:
     assert b"/Subtype /Image" in pdf.read_bytes()
     assert all(len(line) <= 140 for line in md.read_text().splitlines())
     assert pdf.read_bytes().startswith(b"%PDF-")
-    assert pdf.read_bytes().count(b"/Type /Page\n") == 3
+    assert 4 <= pdf.read_bytes().count(b"/Type /Page\n") <= 5
     assert (tmp_path / "custom-overview.png").is_file()
     assert "Diagnostic shortened" in md.read_text()
     report["charts"] = [{"chart": f"demo-{index}", "status": "failed", "error": "failure"} for index in range(40)]
@@ -321,6 +324,10 @@ def test_scan_fail_flag(
         assert "--fail" in report["charts"][2]["error"]
     assert (Path(report["charts"][1]["artifacts"]) / "values.json").exists()
     assert json.loads(next((tmp_path / "artifacts").glob("*/scan.json")).read_text()) == report
+    assert report["finished_epoch"] >= report["started_epoch"]
+    assert report["finish_time_source"] == "recorded"
+    assert report["finished_at"] in (tmp_path / "result.md").read_text()
+    assert report["run_hash"] in (tmp_path / "result.md").read_text()
     assert outcome in (tmp_path / "result.md").read_text()
     assert (tmp_path / "result.pdf").read_bytes().startswith(b"%PDF-")
 
@@ -419,6 +426,7 @@ def test_values_override_and_dependency_build(tmp_path: Path, monkeypatch: pytes
 
     monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.Processes.run", lambda self, *args, **kwargs: command(*args, **kwargs))
     monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.comparison", lambda *args: {"status": "unavailable"})
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.local_provenance", lambda *args: {})
     monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", exercise)
     assert (
         main(
@@ -695,6 +703,7 @@ def test_dependency_timing_accounting(
 
     monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.Processes.run", lambda self, *args, **kwargs: prepare(*args, **kwargs))
     monkeypatch.setattr(module, "comparison", lambda *args: {"status": "unavailable"})
+    monkeypatch.setattr(module, "local_provenance", lambda *args: {})
     monkeypatch.setattr(module, "exercise_chart", exercise)
     code = main(
         [

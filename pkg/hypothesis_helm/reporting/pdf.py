@@ -17,6 +17,7 @@ from reportlab.platypus import Paragraph  # type: ignore[import-untyped]
 from hypothesis_helm.reporting.contents import heading_inventory
 from hypothesis_helm.reporting.links import LINK, linked_prose
 from hypothesis_helm.reporting.overview import CellLink
+from hypothesis_helm.reporting.references import APPENDIX_TITLE
 
 
 def write_pdf(
@@ -140,11 +141,15 @@ def write_pdf(
             continue
         if index in destinations:
             level, label, anchor = destinations[index]
-            if y < 120 or (overview_page and level <= 2):
+            if y < 120 or (overview_page and level <= 2) or (level == 2 and label == APPENDIX_TITLE):
                 canvas.showPage()
                 y = page_header()
                 overview_page = False
-            paragraph = Paragraph(escape(label), ParagraphStyle("section", fontName="Helvetica-Bold", fontSize=11, leading=15))
+            size = 14 if level <= 2 else 12 if level == 3 else 10
+            paragraph = Paragraph(
+                linked_prose(re.sub(r"^\s*#{1,6}\s+", "", line)),
+                ParagraphStyle("section", fontName="Helvetica-Bold", fontSize=size, leading=size + 4),
+            )
             _, height = paragraph.wrap(540, 708)
             if y - height < 90:
                 canvas.showPage()

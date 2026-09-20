@@ -16,9 +16,41 @@ from urllib.parse import urlsplit
 
 from attrs import define, field
 
+from hypothesis_helm.charts.repositories.changes import optional_git
 from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.reporting.links import repository_url
 
 LOGGER = logging.getLogger(__name__)
+
+
+def local_provenance(root: Path) -> dict[str, object]:
+    """
+    Capture browser links for local charts without fetching or changing their checkout.
+
+    Args:
+        root (Path): Chart or directory being scanned, possibly inside a Git submodule.
+
+    Returns:
+        dict[str, object]: Repository URL, commit, scan-root prefix, and tracked charts, or no source when unavailable.
+    """
+    url = repository_url(optional_git(root, "config", "--get", "remote.origin.url"))
+    if url is None:
+        return {}
+    revision = optional_git(root, "rev-parse", "HEAD")
+    if not revision:
+        return {}
+    files = optional_git(root, "ls-tree", "-r", "--name-only", "-z", revision)
+    charts = [str(Path(name).parent) for name in files.split("\0") if name and Path(name).name == "Chart.yaml"]
+    if not charts:
+        return {}
+    repository = optional_git(root, "rev-parse", "--show-toplevel")
+    if not repository:
+        return {}
+    try:
+        prefix = root.resolve().relative_to(Path(repository).resolve()).as_posix()
+    except ValueError:
+        return {}
+    return {"kind": "git", "url": url, "revision": revision, "path": prefix, "chart_paths": charts}
 
 
 def remote_name(location: str) -> str | None:

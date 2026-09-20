@@ -2,13 +2,18 @@
 Verify compact report measurements, partial results, and navigable PDF front matter.
 """
 
+import base64
 import re
+import zlib
 from pathlib import Path
 
 import pytest
 
+from hypothesis_helm.reporting.contents import heading_inventory
 from hypothesis_helm.reporting.errors import deduplicate_errors
+from hypothesis_helm.reporting.links import Publication
 from hypothesis_helm.reporting.overview import grid_shape, measured_seconds, summarize, unfinished, write_overview
+from hypothesis_helm.reporting.references import APPENDIX_TITLE, with_finding_reference
 from hypothesis_helm.reporting.repository import write_reports
 
 
@@ -194,3 +199,96 @@ def test_report_front_matter_and_internal_destinations(tmp_path: Path, chart_cou
     if chart_count > 1:
         assert "[repeated/name](#repeatedname-1)" in markdown.read_text()
         assert content.count(b"/Title (repeated/name)") == chart_count
+
+
+def test_code_appendix_keeps_literal_inputs_and_unique_targets() -> None:
+    """
+    Link findings to one definition each without altering reproducing values or external links.
+
+    Returns:
+        None: References survive repeated publication, unknown codes are explained, and duplicate headings have unique anchors.
+    """
+    document = "\n".join(
+        [
+            "# Report",
+            "## Charts",
+            "### HH1101 - Invalid YAML in rendered output",
+            "#### E001 (HH1101)",
+            "- `HH2006` at `$.settings`",
+            "Disabled: HH2006; future finding: HH9999.",
+            "[External HH1101](https://example.org/HH1101)",
+            '`$.value = "HH3001"`',
+            "~~~yaml",
+            "name: HH3002",
+            "~~~",
+            "```text",
+            "[HH1101] Raw diagnostic",
+            "```",
+        ]
+    )
+    content = with_finding_reference(document)
+    assert "[HH1101](#hh1101---invalid-yaml-in-rendered-output-1)" in content
+    assert "[HH2006](#hh2006---opaque-object-schema)" in content
+    assert "[External HH1101](https://example.org/HH1101)" in content
+    assert '`$.value = "HH3001"`' in content
+    assert "~~~yaml\nname: HH3002\n~~~" in content
+    assert "```text\n[HH1101] Raw diagnostic\n```" in content
+    assert "### HH3001" not in content and "### HH3002" not in content
+    assert "### HH9999 - Unknown finding code" in content
+    assert content.count(f"## {APPENDIX_TITLE}") == 1
+    assert with_finding_reference(content) == content
+    targets = {anchor for _, _, _, anchor in heading_inventory(content)}
+    assert set(re.findall(r"\]\(#([^)]*)\)", content)) <= targets
+
+
+def test_report_heading_sizes_and_code_links_in_pdf(tmp_path: Path) -> None:
+    """
+    Render chart headings above diagnostics in size and route code links to the final appendix page.
+
+    Args:
+        tmp_path (Path): Compact public report destination.
+
+    Returns:
+        None: Both formats link finding codes; the PDF contains distinct heading sizes and real internal destinations.
+    """
+    report: dict[str, object] = {
+        "directory": "charts",
+        "started_epoch": 1,
+        "elapsed_seconds": 2,
+        "charts_discovered": 1,
+        "counts": {"failed": 1},
+        "settings": {},
+        "ignored_rules": ["HH2006"],
+        "charts": [
+            {
+                "chart": "readable-chart",
+                "status": "failed",
+                "error": "[HH1101] Invalid YAML",
+                "testing_seconds": 2,
+                "audit": {"findings": [{"code": "HH2001", "path": ["name"]}]},
+            }
+        ],
+    }
+    markdown, pdf = write_reports(
+        report, tmp_path / "report", publication=Publication(tmp_path, "https://github.com/example/charts", "main")
+    )
+    text = markdown.read_text()
+    assert "#### E001 ([HH1101](<#hh1101---invalid-yaml-in-rendered-output>))" in text
+    assert "[HH2001](<#hh2001---undocumented-values-path>)" in text
+    assert text.index(f"## {APPENDIX_TITLE}") > text.index("### readable-chart")
+    assert "Default severity: **error**" in text
+    content = pdf.read_bytes()
+    objects = dict(re.findall(rb"(\d+) 0 obj\s*(.*?)\s*endobj", content, re.DOTALL))
+    pages = [number for number, body in objects.items() if b"/Type /Page\n" in body]
+    definition = next(body for body in objects.values() if b"/Title (HH1101 - Invalid YAML in rendered output)" in body)
+    target = re.search(rb"/Dest \[ (\d+) 0 R", definition)
+    assert target is not None and target[1] == pages[-1]
+    assert sum(b"/Subtype /Link" in body and b"/Dest [ " + target[1] + b" 0 R" in body for body in objects.values()) >= 4
+    streams = []
+    for body in objects.values():
+        if b"/Filter [ /ASCII85Decode /FlateDecode ]" in body and (match := re.search(rb"stream\s*\n(.*?)endstream", body, re.DOTALL)):
+            streams.append(zlib.decompress(base64.a85decode(match[1].strip(), adobe=True)))
+    drawn = b"\n".join(streams)
+    assert re.search(rb"/F\d+ 12 Tf[^\n]*\(readable-chart\)", drawn)
+    assert re.search(rb"/F\d+ 10 Tf[^\n]*\(E001 ", drawn)
+    assert re.search(rb"/F\d+ 8 Tf", drawn)

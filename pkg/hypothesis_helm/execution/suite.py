@@ -40,6 +40,7 @@ from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format
+from hypothesis_helm.reporting.provenance import trace_run
 from hypothesis_helm.schemas.selectors import chart_identity, source_identity
 
 
@@ -339,6 +340,7 @@ def run_suite(
                 source=str(provenance.get("source", source_identity(chart_path))),
                 defaults=defaults,
             )
+        trace_run(report, finished_epoch=time.time())
         temporary = results / f"report.{uuid4().hex}.tmp"
         temporary.write_text(json.dumps(report, indent=2) + "\n")
         temporary.replace(results / "report.json")

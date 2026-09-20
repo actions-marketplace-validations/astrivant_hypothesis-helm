@@ -12,7 +12,7 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.charts.repositories.repository import remote_name, run_git
+from hypothesis_helm.charts.repositories.repository import local_provenance, remote_name, run_git
 from hypothesis_helm.cli import main
 
 
@@ -75,6 +75,19 @@ def test_remote_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: py
         capture_output=True,
     )
     revision = subprocess.check_output(["git", "-C", str(origin), "rev-parse", "HEAD"], text=True).strip()
+    subprocess.run(["git", "-C", str(origin), "remote", "add", "origin", url], check=True, capture_output=True)
+    local = local_provenance(chart)
+    assert local == {
+        "kind": "git",
+        "url": "https://github.com/example/charts",
+        "revision": revision,
+        "path": "nested/demo",
+        "chart_paths": ["."],
+    }
+    untracked = origin / "temporary-chart"
+    untracked.mkdir()
+    (untracked / "Chart.yaml").write_text((chart / "Chart.yaml").read_text())
+    assert local_provenance(untracked) == {}
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{origin.as_uri()}.insteadOf")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", url)
@@ -125,6 +138,9 @@ def test_remote_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: py
     assert roots and not roots[0].exists()
     markdown = next((tmp_path / "docs/reports").glob("charts_*_report.md"))
     assert url in markdown.read_text() and revision in markdown.read_text()
+    destination = f"https://github.com/example/charts/tree/{revision}/nested/demo"
+    assert f"### [nested/demo](<{destination}>)" in markdown.read_text()
+    assert destination.encode() in markdown.with_suffix(".pdf").read_bytes()
     assert markdown.with_suffix(".pdf").exists()
     assert list((tmp_path / "artifacts").glob("charts_*/checkout.txt"))
 

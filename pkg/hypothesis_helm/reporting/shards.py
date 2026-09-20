@@ -16,6 +16,7 @@ from tempfile import TemporaryDirectory
 from hypothesis_helm.findings.severity import junit_attributes
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.errors import chart_errors
+from hypothesis_helm.reporting.provenance import finish_epoch
 from hypothesis_helm.reporting.repository import write_reports
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -223,8 +224,13 @@ def aggregate(inputs: list[Path], total: int, run_id: str, output: Path | None =
             "run_id": run_id,
             "input_digest": identity,
             "started_epoch": min(float(str(item["started_epoch"])) for item in records),
-            "elapsed_seconds": max(float(str(item["started_epoch"])) + float(str(item["elapsed_seconds"])) for item in records)
-            - min(float(str(item["started_epoch"])) for item in records),
+            "finished_epoch": max(finish_epoch(item) for item in records),
+            "finish_time_source": "recorded-shards"
+            if all(
+                "finished_epoch" in item and not str(item.get("finish_time_source", "recorded")).startswith("derived") for item in records
+            )
+            else "derived-shard-timings",
+            "elapsed_seconds": max(finish_epoch(item) for item in records) - min(float(str(item["started_epoch"])) for item in records),
             "scan_status": "completed" if status in (0, 1) else "incomplete",
             "discovery_complete": True,
             "unstarted_charts": 0,

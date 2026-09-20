@@ -119,21 +119,34 @@ def verify(binary: Path, profiles: dict[str, object], owner: Processes) -> dict[
     return {"cases": len(cases), "corpus_sha256": hashlib.sha256(corpus.encode()).hexdigest(), "status": "passed"}
 
 
-def destinations(source: Path, extracted: dict[str, object]) -> dict[str, object]:
+def destinations(source: Path, extracted: dict[str, object], *, reviewed: list[dict[str, object]] | None = None) -> dict[str, object]:
     """
     Follow OpenAPI references to exact resource fields with exportable source constraints.
 
     Args:
         source (Path): Pinned Kubernetes checkout.
         extracted (dict[str, object]): Parsed Go annotations and primitive validators.
+        reviewed (list[dict[str, object]] | None): Supplemental rules bound to exact API types and fields.
 
     Returns:
         dict[str, object]: Resource identities mapped to field paths and their constraint evidence.
     """
     document = mapping(json.loads((source / "api/openapi-spec/swagger.json").read_text()))
     definitions = mapping(document["definitions"])
-    fields = mapping(extracted["fields"])
+    fields = dict(mapping(extracted["fields"]))
     profiles = mapping(extracted["profiles"])
+    for row in reviewed or []:
+        identity = str(row["type_field"])
+        owner, name = identity.rsplit("/", 1)
+        properties = mapping(mapping(definitions.get(owner, {})).get("properties", {}))
+        if name not in properties:
+            raise ValueError(f"Reviewed API field missing for {row['id']}: {identity}; review its binding before rebuilding")
+        if mapping(properties[name]).get("description") != row["description"]:
+            raise ValueError(f"Source description changed for {row['id']} at {identity}; review its domain before rebuilding")
+        fields[identity] = [
+            *sequence(fields.get(identity, [])),
+            {"schema": row["schema"], "reviewed": row["id"], "type_field": identity, "reference": row["reference"]},
+        ]
     resources: dict[str, object] = {}
     for type_name, raw in sorted(definitions.items()):
         root = mapping(raw)
@@ -178,7 +191,8 @@ def destinations(source: Path, extracted: dict[str, object]) -> dict[str, object
                     # Upstream nullable scalar fields are still intersected with the chart's own type.
                     if "type" in schema:
                         kinds = schema["type"]
-                        schema["type"] = [kinds, "null"] if isinstance(kinds, str) else [*sequence(kinds), "null"]
+                        nullable = [kinds] if isinstance(kinds, str) else list(sequence(kinds))
+                        schema["type"] = nullable if "null" in nullable else [*nullable, "null"]
                     target["/".join((*path, field))] = {"schema": schema, "evidence": rules}
                 walk(child, (*path, field), "", ancestry)
             if isinstance(node.get("items"), dict):
@@ -224,5 +238,6 @@ def rebuild(source: Path, cache: Path, go: str = "go", *, offline: bool = False)
             result["verification"] = verify(tool, mapping(result["profiles"]), owner)
     finally:
         owner.stop()
-    result.update(version=VERSION, revision=REVISION, repository=REPOSITORY, resources=destinations(source, result))
+    reviewed = [mapping(row) for row in sequence(json.loads((Path(__file__).with_name("data") / "reviewed-domains.json").read_text()))]
+    result.update(version=VERSION, revision=REVISION, repository=REPOSITORY, resources=destinations(source, result, reviewed=reviewed))
     return result

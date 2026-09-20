@@ -180,13 +180,8 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
         if node.get("format") in {"int32", "int64"}:
             bits = int(str(node["format"])[3:])
             result = intersect(result, {"minimum": -(2 ** (bits - 1)), "maximum": 2 ** (bits - 1) - 1})
-        # Reviewed descriptions supplement upstream gaps only when the description still matches.
+        # Only the version-matched catalog establishes exact API destinations for supplements.
         if identity not in custom:
-            for item in sequence(catalog["reviewed"]):
-                review = mapping(item)
-                if node.get("description") == review["description"]:
-                    result = intersect(result, mapping(review["schema"]))
-                    source += f"+reviewed:{review['id']}"
             if catalog.get("version") == live.get("version"):
                 record_id = mapping(mapping(catalog["resources"]).get(identity, {})).get("/".join(path))
                 if record_id is not None:

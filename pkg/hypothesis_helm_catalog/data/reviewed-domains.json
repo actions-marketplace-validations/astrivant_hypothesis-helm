@@ -1,6 +1,7 @@
 [
   {
     "id": "containerport.containerPort",
+    "type_field": "io.k8s.api.core.v1.ContainerPort/containerPort",
     "file": "containerport.json",
     "path": [
       "containerPort"
@@ -14,6 +15,7 @@
   },
   {
     "id": "secretvolumesource.secretName",
+    "type_field": "io.k8s.api.core.v1.SecretVolumeSource/secretName",
     "file": "secretvolumesource.json",
     "path": [
       "secretName"
@@ -31,6 +33,7 @@
   },
   {
     "id": "secretkeyselector.name",
+    "type_field": "io.k8s.api.core.v1.SecretKeySelector/name",
     "file": "secretkeyselector.json",
     "path": [
       "name"
@@ -48,6 +51,7 @@
   },
   {
     "id": "deploymentspec.replicas",
+    "type_field": "io.k8s.api.apps.v1.DeploymentSpec/replicas",
     "file": "deploymentspec.json",
     "path": [
       "replicas"
@@ -60,6 +64,7 @@
   },
   {
     "id": "serviceport.protocol",
+    "type_field": "io.k8s.api.core.v1.ServicePort/protocol",
     "file": "serviceport.json",
     "path": [
       "protocol"
@@ -77,6 +82,7 @@
   },
   {
     "id": "podspec.restartPolicy",
+    "type_field": "io.k8s.api.core.v1.PodSpec/restartPolicy",
     "file": "podspec.json",
     "path": [
       "restartPolicy"
@@ -94,6 +100,7 @@
   },
   {
     "id": "volumemount.mountPath",
+    "type_field": "io.k8s.api.core.v1.VolumeMount/mountPath",
     "file": "volumemount.json",
     "path": [
       "mountPath"
@@ -104,8 +111,7 @@
         "string",
         "null"
       ],
-      "minLength": 1,
-      "pattern": "^[^:]+$"
+      "minLength": 1
     },
     "reference": "https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#volumes-1"
   }

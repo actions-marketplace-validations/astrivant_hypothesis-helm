@@ -5,13 +5,90 @@ Resolve published report links and render linked prose in PDF paragraphs.
 import re
 from collections.abc import Iterator
 from html import escape
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote, unquote, urlsplit
 
 from attrs import frozen
 
 LINK = re.compile(r"\[([^\]]+)\]\((?:<([^>]+)>|([^\s)]+))\)")
 CODE = re.compile(r"(`+)(.*?)\1(?!`)")
+
+
+def web_url(value: object) -> str | None:
+    """
+    Accept shareable HTTPS destinations without exposing embedded credentials.
+
+    Args:
+        value (object): Optional recorded source or artifact URL.
+
+    Returns:
+        str | None: HTTPS URL, or None for local paths and unusable destinations.
+    """
+    if not isinstance(value, str) or any(ord(char) < 32 for char in value):
+        return None
+    try:
+        parsed = urlsplit(value)
+        if parsed.scheme == "https" and parsed.hostname and not parsed.username and not parsed.password:
+            return quote(value, safe="/:?#[]@!$&'()*+,;=%-._~")
+    except ValueError:
+        pass
+    return None
+
+
+def repository_url(value: object) -> str | None:
+    """
+    Convert supported Git clone URLs to credential-free repository browser URLs.
+
+    Args:
+        value (object): HTTPS, SSH, or SCP-style Git remote.
+
+    Returns:
+        str | None: GitHub, GitLab, or Bitbucket browser root, when recognized.
+    """
+    if not isinstance(value, str):
+        return None
+    scp = re.fullmatch(r"[\w.-]+@([\w.-]+):(.+)", value)
+    if scp:
+        value = f"https://{scp[1]}/{scp[2]}"
+    if value.startswith("ssh://"):
+        try:
+            parsed = urlsplit(value)
+            if parsed.password or parsed.port not in (None, 22) or parsed.query or parsed.fragment:
+                return None
+            value = f"https://{parsed.hostname}{parsed.path}"
+        except ValueError:
+            return None
+    url = web_url(value)
+    if url is None:
+        return None
+    parsed = urlsplit(url)
+    if parsed.hostname not in {"github.com", "gitlab.com", "bitbucket.org"} or parsed.query or parsed.fragment:
+        return None
+    return url.rstrip("/").removesuffix(".git")
+
+
+def chart_source_url(chart: dict[str, object], source: dict[str, object]) -> str | None:
+    """
+    Link a chart to its recorded Git revision or its declared source URL.
+
+    Args:
+        chart (dict[str, object]): Chart-relative path and optional declared source.
+        source (dict[str, object]): Recorded repository URL, revision, and optional scan-root subdirectory.
+
+    Returns:
+        str | None: Chart source URL without guessing a repository branch or Helm registry layout.
+    """
+    repository = repository_url(source.get("url")) if source.get("kind") != "helm" else None
+    revision = source.get("revision")
+    path = PurePosixPath(str(source.get("path", "."))) / str(chart["chart"])
+    tracked = source.get("chart_paths")
+    present = tracked is None or isinstance(tracked, list) and chart["chart"] in tracked
+    if repository and revision and present and not path.is_absolute() and ".." not in path.parts:
+        host = urlsplit(repository).hostname
+        route = "-/tree" if host == "gitlab.com" else "src" if host == "bitbucket.org" else "tree"
+        suffix = "" if path == PurePosixPath(".") else "/" + quote(path.as_posix(), safe="/")
+        return f"{repository}/{route}/{quote(str(revision), safe='')}{suffix}"
+    return web_url(chart.get("source_url"))
 
 
 def link_matches(line: str) -> Iterator[re.Match[str]]:

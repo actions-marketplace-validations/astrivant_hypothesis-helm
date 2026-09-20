@@ -1,5 +1,5 @@
 """
-Rebuild reproducible destination domains from pinned schemas and reviewed descriptions.
+Rebuild reproducible destination domains from pinned schemas and exact API field bindings.
 """
 
 import argparse
@@ -72,25 +72,23 @@ def scalar_domain(node: dict[str, object]) -> dict[str, object]:
 
 def build(directory: Path, version: str, *, upstream: dict[str, object] | None = None) -> dict[str, object]:
     """
-    Extract scalar bounds and attach reviewed rules only to matching source descriptions.
+    Extract scalar bounds and merge supplements resolved through upstream API type references.
 
     Args:
         directory (Path): Standalone strict Kubernetes schema snapshot.
         version (str): Kubernetes version represented by the snapshot.
-        upstream (dict[str, object] | None): Verified constraints extracted from matching Kubernetes Go sources.
+        upstream (dict[str, object] | None): Source constraints and reviewed supplements at exact destinations; omit for schema bounds only.
 
     Returns:
         dict[str, object]: Deterministic catalog, with source hashes and review provenance.
     """
     reviewed = [mapping(row) for row in sequence(json.loads((DATA / "reviewed-domains.json").read_text()))]
-    by_description: dict[str, dict[str, object]] = {}
     for row in reviewed:
         node = mapping(json.loads((directory / str(row["file"])).read_text()))
         for key in sequence(row["path"]):
             node = mapping(mapping(node["properties"])[str(key)])
         if node.get("description") != row["description"]:
             raise ValueError(f"Source description changed for {row['id']}; review its domain before rebuilding")
-        by_description[str(row["description"])] = row
     domains: dict[str, object] = {}
     resources: dict[str, object] = {}
     sources: dict[str, str] = {}
@@ -120,10 +118,6 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
                 bits = int(str(node["format"])[3:])
                 schema = intersect(schema, {"minimum": -(2 ** (bits - 1)), "maximum": 2 ** (bits - 1) - 1})
                 origins.append(str(node["format"]))
-            review = by_description.get(str(node.get("description", "")))
-            if review:
-                schema = intersect(schema, mapping(review["schema"]))
-                origins.append(str(review["id"]))
             if schema:
                 record = {"schema": schema, "sources": origins}
                 key = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()[:20]
@@ -164,9 +158,14 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
             for path, raw_rule in mapping(raw).items():
                 rule = mapping(raw_rule)
                 previous = mapping(domains[str(projected_paths[path])]) if path in projected_paths else {"schema": {}, "sources": []}
+                evidence = [mapping(item) for item in sequence(rule["evidence"])]
+                origins = list(sequence(previous["sources"]))
+                origins.extend(str(item["reviewed"]) for item in evidence if "reviewed" in item)
+                if any("reviewed" not in item for item in evidence):
+                    origins.append(f"kubernetes-go:{upstream['revision']}")
                 record = {
                     "schema": intersect(mapping(previous["schema"]), mapping(rule["schema"])),
-                    "sources": [*sequence(previous["sources"]), f"kubernetes-go:{upstream['revision']}"],
+                    "sources": origins,
                     "evidence": rule["evidence"],
                 }
                 key = hashlib.sha256(json.dumps(record, sort_keys=True).encode()).hexdigest()[:20]

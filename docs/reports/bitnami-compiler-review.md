@@ -12,6 +12,16 @@
   - [airflow](#airflow)
   - [apache](#apache)
   - [apisix](#apisix)
+- [Appendix: finding codes](#appendix-finding-codes)
+  - [HH1001 - Unclassified template failure](#hh1001---unclassified-template-failure)
+  - [HH1101 - Invalid YAML in rendered output](#hh1101---invalid-yaml-in-rendered-output)
+  - [HH1105 - Missing resource name](#hh1105---missing-resource-name)
+  - [HH2001 - Undocumented values path](#hh2001---undocumented-values-path)
+  - [HH2004 - No supplied default for a values path](#hh2004---no-supplied-default-for-a-values-path)
+  - [HH2006 - Opaque object schema](#hh2006---opaque-object-schema)
+  - [HH3001 - Template accesses a missing object](#hh3001---template-accesses-a-missing-object)
+  - [HH3002 - Incompatible value type in template](#hh3002---incompatible-value-type-in-template)
+  - [HH3003 - Undefined named template](#hh3003---undefined-named-template)
 <!-- toc:end -->
 
 ## Overview
@@ -28,6 +38,9 @@ Git comparison: HEAD^ (ba7b5abc108e60d97302618dbcf21b2dc7d0b924); 0 cached chart
 
 Directory: /Users/emmadoyle/projects/personal/hypothesis-helm/.cache/bitnami-compiler-review-1789844100/charts
 Started (Unix epoch): 1789844180
+Started (UTC): 2026-09-19T18:56:20.000+00:00
+Finished (UTC): 2026-09-19T19:09:18.486+00:00 (estimated from recorded timing)
+Run fingerprint (SHA-256): `08b4a9e8f9b99dd8be1bc87c1c8cb89e5f6a99891208f9fc09eb1ebf4d5a3097`
 Elapsed (wall clock): 778.49 seconds
 Chart testing: 777.82 seconds
 Dependency preparation: 0.00 seconds (excluded from testing budgets)
@@ -52,7 +65,7 @@ Complete settings are retained in the JSON report.
 Generated values use the configured input domains and any supported destination constraints. Coverage excludes inputs outside these domains;
 supplied defaults are tested unchanged. The JSON report records constraints and unresolved mappings.
 
-Disabled checks: HH2006
+Disabled checks: [HH2006](#hh2006---opaque-object-schema)
 
 ## Errors
 
@@ -64,7 +77,7 @@ Selected fields identify the inputs varied by the test. Causal attribution requi
 
 ## Charts
 
-### airflow
+### [airflow](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow>)
 
 Overview cell: 01
 
@@ -72,17 +85,17 @@ Status: time-limit | Attempts: 341
 
 Audit findings: 1282. Full paths and template references are retained in the JSON report.
 
-- `HH2001` at `$[*][*]`: Undocumented values path
-- `HH2004` at `$[*][*]`: No supplied default for a values path
-- `HH2001` at `$[*][*][*]`: Undocumented values path
-- `HH2004` at `$[*][*][*]`: No supplied default for a values path
-- `HH2001` at `$[*][*][*][*]`: Undocumented values path
-- `HH2004` at `$[*][*][*][*]`: No supplied default for a values path
+- [HH2001](#hh2001---undocumented-values-path) at `$[*][*]`: Undocumented values path
+- [HH2004](#hh2004---no-supplied-default-for-a-values-path) at `$[*][*]`: No supplied default for a values path
+- [HH2001](#hh2001---undocumented-values-path) at `$[*][*][*]`: Undocumented values path
+- [HH2004](#hh2004---no-supplied-default-for-a-values-path) at `$[*][*][*]`: No supplied default for a values path
+- [HH2001](#hh2001---undocumented-values-path) at `$[*][*][*][*]`: Undocumented values path
+- [HH2004](#hh2004---no-supplied-default-for-a-values-path) at `$[*][*][*][*]`: No supplied default for a values path
 - 1276 additional audit findings in JSON.
 
 [Chart artifacts](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0000>)
 
-### apache
+### [apache](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apache>)
 
 Overview cell: 02
 
@@ -90,15 +103,15 @@ Status: failed | Attempts: 3916
 
 Audit findings: 270. Full paths and template references are retained in the JSON report.
 
-- `HH2001` at `$.affinity`: Undocumented values path
-- `HH2001` at `$.args`: Undocumented values path
-- `HH2001` at `$.automountServiceAccountToken`: Undocumented values path
-- `HH2001` at `$.autoscaling.enabled`: Undocumented values path
-- `HH2001` at `$.autoscaling.maxReplicas`: Undocumented values path
-- `HH2001` at `$.autoscaling.minReplicas`: Undocumented values path
+- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path
+- [HH2001](#hh2001---undocumented-values-path) at `$.args`: Undocumented values path
+- [HH2001](#hh2001---undocumented-values-path) at `$.automountServiceAccountToken`: Undocumented values path
+- [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.enabled`: Undocumented values path
+- [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.maxReplicas`: Undocumented values path
+- [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.minReplicas`: Undocumented values path
 - 264 additional audit findings in JSON.
 
-#### E001 (HH1001)
+#### E001 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -115,7 +128,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/672041fcfe26907bc14c>)
 
-#### E002 (HH1001)
+#### E002 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -140,7 +153,7 @@ Absent from overrides: $.extraDeploy["*"]. Defaults may still apply.
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/fbfea8b96e1bf6abb6fc>)
 
-#### E003 (HH1001)
+#### E003 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -164,7 +177,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/7a010717afb4691aaeb8>)
 
-#### E004 (HH1001)
+#### E004 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -188,7 +201,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/da628aa79e50e022e4ff>)
 
-#### E005 (HH1001)
+#### E005 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -208,7 +221,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/2442d14cba32517cdd3b>)
 
-#### E006 (HH1001)
+#### E006 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -238,7 +251,7 @@ Changed overrides (used together):
 
 1 additional occurrences are retained in the JSON report and chart artifacts.
 
-#### E007 (HH1001)
+#### E007 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -266,7 +279,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/a8d13bfa12806deaf76c>)
 
-#### E008 (HH1001)
+#### E008 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -287,7 +300,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/488624c1bd95bbae6f8b>)
 
-#### E009 (HH1001)
+#### E009 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -308,7 +321,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/4c4a07eb1c5214b3a409>)
 
-#### E010 (HH1001)
+#### E010 ([HH1001](#hh1001---unclassified-template-failure))
 
 **Unclassified template failure** (unclassified / diagnostic). Inspect the Helm diagnostic and reproducer; the exit alone does not establish
 a chart defect.
@@ -329,7 +342,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/3f7165f1837241716c3c>)
 
-#### E011 (HH1101)
+#### E011 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -355,7 +368,7 @@ Changed overrides (used together):
 
 2 additional occurrences are retained in the JSON report and chart artifacts.
 
-#### E012 (HH1101)
+#### E012 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -372,7 +385,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/57504c968732d9714f10>)
 
-#### E013 (HH1101)
+#### E013 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -396,7 +409,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/95d9e80fea15aed87f2a>)
 
-#### E014 (HH1101)
+#### E014 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -413,7 +426,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/be14993fbd1c228c36ce>)
 
-#### E015 (HH1101)
+#### E015 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -439,7 +452,7 @@ Changed overrides (used together):
 
 1 additional occurrences are retained in the JSON report and chart artifacts.
 
-#### E016 (HH1101)
+#### E016 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -465,7 +478,7 @@ Changed overrides (used together):
 
 4 additional occurrences are retained in the JSON report and chart artifacts.
 
-#### E017 (HH1101)
+#### E017 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -489,7 +502,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/7e365cc9986c8fb6c4ad>)
 
-#### E018 (HH1101)
+#### E018 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -506,7 +519,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/10293d402dd6d1dd34f5>)
 
-#### E019 (HH1101)
+#### E019 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -523,7 +536,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/0ce120cfa523ba37df61>)
 
-#### E020 (HH1101)
+#### E020 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -540,7 +553,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/fcc268f7f5d701449828>)
 
-#### E021 (HH1101)
+#### E021 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -563,7 +576,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/07d4854a45a9e7c1eb04>)
 
-#### E022 (HH1101)
+#### E022 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -588,7 +601,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/60903c8f6383b493cf31>)
 
-#### E023 (HH1101)
+#### E023 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -604,7 +617,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/6e931799d09f8182f34b>)
 
-#### E024 (HH1101)
+#### E024 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -620,7 +633,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/12b3c4a215648c1d6dd7>)
 
-#### E025 (HH1101)
+#### E025 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -645,7 +658,7 @@ Changed overrides (used together):
 
 2 additional occurrences are retained in the JSON report and chart artifacts.
 
-#### E028 (HH1105)
+#### E028 ([HH1105](#hh1105---missing-resource-name))
 
 **Missing resource name** (manifest / violation). Provide a name in each resource branch; ignore this check if your workflow intentionally
 uses generated names.
@@ -680,7 +693,7 @@ Manifest changes from rendered defaults (document and list order preserved):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/e2f7761f901d86846684>)
 
-#### E029 (HH3001)
+#### E029 ([HH3001](#hh3001---template-accesses-a-missing-object))
 
 **Template accesses a missing object** (template / violation). Guard or default the parent object, or require it in the values schema.
 
@@ -697,7 +710,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/94ed38bb417a953196c3>)
 
-#### E030 (HH3002)
+#### E030 ([HH3002](#hh3002---incompatible-value-type-in-template))
 
 **Incompatible value type in template** (template / violation). Align the template operation with the accepted input types, or narrow the
 schema.
@@ -715,7 +728,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001/paths/835d62e0a3e46b72c904>)
 
-#### E031 (HH3003)
+#### E031 ([HH3003](#hh3003---undefined-named-template))
 
 **Undefined named template** (template / violation). Check the helper name, its definition and dependency availability.
 
@@ -740,7 +753,7 @@ Changed overrides (used together):
 
 [Chart artifacts](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0001>)
 
-### apisix
+### [apisix](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apisix>)
 
 Overview cell: 03
 
@@ -748,15 +761,15 @@ Status: failed | Attempts: 261
 
 Audit findings: 410. Full paths and template references are retained in the JSON report.
 
-- `HH2001` at `$[*][*]`: Undocumented values path
-- `HH2004` at `$[*][*]`: No supplied default for a values path
-- `HH2001` at `$[*][*][*]`: Undocumented values path
-- `HH2004` at `$[*][*][*]`: No supplied default for a values path
-- `HH2001` at `$[*][*][*][*]`: Undocumented values path
-- `HH2004` at `$[*][*][*][*]`: No supplied default for a values path
+- [HH2001](#hh2001---undocumented-values-path) at `$[*][*]`: Undocumented values path
+- [HH2004](#hh2004---no-supplied-default-for-a-values-path) at `$[*][*]`: No supplied default for a values path
+- [HH2001](#hh2001---undocumented-values-path) at `$[*][*][*]`: Undocumented values path
+- [HH2004](#hh2004---no-supplied-default-for-a-values-path) at `$[*][*][*]`: No supplied default for a values path
+- [HH2001](#hh2001---undocumented-values-path) at `$[*][*][*][*]`: Undocumented values path
+- [HH2004](#hh2004---no-supplied-default-for-a-values-path) at `$[*][*][*][*]`: No supplied default for a values path
 - 404 additional audit findings in JSON.
 
-#### E026 (HH1101)
+#### E026 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -773,7 +786,7 @@ Changed overrides (used together):
 
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0002/paths/aaadbc44a6ff4d313d85>)
 
-#### E027 (HH1101)
+#### E027 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
 
 **Invalid YAML in rendered output** (manifest / violation). Inspect the failing YAML and template interpolation, including quoting and
 indentation.
@@ -791,3 +804,82 @@ Changed overrides (used together):
 [Full input and diagnostic](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0002/paths/98c9de7170b4f8fa32cd>)
 
 [Chart artifacts](<../../.cache/bitnami-compiler-review-1789844100/artifacts/charts_1789844180/0002>)
+
+## Appendix: finding codes
+
+HH codes identify finding categories. E001-style numbers identify individual diagnostics within this report.
+Severities below are defaults; configured overrides are shown with the findings above.
+
+### HH1001 - Unclassified template failure
+
+Default severity: **error** | Category: unclassified | Evidence type: diagnostic
+
+Helm template exits unsuccessfully without a recognized diagnostic.
+
+Suggested action: Inspect the Helm diagnostic and reproducer; the exit alone does not establish a chart defect.
+
+### HH1101 - Invalid YAML in rendered output
+
+Default severity: **error** | Category: manifest | Evidence type: violation
+
+The YAML parser rejects rendered output, or Helm reports a YAML parse error.
+
+Suggested action: Inspect the failing YAML and template interpolation, including quoting and indentation.
+
+### HH1105 - Missing resource name
+
+Default severity: **error** | Category: manifest | Evidence type: violation
+
+The resource fails the tool's nonempty metadata.name contract.
+
+Suggested action: Provide a name in each resource branch; ignore this check if your workflow intentionally uses generated names.
+
+### HH2001 - Undocumented values path
+
+Default severity: **warning** | Category: values | Evidence type: warning
+
+The audit finds a values path with no matching schema declaration.
+
+Suggested action: Document the path in values.schema.json, including its accepted values.
+
+### HH2004 - No supplied default for a values path
+
+Default severity: **warning** | Category: values | Evidence type: warning
+
+A discovered path is absent from the original values file.
+
+Suggested action: Supply a default or document when users must provide the field. Render the relevant configurations to check its
+requirements.
+
+### HH2006 - Opaque object schema
+
+Default severity: **warning** | Category: values | Evidence type: warning
+
+An object permits unspecified entries without named fields, patterned fields or a typed map-value schema.
+
+Suggested action: Describe fields with properties, patternProperties or typed additionalProperties. Ignore
+[HH2006](#hh2006---opaque-object-schema) for intentional free-form configuration; tests still sample those values.
+
+### HH3001 - Template accesses a missing object
+
+Default severity: **error** | Category: template | Evidence type: violation
+
+Helm reports a nil pointer while evaluating a template field.
+
+Suggested action: Guard or default the parent object, or require it in the values schema.
+
+### HH3002 - Incompatible value type in template
+
+Default severity: **error** | Category: template | Evidence type: violation
+
+Helm reports a wrong value type, a field unavailable on a type, or an unsupported range operand.
+
+Suggested action: Align the template operation with the accepted input types, or narrow the schema.
+
+### HH3003 - Undefined named template
+
+Default severity: **error** | Category: template | Evidence type: violation
+
+Helm reports that a called named template is not defined.
+
+Suggested action: Check the helper name, its definition and dependency availability.

@@ -56,6 +56,8 @@
   - [charts/prometheus-to-sd](#chartsprometheus-to-sd)
   - [charts/prometheus-windows-exporter](#chartsprometheus-windows-exporter)
   - [charts/prometheus-yet-another-cloudwatch-exporter](#chartsprometheus-yet-another-cloudwatch-exporter)
+- [Appendix: finding codes](#appendix-finding-codes)
+  - [HH2006 - Opaque object schema](#hh2006---opaque-object-schema)
 
 </details>
 <!-- toc:end -->
@@ -74,6 +76,9 @@ Git comparison: HEAD^ (b2c38cff79e9f432a6194223beb1b172e8b7667f); 0 cached chart
 
 Directory: /Users/emmadoyle/projects/personal/hypothesis-helm/third_party/prometheus-community-helm-charts
 Started (Unix epoch): 1789747367
+Started (UTC): 2026-09-18T16:02:47.000+00:00
+Finished (UTC): 2026-09-18T16:02:48.774+00:00 (estimated from recorded timing)
+Run fingerprint (SHA-256): `354ef379ee03ce68d434adca84c81694734ebd7b69d2f6e9e404b3daf8069b3e`
 Elapsed (wall clock): 1.77 seconds
 Chart testing: 1.38 seconds
 Dependency preparation: 0.14 seconds (excluded from testing budgets)
@@ -98,7 +103,7 @@ Complete settings are retained in the JSON report.
 Generated values use the configured input domains and any supported destination constraints. Coverage excludes inputs outside these domains;
 supplied defaults are tested unchanged. The JSON report records constraints and unresolved mappings.
 
-Disabled checks: HH2006
+Disabled checks: [HH2006](#hh2006---opaque-object-schema)
 
 ## Errors
 
@@ -110,7 +115,7 @@ Selected fields identify the inputs varied by the test. Causal attribution requi
 
 ## Charts
 
-### charts/alertmanager
+### [charts/alertmanager](<https://github.com/prometheus-community/helm-charts/tree/main/charts/alertmanager>)
 
 Overview cell: 01
 
@@ -126,7 +131,7 @@ Phase: chart | Status: error
 
 No triggering values were recorded for this diagnostic.
 
-### charts/alertmanager-snmp-notifier
+### [charts/alertmanager-snmp-notifier](<https://github.com/prometheus-community/helm-charts/tree/main/charts/alertmanager-snmp-notifier>)
 
 Overview cell: 02
 
@@ -142,266 +147,280 @@ Phase: chart | Status: interrupted
 
 No triggering values were recorded for this diagnostic.
 
-### charts/jiralert
+### [charts/jiralert](<https://github.com/prometheus-community/helm-charts/tree/main/charts/jiralert>)
 
 Overview cell: 03
 
 Status: pending | Attempts: N/A
 
-### charts/kube-prometheus-stack
+### [charts/kube-prometheus-stack](<https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack>)
 
 Overview cell: 04
 
 Status: pending | Attempts: N/A
 
-### charts/kube-prometheus-stack/charts/crds
+### [charts/kube-prometheus-stack/charts/crds](<https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack/charts/crds>)
 
 Overview cell: 05
 
 Status: pending | Attempts: N/A
 
-### charts/kube-state-metrics
+### [charts/kube-state-metrics](<https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-state-metrics>)
 
 Overview cell: 06
 
 Status: pending | Attempts: N/A
 
-### charts/prom-label-proxy
+### [charts/prom-label-proxy](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prom-label-proxy>)
 
 Overview cell: 07
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus
+### [charts/prometheus](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus>)
 
 Overview cell: 08
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-adapter
+### [charts/prometheus-adapter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-adapter>)
 
 Overview cell: 09
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-blackbox-exporter
+### [charts/prometheus-blackbox-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-blackbox-exporter>)
 
 Overview cell: 10
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-cloudwatch-exporter
+### [charts/prometheus-cloudwatch-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-cloudwatch-exporter>)
 
 Overview cell: 11
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-conntrack-stats-exporter
+### [charts/prometheus-conntrack-stats-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-conntrack-stats-exporter>)
 
 Overview cell: 12
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-consul-exporter
+### [charts/prometheus-consul-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-consul-exporter>)
 
 Overview cell: 13
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-couchdb-exporter
+### [charts/prometheus-couchdb-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-couchdb-exporter>)
 
 Overview cell: 14
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-druid-exporter
+### [charts/prometheus-druid-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-druid-exporter>)
 
 Overview cell: 15
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-elasticsearch-exporter
+### [charts/prometheus-elasticsearch-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-elasticsearch-exporter>)
 
 Overview cell: 16
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-fastly-exporter
+### [charts/prometheus-fastly-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-fastly-exporter>)
 
 Overview cell: 17
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-ipmi-exporter
+### [charts/prometheus-ipmi-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-ipmi-exporter>)
 
 Overview cell: 18
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-json-exporter
+### [charts/prometheus-json-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-json-exporter>)
 
 Overview cell: 19
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-kafka-exporter
+### [charts/prometheus-kafka-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-kafka-exporter>)
 
 Overview cell: 20
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-memcached-exporter
+### [charts/prometheus-memcached-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-memcached-exporter>)
 
 Overview cell: 21
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-modbus-exporter
+### [charts/prometheus-modbus-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-modbus-exporter>)
 
 Overview cell: 22
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-mongodb-exporter
+### [charts/prometheus-mongodb-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-mongodb-exporter>)
 
 Overview cell: 23
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-mysql-exporter
+### [charts/prometheus-mysql-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-mysql-exporter>)
 
 Overview cell: 24
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-nats-exporter
+### [charts/prometheus-nats-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-nats-exporter>)
 
 Overview cell: 25
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-nginx-exporter
+### [charts/prometheus-nginx-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-nginx-exporter>)
 
 Overview cell: 26
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-node-exporter
+### [charts/prometheus-node-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-node-exporter>)
 
 Overview cell: 27
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-operator-admission-webhook
+### [charts/prometheus-operator-admission-webhook](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-operator-admission-webhook>)
 
 Overview cell: 28
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-operator-crds
+### [charts/prometheus-operator-crds](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-operator-crds>)
 
 Overview cell: 29
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-operator-crds/charts/crds
+### [charts/prometheus-operator-crds/charts/crds](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-operator-crds/charts/crds>)
 
 Overview cell: 30
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-pgbouncer-exporter
+### [charts/prometheus-pgbouncer-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-pgbouncer-exporter>)
 
 Overview cell: 31
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-pingdom-exporter
+### [charts/prometheus-pingdom-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-pingdom-exporter>)
 
 Overview cell: 32
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-pingmesh-exporter
+### [charts/prometheus-pingmesh-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-pingmesh-exporter>)
 
 Overview cell: 33
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-postgres-exporter
+### [charts/prometheus-postgres-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-postgres-exporter>)
 
 Overview cell: 34
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-pushgateway
+### [charts/prometheus-pushgateway](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-pushgateway>)
 
 Overview cell: 35
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-rabbitmq-exporter
+### [charts/prometheus-rabbitmq-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-rabbitmq-exporter>)
 
 Overview cell: 36
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-redis-exporter
+### [charts/prometheus-redis-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-redis-exporter>)
 
 Overview cell: 37
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-smartctl-exporter
+### [charts/prometheus-smartctl-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-smartctl-exporter>)
 
 Overview cell: 38
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-snmp-exporter
+### [charts/prometheus-snmp-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-snmp-exporter>)
 
 Overview cell: 39
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-sql-exporter
+### [charts/prometheus-sql-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-sql-exporter>)
 
 Overview cell: 40
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-stackdriver-exporter
+### [charts/prometheus-stackdriver-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-stackdriver-exporter>)
 
 Overview cell: 41
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-statsd-exporter
+### [charts/prometheus-statsd-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-statsd-exporter>)
 
 Overview cell: 42
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-systemd-exporter
+### [charts/prometheus-systemd-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-systemd-exporter>)
 
 Overview cell: 43
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-to-sd
+### [charts/prometheus-to-sd](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-to-sd>)
 
 Overview cell: 44
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-windows-exporter
+### [charts/prometheus-windows-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-windows-exporter>)
 
 Overview cell: 45
 
 Status: pending | Attempts: N/A
 
-### charts/prometheus-yet-another-cloudwatch-exporter
+### [charts/prometheus-yet-another-cloudwatch-exporter](<https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus-yet-another-cloudwatch-exporter>)
 
 Overview cell: 46
 
 Status: pending | Attempts: N/A
+
+## Appendix: finding codes
+
+HH codes identify finding categories. E001-style numbers identify individual diagnostics within this report.
+Severities below are defaults; configured overrides are shown with the findings above.
+
+### HH2006 - Opaque object schema
+
+Default severity: **warning** | Category: values | Evidence type: warning
+
+An object permits unspecified entries without named fields, patterned fields or a typed map-value schema.
+
+Suggested action: Describe fields with properties, patternProperties or typed additionalProperties. Ignore
+[HH2006](#hh2006---opaque-object-schema) for intentional free-form configuration; tests still sample those values.

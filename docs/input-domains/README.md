@@ -461,13 +461,16 @@ hashes, and unresolved annotations. These comparisons detect translation mistake
 validation rule has been translated.
 
 Exact API type/field bindings connect those primitives to destinations such as `ConfigMapVolumeSource.name`.
-Reviewed descriptions supplement published schema gaps only while their text matches the reviewed source.
+Reviewed supplements also bind to exact API types and fields, followed through OpenAPI references into each resource.
+Descriptions are checked for upstream changes; identical wording on another field never copies a constraint there.
+For example, the `SecretKeySelector.name` rule does not restrict `imagePullSecrets[].name`.
+Mount paths must be nonempty, but the catalog allows Windows drive letters such as `C:\data`; it does not infer a colon ban from the description.
 No bound is inferred solely from a Helm values key's name. Conditional annotations, unsupported types, arbitrary Go validation
 functions and state-dependent rules are not translated. A field with no supported bound remains unconstrained by this catalog;
 users can add an explicit profile or schema.
 
 Source inventories are checked against [kubernetes-source-lock.json](../../pkg/hypothesis_helm_catalog/data/kubernetes-source-lock.json).
-Reviewed prose rules live in [reviewed-domains.json](../../pkg/hypothesis_helm_catalog/data/reviewed-domains.json).
+Reviewed field supplements live in [reviewed-domains.json](../../pkg/hypothesis_helm_catalog/data/reviewed-domains.json).
 Source changes require review; rebuilding does not invent replacements. Identical sources produce identical output without timestamps.
 
 References: [Kubernetes declarative validation](https://kubernetes.io/docs/reference/using-api/declarative-validation/),

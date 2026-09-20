@@ -23,7 +23,7 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.repositories.cache import ChartCache
 from hypothesis_helm.charts.repositories.changes import comparison
 from hypothesis_helm.charts.repositories.registry import prepare_helm_source
-from hypothesis_helm.charts.repositories.repository import RepositorySource, remote_name
+from hypothesis_helm.charts.repositories.repository import RepositorySource, local_provenance, remote_name
 from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
@@ -41,7 +41,9 @@ from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.reporting.budget import execution_timer
 from hypothesis_helm.reporting.errors import chart_errors, deduplicate_errors
+from hypothesis_helm.reporting.links import web_url
 from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.reporting.provenance import trace_run
 from hypothesis_helm.reporting.repository import write_reports
 from hypothesis_helm.rules import ignored, ignored_codes, record_ignored
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -97,6 +99,12 @@ def discover_charts(root: Path, *, deadline: float | None = None) -> list[dict[s
                     if kind not in ("application", "library"):
                         raise ValueError("type must be application or library")
                     record.update(name=name, version=version, kind=kind)
+                    sources = metadata.get("sources", [])
+                    if isinstance(sources, list):
+                        for candidate in sources:
+                            if (url := web_url(candidate)) is not None:
+                                record["source_url"] = url
+                                break
                 except Exception as exc:
                     record.update(status="invalid-metadata", error=str(exc))
                 results.append(record)
@@ -368,6 +376,7 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         int: Scan exit status, including checkout failure or timeout.
     """
     root = source.root
+    provenance = local_provenance(root) if not source.remote else {}
     changes: dict[str, object] = (
         comparison(root, getattr(args, "base_ref", None)) if source.status == "ready" else {"status": "unavailable"}
     )
@@ -650,6 +659,8 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
             "chart_version": args.chart_version,
         },
     }
+    if provenance:
+        report["source"] = provenance
     if source.remote:
         report["source"] = {
             "url": source.location,
@@ -685,6 +696,7 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         else "Git comparison unavailable; no charts skipped using previous test results."
     )
     deduplicate_errors(report)
+    trace_run(report, finished_epoch=time.time())
     (output / "scan.json").write_text(json.dumps(report, indent=2) + "\n")
     if args.report is not None:
         stem = Path(args.report) if args.report else Path("docs/reports") / f"{source.name}_{int(started)}_report"

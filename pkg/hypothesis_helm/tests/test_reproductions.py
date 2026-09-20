@@ -80,7 +80,7 @@ def test_reports_group_errors_and_inputs_by_chart(tmp_path: Path) -> None:
     }
     original = copy.deepcopy(phases)
     markdown, pdf = write_reports(report, tmp_path / "report")
-    first, second = markdown.read_text().split("### first\n", 1)[1].split("### second\n", 1)
+    first, second = markdown.read_text().split("### [first](<first>)\n", 1)[1].split("### [second](<second>)\n", 1)
     assert "incompatible ingress and service" in first and "incompatible ingress and service" in second
     assert "$.ingress.enabled = true" in first
     assert '$.service.type = "ExternalName"' in first
@@ -203,11 +203,12 @@ def test_public_pdf_links(tmp_path: Path) -> None:
     publication = Publication(tmp_path, "https://github.com/example/charts", "main")
     markdown, pdf = write_reports(report, tmp_path / "docs" / "report", publication=publication)
     uris = re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
-    assert len(uris) == 4
+    assert len(uris) == 5
     assert all(uri.startswith(b"https://github.com/example/charts/") for uri in uris)
     assert b"https://github.com/example/charts/blob/main/docs/saved%20inputs/values.json" in uris
     assert b"https://github.com/example/charts/tree/main/docs/saved%20inputs" in uris
     assert all(uri.decode() in markdown.read_text() for uri in uris)
+    assert "### [demo](<https://github.com/example/charts/tree/main/docs/saved%20inputs>)" in markdown.read_text()
     assert str(tmp_path) not in markdown.read_text()
     assert publication.url("#charts", markdown) == "#charts"
     assert publish_links("[Charts](#charts)", markdown, publication) == "[Charts](<#charts>)"

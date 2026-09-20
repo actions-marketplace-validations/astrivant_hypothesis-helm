@@ -14,6 +14,7 @@ from collections import Counter
 from pathlib import Path
 from textwrap import dedent
 
+from hypothesis_helm.charts.repositories.repository import local_provenance
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.traversal import SELECTION_ORDER
@@ -143,7 +144,9 @@ summary.extend(
 result = {
     "title": f"{'Bitnami' if name == 'bitnami' else 'Prometheus Community'} Helm chart scan",
     "directory": metadata["source"],
+    "source": local_provenance(Path(metadata["source"])),
     "started_epoch": started,
+    "finished_epoch": finished,
     "elapsed_seconds": finished - started,
     "testing_seconds": sum(record.get("testing_seconds", 0) for record in records),
     "dependency_preparation_seconds": sum(record.get("dependency_preparation_seconds", 0) for record in records),

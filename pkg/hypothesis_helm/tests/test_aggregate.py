@@ -98,7 +98,34 @@ def test_piped_reports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, encoding
     report = json.loads((output / "report.json").read_text())
     assert report["properties"]["selected"] == report["properties"]["tests"] == 6
     assert report["charts"][0]["elapsed_seconds"] == 2
+    assert report["finished_epoch"] == 1002
+    assert report["finish_time_source"] == "derived-shard-timings"
+    assert report["run_hash"] in (output / "report.md").read_text()
     assert report["artifact_checksums"]["report-overview.png"] == hashlib.sha256((output / "report-overview.png").read_bytes()).hexdigest()
+
+
+def test_aggregate_uses_latest_recorded_shard_finish(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Preserve actual shard finish timestamps when aggregation runs later.
+
+    Args:
+        tmp_path (Path): Final report destination.
+        monkeypatch (pytest.MonkeyPatch): Supply independent shard records through standard input.
+
+    Returns:
+        None: Aggregate timing spans the earliest start through the latest recorded finish.
+    """
+    reports = records()
+    reports[0]["finished_epoch"] = 1003.5
+    reports[1]["finished_epoch"] = 1004.5
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(reports)))
+    output = tmp_path / "final"
+    assert main(["aggregate", "--shards", "2", "--run-id", "pipeline-42-attempt-1", "--output-dir", str(output)]) == 0
+    report = json.loads((output / "report.json").read_text())
+    assert report["finished_epoch"] == 1004.5
+    assert report["finish_time_source"] == "recorded-shards"
+    assert report["elapsed_seconds"] == 4.5
+    assert report["finished_at"] == "1970-01-01T00:16:44.500+00:00"
 
 
 def test_aggregate_counts_distinct_junit_diagnostics(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
