@@ -7,8 +7,8 @@ from collections.abc import Callable
 
 from attrs import frozen
 from hypothesis_helm.charts.model import merge_values
-from hypothesis_helm.execution.sensitivity import SensitivityOrder, mutations
-from hypothesis_helm.execution.traversal import order_configurations
+from hypothesis_helm.execution.planning.sensitivity import SensitivityOrder, mutations
+from hypothesis_helm.execution.planning.traversal import order_configurations
 from hypothesis_helm.schemas.contracts import configuration_key
 
 __all__ = ("Observation", "methods", "replay")

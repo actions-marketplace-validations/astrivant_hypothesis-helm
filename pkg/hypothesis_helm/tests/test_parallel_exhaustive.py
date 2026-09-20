@@ -18,7 +18,7 @@ from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values.yamlio import load_all
 from hypothesis_helm.exceptions.execution import ChartUnavailable
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.replay import Replay
 
 

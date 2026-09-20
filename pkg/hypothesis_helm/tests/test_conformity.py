@@ -14,9 +14,10 @@ import pytest
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.cache import fingerprint
-from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.execution.state.cache import fingerprint
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.schemas import conformity
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -119,6 +120,7 @@ def test_validator_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         None: Strict local-only validation errors fail the property.
     """
     monkeypatch.delenv(conformity.ENVIRONMENT, raising=False)
+    refresh_env()
     before = fingerprint(tmp_path, 0, None, "none")
     conformity.validate("ignored", 1)
     monkeypatch.setenv(
@@ -130,6 +132,7 @@ def test_validator_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
             }
         ),
     )
+    refresh_env()
     assert fingerprint(tmp_path, 0, None, "none") != before
 
     (tmp_path / "configmap-v1.json").write_text(
@@ -177,6 +180,7 @@ def test_render_parses_once_for_schema_validation(
         json.dumps({"type": "object", "properties": {"data": {"type": "object", "additionalProperties": {"type": "string"}}}})
     )
     monkeypatch.setenv(conformity.ENVIRONMENT, json.dumps({"version": "1.35.0", "schemas": str(tmp_path)}))
+    refresh_env()
     output = dedent("""
         apiVersion: v1
         kind: ConfigMap
@@ -273,6 +277,7 @@ def test_cli_validation_scope(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(cli, "prepare", prepare)
     monkeypatch.setattr(cli, "run_suite", run)
     monkeypatch.delenv(conformity.ENVIRONMENT, raising=False)
+    refresh_env()
     arguments = ["run", str(tmp_path), "--validate-schemas", "--schema-version", "1.31.0"]
     assert cli.main(arguments) == 0
     assert conformity.ENVIRONMENT not in os.environ
@@ -297,9 +302,11 @@ def test_memory_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     snapshot.mkdir(parents=True)
     (snapshot / "pod.json").write_text('{"type":"object"}')
     monkeypatch.delenv("HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR", raising=False)
+    refresh_env()
     assert conformity.memory_snapshot(snapshot) == snapshot
     root = tmp_path / "memory"
     monkeypatch.setenv("HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR", str(root))
+    refresh_env()
     monkeypatch.setattr(
         "hypothesis_helm.schemas.conformity.Processes.run", lambda *args, **kwargs: subprocess.CompletedProcess([], 0, "ext4\n")
     )
@@ -316,6 +323,7 @@ def test_memory_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert conformity.memory_snapshot(snapshot) == staged
     assert (staged / "pod.json").stat().st_mtime_ns == timestamp
     monkeypatch.setenv("HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR", str(tmp_path / "full"))
+    refresh_env()
     usage = shutil.disk_usage(tmp_path)
     monkeypatch.setattr(shutil, "disk_usage", lambda _: usage._replace(free=0))
     with pytest.raises(ValueError, match="free bytes"):

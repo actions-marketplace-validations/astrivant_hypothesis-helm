@@ -8,9 +8,9 @@ from textwrap import dedent
 import pytest
 
 from hypothesis_helm.cli import argument_parser
-from hypothesis_helm.execution.estimate import estimate_suite
+from hypothesis_helm.execution.planning.estimate import estimate_suite
+from hypothesis_helm.execution.planning.traversal import order_configurations, order_paths
 from hypothesis_helm.execution.suite import run_suite
-from hypothesis_helm.execution.traversal import order_configurations, order_paths
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 PATHS = [("global",), ("global", "configMaps"), ("service",), ("service", "ports", "*"), ("image", "tag")]

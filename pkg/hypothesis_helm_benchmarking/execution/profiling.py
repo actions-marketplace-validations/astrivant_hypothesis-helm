@@ -15,6 +15,7 @@ from types import FrameType
 from typing import TypeVar
 
 from attrs import asdict, define
+from hypothesis_helm.environment import env
 
 __all__ = ("Frame", "PROFILE_DIRECTORY", "StackProfiler", "capture", "profile_settings")
 
@@ -201,5 +202,5 @@ def profile_settings() -> dict[str, object] | None:
     Returns:
         dict[str, object] | None: Active capture settings, or none for ordinary timing runs.
     """
-    directory = os.environ.get(PROFILE_DIRECTORY)
+    directory = env.get(PROFILE_DIRECTORY)
     return {"directory": directory, "profiler": "sys.setprofile", "timings_include_overhead": True} if directory else None

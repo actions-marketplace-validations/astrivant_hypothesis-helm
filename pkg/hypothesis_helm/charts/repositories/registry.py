@@ -7,7 +7,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import re
 import shutil
 import subprocess
@@ -23,7 +22,8 @@ from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.charts.repositories.repository import RepositorySource
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence, text
 
 __all__ = ("CHART_NAME", "HelmTransport", "prepare_helm_source", "unpack_chart")
@@ -135,7 +135,7 @@ def prepare_helm_source(
     root = temporary / "charts"
     root.mkdir()
     environment = dict(
-        os.environ,
+        env,
         HELM_REPOSITORY_CACHE=str(temporary / "indexes"),
         HELM_CACHE_HOME=str(temporary / "cache"),
         HELM_CONTENT_CACHE=str(temporary / "content"),

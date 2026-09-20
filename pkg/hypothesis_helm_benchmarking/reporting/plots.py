@@ -1,20 +1,23 @@
+# Configure the shared Matplotlib environment before importing its plotting modules.
+# ruff: noqa: E402
 """
 Plot measured capped runtimes, exact-equivalence drops and correctly defined scaling.
 """
 
 from __future__ import annotations
 
-import os
 import tempfile
 from collections import defaultdict
 from pathlib import Path
 from statistics import NormalDist, mean
 from textwrap import fill
 
+from hypothesis_helm.environment import env, set_env
+
 __all__ = ("COLORS", "Point", "finish", "groups", "measured_line", "numeric", "paired_ratios", "plot", "scaling_plots")
 
 
-os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
+set_env("MPLCONFIGDIR", env.get("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib")))
 
 import matplotlib
 

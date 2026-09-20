@@ -13,8 +13,8 @@ from hypothesis_helm_benchmarking.charts.workload import load_inputs, partition_
 from hypothesis_helm_benchmarking.execution.runner import assignment_digest
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.execution.sampling import Sampling
-from hypothesis_helm.execution.traversal import order_configurations
+from hypothesis_helm.execution.planning.sampling import Sampling
+from hypothesis_helm.execution.planning.traversal import order_configurations
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import configuration_key

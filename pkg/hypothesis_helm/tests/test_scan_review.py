@@ -22,7 +22,7 @@ from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.path_queue import execute
+from hypothesis_helm.execution.workers.path_queue import execute
 from hypothesis_helm.reporting.checkpoints import save
 from hypothesis_helm.reporting.logs import WorkerLogFormatter, WorkerLogs, diagnostic_line
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -135,7 +135,9 @@ def test_worker_recovery_retains_checkpoint(tmp_path: Path, monkeypatch: pytest.
         )
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("hypothesis_helm.execution.path_queue.Processes", lambda **kwargs: SimpleNamespace(run=run, stop=lambda: None))
+    monkeypatch.setattr(
+        "hypothesis_helm.execution.workers.path_queue.Processes", lambda **kwargs: SimpleNamespace(run=run, stop=lambda: None)
+    )
     results = execute({"paths": [{"path": ["a"]}], "deadline": float("inf")}, queue, 1)
     assert len(results) == 1
     assert results[0]["status"] == ("failed" if blocking else "error")
@@ -188,7 +190,7 @@ def test_parallel_counters_sum_property_deltas(chart: Chart, tmp_path: Path, mon
             for index, item in enumerate(sequence(context["paths"])[:3])
         ]
 
-    monkeypatch.setattr("hypothesis_helm.execution.path_queue.execute", workers)
+    monkeypatch.setattr("hypothesis_helm.execution.workers.path_queue.execute", workers)
     result = check_paths(
         chart, budget=30, max_examples=10, seed=0, helm="helm", timeout=5, artifacts=tmp_path / "results", jobs=2, filtering=True
     )

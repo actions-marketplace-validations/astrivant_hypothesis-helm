@@ -2,12 +2,12 @@
 Match local chart policies against stable source locations and chart-name matrices.
 """
 
-import os
 from fnmatch import fnmatchcase
 from pathlib import Path
 from types import TracebackType
 
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import env, set_env
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 __all__ = ("SOURCE_ENVIRONMENT", "SourceScope", "chart_identity", "matching_rules", "select_rules", "selectors", "source_identity")
@@ -40,7 +40,7 @@ def source_identity(chart: Path) -> str:
     Returns:
         str: Scan source inherited by workers, or the resolved chart directory.
     """
-    return os.environ.get(SOURCE_ENVIRONMENT, str(chart.resolve()))
+    return env.get(SOURCE_ENVIRONMENT, str(chart.resolve()))
 
 
 def selectors(value: object, root: Path) -> list[object]:
@@ -146,8 +146,8 @@ class SourceScope:
         Returns:
             None: The previous identity is retained for restoration.
         """
-        self.previous = os.environ.get(SOURCE_ENVIRONMENT)
-        os.environ[SOURCE_ENVIRONMENT] = self.source
+        self.previous = env.get(SOURCE_ENVIRONMENT)
+        set_env(SOURCE_ENVIRONMENT, self.source)
 
     def __exit__(self, kind: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None) -> None:
         """
@@ -162,6 +162,6 @@ class SourceScope:
             None: Exceptions continue after source restoration.
         """
         if self.previous is None:
-            os.environ.pop(SOURCE_ENVIRONMENT, None)
+            set_env(SOURCE_ENVIRONMENT, None)
         else:
-            os.environ[SOURCE_ENVIRONMENT] = self.previous
+            set_env(SOURCE_ENVIRONMENT, self.previous)

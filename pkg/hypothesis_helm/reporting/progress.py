@@ -5,7 +5,6 @@ Display readable value paths during generation and pytest execution.
 import hashlib
 import json
 import logging
-import os
 from collections.abc import Generator
 from pathlib import Path
 from typing import cast
@@ -13,15 +12,16 @@ from typing import cast
 import pytest
 from rich.progress import Progress, TaskID
 
-from hypothesis_helm.execution.render_hashes import (
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.planning.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
+from hypothesis_helm.execution.planning.sampling import REPORT as SAMPLING_REPORT
+from hypothesis_helm.execution.planning.sampling import Sampling
+from hypothesis_helm.execution.planning.traversal import order_paths
+from hypothesis_helm.execution.state.render_hashes import (
     STATISTICS_DIRECTORY,
     reset_process_hashes,
     save_process_statistics,
 )
-from hypothesis_helm.execution.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
-from hypothesis_helm.execution.sampling import REPORT as SAMPLING_REPORT
-from hypothesis_helm.execution.sampling import Sampling
-from hypothesis_helm.execution.traversal import order_paths
 from hypothesis_helm.integrations.sharding import parse_shard
 from hypothesis_helm.reporting.display import start_progress
 
@@ -64,7 +64,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
         entry = ("hypothesis_helm.finding", json.dumps({"code": cause.code, **decision}, sort_keys=True))
         item.user_properties.append(entry)
         report.user_properties.append(entry)
-    if report.failed and os.environ.get("HYPOTHESIS_HELM_FAIL_FAST") == "1" and decision.get("fail_fast", True):
+    if report.failed and env.get("HYPOTHESIS_HELM_FAIL_FAST") == "1" and decision.get("fail_fast", True):
         item.session.shouldfail = "Stopping after the first finding at the configured severity threshold"
     return report
 
@@ -137,16 +137,16 @@ def pytest_collection_finish(session: pytest.Session) -> None:
         None: Selected node IDs are saved when the scheduler requests collection.
     """
     global DISPLAY
-    if os.environ.get("HYPOTHESIS_HELM_PROGRESS") == "1" and not session.config.option.collectonly:
+    if env.get("HYPOTHESIS_HELM_PROGRESS") == "1" and not session.config.option.collectonly:
         DISPLAY = start_progress(
             len(session.items),
             1,
-            force=os.environ.get("HYPOTHESIS_HELM_FORCE_PROGRESS") == "1",
+            force=env.get("HYPOTHESIS_HELM_FORCE_PROGRESS") == "1",
         )
-    destination = os.environ.get("HYPOTHESIS_HELM_COLLECT")
+    destination = env.get("HYPOTHESIS_HELM_COLLECT")
     if destination is not None:
         Path(destination).write_text(json.dumps([item.nodeid for item in session.items]))
-    depths = os.environ.get("HYPOTHESIS_HELM_COLLECT_DEPTHS")
+    depths = env.get("HYPOTHESIS_HELM_COLLECT_DEPTHS")
     if depths is not None:
         Path(depths).write_text(
             json.dumps(
@@ -186,7 +186,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         None: The terminal cursor is restored and the final count remains visible.
     """
     global DISPLAY
-    destination = os.environ.get(STATISTICS_DIRECTORY)
+    destination = env.get(STATISTICS_DIRECTORY)
     if destination is not None and not session.config.option.collectonly:
         save_process_statistics(Path(destination))
     if DISPLAY is not None:
@@ -223,25 +223,25 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         marker = item.get_closest_marker("hypothesis_helm_path")
         return cast(tuple[str | int, ...], marker.args[0]) if marker is not None else ()
 
-    if SAMPLING_ENVIRONMENT in os.environ:
-        policy = Sampling(**json.loads(os.environ[SAMPLING_ENVIRONMENT]))
-        retained, evidence = policy.select(items, lambda item: item.nodeid, int(os.environ.get("HYPOTHESIS_HELM_TRAVERSAL_SEED", "0")))
+    if SAMPLING_ENVIRONMENT in env:
+        policy = Sampling(**json.loads(env[SAMPLING_ENVIRONMENT]))
+        retained, evidence = policy.select(items, lambda item: item.nodeid, int(env.get("HYPOTHESIS_HELM_TRAVERSAL_SEED", "0")))
         retained_ids = {item.nodeid for item in retained}
         omitted = [item for item in items if item.nodeid not in retained_ids]
         items[:] = retained
         config.hook.pytest_deselected(items=omitted)
-        if destination := os.environ.get(SAMPLING_REPORT):
+        if destination := env.get(SAMPLING_REPORT):
             Path(destination).write_text(
                 json.dumps({**evidence, "unit": "path property", "scope": "global before sharding"}, indent=2) + "\n"
             )
     items[:] = order_paths(
         items,
         path,
-        strategy=os.environ.get("HYPOTHESIS_HELM_TRAVERSAL_STRATEGY", "linear"),
-        seed=int(os.environ.get("HYPOTHESIS_HELM_TRAVERSAL_SEED", "0")),
+        strategy=env.get("HYPOTHESIS_HELM_TRAVERSAL_STRATEGY", "linear"),
+        seed=int(env.get("HYPOTHESIS_HELM_TRAVERSAL_SEED", "0")),
         identity=lambda item: item.nodeid,
     )
-    selector = os.environ.get("HYPOTHESIS_HELM_SHARD")
+    selector = env.get("HYPOTHESIS_HELM_SHARD")
     if selector is None:
         return
     shard = parse_shard(selector)
@@ -251,7 +251,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     deselected = [item for item in items if not shard.includes(item.nodeid)]
     items[:] = selected
     config.hook.pytest_deselected(items=deselected)
-    destination = os.environ.get("HYPOTHESIS_HELM_SHARD_REPORT")
+    destination = env.get("HYPOTHESIS_HELM_SHARD_REPORT")
     if destination is not None:
         Path(destination).write_text(
             json.dumps(

@@ -23,14 +23,15 @@ from hypothesis_helm.compiler.passes.exports import export_repository
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
+from hypothesis_helm.environment import env, refresh_env, set_env
 from hypothesis_helm.exceptions.execution import ChartUnavailable
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
-from hypothesis_helm.execution.estimate import estimate_suite
-from hypothesis_helm.execution.sampling import Sampling
-from hypothesis_helm.execution.sensitivity import validate_order
-from hypothesis_helm.execution.signals import Termination
+from hypothesis_helm.execution.planning.estimate import estimate_suite
+from hypothesis_helm.execution.planning.sampling import Sampling
+from hypothesis_helm.execution.planning.sensitivity import validate_order
+from hypothesis_helm.execution.planning.traversal import STRATEGIES, validate_strategy
+from hypothesis_helm.execution.runtime.signals import Termination
 from hypothesis_helm.execution.suite import run_suite
-from hypothesis_helm.execution.traversal import STRATEGIES, validate_strategy
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.severity import LEVELS, audit_blocks
 from hypothesis_helm.findings.suppressions import SuppressionCapture
@@ -708,7 +709,7 @@ def local_discovery(args: argparse.Namespace) -> bool:
         or args.build_dependencies is not None
         or (args.fail and not any(unsupported.values()))
         or args.base_ref is not None
-        or bool(os.environ.get("HYPOTHESIS_HELM_BASE_REF"))
+        or bool(env.get("HYPOTHESIS_HELM_BASE_REF"))
         or (not any(unsupported.values()) and len(discover_charts(args.chart)) > 1)
     )
     if args.filter and not recursive:
@@ -742,6 +743,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Process exit status, zero on success.
     """
+    refresh_env()
     parser = argument_parser()
     arguments = list(sys.argv[1:] if argv is None else argv)
     for index, argument in enumerate(arguments):
@@ -786,9 +788,9 @@ def main(argv: list[str] | None = None) -> int:
     descriptor = None
     token = None
     format_token = None
-    previous_rules = os.environ.get(RULE_ENVIRONMENT)
-    previous_inputs = os.environ.pop(INPUT_ENVIRONMENT, None)
-    previous_conformity = os.environ.pop(ENVIRONMENT, None)
+    previous_rules = env.get(RULE_ENVIRONMENT)
+    previous_inputs = set_env(INPUT_ENVIRONMENT, None)
+    previous_conformity = set_env(ENVIRONMENT, None)
     try:
         streaming = getattr(args, "output_format", None) in ("json", "yaml") and not getattr(args, "dry_run", False)
         if streaming:
@@ -807,7 +809,7 @@ def main(argv: list[str] | None = None) -> int:
             handler = logging.FileHandler(path, encoding="utf-8")
         color_mode = getattr(args, "log_color", "never")
         stream = getattr(handler, "stream", None)
-        color = color_mode == "always" or (color_mode == "auto" and "NO_COLOR" not in os.environ and stream is not None and stream.isatty())
+        color = color_mode == "always" or (color_mode == "auto" and "NO_COLOR" not in env and stream is not None and stream.isatty())
         handler.setFormatter(LogFormatter(color=color))
         logger.addHandler(handler)
         if args.command == "rules":
@@ -830,13 +832,13 @@ def main(argv: list[str] | None = None) -> int:
                     mapping(mapping(rule).get("findings", {})).get("fail_on") is not None
                     for rule in sequence(args.input_policy.get("input_constraints", []))
                 )
-            os.environ[INPUT_ENVIRONMENT] = json.dumps(args.input_policy, sort_keys=True)
+            set_env(INPUT_ENVIRONMENT, json.dumps(args.input_policy, sort_keys=True))
             args.ignored_rules = load_ignored(args.config, args.ignore)
-            os.environ[RULE_ENVIRONMENT] = json.dumps(args.ignored_rules)
+            set_env(RULE_ENVIRONMENT, json.dumps(args.ignored_rules))
             if args.ignored_rules:
                 logger.info("Disabled checks: %s", ", ".join(args.ignored_rules))
         else:
-            os.environ.pop(RULE_ENVIRONMENT, None)
+            set_env(RULE_ENVIRONMENT, None)
         if args.command == "replay-changes":
             replay_file(args.record, args.baseline, args.section, args.output)
             return 0
@@ -844,7 +846,7 @@ def main(argv: list[str] | None = None) -> int:
             return aggregate(args.reports, args.shards, args.run_id, args.output_dir)
         if args.command == "export-minimal-values":
             if args.validate_schemas and may_check("HH1108"):
-                os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
+                set_env(ENVIRONMENT, prepare(args.schema_cache_dir, args.schema_version, args.schema_offline))
             return export_repository(
                 args.source,
                 args.filename,
@@ -855,14 +857,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.command == "scan":
             if args.validate_schemas and may_check("HH1108"):
-                os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
+                set_env(ENVIRONMENT, prepare(args.schema_cache_dir, args.schema_version, args.schema_offline))
             return scan(args)
         if args.command == "test":
             selector = args.shard
-            args.shard, _ = resolve_shard(args.shard, os.environ)
+            args.shard, _ = resolve_shard(args.shard, env)
             if local_discovery(args):
                 if args.validate_schemas and may_check("HH1108"):
-                    os.environ[ENVIRONMENT] = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
+                    set_env(ENVIRONMENT, prepare(args.schema_cache_dir, args.schema_version, args.schema_offline))
                 return scan(args)
             args.shard = selector
         minimal_values = None
@@ -902,7 +904,7 @@ def main(argv: list[str] | None = None) -> int:
             if audit_blocks(finding_report):
                 if getattr(args, "export_suppressions", False):
                     destination = args.artifact_dir or args.suite
-                    selector, _ = resolve_shard(args.shard, os.environ)
+                    selector, _ = resolve_shard(args.shard, env)
                     if selector is not None:
                         destination = destination / "shards" / selector.name
                     SuppressionCapture(destination, enabled=True).write(
@@ -912,12 +914,15 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
         if args.command in ("test", "run"):
             if args.validate_schemas and may_check("HH1108") and not args.collect_only and not args.dry_run:
-                os.environ[ENVIRONMENT] = prepare(
-                    args.schema_cache_dir,
-                    args.schema_version,
-                    args.schema_offline,
+                set_env(
+                    ENVIRONMENT,
+                    prepare(
+                        args.schema_cache_dir,
+                        args.schema_version,
+                        args.schema_offline,
+                    ),
                 )
-            args.shard, shard_source = resolve_shard(args.shard, os.environ)
+            args.shard, shard_source = resolve_shard(args.shard, env)
             if args.shard is not None:
                 logger.info(
                     "Shard %s/%s selected from %s",
@@ -1017,7 +1022,7 @@ def main(argv: list[str] | None = None) -> int:
                         True,
                         read_only=True,
                     )
-                    os.environ[ENVIRONMENT] = configuration
+                    set_env(ENVIRONMENT, configuration)
                     schema_state.update(status="cached", resolved_version=json.loads(configuration)["version"])
                 except (ValueError, OSError) as exc:
                     schema_state["reason"] = str(exc)
@@ -1234,15 +1239,15 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "error", "error": str(exc), "type": type(exc).__name__}))
         return 2
     finally:
-        os.environ.pop(RULE_ENVIRONMENT, None)
-        os.environ.pop(INPUT_ENVIRONMENT, None)
+        set_env(RULE_ENVIRONMENT, None)
+        set_env(INPUT_ENVIRONMENT, None)
         if previous_inputs is not None:
-            os.environ[INPUT_ENVIRONMENT] = previous_inputs
+            set_env(INPUT_ENVIRONMENT, previous_inputs)
         if previous_rules is not None:
-            os.environ[RULE_ENVIRONMENT] = previous_rules
-        os.environ.pop(ENVIRONMENT, None)
+            set_env(RULE_ENVIRONMENT, previous_rules)
+        set_env(ENVIRONMENT, None)
         if previous_conformity is not None:
-            os.environ[ENVIRONMENT] = previous_conformity
+            set_env(ENVIRONMENT, previous_conformity)
         stack.close()
         if token is not None:
             MANIFEST_FD.reset(token)

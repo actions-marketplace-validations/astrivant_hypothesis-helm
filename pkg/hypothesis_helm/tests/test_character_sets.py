@@ -17,7 +17,8 @@ from hypothesis_helm.charts.suites.generate import generate_tests, strategy_sour
 from hypothesis_helm.charts.suites.runtime import prepared_chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
-from hypothesis_helm.execution.cache import fingerprint
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.state.cache import fingerprint
 from hypothesis_helm.schemas.characters import character_sets
 from hypothesis_helm.schemas.contracts import schema_strategy, supported_generated_text
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
@@ -36,6 +37,7 @@ def test_ascii_in_unconstrained_json(schema: dict[str, object], monkeypatch: pyt
         None: Every sampled key and string is ASCII and schema-valid.
     """
     monkeypatch.delenv(ENVIRONMENT, raising=False)
+    refresh_env()
 
     @settings(max_examples=80, deadline=None, derandomize=True)
     @given(schema_strategy(schema))
@@ -76,6 +78,7 @@ def test_unicode_is_explicit_and_preserves_controls_policy(monkeypatch: pytest.M
         None: Native and generated Python strategies can produce non-ASCII text.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"character_sets": "unicode"}))
+    refresh_env()
     schema = {"type": "string", "minLength": 1, "maxLength": 3}
     for strategy in (schema_strategy(schema), eval(strategy_source(schema), {"st": st})):
         found = find(
@@ -97,6 +100,7 @@ def test_authored_unicode_is_not_rewritten(monkeypatch: pytest.MonkeyPatch) -> N
         None: Literal Unicode survives, generated sibling text stays ASCII, and the schema holds.
     """
     monkeypatch.delenv(ENVIRONMENT, raising=False)
+    refresh_env()
     schema = {
         "type": "object",
         "properties": {"日本語": {"const": "café"}, "free": {"type": "string", "minLength": 1}},
@@ -148,6 +152,7 @@ def test_cli_character_precedence(
     config.write_text(yamlio.dump({"hypothesis": {"character_sets": configured}} if configured is not None else {}))
     previous = json.dumps({"character_sets": "unicode"})
     monkeypatch.setenv(ENVIRONMENT, previous)
+    refresh_env()
     output = tmp_path / "suite"
     arguments = ["generate", "examples/workload", "--output", str(output), "--config", str(config)]
     if override is not None:
@@ -189,9 +194,11 @@ def test_saved_character_policy_and_cache(tmp_path: Path, monkeypatch: pytest.Mo
     chart = Path("examples/workload").resolve()
     suite = tmp_path / "suite"
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"character_sets": "unicode"}))
+    refresh_env()
     generate_tests(chart, suite, max_examples=3)
     unicode_key = fingerprint(suite, 0, None, "none")
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"character_sets": "ascii"}))
+    refresh_env()
     assert fingerprint(suite, 0, None, "none") != unicode_key
     assert character_sets() == "ascii"
     with prepared_chart(chart, suite):

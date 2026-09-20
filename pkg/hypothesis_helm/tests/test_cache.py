@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.execution.cache import fingerprint, read_outcomes
-from hypothesis_helm.execution.environment import in_ci
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.runtime.environment import in_ci
+from hypothesis_helm.execution.state.cache import fingerprint, read_outcomes
 from hypothesis_helm.execution.suite import run_suite
 
 
@@ -24,10 +25,10 @@ def test_lua_implementation_invalidates_cache(tmp_path: Path, monkeypatch: pytes
     Returns:
         None: Both native source and dependency identity participate in the cache key.
     """
-    from hypothesis_helm.execution import cache
+    from hypothesis_helm.execution.state import cache
 
     package = tmp_path / "package"
-    source = package / "execution" / "cache.py"
+    source = package / "execution" / "state" / "cache.py"
     source.parent.mkdir(parents=True)
     source.write_text("# unchanged Python implementation\n")
     script = package / "compiler" / "lua" / "bounds.lua"
@@ -70,6 +71,7 @@ def test_cached_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, jobs: int
         None: Cache behavior matches the requested policy.
     """
     monkeypatch.setenv("CI", "false")
+    refresh_env()
     module = tmp_path / "test_chart_values.py"
     module.write_text(
         "from pathlib import Path\n"
@@ -88,11 +90,13 @@ def test_cached_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, jobs: int
     assert run_suite(tmp_path, jobs=jobs) == 0
     assert (tmp_path / "calls").read_text() == calls
     monkeypatch.setenv("CI", "yes")
+    refresh_env()
     assert run_suite(tmp_path, jobs=jobs) == 0
     assert (tmp_path / "calls").read_text().splitlines().count("pass") == 2
     assert run_suite(tmp_path, jobs=jobs, rerun="failed") == 0
     assert (tmp_path / "calls").read_text().splitlines().count("pass") == 2
     monkeypatch.setenv("CI", "no")
+    refresh_env()
     assert run_suite(tmp_path, jobs=jobs, cache=False) == 0
     assert run_suite(tmp_path, jobs=jobs, rerun="all") == 0
     assert (tmp_path / "calls").read_text().splitlines().count("pass") == 4
@@ -162,6 +166,7 @@ def test_collect_only_and_teardown_failure(tmp_path: Path, monkeypatch: pytest.M
         None: Cache behavior matches the requested policy.
     """
     monkeypatch.setenv("CI", "false")
+    refresh_env()
     (tmp_path / "test_chart_values.py").write_text(
         "import pytest\n"
         "@pytest.fixture\n"
@@ -193,7 +198,7 @@ def test_nested_implementation_invalidation(tmp_path: Path, monkeypatch: pytest.
     Returns:
         None: Nested runtime modules affect fingerprints while package tests do not.
     """
-    from hypothesis_helm.execution import cache
+    from hypothesis_helm.execution.state import cache
 
     package = tmp_path / "package"
     implementation = package / "charts" / "runner.py"
@@ -201,7 +206,7 @@ def test_nested_implementation_invalidation(tmp_path: Path, monkeypatch: pytest.
     implementation.write_text("before")
     suite = tmp_path / "suite"
     suite.mkdir()
-    monkeypatch.setattr(cache, "__file__", str(package / "execution" / "cache.py"))
+    monkeypatch.setattr(cache, "__file__", str(package / "execution" / "state" / "cache.py"))
     before = fingerprint(suite, 0, None, "none")
     implementation.write_text("after")
     after = fingerprint(suite, 0, None, "none")
@@ -223,10 +228,11 @@ def test_seed_namespaces(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     Returns:
         None: Execution and dry runs reuse only their seed's compatible entries.
     """
-    from hypothesis_helm.execution.cache import seed_key
-    from hypothesis_helm.execution.estimate import estimate_suite
+    from hypothesis_helm.execution.planning.estimate import estimate_suite
+    from hypothesis_helm.execution.state.cache import seed_key
 
     monkeypatch.setenv("CI", "false")
+    refresh_env()
     module = tmp_path / "test_chart_values.py"
     module.write_text("def test_pass(): pass\n")
     assert seed_key(0) == "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
@@ -259,7 +265,7 @@ def test_concurrent_cache_publication(tmp_path: Path) -> None:
     import subprocess
     import sys
 
-    from hypothesis_helm.execution.cache import merge_outcomes
+    from hypothesis_helm.execution.state.cache import merge_outcomes
 
     target = tmp_path / "shared.json"
     children = [
@@ -268,7 +274,7 @@ def test_concurrent_cache_publication(tmp_path: Path) -> None:
                 sys.executable,
                 "-c",
                 "from pathlib import Path; import sys; "
-                "from hypothesis_helm.execution.cache import merge_outcomes; "
+                "from hypothesis_helm.execution.state.cache import merge_outcomes; "
                 "merge_outcomes(Path(sys.argv[1]), {}, {sys.argv[2]: 'passed'})",
                 str(target),
                 f"node-{index}",

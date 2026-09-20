@@ -3,9 +3,10 @@ Resolve bounded compiler analysis independently of Helm's rendering limits.
 """
 
 import json
-import os
 from functools import lru_cache
 from pathlib import Path
+
+from hypothesis_helm.environment import env
 
 __all__ = ("DEFAULT_LIMITS", "LIMITS", "active_limits", "call_depth", "compiler_limits", "policy_limits")
 
@@ -118,7 +119,7 @@ def active_limits(chart: Path | None = None) -> dict[str, int]:
     from hypothesis_helm.schemas.policy import ENVIRONMENT
     from hypothesis_helm.schemas.selectors import chart_identity, source_identity
 
-    serialized = os.environ.get(ENVIRONMENT, "{}")
+    serialized = env.get(ENVIRONMENT, "{}")
     return dict(
         policy_limits(serialized, chart_identity(chart), source_identity(chart)) if chart is not None else policy_limits(serialized)
     )

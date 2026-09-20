@@ -16,7 +16,8 @@ from hypothesis_helm.compiler.passes.complexity import measure
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.compiler.passes.domains import project
 from hypothesis_helm.compiler.passes.pruning import snapshot
-from hypothesis_helm.execution.cache import fingerprint
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.state.cache import fingerprint
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 from hypothesis_helm.schemas.selectors import SourceScope
@@ -88,6 +89,7 @@ def test_chart_selectors_isolation_and_cache(tmp_path: Path, monkeypatch: pytest
     policy = load_policy(config)
     serialized = json.dumps(policy)
     monkeypatch.setenv(ENVIRONMENT, serialized)
+    refresh_env()
     expected = {**DEFAULT_LIMITS, "max_call_depth": 32, "max_steps": 23456, "max_files": 1234}
     assert active_limits(chart.path) == expected
     assert active_limits()["max_call_depth"] == 1
@@ -101,6 +103,7 @@ def test_chart_selectors_isolation_and_cache(tmp_path: Path, monkeypatch: pytest
     mapping(sequence(document["input_constraints"])[0])["compiler"] = {"max_call_depth": 64}
     config.write_text(yamlio.dump(document))
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
+    refresh_env()
     assert captured.limits == expected
     assert active_limits(chart.path)["max_call_depth"] == 64
     assert fingerprint(chart.path, 0, None, "none") != before
@@ -125,6 +128,7 @@ def test_conflicting_compiler_overrides(tmp_path: Path, monkeypatch: pytest.Monk
         {"charts": [pattern], "path": "$", "compiler": {"max_call_depth": limit}} for pattern, limit in (("help*", 32), ("helpers", 64))
     ]
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"input_constraints": rows[::-1] if reverse else rows}))
+    refresh_env()
     with pytest.raises(ValueError, match="Conflicting compiler.max_call_depth.*helpers"):
         active_limits(chart.path)
 
@@ -151,6 +155,7 @@ def test_analysis_passes_use_chart_budgets(tmp_path: Path, monkeypatch: pytest.M
             }
         ),
     )
+    refresh_env()
     contracts = Contracts.build(chart.path)
     assert contracts.max_call_depth == 32
     assert contracts.predict({**chart.defaults, "name": "reject"}) is not None
@@ -189,6 +194,7 @@ def test_dependencies_use_containing_chart_budgets(tmp_path: Path, monkeypatch: 
             }
         ),
     )
+    refresh_env()
     dependencies = Dependencies.build(tmp_path)
     assert dependencies.limits["max_call_depth"] == 32
     assert any(ref.path == ("helpers", "name") for ref in dependencies.references)

@@ -4,21 +4,21 @@ Estimate selected property work without executing fixtures or property examples.
 
 import ast
 import json
-import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
 
-from hypothesis_helm.execution.cache import fingerprint, read_outcomes, seed_key
-from hypothesis_helm.execution.environment import in_ci
-from hypothesis_helm.execution.parallel import worker_limit
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
-from hypothesis_helm.execution.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
-from hypothesis_helm.execution.sampling import REPORT as SAMPLING_REPORT
-from hypothesis_helm.execution.structure import inspect_structure
-from hypothesis_helm.execution.traversal import validate_strategy
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
+from hypothesis_helm.execution.planning.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
+from hypothesis_helm.execution.planning.sampling import REPORT as SAMPLING_REPORT
+from hypothesis_helm.execution.planning.traversal import validate_strategy
+from hypothesis_helm.execution.runtime.environment import in_ci
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.state.cache import fingerprint, read_outcomes, seed_key
+from hypothesis_helm.execution.state.structure import inspect_structure
+from hypothesis_helm.execution.workers.parallel import worker_limit
 from hypothesis_helm.integrations.sharding import Shard
 
 __all__ = ("budgets", "estimate_suite")
@@ -98,7 +98,7 @@ def estimate_suite(
     if shard:
         results = results / "shards" / shard.name
     cache_root = (cache_dir or results / "cache").resolve()
-    environment = dict(os.environ)
+    environment = dict(env)
     for key in tuple(environment):
         if key.startswith("HYPOTHESIS_HELM_") and key != "HYPOTHESIS_HELM_CONFORMITY":
             environment.pop(key)

@@ -9,7 +9,7 @@ from multiprocessing.synchronize import Event
 from types import TracebackType
 from typing import Self
 
-from hypothesis_helm.execution.signals import DeferredSignals
+from hypothesis_helm.execution.runtime.signals import DeferredSignals
 
 __all__ = ("Cancellation", "initialize")
 

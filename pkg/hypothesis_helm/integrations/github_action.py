@@ -2,12 +2,12 @@
 Run the composite GitHub Action through the Helm command and export artifact paths.
 """
 
-import os
 import sys
 import uuid
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env, refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations.incremental import select_rerun
 from hypothesis_helm.integrations.kubesec import scan
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
@@ -26,7 +26,7 @@ def write_outputs(values: dict[str, str]) -> None:
     Returns:
         None: GitHub receives the action's result and artifact locations.
     """
-    destination = os.environ.get("GITHUB_OUTPUT")
+    destination = env.get("GITHUB_OUTPUT")
     if destination is not None:
         with Path(destination).open("a") as stream:
             for key, value in values.items():
@@ -41,11 +41,12 @@ def main() -> int:
     Returns:
         int: Helm exit status, including 130 on interruption.
     """
+    refresh_env()
     status = 2
     outputs: dict[str, str] = {}
     try:
-        shard, source = resolve_shard(parse_shard_option(os.environ.get("HH_SHARD", "auto")), os.environ)
-        root = Path(os.environ.get("HH_ARTIFACT_DIR", ".cache/hypothesis-helm/runs")).resolve()
+        shard, source = resolve_shard(parse_shard_option(env.get("HH_SHARD", "auto")), env)
+        root = Path(env.get("HH_ARTIFACT_DIR", ".cache/hypothesis-helm/runs")).resolve()
         results = root / "shards" / shard.name if shard is not None else root
         results.mkdir(parents=True, exist_ok=True)
         manifests = results / "manifests.jsonl"
@@ -57,19 +58,19 @@ def main() -> int:
             "shard-id": shard.name if shard is not None else "unsharded",
             "shard-source": source,
         }
-        security = os.environ.get("HH_KUBESEC", "false").lower() == "true"
-        score_minimum = int(os.environ.get("HH_KUBESEC_SCORE_MINIMUM", "0")) if security else 0
+        security = env.get("HH_KUBESEC", "false").lower() == "true"
+        score_minimum = int(env.get("HH_KUBESEC_SCORE_MINIMUM", "0")) if security else 0
         if score_minimum < 0:
             raise ValueError("Kubesec score minimum must be nonnegative")
-        incremental = os.environ.get("HH_INCREMENTAL", "false").lower() == "true"
+        incremental = env.get("HH_INCREMENTAL", "false").lower() == "true"
         rerun = select_rerun(
-            Path(os.environ.get("HH_CHART", ".")),
+            Path(env.get("HH_CHART", ".")),
             incremental=incremental,
-            rerun=os.environ.get("HH_RERUN", "auto"),
-            base_ref=os.environ.get("HH_BASE_REF") or None,
+            rerun=env.get("HH_RERUN", "auto"),
+            base_ref=env.get("HH_BASE_REF") or None,
             report=results / "git-comparison.json",
         )
-        environment = dict(os.environ)
+        environment = dict(env)
         if incremental:
             # The comparison has already been resolved here. Forwarding this setting would
             # select recursive CLI execution, which cannot own a generated-suite shard.
@@ -103,21 +104,21 @@ def main() -> int:
         status = result.returncode if result.returncode >= 0 else 130
         if security and status != 130:
             configuration = prepare(
-                Path(os.environ.get("HH_SCHEMA_CACHE_DIR", "schemas")),
-                os.environ.get("HH_SCHEMA_VERSION", "latest"),
+                Path(env.get("HH_SCHEMA_CACHE_DIR", "schemas")),
+                env.get("HH_SCHEMA_VERSION", "latest"),
                 offline=True,
             )
             security_status = scan(
                 manifests,
                 root / "kubesec",
                 configuration,
-                jobs=os.environ.get("HH_KUBESEC_JOBS", "auto"),
-                executable=os.environ.get("HH_KUBESEC_BINARY", "kubesec"),
+                jobs=env.get("HH_KUBESEC_JOBS", "auto"),
+                executable=env.get("HH_KUBESEC_BINARY", "kubesec"),
                 shard=shard,
                 pre_sharded=True,
                 validate_rest=True,
                 score_minimum=score_minimum,
-                run_id=os.environ.get("HH_RUN_ID", ""),
+                run_id=env.get("HH_RUN_ID", ""),
             )
             security_dir = root / "kubesec"
             if shard:

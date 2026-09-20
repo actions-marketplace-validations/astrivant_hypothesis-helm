@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
 import tempfile
 from collections.abc import Sequence
@@ -15,9 +14,10 @@ from pathlib import Path
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.values import parsers as manifest_parsers
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.rendering import ManifestParseError, RenderFailure
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.render_hashes import RenderHashes, process_hashes
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.state.render_hashes import RenderHashes, process_hashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.reporting.output import emit_manifest
@@ -210,10 +210,10 @@ def render(
             {
                 "resource_contract": 1,
                 "yaml_parser": manifest_parsers.identity(),
-                "conformity": os.environ.get(ENVIRONMENT),
+                "conformity": env.get(ENVIRONMENT),
                 "timeout": timeout,
                 "ignored_rules": effective_ignored_codes(),
-                "input_policy": os.environ.get("HYPOTHESIS_HELM_INPUT_POLICY", "{}"),
+                "input_policy": env.get("HYPOTHESIS_HELM_INPUT_POLICY", "{}"),
                 "resource_schemas": resource_schemas(),
             },
             sort_keys=True,

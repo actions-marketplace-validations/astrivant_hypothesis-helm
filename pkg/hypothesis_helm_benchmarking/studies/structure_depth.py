@@ -10,7 +10,7 @@ from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.compiler.passes.topology import trim_topology
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, number, sequence
 

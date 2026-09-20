@@ -11,6 +11,8 @@ import pytest
 from hypothesis_helm_benchmarking.refresh.ci import merge_statuses, phase_operations, run_phase
 from hypothesis_helm_benchmarking.refresh.plan import STUDIES, Refresh
 
+from hypothesis_helm.environment import refresh_env
+
 
 def test_ci_phases_partition_refresh() -> None:
     """
@@ -105,6 +107,7 @@ def test_ci_study_retains_status_and_logs(
     executable.chmod(0o755)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("PATH", f"{binary}{os.pathsep}{os.environ['PATH']}")
+    refresh_env()
     if exit_code:
         with pytest.raises(RuntimeError):
             run_phase(root, "study", "performance", 1)

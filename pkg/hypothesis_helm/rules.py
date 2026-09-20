@@ -4,9 +4,9 @@ Stable built-in check identifiers and an inherited, explicit ignore policy.
 
 import json
 import logging
-import os
 from pathlib import Path
 
+from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.policy import ACTIVE_CODES, chart_rules, resolve_codes
@@ -69,7 +69,7 @@ def ignored_codes() -> list[str]:
     Returns:
         list[str]: Active ignored rule identifiers.
     """
-    return load_codes(os.environ.get(ENVIRONMENT, "[]"))
+    return load_codes(env.get(ENVIRONMENT, "[]"))
 
 
 def load_codes(value: str) -> list[str]:

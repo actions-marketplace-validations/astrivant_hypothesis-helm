@@ -17,6 +17,7 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.domains import project
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.domains import InputDomains
@@ -260,6 +261,7 @@ def test_live_schema_cache_never_matches_supplements_by_description(tmp_path: Pa
         node.update(type="string", description=reviewed[supplement]["description"])
     (tmp_path / "pod-v1.json").write_text(json.dumps(root))
     monkeypatch.setenv("HYPOTHESIS_HELM_CONFORMITY", json.dumps({"version": version, "schemas": str(tmp_path)}))
+    refresh_env()
     for path in paths:
         found = destination("v1/Pod", tuple(path.split("/")))
         assert found is not None
@@ -410,8 +412,10 @@ def test_changed_helper_is_reanalyzed_and_opt_out_is_respected(bound_chart: Path
         None: Edited helper behavior is reanalyzed, and user policy can disable automatic domains.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"downstream_inputs": False}))
+    refresh_env()
     assert not Chart.load(bound_chart).input_domains().rules
     monkeypatch.delenv(ENVIRONMENT)
+    refresh_env()
     file = bound_chart / "templates/helper.tpl"
     file.write_text(file.read_text() + "\n{{/* changed */}}\n")
     rules, _ = project(bound_chart, Chart.load(bound_chart).schema)

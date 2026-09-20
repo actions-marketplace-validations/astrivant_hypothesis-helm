@@ -1,14 +1,16 @@
+# Configure the shared Matplotlib environment before importing its plotting modules.
+# ruff: noqa: E402
 """
 Plot fixed PCA coordinates, retained output mass and error recall across structural cases.
 """
 
 import csv
-import os
 import tempfile
 from collections import Counter
 from pathlib import Path
 
 import numpy as np
+from hypothesis_helm.environment import env, set_env
 from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 from matplotlib.lines import Line2D
@@ -20,7 +22,7 @@ from hypothesis_helm_benchmarking.reporting.descriptions import describe
 __all__ = ("LABELS", "plot")
 
 
-os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
+set_env("MPLCONFIGDIR", env.get("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib")))
 
 import matplotlib
 

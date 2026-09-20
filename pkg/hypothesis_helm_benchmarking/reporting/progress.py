@@ -10,7 +10,7 @@ from multiprocessing import current_process
 from types import TracebackType
 from typing import Self, TypeVar
 
-from hypothesis_helm.execution.environment import in_ci
+from hypothesis_helm.execution.runtime.environment import in_ci
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 

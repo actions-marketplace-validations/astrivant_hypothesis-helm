@@ -175,7 +175,7 @@ def test_benchmark_preset_matches_native_calibrated_selection(tmp_path: Path) ->
     from hypothesis_helm_benchmarking.charts.faults import Fault, write_faults
 
     from hypothesis_helm.charts.testing.runner import check_chart
-    from hypothesis_helm.execution.sampling import Sampling
+    from hypothesis_helm.execution.planning.sampling import Sampling
     from hypothesis_helm.schemas.combinations import plan_interactions
     from hypothesis_helm.schemas.contracts import mapping, sequence
     from hypothesis_helm.schemas.model import ValuesModel

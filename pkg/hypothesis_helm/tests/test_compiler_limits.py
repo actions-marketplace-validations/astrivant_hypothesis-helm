@@ -17,8 +17,9 @@ from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.limits import DEFAULT_LIMITS
 from hypothesis_helm.compiler.passes.domains import project
 from hypothesis_helm.compiler.passes.rejections import matches_rejection
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.cache import fingerprint
+from hypothesis_helm.execution.state.cache import fingerprint
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 
 
@@ -92,6 +93,7 @@ def test_analysis_depth_boundary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         None: Both analyses agree at the exact boundary, with native Helm confirming rejections.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"compiler": {} if limit is None else {"max_call_depth": limit}}))
+    refresh_env()
     chart = helper_chart(tmp_path, depth)
     model = Contracts.build(chart.path)
     rejection = model.predict({**chart.defaults, "name": "reject"})
@@ -121,6 +123,7 @@ def test_recursive_helpers_remain_unresolved(tmp_path: Path, monkeypatch: pytest
         None: An infinite call cycle cannot establish a constraint or rejection.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"compiler": {"max_call_depth": 64}}))
+    refresh_env()
     chart = helper_chart(tmp_path, 1)
     (chart.path / "templates/_helpers.tpl").write_text(
         dedent("""
@@ -196,10 +199,12 @@ def test_policy_configuration_and_cache_identity(tmp_path: Path, monkeypatch: py
     config.write_text(yamlio.dump({"compiler": {"max_call_depth": 24}}))
     chart = helper_chart(tmp_path, 20)
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
+    refresh_env()
     original = Contracts.build(chart.path)
     previous = fingerprint(tmp_path, 0, None, "none")
     config.write_text(yamlio.dump({"compiler": {"max_call_depth": 32}}))
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
+    refresh_env()
     assert original.max_call_depth == 24
     assert Contracts.build(chart.path).max_call_depth == 32
     assert fingerprint(tmp_path, 0, None, "none") != previous

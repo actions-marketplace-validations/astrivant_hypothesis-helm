@@ -50,7 +50,7 @@ def test_benchmark_wheel(tmp_path: Path) -> None:
         metadata_name = next(name for name in archive.namelist() if name.endswith(".dist-info/METADATA"))
         entry_points = archive.read(metadata_name.replace("METADATA", "entry_points.txt")).decode()
         for declaration in (
-            "hypothesis-helm-path-worker=hypothesis_helm.execution.path_queue:main",
+            "hypothesis-helm-path-worker=hypothesis_helm.execution.workers.path_queue:main",
             "hypothesis-helm-complexity=hypothesis_helm.compiler.passes.complexity:main",
             "hypothesis-helm-kubesec=hypothesis_helm.integrations.kubesec:main",
             "hypothesis-helm-github-action=hypothesis_helm.integrations.github_action:main",
@@ -62,6 +62,9 @@ def test_benchmark_wheel(tmp_path: Path) -> None:
         requirements = metadata.get_all("Requires-Dist", [])
         assert any(Requirement(line).name == "lupa" for line in requirements)
         assert "hypothesis_helm/compiler/lua/bounds.lua" in archive.namelist()
+        calibration = json.loads(archive.read("hypothesis_helm/execution/planning/data/calibration.json"))
+        assert calibration["version"] == "aggressive-calibration-v1"
+        assert calibration["profiles"]
         for name in ("main.go", "helm.go", "kubernetes.go", "go.mod", "go.sum"):
             assert f"hypothesis_helm_catalog/upstream/{name}" in archive.namelist()
         assert not any(name.startswith("hypothesis_helm_catalog/upstream/builtins/") for name in archive.namelist())

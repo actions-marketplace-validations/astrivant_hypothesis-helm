@@ -19,8 +19,9 @@ from hypothesis_helm.charts.suites.runtime import prepared_chart
 from hypothesis_helm.charts.testing.rendering import render, validate_resources
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.schemas import conformity
 from hypothesis_helm.schemas.contracts import json_value, mapping
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
@@ -45,6 +46,7 @@ def polyad_chart(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Chart:
     path = tmp_path / "polyad"
     shutil.copytree(FIXTURE, path)
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(path / ".hypothesis-helm.yaml")))
+    refresh_env()
     return Chart.load(path)
 
 
@@ -141,6 +143,7 @@ def test_crd_files_do_not_replace_explicit_resource_schemas(
     """
     schema = json.loads((polyad_chart.path / "schemas" / "gate.json").read_text())
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"resource_schemas": {identity: schema} if identity else {}}))
+    refresh_env()
     with pytest.raises(RenderFailure, match="requires an explicit JSON schema") as caught:
         render(polyad_chart, {})
     assert caught.value.code == "HH1108"
@@ -248,6 +251,7 @@ def test_saved_suite_preserves_custom_resource_schema(polyad_chart: Chart, tmp_p
     suite = tmp_path / "suite"
     generate_tests(polyad_chart, suite, max_examples=1)
     monkeypatch.delenv(ENVIRONMENT)
+    refresh_env()
     (polyad_chart.path / ".hypothesis-helm.yaml").unlink()
     (polyad_chart.path / "schemas" / "gate.json").unlink()
     hashes = RenderHashes()
@@ -288,6 +292,7 @@ def test_mixed_bundle_keeps_builtin_validation(polyad_chart: Chart, tmp_path: Pa
     if saved:
         generate_tests(chart, suite, max_examples=1)
         monkeypatch.delenv(ENVIRONMENT)
+        refresh_env()
     (tmp_path / "configmap-v1.json").write_text(
         json.dumps({"type": "object", "properties": {"data": {"properties": {"ready": {"const": "expected"}}}}})
     )
@@ -297,5 +302,6 @@ def test_mixed_bundle_keeps_builtin_validation(polyad_chart: Chart, tmp_path: Pa
             conformity.ENVIRONMENT,
             json.dumps({"version": "1.35.0", "schemas": str(tmp_path)}),
         )
+        refresh_env()
         with pytest.raises(AssertionError, match="ConfigMap.*ready"):
             conformity.validate("---\n".join(yamlio.dump(resource) for resource in resources), 10)

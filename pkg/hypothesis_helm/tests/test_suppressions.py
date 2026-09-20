@@ -16,6 +16,7 @@ import pytest
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.findings.policy import candidate_paths, resolve_codes
 from hypothesis_helm.findings.suppressions import ENVIRONMENT, SuppressionCapture, observe, observed_paths
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -221,6 +222,7 @@ def test_disabled_export_creates_no_artifacts(tmp_path: Path, monkeypatch: pytes
         None: No rules become active and no files are written.
     """
     monkeypatch.delenv(ENVIRONMENT, raising=False)
+    refresh_env()
     with SuppressionCapture(tmp_path, enabled=False) as capture:
         observe("HH1101", {}, {"name": ">"})
         capture.write({"status": "passed"}, name="demo", source="remote.git")

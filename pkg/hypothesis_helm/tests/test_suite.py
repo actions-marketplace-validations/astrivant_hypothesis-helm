@@ -13,7 +13,8 @@ import pytest
 from hypothesis_helm.charts.suites.generate import generate_tests
 from hypothesis_helm.charts.values.yamlio import load_all
 from hypothesis_helm.cli import main
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.suite import run_suite
 
 
@@ -90,7 +91,9 @@ def test_saved_suite_isolated_from_parent_pytest(tmp_path: Path, monkeypatch: py
     """
     generate_tests("examples/workload", tmp_path, max_examples=2)
     monkeypatch.setenv("PYTEST_ADDOPTS", "--invalid-parent-option")
+    refresh_env()
     monkeypatch.setenv("PYTEST_PLUGINS", "nonexistent_parent_plugin")
+    refresh_env()
     assert main(["run", str(tmp_path), "--collect-only", "--match", "replicas"]) == 0
     assert main(["run", str(tmp_path), "--collect-only", "--match", "nonexistent_path"]) == 5
 

@@ -18,9 +18,10 @@ from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import parsers, yamlio
 from hypothesis_helm.cli import argument_parser
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import ManifestParseError, RenderFailure
-from hypothesis_helm.execution.cache import fingerprint
-from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.execution.state.cache import fingerprint
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 from hypothesis_helm.tests.test_path_workers import fixture_chart
@@ -117,9 +118,11 @@ def test_policy_overrides_cache_identity_and_keeps_values_round_trip(tmp_path: P
     config.write_text("yaml_parser: pyyaml\n")
     policy = load_policy(config)
     monkeypatch.setenv(ENVIRONMENT, json.dumps(policy))
+    refresh_env()
     assert parsers.selected() == "pyyaml"
     first = fingerprint(tmp_path, 0, None, "none")
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config, yaml_parser="ruamel-safe")))
+    refresh_env()
     assert parsers.selected() == "ruamel-safe"
     assert fingerprint(tmp_path, 0, None, "none") != first
     original = "# retained comment\nfirst: &shared {name: value}\nsecond: *shared\n"
@@ -146,6 +149,7 @@ def test_manifest_checks_and_cache_context_use_selected_parser(tmp_path: Path, m
         None: Wrong manifest types and duplicate keys remain findings across all parsers.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"yaml_parser": backend}))
+    refresh_env()
     chart = Chart(tmp_path, {}, {})
     with pytest.raises(RenderFailure, match="HH1101") as error:
         render(chart, {}, rendered_output="kind: Pod\nkind: ConfigMap\n", stream=False)
@@ -158,6 +162,7 @@ def test_manifest_checks_and_cache_context_use_selected_parser(tmp_path: Path, m
     render(chart, {}, rendered_output=output, hashes=hashes, stream=False)
     assert hashes.snapshot()["validation_cache_hits"] == 1
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"yaml_parser": "pyyaml" if backend != "pyyaml" else "ruamel"}))
+    refresh_env()
     render(chart, {}, rendered_output=output, hashes=hashes, stream=False)
     assert hashes.snapshot()["validation_cache_hits"] == 1
 
@@ -178,15 +183,18 @@ def test_saved_suite_restores_parser_and_explicit_override(tmp_path: Path, monke
     chart = fixture_chart(source)
     generated = tmp_path / "suite"
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"yaml_parser": "pyyaml"}))
+    refresh_env()
     generate_tests(chart, generated)
     frozen = json.loads((generated / "input-domains.json").read_text())
     assert frozen["yaml_parser"] == "pyyaml"
     monkeypatch.delenv(ENVIRONMENT)
+    refresh_env()
     with prepared_chart(source, generated) as replay:
         assert parsers.selected() == "pyyaml"
         saved_identity = replay.input_domains().identity
     assert parsers.selected() == "ruamel"
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"yaml_parser": "ruamel-safe"}))
+    refresh_env()
     with prepared_chart(source, generated) as replay:
         assert parsers.selected() == "ruamel-safe"
         assert replay.input_domains().identity != saved_identity
@@ -205,7 +213,9 @@ def test_path_workers_inherit_manifest_parser(tmp_path: Path, monkeypatch: pytes
         None: Worker phases accept a block rejected by the default round-trip parser.
     """
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    refresh_env()
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"yaml_parser": "pyyaml"}))
+    refresh_env()
     chart = fixture_chart(tmp_path)
     template = chart.path / "templates/config.yaml"
     template.write_text(template.read_text() + "  script: |\n \n    hello\n")

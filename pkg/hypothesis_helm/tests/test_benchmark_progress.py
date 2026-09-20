@@ -9,6 +9,7 @@ from hypothesis_helm_benchmarking.reporting import progress
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from rich.console import Console
 
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.reporting.display import start_progress
 
 
@@ -28,7 +29,9 @@ def test_ci_disables_even_forced_bars(marker: str, monkeypatch: pytest.MonkeyPat
         None: CI never prints bars or escapes even when progress is forced.
     """
     monkeypatch.setenv("CI", "false")
+    refresh_env()
     monkeypatch.setenv(marker, "true")
+    refresh_env()
     monkeypatch.setattr(progress, "Console", lambda **kwargs: Console(stderr=True, force_terminal=True))
     with BenchmarkProgress("Matrix checks") as display:
         assert not display.interactive
@@ -54,6 +57,9 @@ def test_terminal_bar_tracks_expansion(monkeypatch: pytest.MonkeyPatch) -> None:
     Returns:
         None: The bar finishes at the expanded count and restores its live display.
     """
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    refresh_env()
     stream = io.StringIO()
     monkeypatch.setattr(progress, "in_ci", lambda **kwargs: False)
     monkeypatch.setattr(progress, "Console", lambda **kwargs: Console(file=stream, force_terminal=True, width=120))
@@ -83,6 +89,7 @@ def test_interruption_preserves_partial_count(monkeypatch: pytest.MonkeyPatch, c
         None: Original interruptions propagate and remaining work stays visible.
     """
     monkeypatch.setenv("CI", "true")
+    refresh_env()
     with pytest.raises(TimeoutError), BenchmarkProgress("Checks") as display:
         for item in display.track(range(3)):
             if item == 1:
@@ -104,6 +111,7 @@ def test_redirected_updates_are_throttled(monkeypatch: pytest.MonkeyPatch, capsy
     """
     clock = [0.0]
     monkeypatch.setenv("CI", "true")
+    refresh_env()
     monkeypatch.setattr("hypothesis_helm_benchmarking.reporting.progress.time.monotonic", lambda: clock[0])
     with BenchmarkProgress("Renders") as display:
         for _ in display.track(range(25)):

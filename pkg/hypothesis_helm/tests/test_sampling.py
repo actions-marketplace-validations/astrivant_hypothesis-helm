@@ -10,8 +10,8 @@ import pytest
 from hypothesis_helm_benchmarking.charts.generator import generate
 
 from hypothesis_helm.charts.testing.runner import Chart, check_chart
-from hypothesis_helm.execution.estimate import estimate_suite
-from hypothesis_helm.execution.sampling import Sampling
+from hypothesis_helm.execution.planning.estimate import estimate_suite
+from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.shards import aggregate

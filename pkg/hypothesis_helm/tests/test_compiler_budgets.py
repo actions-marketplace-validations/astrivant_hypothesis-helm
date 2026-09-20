@@ -22,8 +22,9 @@ from hypothesis_helm.compiler.passes.complexity import measure
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, unpack
 from hypothesis_helm.compiler.passes.domains import project
 from hypothesis_helm.compiler.passes.pruning import snapshot
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.compiler import Unavailable, UnsupportedTransformation
-from hypothesis_helm.execution.cache import fingerprint
+from hypothesis_helm.execution.state.cache import fingerprint
 from hypothesis_helm.findings.configuration import COMPLETE_EXAMPLE
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 
@@ -40,6 +41,7 @@ def configure(monkeypatch: pytest.MonkeyPatch, **limits: int) -> None:
         None: Subsequent analyses inherit the settings.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"compiler": limits}))
+    refresh_env()
 
 
 def archive(contents: dict[str, bytes]) -> bytes:
@@ -123,6 +125,7 @@ def test_config_documentation_and_cache_identity(tmp_path: Path, monkeypatch: py
     config = tmp_path / "config.yaml"
     config.write_text(yamlio.dump({"compiler": {"max_files": 1}}))
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
+    refresh_env()
     original = RendererContext(tmp_path)
     previous = fingerprint(tmp_path, 0, None, "none")
     configure(monkeypatch, max_files=2)

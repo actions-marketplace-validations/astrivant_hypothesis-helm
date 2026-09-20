@@ -4,13 +4,15 @@ Property-based tests for Helm charts.
 
 from typing import TYPE_CHECKING
 
+from hypothesis_helm.environment import env, refresh_env, set_env
+
 if TYPE_CHECKING:
     from hypothesis_helm.charts.model import Chart
     from hypothesis_helm.charts.suites.generate import coalesce, generate_tests
     from hypothesis_helm.charts.testing.runner import check_chart
 
 # This facade is deliberately small; dependency types belong to their own packages.
-__all__ = ["Chart", "check_chart", "coalesce", "generate_tests"]
+__all__ = ["Chart", "check_chart", "coalesce", "env", "generate_tests", "refresh_env", "set_env"]
 
 
 def __getattr__(name: str) -> object:

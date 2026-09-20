@@ -13,8 +13,8 @@ from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.compiler.passes.sampling import profile
 from hypothesis_helm.compiler.passes.topology import trim_topology
-from hypothesis_helm.execution.aggressive import CALIBRATION_VERSION, descriptor, select
-from hypothesis_helm.execution.sampling import Sampling
+from hypothesis_helm.execution.planning.aggressive import CALIBRATION_VERSION, descriptor, select
+from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.schemas.model import ValuesModel

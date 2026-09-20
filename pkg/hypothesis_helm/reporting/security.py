@@ -5,7 +5,6 @@ Summarize Kubesec validity and score checks without losing scanner failures.
 import hashlib
 import html
 import json
-import os
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,6 +13,7 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 
 from attrs import asdict, define
 
+from hypothesis_helm.environment import env
 from hypothesis_helm.schemas.contracts import mapping
 
 __all__ = ("SecurityStatistics", "aggregate", "checksum", "publish", "read_result", "records")
@@ -252,7 +252,7 @@ def publish(output: Path, metadata: dict[str, object], minimum: int) -> int:
         f"{statistics.failed_checks}/{statistics.checks} checks failed; {missing} checks missing; minimum score {minimum}. "
         f"Report: {output / 'summary.md'}"
     )
-    if destination := os.environ.get("GITHUB_STEP_SUMMARY"):
+    if destination := env.get("GITHUB_STEP_SUMMARY"):
         with Path(destination).open("a") as stream:
             stream.write(summary + "\n")
     return status

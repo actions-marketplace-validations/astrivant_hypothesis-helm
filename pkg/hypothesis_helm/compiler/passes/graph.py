@@ -19,7 +19,7 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.conditions import condition_path
 from hypothesis_helm.compiler.asts.templates import fold, lower, specialize, walk
 from hypothesis_helm.compiler.passes.inputs import InputInventory
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping
 
 __all__ = ("export_graph",)

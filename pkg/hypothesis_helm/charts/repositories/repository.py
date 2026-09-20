@@ -5,7 +5,6 @@ Resolve local directories and temporary Git checkouts for repository scans.
 from __future__ import annotations
 
 import logging
-import os
 import re
 import subprocess
 import tempfile
@@ -17,7 +16,8 @@ from urllib.parse import urlsplit
 from attrs import define, field
 
 from hypothesis_helm.charts.repositories.changes import optional_git
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.reporting.links import repository_url
 
 __all__ = ("RepositorySource", "local_provenance", "remote_name", "run_git")
@@ -100,7 +100,7 @@ def run_git(command: list[str], timeout: float) -> subprocess.CompletedProcess[s
     Returns:
         subprocess.CompletedProcess[str]: Git output and exit status.
     """
-    environment = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    environment = dict(env, GIT_TERMINAL_PROMPT="0")
     if "GIT_SSH" not in environment:
         environment.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
     return Processes().run(command, env=environment, capture_output=True, timeout=timeout)

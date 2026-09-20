@@ -5,7 +5,6 @@ Plan finite inputs, filtering, failure expansion and progressive estimates befor
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -16,9 +15,10 @@ from hypothesis_helm.charts.model import Chart, merge_values
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
 from hypothesis_helm.compiler.passes.topology import trim_topology as topology_trim
-from hypothesis_helm.execution.aggressive import select as select_aggressive
-from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
-from hypothesis_helm.execution.traversal import ALGORITHM, order_configurations
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.planning.aggressive import select as select_aggressive
+from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
+from hypothesis_helm.execution.planning.traversal import ALGORITHM, order_configurations
 from hypothesis_helm.reporting.permutations import PermutationStatistics
 from hypothesis_helm.reporting.progressive import estimate_progression
 from hypothesis_helm.schemas.combinations import plan_interactions, trim_values
@@ -368,7 +368,7 @@ def build_plan(
                 "kube_version": options.kube_version,
                 "timeout": options.timeout,
                 "allow_empty": options.allow_empty,
-                "conformity": os.environ.get(ENVIRONMENT),
+                "conformity": env.get(ENVIRONMENT),
                 "custom_properties": bool(options.properties),
                 "prune_equivalent": options.prune_equivalent,
                 "filter_rejections": policy_enabled,

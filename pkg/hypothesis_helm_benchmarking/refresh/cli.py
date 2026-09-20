@@ -14,8 +14,9 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.signals import DeferredSignals, Termination
+from hypothesis_helm.environment import env, refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 from pipeline import OperationQueue
 
 from hypothesis_helm_benchmarking.refresh.plan import Refresh, source_path
@@ -91,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero for completion, 130 for interruption, or two for an unsuccessful refresh.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--resume", type=Path, help="retry unfinished operations from a saved operations.json or its directory")
     parser.add_argument("--workers", default="auto", help="concurrent independent refresh operations; auto uses available CPUs")
@@ -147,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
             root.mkdir(exist_ok=False)
             latest.write_text(str(root) + "\n")
-            environment = dict(os.environ, MPLBACKEND="Agg")
+            environment = dict(env, MPLBACKEND="Agg")
             environment["PYTHONPATH"] = source_path(project)
             queue = OperationQueue(
                 operations,

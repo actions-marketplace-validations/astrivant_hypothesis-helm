@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import env, set_env
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.policy import candidate_paths, resolve_codes
 from hypothesis_helm.reporting.errors import chart_errors
@@ -62,7 +63,7 @@ def observe(code: str, defaults: dict[str, object], values: dict[str, object]) -
     Returns:
         None: Only paths and codes are retained; separate process files avoid shared writes.
     """
-    directory = os.environ.get(ENVIRONMENT)
+    directory = env.get(ENVIRONMENT)
     if directory is None or code not in CATALOG:
         return
     try:
@@ -159,10 +160,10 @@ class SuppressionCapture:
         Returns:
             SuppressionCapture: The active per-chart capture.
         """
-        self.previous = os.environ.get(ENVIRONMENT)
+        self.previous = env.get(ENVIRONMENT)
         if self.enabled:
             self.journal.mkdir(parents=True, exist_ok=True)
-            os.environ[ENVIRONMENT] = str(self.journal.resolve())
+            set_env(ENVIRONMENT, str(self.journal.resolve()))
         return self
 
     def __exit__(self, kind: type[BaseException] | None, error: BaseException | None, traceback: TracebackType | None) -> None:
@@ -179,9 +180,9 @@ class SuppressionCapture:
         """
         if self.enabled:
             if self.previous is None:
-                os.environ.pop(ENVIRONMENT, None)
+                set_env(ENVIRONMENT, None)
             else:
-                os.environ[ENVIRONMENT] = self.previous
+                set_env(ENVIRONMENT, self.previous)
 
     def write(self, record: dict[str, object], *, name: str, source: str, defaults: dict[str, object] | None = None) -> None:
         """

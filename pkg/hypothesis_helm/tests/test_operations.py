@@ -15,8 +15,8 @@ import pytest
 from hypothesis_helm_benchmarking.refresh.plan import STUDIES, Refresh
 from pipeline import Operation, OperationQueue
 
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.signals import DeferredSignals, Termination
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 
 
 def queue(operations: list[Operation], directory: Path, workers: int = 3) -> OperationQueue:

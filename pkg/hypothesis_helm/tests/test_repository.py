@@ -14,6 +14,7 @@ import pytest
 
 from hypothesis_helm.charts.repositories.repository import local_provenance, remote_name, run_git
 from hypothesis_helm.cli import main
+from hypothesis_helm.environment import refresh_env
 
 
 @pytest.mark.parametrize(
@@ -89,9 +90,13 @@ def test_remote_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: py
     (untracked / "Chart.yaml").write_text((chart / "Chart.yaml").read_text())
     assert local_provenance(untracked) == {}
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    refresh_env()
     monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{origin.as_uri()}.insteadOf")
+    refresh_env()
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", url)
+    refresh_env()
     monkeypatch.setenv("GIT_ALLOW_PROTOCOL", "file")
+    refresh_env()
     roots: list[Path] = []
     discover = scanner.discover_charts
 

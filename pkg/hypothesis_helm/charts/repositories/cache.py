@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import logging
-import os
 import shutil
 import time
 from pathlib import Path
@@ -14,7 +13,8 @@ from pathlib import Path
 from attrs import define, field
 
 from hypothesis_helm.charts.repositories.changes import chart_changed
-from hypothesis_helm.execution.cache import fingerprint, merge_outcomes, read_outcomes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.state.cache import fingerprint, merge_outcomes, read_outcomes
 
 __all__ = ("ChartCache", "RETENTION_SECONDS")
 
@@ -63,7 +63,7 @@ class ChartCache:
         ):
             return cls(reason="requested exports require execution")
         # External schema trees and validators have independent lifetimes and caches.
-        if os.environ.get("HYPOTHESIS_HELM_CONFORMITY"):
+        if env.get("HYPOTHESIS_HELM_CONFORMITY"):
             return cls(reason="external validation requires fresh execution")
         ignored = {
             "directory",

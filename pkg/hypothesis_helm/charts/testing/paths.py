@@ -26,8 +26,8 @@ from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
-from hypothesis_helm.execution.traversal import ALGORITHM, SELECTION_ORDER, order_paths, validate_strategy
+from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
+from hypothesis_helm.execution.planning.traversal import ALGORITHM, SELECTION_ORDER, order_paths, validate_strategy
 from hypothesis_helm.findings.policy import RuleScope, chart_rules
 from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.reporting.budget import execution_timer
@@ -222,7 +222,7 @@ def check_paths(
                 )
             measured.observe(chart.defaults)
             if jobs > 1:
-                from hypothesis_helm.execution.path_queue import execute
+                from hypothesis_helm.execution.workers.path_queue import execute
 
                 context: dict[str, object] = {
                     "chart": str(chart.path),

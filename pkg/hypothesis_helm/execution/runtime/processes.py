@@ -12,8 +12,9 @@ from typing import TextIO
 
 from attrs import define, field
 
+from hypothesis_helm.environment import env as process_env
 from hypothesis_helm.exceptions.execution import TimeLimitReached
-from hypothesis_helm.execution.signals import DeferredSignals, Termination
+from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 
 __all__ = ("Processes",)
 
@@ -81,7 +82,7 @@ class Processes:
         Args:
             command (list[str]): Child invocation.
             cwd (Path | None): Working directory, or inherit the current directory.
-            env (dict[str, str] | None): Child environment, or inherit the current environment.
+            env (dict[str, str] | None): Explicit child environment, or a copy of the shared package snapshot.
             capture_output (bool): Whether to collect stdout and stderr.
             text (bool): Whether subprocess pipes use text mode.
             check (bool): Whether nonzero exits raise a subprocess error.
@@ -104,7 +105,7 @@ class Processes:
                         child = subprocess.Popen(
                             command,
                             cwd=cwd,
-                            env=env,
+                            env=dict(process_env) if env is None else env,
                             text=text,
                             stdin=subprocess.PIPE if input is not None else None,
                             stdout=subprocess.PIPE if capture_output else stdout,

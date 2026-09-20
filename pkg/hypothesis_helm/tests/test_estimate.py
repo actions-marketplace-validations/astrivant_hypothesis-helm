@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from hypothesis_helm.cli import main
-from hypothesis_helm.execution.estimate import estimate_suite
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.planning.estimate import estimate_suite
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.integrations.sharding import Shard
 
@@ -43,6 +44,7 @@ def test_saved_suite_cache_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         None: Plans match the prospective selection and leave artifacts unchanged.
     """
     monkeypatch.setenv("CI", "false")
+    refresh_env()
     (tmp_path / "test_chart_values.py").write_text(
         "from pathlib import Path\ndef test_pass(): Path('executed').touch()\ndef test_fail(): assert False\n"
     )
@@ -57,6 +59,7 @@ def test_saved_suite_cache_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert estimate_suite(tmp_path, schema_state={"status": "unavailable"})["scheduled_properties"] == 2
     assert estimate_suite(tmp_path, rerun="all")["scheduled_properties"] == 2
     monkeypatch.setenv("CI", "true")
+    refresh_env()
     assert estimate_suite(tmp_path)["scheduled_properties"] == 2
     assert estimate_suite(tmp_path, rerun="failed")["scheduled_properties"] == 1
     after = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
@@ -76,6 +79,7 @@ def test_chart_dry_run_cache_identity(tmp_path: Path, monkeypatch: pytest.Monkey
         None: Cold, warm, and changed-budget plans report the appropriate work.
     """
     monkeypatch.setenv("CI", "false")
+    refresh_env()
     target = tmp_path / "reports"
     args = [
         "test",

@@ -17,6 +17,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 from ruamel.yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.contracts import mapping
 
 __all__ = ("ShellBlock", "blocks", "check", "main", "replacement")
@@ -214,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero on success, one for lint failures, or two for invalid setup.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("files", nargs="*", type=Path, help="CI YAML files; defaults to action.yml, .github/, .circleci/ and ci/")
     parser.add_argument("--write", action="store_true", help="Apply shfmt formatting to embedded shell blocks")

@@ -3,14 +3,14 @@ Run isolated GitHub refresh phases from the same operation inventory used locall
 """
 
 import json
-import os
 import shutil
 import sys
 from dataclasses import replace
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.signals import DeferredSignals, Termination
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 from pipeline import Operation, OperationQueue
 
 from hypothesis_helm_benchmarking.refresh.plan import STUDIES, Refresh, source_path
@@ -102,7 +102,7 @@ def run_phase(root: Path, phase: str, study: str | None, workers: int) -> None:
         workers=workers,
         directory=directory,
         cwd=Path.cwd(),
-        environment=dict(os.environ, MPLBACKEND="Agg", PYTHONPATH=source_path(Path.cwd())),
+        environment=dict(env, MPLBACKEND="Agg", PYTHONPATH=source_path(Path.cwd())),
         owner_factory=lambda: Processes(interrupt_grace=15.0),
         cancellation_scope=Termination,
         critical_scope=DeferredSignals,
@@ -123,10 +123,10 @@ def run_phase(root: Path, phase: str, study: str | None, workers: int) -> None:
         provenance_path = root / "provenance.json"
         provenance = json.loads(provenance_path.read_text())
         provenance["execution"] = "Isolated CI study runners, verified aggregation and diagrams, then sequential repository tests"
-        provenance["ci_run_id"] = os.environ.get("GITHUB_RUN_ID")
-        provenance["ci_run_attempt"] = os.environ.get("GITHUB_RUN_ATTEMPT")
+        provenance["ci_run_id"] = env.get("GITHUB_RUN_ID")
+        provenance["ci_run_attempt"] = env.get("GITHUB_RUN_ATTEMPT")
         provenance_path.write_text(json.dumps(provenance, indent=2) + "\n")
-        path = os.environ.get("GITHUB_OUTPUT")
+        path = env.get("GITHUB_OUTPUT")
         if path:
             with Path(path).open("a") as output:
                 output.write(f"root={root}\nmatrix={json.dumps({'study': list(STUDIES)})}\n")

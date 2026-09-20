@@ -7,7 +7,8 @@ import html
 import re
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
 
 __all__ = ("END", "START", "heading_inventory", "main", "with_contents")
 
@@ -117,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: One if a check finds stale contents; otherwise zero.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="report stale contents without changing files")
     parser.add_argument("files", nargs="*", type=Path, help="Markdown files; defaults to repository documentation")

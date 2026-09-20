@@ -16,6 +16,7 @@ from hypothesis_helm_benchmarking.execution.profiling import PROFILE_DIRECTORY, 
 from hypothesis_helm_benchmarking.execution.runner import measure
 from hypothesis_helm_benchmarking.reporting.flamegraph import layout, merge, render_profiles
 
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 
@@ -120,6 +121,7 @@ def test_profiles_are_captured_in_multiple_worker_processes(tmp_path: Path, monk
     generate(chart, input_complexity=4, mean_value=0, stddev=1, output_bins=4)
     profiles = tmp_path / "profiles"
     monkeypatch.setenv(PROFILE_DIRECTORY, str(profiles))
+    refresh_env()
     result = measure(chart, 4, 2, True, seed=0, multiplicity=1, time_limit=30, helm="helm", shard=None)
     assert result["status"] == "passed"
     assert result["completed"] == 4

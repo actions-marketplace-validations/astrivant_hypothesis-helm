@@ -12,7 +12,7 @@ from textwrap import dedent
 
 import pytest
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations import kubesec
 from hypothesis_helm.integrations.sharding import Shard
 

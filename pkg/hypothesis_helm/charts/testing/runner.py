@@ -8,7 +8,6 @@ import copy
 import json
 import logging
 import math
-import os
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
@@ -33,12 +32,13 @@ from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
+from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.render_hashes import RenderHashes
-from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
-from hypothesis_helm.execution.sensitivity import SensitivityOrder, validate_order
-from hypothesis_helm.execution.traversal import order_configurations, validate_strategy
+from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
+from hypothesis_helm.execution.planning.sensitivity import SensitivityOrder, validate_order
+from hypothesis_helm.execution.planning.traversal import order_configurations, validate_strategy
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.findings.policy import chart_rules
 from hypothesis_helm.findings.severity import attributes
 from hypothesis_helm.findings.severity import policy as finding_policy
@@ -347,7 +347,7 @@ def check_chart(
                 "kube_version": kube_version,
                 "timeout": timeout,
                 "allow_empty": allow_empty,
-                "environment": dict(os.environ),
+                "environment": dict(env),
                 "ignored_rules": effective_ignored_codes(),
             }
         )

@@ -19,9 +19,10 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
+from hypothesis_helm.environment import env, refresh_env
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.signals import DeferredSignals, Termination
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 from hypothesis_helm.reporting.checkpoints import save
 from hypothesis_helm.reporting.logs import WorkerLogFormatter, WorkerLogs
 from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format
@@ -58,7 +59,7 @@ def execute(context: dict[str, object], directory: Path, workers: int) -> list[d
     deadline = float(str(context["deadline"]))
     logs = WorkerLogs(directory, count)
     descriptor = MANIFEST_FD.get()
-    environment = dict(os.environ)
+    environment = dict(env)
     if descriptor is not None:
         lock = directory / "manifests.lock"
         lock.touch()
@@ -169,6 +170,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero after exhausting the queue or reaching its common deadline.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
     args = parser.parse_args(argv)

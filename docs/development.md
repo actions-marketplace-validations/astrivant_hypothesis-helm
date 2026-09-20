@@ -13,6 +13,7 @@
 - [Publishing to PyPI](#publishing-to-pypi)
 - [Pre-commit hook](#pre-commit-hook)
 - [Package organization](#package-organization)
+- [Shared environment settings](#shared-environment-settings)
 - [Repository map](#repository-map)
 - [Preserved scheduler and separate Reflow project](#preserved-scheduler-and-separate-reflow-project)
 <!-- toc:end -->
@@ -253,7 +254,8 @@ sampling budget modest. Use branch analysis and broader testing to assess covera
 
 Every maintained Python module declares `__all__` explicitly. Export functions, classes, type aliases, and constants owned by that module,
 plus intentional re-exports from another project module. Keep standard-library and third-party imports, loggers, generic type variables,
-and mutable execution state out of the list. Import dependencies directly from their own packages.
+and internal execution state out of the list. The shared `env` dictionary is an explicit public configuration interface.
+Import dependencies directly from their own packages.
 
 An organizing package can use `__all__ = ()`; it does not need to eagerly import all its submodules. The root `hypothesis_helm` API stays lazy
 so importing it does not initialize the testing engine. Refresh recipe scripts also have empty exports because they are executable steps,
@@ -263,14 +265,14 @@ not library interfaces. Tests check export ownership and representative wildcard
 Use short comments near decisions that need context: why a branch remains unresolved, what a cache entry proves, which process owns cleanup,
 or how a measurement stays comparable. Avoid comments that merely repeat the next statement; update them with the behavior they explain.
 
-The package root contains the CLI and the lazy public API (`Chart`, `check_chart`,
-`coalesce`, and `generate_tests`). Related implementation modules live together:
+The package root contains the CLI, lightweight environment helpers (`env`, `refresh_env`, `set_env`), and the lazy chart API
+(`Chart`, `check_chart`, `coalesce`, and `generate_tests`). Related implementation modules live together:
 
 | Subpackage | Responsibility |
 | --- | --- |
 | `charts/` | Template discovery, YAML handling, property generation, and chart rendering. |
 | `schemas/` | Value contracts, finite schema enumeration, and Kubernetes API conformity. |
-| `execution/` | Suite execution, worker scheduling, PID feedback, process cleanup, and result caching. |
+| `execution/` | Suite coordination, with `planning/`, `workers/`, `runtime/` and `state/` groups. See the [execution layout](architecture/README.md#execution-package-layout). |
 | `reporting/` | Progress display, path logging, and JSON manifest streaming. |
 | `integrations/` | CI provider configuration, shard detection, and the GitHub Action adapter. |
 | `tests/` | Package-local unit and integration tests. |
@@ -280,6 +282,35 @@ Regenerate previously saved suites with `helm hypothesis generate` after upgradi
 from the flat module layout, or update that import in a manually maintained suite.
 Helm commands and the public package exports retain their existing names. Result
 cache fingerprints cover implementation modules recursively across all subpackages.
+
+## Shared environment settings
+
+Package code reads environment variables from one process-local dictionary:
+
+```python
+from hypothesis_helm import env, refresh_env, set_env
+
+ignored = env.get("HYPOTHESIS_HELM_IGNORED_RULES", "[]")
+refresh_env()  # Pick up changes made directly to os.environ by the caller or another library.
+previous = set_env("HYPOTHESIS_HELM_IGNORED_RULES", "[]")
+try:
+    ...
+finally:
+    set_env("HYPOTHESIS_HELM_IGNORED_RULES", previous)
+```
+
+[`environment.py`](../pkg/hypothesis_helm/environment.py) owns the dictionary and the only direct environment reads and writes.
+`refresh_env()` updates that same object, including removing deleted variables, so imported references remain valid.
+CLI entry points refresh before starting work. Library callers should refresh after changing `os.environ` themselves,
+before starting worker threads; refreshing several settings is not an atomic configuration change for concurrent readers.
+
+Use `set_env(name, value)` for application-owned changes, or `None` to remove a variable. It updates both the dictionary and
+`os.environ`, so external libraries and child processes see the setting too. Temporary chart scopes and CLI overrides restore both
+on exit. The process owner copies the shared dictionary when no explicit child environment is supplied; a provided mapping,
+including an empty one, takes precedence. Each worker process has its own snapshot, rather than shared memory between processes.
+
+The catalog and optional benchmarking package use this same environment API. Tests that change the process environment explicitly
+refresh the snapshot, and test teardown restores it to prevent settings leaking between cases.
 
 ## Repository map
 

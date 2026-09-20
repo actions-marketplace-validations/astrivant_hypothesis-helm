@@ -20,7 +20,7 @@ from hypothesis_helm_benchmarking.studies.error_surface import METHODS, METRICS,
 from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES
 
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.execution.traversal import SELECTION_ORDER
+from hypothesis_helm.execution.planning.traversal import SELECTION_ORDER
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
 
 
@@ -705,7 +705,7 @@ def test_refresh_scans_follow_published_diagrams(tmp_path: Path, failure: str | 
     from hypothesis_helm_benchmarking.refresh.plan import Refresh
     from pipeline import OperationQueue
 
-    from hypothesis_helm.execution.processes import Processes
+    from hypothesis_helm.execution.runtime.processes import Processes
 
     project = Path(__file__).resolve().parents[3]
     root = tmp_path / "refresh"

@@ -17,7 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -156,7 +157,7 @@ def run(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = N
         or args.multiplicity & (args.multiplicity - 1)
     ):
         raise ValueError("limit must be <= 9m; repeats positive; multiplicity a positive power of two")
-    shard, shard_source = resolve_shard(args.shard, os.environ)
+    shard, shard_source = resolve_shard(args.shard, env)
     output = args.output / f"shard-{shard.name}" if shard else args.output
     if args.plot_only:
         from hypothesis_helm_benchmarking.reporting.plots import plot

@@ -7,7 +7,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.policy import intersect
 from jsonschema import validators

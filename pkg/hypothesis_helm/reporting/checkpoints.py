@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.execution.signals import DeferredSignals
+from hypothesis_helm.execution.runtime.signals import DeferredSignals
 
 __all__ = ("save",)
 

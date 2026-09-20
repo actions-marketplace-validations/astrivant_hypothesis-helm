@@ -16,7 +16,8 @@ from uuid import uuid4
 
 import pytest
 
-from hypothesis_helm.execution.manifests import ManifestStore
+from hypothesis_helm.environment import env, set_env
+from hypothesis_helm.execution.state.manifests import ManifestStore
 
 __all__ = (
     "fingerprint",
@@ -71,13 +72,13 @@ def fingerprint(
         str: Content-addressed cache key, independent of absolute checkout paths.
     """
     digest = hashlib.sha256(repr((seed, match, shard, sys.version)).encode())
-    digest.update(os.environ.get("HYPOTHESIS_HELM_IGNORED_RULES", "[]").encode())
-    digest.update(os.environ.get("HYPOTHESIS_HELM_INPUT_POLICY", "{}").encode())
+    digest.update(env.get("HYPOTHESIS_HELM_IGNORED_RULES", "[]").encode())
+    digest.update(env.get("HYPOTHESIS_HELM_INPUT_POLICY", "{}").encode())
     from hypothesis_helm_catalog.builder import DATA
 
     for catalog in sorted(DATA.glob("*.json")):
         digest.update(catalog.read_bytes())
-    conformity = os.environ.get("HYPOTHESIS_HELM_CONFORMITY")
+    conformity = env.get("HYPOTHESIS_HELM_CONFORMITY")
     if conformity:
         settings = json.loads(conformity)
         if "cache_root" in settings:
@@ -104,7 +105,8 @@ def fingerprint(
             if file.is_file() and not any(root in file.parents for root in (directory, *excluded)):
                 digest.update(file.relative_to(chart).as_posix().encode())
                 digest.update(hashlib.sha256(file.read_bytes()).digest())
-    package_root = Path(__file__).resolve().parents[1]
+    # Invalidate outcomes for changes anywhere in the core package, beyond execution/state.
+    package_root = Path(__file__).resolve().parents[2]
     files += sorted(file for file in package_root.rglob("*.py") if "tests" not in file.relative_to(package_root).parts)
     files += sorted((package_root / "compiler" / "lua").glob("*.lua"))
     for file in files:
@@ -174,12 +176,12 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         None: Keyword selection and shard inventory finish before cached successes are removed.
     """
     yield
-    source = os.environ.get("HYPOTHESIS_HELM_CACHE_READ")
+    source = env.get("HYPOTHESIS_HELM_CACHE_READ")
     if not source:
         return
     outcomes = read_outcomes(Path(source))
-    store = os.environ.get("HYPOTHESIS_HELM_MANIFEST_STORE")
-    required = os.environ.get("HYPOTHESIS_HELM_MANIFEST_REQUIRED") == "1"
+    store = env.get("HYPOTHESIS_HELM_MANIFEST_STORE")
+    required = env.get("HYPOTHESIS_HELM_MANIFEST_REQUIRED") == "1"
     excluded = [
         item
         for item in items
@@ -190,7 +192,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     items[:] = [item for item in items if item.nodeid not in skipped]
     config.hook.pytest_deselected(items=excluded)
     if excluded:
-        destination = os.environ.get("HYPOTHESIS_HELM_CACHE_RESULTS")
+        destination = env.get("HYPOTHESIS_HELM_CACHE_RESULTS")
         if destination:
             (Path(destination) / "deselected").touch()
             (Path(destination) / f"reused-{os.getpid()}.json").write_text(json.dumps(sorted(skipped)))
@@ -210,22 +212,22 @@ def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> 
         None: Pytest executes the property's fixtures, examples and teardown.
 
     """
-    root = os.environ.get("HYPOTHESIS_HELM_MANIFEST_STORE")
-    workspace = os.environ.get("HYPOTHESIS_HELM_CACHE_RESULTS")
+    root = env.get("HYPOTHESIS_HELM_MANIFEST_STORE")
+    workspace = env.get("HYPOTHESIS_HELM_CACHE_RESULTS")
     if root is None or workspace is None:
         yield
         return
     capture = Path(workspace) / f"{uuid4().hex}.jsonl"
     capture.touch()
-    previous = os.environ.get("HYPOTHESIS_HELM_MANIFEST_CAPTURE")
-    os.environ["HYPOTHESIS_HELM_MANIFEST_CAPTURE"] = str(capture)
+    previous = env.get("HYPOTHESIS_HELM_MANIFEST_CAPTURE")
+    set_env("HYPOTHESIS_HELM_MANIFEST_CAPTURE", str(capture))
     try:
         yield
     finally:
         if previous is None:
-            os.environ.pop("HYPOTHESIS_HELM_MANIFEST_CAPTURE", None)
+            set_env("HYPOTHESIS_HELM_MANIFEST_CAPTURE", None)
         else:
-            os.environ["HYPOTHESIS_HELM_MANIFEST_CAPTURE"] = previous
+            set_env("HYPOTHESIS_HELM_MANIFEST_CAPTURE", previous)
         try:
             if OUTCOMES.get(item.nodeid) == "passed":
                 ManifestStore(Path(root)).publish(item.nodeid, capture)
@@ -245,7 +247,7 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     Returns:
         None: Completed results are atomically saved in a worker-specific file.
     """
-    destination = os.environ.get("HYPOTHESIS_HELM_CACHE_RESULTS")
+    destination = env.get("HYPOTHESIS_HELM_CACHE_RESULTS")
     if not destination:
         return
     if report.when == "call" and report.passed:

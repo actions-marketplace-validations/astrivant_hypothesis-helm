@@ -16,7 +16,7 @@ from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
 from hypothesis_helm.compiler.passes.topology import trim_topology
 from hypothesis_helm.exceptions.execution import TimeLimitReached
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.reporting.budget import execution_timer, parse_time_limit
 from hypothesis_helm.schemas.combinations import plan_interactions, trim_values
 from hypothesis_helm.schemas.contracts import configuration_key, mapping

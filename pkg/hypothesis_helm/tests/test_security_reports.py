@@ -8,6 +8,7 @@ from xml.etree.ElementTree import parse
 
 import pytest
 
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.reporting.security import SecurityStatistics, aggregate, publish, read_result
 
 
@@ -103,6 +104,7 @@ def test_aggregate_security(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fai
     for index in range(1, 4):
         shard_report(tmp_path / "source", index, failed=failed and index == 1)
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "step.md"))
+    refresh_env()
     output = tmp_path / "final"
     assert aggregate(tmp_path / "source", output, shards=3, run_id="pipeline-123-attempt-1", version="latest", minimum=5) == int(failed)
     summary = json.loads((output / "summary.json").read_text())

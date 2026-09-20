@@ -16,8 +16,8 @@ from textwrap import dedent
 
 from hypothesis_helm.charts.repositories.repository import local_provenance
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.traversal import SELECTION_ORDER
+from hypothesis_helm.execution.planning.traversal import SELECTION_ORDER
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.reporting.repository import write_reports
 from hypothesis_helm.schemas.contracts import supported_generated_text

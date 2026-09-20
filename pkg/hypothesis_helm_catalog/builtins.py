@@ -11,7 +11,8 @@ import urllib.request
 from pathlib import Path
 from zipfile import ZipFile
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_catalog import toolchain
@@ -157,6 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero on success, one for a stale inventory or invalid source.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache-dir", type=Path, default=Path(".cache/compiler-builtins"))
     parser.add_argument("--source-lock", type=Path, default=LOCK, help="reviewed upstream artifact URLs and checksums")

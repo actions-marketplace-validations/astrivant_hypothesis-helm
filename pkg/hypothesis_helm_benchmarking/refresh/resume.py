@@ -9,8 +9,9 @@ import sys
 import time
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.signals import DeferredSignals, Termination
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from pipeline import Operation, OperationQueue
 
@@ -82,7 +83,7 @@ def resume(journal: Path, workers: int, *, dry_run: bool = False) -> None:
         return
     with RefreshLock(root.parent / "full-refresh.lock"):
         directory = root / f"resumed-{time.time_ns()}"
-        environment = dict(os.environ, MPLBACKEND="Agg")
+        environment = dict(env, MPLBACKEND="Agg")
         environment["PYTHONPATH"] = str(root / "frozen-source/pkg")
         environment["PATH"] = str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", "")
         queue = OperationQueue(

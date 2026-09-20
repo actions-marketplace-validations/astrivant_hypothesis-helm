@@ -9,7 +9,8 @@ from textwrap import dedent
 import pytest
 
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.execution.manifests import ManifestStore
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.state.manifests import ManifestStore
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.reporting.output import MANIFEST_FD, MANIFEST_FORMAT
@@ -59,6 +60,7 @@ def test_partial_retries_replay_and_corrupt_streams_rerun(tmp_path: Path, monkey
         None: Cold, partial, fully cached and corrupt-cache runs preserve complete output.
     """
     monkeypatch.setenv("CI", "true")
+    refresh_env()
     (tmp_path / "test_chart_values.py").write_text(
         dedent("""
         from pathlib import Path

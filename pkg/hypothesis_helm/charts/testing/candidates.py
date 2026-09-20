@@ -16,7 +16,7 @@ from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import ACTIVE_CODES, RuleScope
 from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, blocks

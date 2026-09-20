@@ -13,6 +13,7 @@ from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.compiler.asts.contracts import Contracts
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.findings.severity import attributes, for_paths, policy
@@ -38,6 +39,7 @@ def configure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, document: dict[st
     path = tmp_path / "policy.yaml"
     path.write_text(yamlio.dump(document))
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(path)))
+    refresh_env()
     return path
 
 

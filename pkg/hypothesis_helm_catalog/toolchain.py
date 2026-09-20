@@ -4,11 +4,11 @@ Build and fingerprint the shared Go catalog extractor.
 
 import hashlib
 import json
-import os
 import shutil
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
 
 __all__ = ("TOOL", "build", "fingerprint")
 
@@ -54,7 +54,7 @@ def build(output: Path, cache: Path, go: str, owner: Processes, *, offline: bool
         raise ValueError("Catalog rebuilds require Go 1.25 or newer; run scripts/setup-dev.sh")
     cache = cache.resolve()
     environment = {
-        **os.environ,
+        **env,
         "GOMODCACHE": str(cache / "go/modules"),
         "GOCACHE": str(cache / "go/build"),
         "GOTOOLCHAIN": "local",

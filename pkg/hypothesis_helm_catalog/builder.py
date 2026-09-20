@@ -8,6 +8,7 @@ import json
 import tempfile
 from pathlib import Path
 
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import intersect
 
@@ -189,6 +190,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero for success, one when --check finds a stale catalog.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--schema-dir", type=Path, help="local standalone-strict schema snapshot")
     parser.add_argument("--schema-version", default="1.35.0")

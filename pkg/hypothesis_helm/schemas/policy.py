@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import re
 from pathlib import Path
 
@@ -16,6 +15,7 @@ from jsonschema import validators
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.charts.values.parsers import validate_backend
 from hypothesis_helm.compiler.limits import compiler_limits
+from hypothesis_helm.environment import env
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.severity import validate as validate_findings
 from hypothesis_helm.schemas.characters import validate_character_sets
@@ -248,7 +248,7 @@ def inherited_policy() -> dict[str, object]:
     Returns:
         dict[str, object]: Immutable-by-convention JSON policy.
     """
-    return mapping(json.loads(os.environ.get(ENVIRONMENT, "{}")))
+    return mapping(json.loads(env.get(ENVIRONMENT, "{}")))
 
 
 def intersect(original: dict[str, object], restriction: dict[str, object]) -> dict[str, object]:

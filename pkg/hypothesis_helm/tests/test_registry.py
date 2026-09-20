@@ -17,6 +17,7 @@ import pytest
 
 from hypothesis_helm.charts.repositories.registry import HelmTransport, prepare_helm_source, unpack_chart
 from hypothesis_helm.cli import main
+from hypothesis_helm.environment import refresh_env
 
 
 def chart_archive(name: str, version: str) -> bytes:
@@ -216,6 +217,7 @@ def test_oci_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         None: Version, package checksum, and registry configuration are retained correctly.
     """
     monkeypatch.setenv("HELM_REGISTRY_CONFIG", str(tmp_path / "registry.json"))
+    refresh_env()
 
     def pull(transport: HelmTransport, command: list[str]) -> subprocess.CompletedProcess[str]:
         """
@@ -269,6 +271,7 @@ def test_real_helm_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
         "HELM_PLUGINS": "plugins",
     }.items():
         monkeypatch.setenv(key, str(tmp_path / directory))
+        refresh_env()
     archive_a = chart_archive("a", "1.0.0")
     archive_new = chart_archive("a", "2.0.0")
     archive_b = chart_archive("b", "1.0.0")

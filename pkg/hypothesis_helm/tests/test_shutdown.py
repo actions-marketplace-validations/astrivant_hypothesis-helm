@@ -20,8 +20,8 @@ from hypothesis_helm_benchmarking.execution.runner import Job, measure
 
 from hypothesis_helm.charts.repositories.registry import HelmTransport
 from hypothesis_helm.charts.repositories.repository import run_git
-from hypothesis_helm.execution.parallel import run_parallel
-from hypothesis_helm.execution.processes import Processes, _signal_group
+from hypothesis_helm.execution.runtime.processes import Processes, _signal_group
+from hypothesis_helm.execution.workers.parallel import run_parallel
 
 
 @pytest.mark.parametrize("sig", [0, signal.SIGINT, signal.SIGTERM, signal.SIGKILL])
@@ -94,7 +94,7 @@ import time
 from pathlib import Path
 import pytest
 from hypothesis_helm.reporting.output import emit_manifest
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
 
 @pytest.mark.parametrize("index", range(8))
 def test_shutdown(index):
@@ -288,7 +288,7 @@ def test_one_cleanup_failure_does_not_skip_other_children(monkeypatch: pytest.Mo
             raise PermissionError("cannot signal owned group")
         return False
 
-    monkeypatch.setattr("hypothesis_helm.execution.processes._signal_group", signal_group)
+    monkeypatch.setattr("hypothesis_helm.execution.runtime.processes._signal_group", signal_group)
     processes = Processes(interrupt_grace=0)
     processes._children.update((blocked, finished))
     with pytest.raises(ExceptionGroup, match="Failed to release"):
@@ -324,7 +324,7 @@ def test_repeated_cancellation_during_join_preserves_siblings(monkeypatch: pytes
         signal.raise_signal(signal.SIGTERM)
 
     children[0].wait.side_effect = interrupted_join
-    monkeypatch.setattr("hypothesis_helm.execution.processes._signal_group", lambda child, sig: False)
+    monkeypatch.setattr("hypothesis_helm.execution.runtime.processes._signal_group", lambda child, sig: False)
     owner = Processes()
     owner._children.update(children)
     with pytest.raises(KeyboardInterrupt):
@@ -510,7 +510,7 @@ def test_timeout_alarm_waits_for_real_child_cleanup(tmp_path: Path, monkeypatch:
 
         monkeypatch.setattr(Processes, "stop", interrupt_before_stop)
     else:
-        monkeypatch.setattr("hypothesis_helm.execution.processes._signal_group", interrupt_cleanup)
+        monkeypatch.setattr("hypothesis_helm.execution.runtime.processes._signal_group", interrupt_cleanup)
     previous_alarm, previous_interrupt = signal.getsignal(signal.SIGALRM), signal.getsignal(signal.SIGINT)
     owner = Processes(interrupt_grace=0.1)
     with pytest.raises(TimeLimitReached) as failure, execution_timer(30):
@@ -556,7 +556,7 @@ def test_deferred_deadline_preserves_cleanup_failure(monkeypatch: pytest.MonkeyP
         signal.raise_signal(signal.SIGALRM)
         return False
 
-    monkeypatch.setattr("hypothesis_helm.execution.processes._signal_group", gone)
+    monkeypatch.setattr("hypothesis_helm.execution.runtime.processes._signal_group", gone)
     with pytest.raises(BaseExceptionGroup) as failure, execution_timer(30):
         owner.stop()
     assert failure.value.subgroup(OSError) is not None

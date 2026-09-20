@@ -13,6 +13,7 @@ from hypothesis import strategies as st
 
 from hypothesis_helm.compiler.lua.bounds import BoundEvaluator
 from hypothesis_helm.compiler.passes.complexity import Component, OutputCase, bound, measure
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.schemas.policy import ENVIRONMENT
 from hypothesis_helm.tests.test_complexity import _chart
@@ -169,6 +170,7 @@ def test_lua_and_fallback_searches_keep_identical_witnesses(tmp_path: Path, monk
     monkeypatch.setenv(
         ENVIRONMENT, json.dumps({"input_constraints": [{"charts": ["example"], "path": "$", "compiler": {"max_lua_memory_bytes": 1}}]})
     )
+    refresh_env()
     fallback = measure(chart)
     assert mapping(normal["bound_backend"])["engine"] == "lua54"
     assert mapping(fallback["bound_backend"])["fallback_reason"] is not None

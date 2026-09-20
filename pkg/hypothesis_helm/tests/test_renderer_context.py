@@ -18,6 +18,7 @@ from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.rules import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import mapping
@@ -309,10 +310,12 @@ def test_unknown_context_warns_once_and_can_be_suppressed(
     assert contracts.incomplete_evaluations == 2
     caplog.clear()
     monkeypatch.setenv(ENVIRONMENT, json.dumps(["HH2007"]))
+    refresh_env()
     contracts.fail_fast = True
     assert contracts.predict(context_chart.defaults) is None
     assert not caplog.records
     monkeypatch.setenv(ENVIRONMENT, "[]")
+    refresh_env()
     with pytest.raises(RenderFailure, match="HH2007"):
         contracts.predict(context_chart.defaults)
 
@@ -437,9 +440,11 @@ def test_fallback_suppression_is_scoped_to_values_paths(
     """
     (context_chart.path / "templates/NOTES.txt").write_text("{{ tpl .Values.script . }}")
     monkeypatch.setenv(ENVIRONMENT, '["HH2007"]')
+    refresh_env()
     monkeypatch.setenv(
         INPUT_POLICY, json.dumps({"input_constraints": [{"charts": ["context"], "path": "$.script", "enabled": ["HH2007"]}]})
     )
+    refresh_env()
     contracts = Contracts.build(context_chart.path)
     with caplog.at_level(logging.WARNING):
         assert contracts.predict({"script": "{{ now }}"}) is None

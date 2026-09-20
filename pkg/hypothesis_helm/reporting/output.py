@@ -10,6 +10,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import env
 
 __all__ = ("emit_manifest", "manifest_format")
 
@@ -25,7 +26,7 @@ def manifest_format() -> str:
     Returns:
         str: JSON lines by default, or YAML documents when explicitly selected.
     """
-    return MANIFEST_FORMAT.get() or os.environ.get("HYPOTHESIS_HELM_MANIFEST_FORMAT", "json")
+    return MANIFEST_FORMAT.get() or env.get("HYPOTHESIS_HELM_MANIFEST_FORMAT", "json")
 
 
 def emit_manifest(resource: object) -> None:
@@ -39,13 +40,13 @@ def emit_manifest(resource: object) -> None:
         None: One complete resource is written immediately when output is enabled.
     """
     # Capture independently of stdout: a later cached run may request a manifest stream.
-    capture = os.environ.get("HYPOTHESIS_HELM_MANIFEST_CAPTURE")
+    capture = env.get("HYPOTHESIS_HELM_MANIFEST_CAPTURE")
     if capture is not None:
         with Path(capture).open("a") as stream:
             stream.write(json.dumps(resource, ensure_ascii=True, allow_nan=False) + "\n")
     descriptor = MANIFEST_FD.get()
     if descriptor is None:
-        inherited = os.environ.get("HYPOTHESIS_HELM_MANIFEST_FD")
+        inherited = env.get("HYPOTHESIS_HELM_MANIFEST_FD")
         if inherited is None:
             return
         descriptor = int(inherited)
@@ -54,7 +55,7 @@ def emit_manifest(resource: object) -> None:
     )
     payload = text.encode()
     with ExitStack() as stack:
-        lock_path = os.environ.get("HYPOTHESIS_HELM_MANIFEST_LOCK")
+        lock_path = env.get("HYPOTHESIS_HELM_MANIFEST_LOCK")
         if lock_path is not None:
             lock = stack.enter_context(open(lock_path, "rb"))
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX)

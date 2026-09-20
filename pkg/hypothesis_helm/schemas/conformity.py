@@ -19,7 +19,8 @@ from jsonschema import FormatChecker, ValidationError, validators
 from jsonschema.protocols import Validator
 
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.rules import ignored
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.policy import check_schema
@@ -60,7 +61,7 @@ def memory_snapshot(snapshot: Path) -> Path:
     Returns:
         Path: Atomic memory copy, or the original snapshot when staging is disabled.
     """
-    setting = os.environ.get("HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR", "")
+    setting = env.get("HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR", "")
     if not setting:
         return snapshot
     root = Path(setting).expanduser().resolve()
@@ -225,7 +226,7 @@ def validate(manifests: str | Iterable[object], timeout: float, *, configuration
     Returns:
         None: Every resource conforms, or validation raises an assertion failure.
     """
-    configuration = configuration or os.environ.get(ENVIRONMENT)
+    configuration = configuration or env.get(ENVIRONMENT)
     if not configuration or ignored("HH1108"):
         return
     settings = json.loads(configuration)

@@ -3,7 +3,8 @@ Render the argument parser consistently in the README and command reference.
 """
 
 import argparse
-import os
+
+from hypothesis_helm.environment import env, set_env
 
 __all__ = ("help_markdown",)
 
@@ -20,8 +21,8 @@ def help_markdown(*, headings: bool = True) -> str:
     """
     from hypothesis_helm.cli import argument_parser
 
-    previous = os.environ.get("COLUMNS")
-    os.environ["COLUMNS"] = "88"
+    previous = env.get("COLUMNS")
+    set_env("COLUMNS", "88")
     try:
         parser = argument_parser(prog="helm hypothesis")
         parsers = [("helm hypothesis", parser)]
@@ -35,6 +36,6 @@ def help_markdown(*, headings: bool = True) -> str:
         return "\n".join(sections)
     finally:
         if previous is None:
-            os.environ.pop("COLUMNS", None)
+            set_env("COLUMNS", None)
         else:
-            os.environ["COLUMNS"] = previous
+            set_env("COLUMNS", previous)

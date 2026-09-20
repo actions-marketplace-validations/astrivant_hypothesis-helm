@@ -11,6 +11,7 @@ import pytest
 
 from hypothesis_helm.charts.inspection.audit import audit
 from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.rules import ENVIRONMENT, load_ignored
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.opaque import opaque_paths, warn_opaque
@@ -117,6 +118,7 @@ def test_audit_and_ignore_preserve_input_space(tmp_path: Path, monkeypatch: pyte
     policy = tmp_path / "config.yaml"
     policy.write_text("ignored: [HH2006]\n")
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_ignored(policy, [])))
+    refresh_env()
     caplog.clear()
     suppressed = audit(chart)
     assert not any(mapping(item)["code"] == "HH2006" for item in sequence(suppressed["findings"]))

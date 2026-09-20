@@ -15,6 +15,7 @@ from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.compiler.asts.contracts import Contracts
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.generator import FindingGenerator
@@ -78,6 +79,7 @@ def test_threshold_uses_effective_severity(monkeypatch: pytest.MonkeyPatch, thre
         None: Overrides affect failure decisions while preserving the evidence kind.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": threshold, "severity": {"HH1101": "warning"}}}))
+    refresh_env()
     assert level("HH1101") == "warning"
     assert blocks("HH1101") is expected
     record = FindingGenerator.create("HH1101", "invalid YAML").record()
@@ -126,6 +128,7 @@ def test_report_keeps_the_original_severity_policy(monkeypatch: pytest.MonkeyPat
         None: Rendering a saved diagnostic uses its recorded policy instead of current defaults.
     """
     monkeypatch.delenv(ENVIRONMENT, raising=False)
+    refresh_env()
     diagnostics = chart_errors(
         {
             "finding_policy": {"fail_on": "error", "severity": {"HH1201": "error"}},
@@ -206,6 +209,7 @@ def test_lower_findings_do_not_stop_or_validate_candidates(
         None: Every candidate is attempted, warnings stay visible and no output is certified.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error", "severity": {"HH1101": "warning"}}}))
+    refresh_env()
     attempted = []
 
     def fail(chart: Chart, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
@@ -261,8 +265,11 @@ def test_path_workers_continue_after_lower_findings(
     import sys
 
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    refresh_env()
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error", "severity": {"HH1101": "warning"}}}))
+    refresh_env()
     monkeypatch.setenv(IGNORED, "[]")
+    refresh_env()
     result = check_paths(
         severity_chart, budget=45, max_examples=3, seed=0, helm="helm", timeout=5, artifacts=tmp_path / "results", jobs=jobs, fail_fast=True
     )
@@ -286,13 +293,16 @@ def test_compiler_warning_threshold_retains_unknown_candidates(severity_chart: C
     """
     (severity_chart.path / "templates/NOTES.txt").write_text("{{ now }}")
     monkeypatch.setenv(IGNORED, "[]")
+    refresh_env()
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error"}}))
+    refresh_env()
     contracts = Contracts.build(severity_chart.path)
     contracts.fail_fast = True
     assert contracts.predict(severity_chart.defaults) is None
     assert contracts.incomplete_evaluations > 0
     assert any(row["severity"] == "warning" and row["blocking"] is False for row in contracts.fallbacks)
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error", "severity": {"HH2007": "error"}}}))
+    refresh_env()
     with pytest.raises(RenderFailure, match="HH2007"):
         contracts.predict(severity_chart.defaults)
 
@@ -310,6 +320,7 @@ def test_warning_does_not_hide_a_later_error(severity_chart: Chart, tmp_path: Pa
         None: Both findings survive, and the blocking reproducer owns the failure checkpoint.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error", "severity": {"HH1101": "warning"}}}))
+    refresh_env()
 
     def render(chart: Chart, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
         """

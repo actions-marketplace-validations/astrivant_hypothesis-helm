@@ -6,6 +6,8 @@
 - [Input discovery and test generation](#input-discovery-and-test-generation)
 - [Execution and validation](#execution-and-validation)
 - [Chart package layout](#chart-package-layout)
+- [Execution package layout](#execution-package-layout)
+- [Shared exceptions](#shared-exceptions)
 - [Syntax trees and compiler passes](#syntax-trees-and-compiler-passes)
 - [Finite permutation planning](#finite-permutation-planning)
 - [Cooperative workload balancing](#cooperative-workload-balancing)
@@ -61,7 +63,7 @@ Selection, caching, traversal, and sharding determine which properties execute.
 The chart runner coordinates case planning, candidate checks and Helm rendering.
 The shared chart model holds the loaded values and schema; inspection assembles audit findings.
 
-`execution/processes.py` owns external commands and worker process groups until descendants have stopped
+`execution/runtime/processes.py` owns external commands and worker process groups until descendants have stopped
 and direct children have been joined. Git, Helm, schema validators, collection, and benchmark commands use
 the same owner. Communication errors and timeouts trigger cleanup; a failed cleanup retains the unresolved
 ownership record while other children are still joined. Execution and cleanup failures are reported together.
@@ -93,6 +95,23 @@ suites, or regenerate them if they contain no custom edits.
 `charts/testing` coordinates chart-specific work. The separate
 [`execution/`](../../pkg/hypothesis_helm/execution) package owns worker processes, queues,
 signals and scheduling shared by those operations.
+
+## Execution package layout
+
+[`execution/suite.py`](../../pkg/hypothesis_helm/execution/suite.py) coordinates saved-suite runs.
+Its supporting modules are grouped by responsibility:
+
+| Package | Responsibility |
+| --- | --- |
+| [`planning/`](../../pkg/hypothesis_helm/execution/planning) | Select and order inputs, apply measured sampling policies, and estimate work. Calibration evidence lives in `planning/data/`. |
+| [`workers/`](../../pkg/hypothesis_helm/execution/workers) | Dispatch properties and chart paths, manage their queues, and adjust concurrency from measured throughput. |
+| [`runtime/`](../../pkg/hypothesis_helm/execution/runtime) | Own subprocesses and shutdown signals, and interpret CI environment settings. |
+| [`state/`](../../pkg/hypothesis_helm/execution/state) | Store outcomes and manifest streams, compare render hashes, and track YAML structure changes for cache reuse. |
+
+The worker CLI and pytest cache plugin use these module paths. Reinstall the project after updating an editable checkout
+so its installed worker entry point follows the new layout. Helm commands and saved-suite runtime imports are unchanged.
+
+## Shared exceptions
 
 Package-owned exceptions are defined in [`exceptions/`](../../pkg/hypothesis_helm/exceptions)
 and imported directly from the module for their concern:

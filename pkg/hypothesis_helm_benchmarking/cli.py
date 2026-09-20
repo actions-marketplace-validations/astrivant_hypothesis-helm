@@ -4,13 +4,13 @@ Dispatch installed benchmark commands without depending on a source checkout.
 
 import argparse
 import importlib
-import os
 import sys
 import tempfile
 from contextlib import nullcontext
 from pathlib import Path
 
-from hypothesis_helm.execution.signals import Termination
+from hypothesis_helm.environment import env, refresh_env, set_env
+from hypothesis_helm.execution.runtime.signals import Termination
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path
@@ -56,6 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Selected command's exit status.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--profile", type=Path, help="capture Python call stacks and flame graphs under this directory; place before COMMAND"
@@ -94,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
                         arguments.extend(["--output", str(options.output)])
                     destination = options.output
                     if args.command == "run":
-                        shard, _ = resolve_shard(options.shard, os.environ)
+                        shard, _ = resolve_shard(options.shard, env)
                         if shard:
                             destination = destination / f"shard-{shard.name}"
                     logical = destination / "chart"
@@ -109,16 +110,16 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("flamegraph redraws existing profiles; use --profile with a benchmark study")
             args.profile.mkdir(parents=True, exist_ok=True)
             directory = Path(tempfile.mkdtemp(prefix="profile-", dir=args.profile)).resolve()
-            previous_directory = os.environ.get(PROFILE_DIRECTORY)
-            os.environ[PROFILE_DIRECTORY] = str(directory)
+            previous_directory = env.get(PROFILE_DIRECTORY)
+            set_env(PROFILE_DIRECTORY, str(directory))
             print(f"Python profiles: {directory} (timings include profiling overhead)", file=sys.stderr)
             try:
                 return capture(invoke, directory, "coordinator", {"command": args.command, "arguments": args.arguments})
             finally:
                 if previous_directory is None:
-                    os.environ.pop(PROFILE_DIRECTORY, None)
+                    set_env(PROFILE_DIRECTORY, None)
                 else:
-                    os.environ[PROFILE_DIRECTORY] = previous_directory
+                    set_env(PROFILE_DIRECTORY, previous_directory)
                 interrupted = sys.exc_info()[0] is not None
                 try:
                     render_profiles(directory, directory / "flamegraphs")

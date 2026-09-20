@@ -15,7 +15,8 @@ from typing import TextIO
 import pytest
 
 from hypothesis_helm.cli import main
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations import github_action
 from hypothesis_helm.integrations.sharding import Shard, resolve_shard
 from hypothesis_helm.schemas.contracts import mapping
@@ -194,7 +195,9 @@ def test_cli_defaults_to_ci_detection(tmp_path: Path, monkeypatch: pytest.Monkey
         None: Auto uses the CI partition and none disables it.
     """
     monkeypatch.setenv("CIRCLE_NODE_INDEX", "0")
+    refresh_env()
     monkeypatch.setenv("CIRCLE_NODE_TOTAL", "2")
+    refresh_env()
     args = ["test", "examples/workload", "--collect-only", "--artifact-dir", str(tmp_path)]
     assert main(args) == 0
     report = json.loads((tmp_path / "shards/1-of-2/report.json").read_text())
@@ -224,18 +227,31 @@ def test_action_preserves_arguments_outputs_and_status(
     """
     output = tmp_path / "outputs"
     monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    refresh_env()
     monkeypatch.setenv("HH_ARTIFACT_DIR", str(tmp_path / "reports"))
+    refresh_env()
     monkeypatch.setenv("HH_CHART", "$(touch unexpected); chart")
+    refresh_env()
     monkeypatch.setenv("HH_MATCH", keyword)
+    refresh_env()
     monkeypatch.setenv("HH_CACHE_DIR", str(tmp_path / "cache"))
+    refresh_env()
     monkeypatch.setenv("HH_RERUN", "failed")
+    refresh_env()
     monkeypatch.setenv("HH_DISABLE_SCHEMA_CACHING", "true")
+    refresh_env()
     monkeypatch.setenv("HH_CACHE", "false")
+    refresh_env()
     monkeypatch.setenv("HH_VALIDATE_SCHEMAS", "true")
+    refresh_env()
     monkeypatch.setenv("HH_SCHEMA_VERSION", "1.35.0")
+    refresh_env()
     monkeypatch.setenv("HH_SCHEMA_OFFLINE", "true")
+    refresh_env()
     monkeypatch.setenv("HYPOTHESIS_HELM_JOB_INDEX", "1")
+    refresh_env()
     monkeypatch.setenv("HYPOTHESIS_HELM_JOB_TOTAL", "3")
+    refresh_env()
     binary = tmp_path / "helm"
     capture = tmp_path / "arguments.json"
     binary.write_text(
@@ -252,8 +268,11 @@ def test_action_preserves_arguments_outputs_and_status(
     )
     binary.chmod(0o755)
     monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    refresh_env()
     monkeypatch.setenv("CAPTURE_ARGS", str(capture))
+    refresh_env()
     monkeypatch.setenv("FAKE_HELM_STATUS", str(exit_code))
+    refresh_env()
     calls: list[list[str]] = []
 
     def execute(self: Processes, command: list[str], *, stdout: TextIO, **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -281,8 +300,11 @@ def test_action_preserves_arguments_outputs_and_status(
 
     monkeypatch.setattr(Processes, "run", execute)
     monkeypatch.setenv("HH_KUBESEC", str(security).lower())
+    refresh_env()
     monkeypatch.setenv("HH_KUBESEC_SCORE_MINIMUM", "5")
+    refresh_env()
     monkeypatch.setenv("HH_RUN_ID", "pipeline-123")
+    refresh_env()
     monkeypatch.setattr(github_action, "prepare", lambda *args, **kwargs: "{}")
     scan_calls: list[dict[str, object]] = []
 
@@ -361,11 +383,17 @@ def test_action_incremental_selection(
         None: Only unchanged charts with usable history request cached success reuse.
     """
     monkeypatch.setenv("HH_CHART", str(tmp_path / "chart"))
+    refresh_env()
     monkeypatch.setenv("HH_ARTIFACT_DIR", str(tmp_path / "results"))
+    refresh_env()
     monkeypatch.setenv("HH_INCREMENTAL", "true")
+    refresh_env()
     monkeypatch.setenv("HH_BASE_REF", "origin/release")
+    refresh_env()
     monkeypatch.setenv("HYPOTHESIS_HELM_BASE_REF", "origin/main")
+    refresh_env()
     monkeypatch.setenv("HH_RERUN", requested)
+    refresh_env()
 
     def compare(root: Path, base_ref: str | None, **kwargs: object) -> dict[str, object]:
         """

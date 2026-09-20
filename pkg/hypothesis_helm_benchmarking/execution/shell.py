@@ -8,7 +8,8 @@ import sys
 from importlib.resources import as_file, files
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
 
@@ -31,6 +32,6 @@ def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = 
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     resource = files("hypothesis_helm_benchmarking").joinpath("scripts", f"{args.helper}.sh")
-    environment = dict(os.environ, PATH=f"{Path(sys.executable).parent}{os.pathsep}{os.environ.get('PATH', '')}")
+    environment = dict(env, PATH=f"{Path(sys.executable).parent}{os.pathsep}{env.get('PATH', '')}")
     with as_file(resource) as script:
         return Processes().run(["bash", str(script), *args.arguments], env=environment).returncode

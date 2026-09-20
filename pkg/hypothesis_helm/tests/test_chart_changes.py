@@ -14,6 +14,7 @@ import pytest
 from hypothesis_helm.charts.repositories.cache import RETENTION_SECONDS, ChartCache
 from hypothesis_helm.charts.repositories.changes import MINIMAL_TRAILER, chart_changed, comparison, git
 from hypothesis_helm.cli import main
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.integrations.incremental import main as ci_policy
 from hypothesis_helm.integrations.incremental import select_rerun
 
@@ -54,6 +55,7 @@ def repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name in tuple(os.environ):
         if name.startswith(("GITHUB_", "CI_", "CIRCLE_", "HYPOTHESIS_HELM_")):
             monkeypatch.delenv(name)
+            refresh_env()
     root = tmp_path / "repository"
     root.mkdir()
     git(root, "init", "-b", "main")

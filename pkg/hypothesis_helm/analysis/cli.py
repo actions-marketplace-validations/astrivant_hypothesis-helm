@@ -11,6 +11,7 @@ from hypothesis_helm.analysis.report import write_report
 from hypothesis_helm.analysis.sensitivity import Mutation, analyze
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -53,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero for a complete analysis, one for a budget-limited result.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("chart", type=Path, help="local chart containing values.yaml and values.schema.json")
     parser.add_argument("--mutations", required=True, type=Path, help="JSON array of name/path/value replacements")

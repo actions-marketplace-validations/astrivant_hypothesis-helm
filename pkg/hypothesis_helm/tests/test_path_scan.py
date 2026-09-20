@@ -12,7 +12,7 @@ from hypothesis import given, settings
 from hypothesis_helm.charts.suites.generate import ValuePath
 from hypothesis_helm.charts.testing.paths import check_paths, path_strategy
 from hypothesis_helm.charts.testing.runner import Chart
-from hypothesis_helm.execution.sampling import Sampling
+from hypothesis_helm.execution.planning.sampling import Sampling
 
 
 @pytest.fixture
@@ -216,7 +216,7 @@ def test_ignored_work_cannot_hide_chart_deadline(chart: Chart, tmp_path: Path, m
         clock[0] = 2.0
         return [{"status": "ignored", "phase": "$.replicas", "kind": "value-path", "path": ["replicas"], "attempts": 1}]
 
-    monkeypatch.setattr("hypothesis_helm.execution.path_queue.execute", execute)
+    monkeypatch.setattr("hypothesis_helm.execution.workers.path_queue.execute", execute)
     result = check_paths(chart, budget=1, max_examples=1, seed=0, helm="helm", timeout=1, artifacts=tmp_path / "out", jobs=2)
     assert result["status"] == "time-limit"
     assert result["coverage_complete"] is False

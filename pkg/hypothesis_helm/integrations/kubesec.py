@@ -11,7 +11,8 @@ import tempfile
 import time
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env, refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations.sharding import Shard, parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.security import aggregate, publish, read_result
 from hypothesis_helm.schemas.conformity import prepare, validate
@@ -159,7 +160,7 @@ def scan(
     if selected:
         try:
             with (output / "parallel.stdout").open("w") as stdout:
-                result = Processes(interrupt_grace=12).run(command, cwd=Path.cwd(), env={**os.environ, "GOMAXPROCS": "1"}, stdout=stdout)
+                result = Processes(interrupt_grace=12).run(command, cwd=Path.cwd(), env={**env, "GOMAXPROCS": "1"}, stdout=stdout)
             status = result.returncode
         except KeyboardInterrupt:
             status, interrupted = 130, True
@@ -215,6 +216,7 @@ def main() -> int:
     Returns:
         int: Scan status or two for an invalid setup.
     """
+    refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifests", type=Path, help="Manifest JSONL stream, or downloaded security artifact directory with --aggregate")
     parser.add_argument("--output", type=Path, default=Path(".cache/hypothesis-helm/kubesec"))
@@ -250,7 +252,7 @@ def main() -> int:
         if args.shards is not None:
             raise ValueError("--shards requires --aggregate; use --shard INDEX/TOTAL to scan")
         worker_count(args.jobs)
-        shard, _ = resolve_shard(args.shard, os.environ)
+        shard, _ = resolve_shard(args.shard, env)
         configuration = prepare(args.schema_cache_dir, args.schema_version, args.schema_offline)
         return scan(
             args.manifests,

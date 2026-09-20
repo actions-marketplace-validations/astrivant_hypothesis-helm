@@ -13,8 +13,9 @@ from hypothesis_helm.charts.inspection.audit import audit_findings
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import argument_parser, main
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.policy import RuleScope, candidate_paths, resolve_codes
@@ -44,7 +45,9 @@ def configure(
     path = tmp_path / "policy.yaml"
     path.write_text(yamlio.dump({"ignored": ignored_codes or [], "downstream_inputs": False, "input_constraints": rules}))
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(path)))
+    refresh_env()
     monkeypatch.setenv(RULE_ENVIRONMENT, json.dumps(ignored_codes or []))
+    refresh_env()
     return path
 
 

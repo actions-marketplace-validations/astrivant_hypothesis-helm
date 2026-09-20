@@ -13,7 +13,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from hypothesis_helm.execution.environment import in_ci
+from hypothesis_helm.execution.runtime.environment import in_ci
 
 __all__ = ("start_progress",)
 

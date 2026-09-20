@@ -11,8 +11,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis_helm_benchmarking.analysis.calibration_matrix import METRIC, evaluate
 
-from hypothesis_helm.execution.aggressive import matching_profiles
-from hypothesis_helm.execution.sampling import Sampling
+from hypothesis_helm.execution.planning.aggressive import matching_profiles
+from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 

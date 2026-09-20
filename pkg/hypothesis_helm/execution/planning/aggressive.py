@@ -10,14 +10,14 @@ from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart, merge_values
 from hypothesis_helm.compiler.passes.sampling import fingerprint, profile
-from hypothesis_helm.execution.sampling import Sampling
+from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
 __all__ = ("CALIBRATION_VERSION", "DEFAULT_CALIBRATION", "changed_fields", "coordinates", "descriptor", "matching_profiles", "select")
 
 
 CALIBRATION_VERSION = "aggressive-calibration-v1"
-DEFAULT_CALIBRATION = Path(__file__).with_name("calibration.json")
+DEFAULT_CALIBRATION = Path(__file__).parent / "data" / "calibration.json"
 LOGGER = logging.getLogger(__name__)
 
 

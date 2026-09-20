@@ -12,6 +12,7 @@ import pytest
 
 from hypothesis_helm.charts.inspection.templates import discover, parse
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.policy import ENVIRONMENT
 from hypothesis_helm.tests.test_templates import scan
 
@@ -154,6 +155,7 @@ def test_dynamic_ambiguous_recursive_and_transformed_calls_stay_unknown(tmp_path
         None: Unsupported calls retain diagnostics and caller-local variables never leak into helpers.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"compiler": {"max_call_depth": 2}}))
+    refresh_env()
     refs, warnings = scan(
         tmp_path,
         dedent("""

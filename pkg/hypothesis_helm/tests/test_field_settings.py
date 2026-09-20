@@ -14,6 +14,7 @@ from hypothesis_helm.charts.suites.generate import generate_tests, strategy_sour
 from hypothesis_helm.charts.suites.runtime import prepared_chart
 from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.findings.configuration import COMPLETE_EXAMPLE
 from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
@@ -38,6 +39,7 @@ def install_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, document: di
     config.write_text(yamlio.dump(document))
     policy = load_policy(config)
     monkeypatch.setenv(ENVIRONMENT, json.dumps(policy))
+    refresh_env()
     return policy
 
 
@@ -212,6 +214,7 @@ def test_source_matrix_survives_saved_suite(tmp_path: Path, monkeypatch: pytest.
     chart = fixture_chart(tmp_path)
     source = "https://example.org/team/charts.git"
     monkeypatch.delenv(SOURCE_ENVIRONMENT, raising=False)
+    refresh_env()
     install_policy(
         tmp_path,
         monkeypatch,
@@ -234,6 +237,7 @@ def test_source_matrix_survives_saved_suite(tmp_path: Path, monkeypatch: pytest.
         original = chart.input_domains().generation
     assert SOURCE_ENVIRONMENT not in os.environ
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"character_sets": "unicode"}))
+    refresh_env()
     with prepared_chart(chart.path, output) as saved:
         assert saved.input_domains().generation == original
         assert hypothesis_parameters(saved.input_domains().generation, ("field0",), 100)["max_examples"] == 3
@@ -330,6 +334,7 @@ def test_local_matrix_and_scope_restoration(tmp_path: Path, monkeypatch: pytest.
     """
     chart = fixture_chart(tmp_path)
     monkeypatch.delenv(SOURCE_ENVIRONMENT, raising=False)
+    refresh_env()
     install_policy(
         tmp_path,
         monkeypatch,

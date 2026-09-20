@@ -104,7 +104,7 @@ def test_existing_package_facades_remain_available() -> None:
     import hypothesis_helm
     from hypothesis_helm.charts.model import Chart
 
-    assert set(hypothesis_helm.__all__) == {"Chart", "check_chart", "coalesce", "generate_tests"}
+    assert set(hypothesis_helm.__all__) == {"Chart", "check_chart", "coalesce", "env", "generate_tests", "refresh_env", "set_env"}
     assert hypothesis_helm.Chart is Chart
     assert pipeline.Operation is Operation
     assert "Operation" in pipeline.__all__

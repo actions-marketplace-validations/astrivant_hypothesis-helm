@@ -13,9 +13,10 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render, validate_resources
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import argument_parser, main
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.cache import fingerprint
-from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.execution.state.cache import fingerprint
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.rules import ENVIRONMENT, RULES, load_ignored
 
@@ -121,10 +122,12 @@ def test_ignored_check_does_not_hide_other_checks(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(RenderFailure, match="HH1106"):
         validate_resources([resource, resource])
     monkeypatch.setenv(ENVIRONMENT, '["HH1106"]')
+    refresh_env()
     validate_resources([resource, resource])
     with pytest.raises(RenderFailure, match="HH1105"):
         validate_resources([resource, resource, {"apiVersion": "v1", "kind": "ConfigMap"}])
     monkeypatch.setenv(ENVIRONMENT, '["HH1103"]')
+    refresh_env()
     with pytest.raises(RenderFailure, match="HH1105"):
         validate_resources([{}])
 
@@ -145,9 +148,11 @@ def test_reenabled_check_cannot_reuse_ignored_success(tmp_path: Path, monkeypatc
     output += "---\n" + output
     hashes = RenderHashes()
     monkeypatch.setenv(ENVIRONMENT, '["HH1106"]')
+    refresh_env()
     before = fingerprint(tmp_path, 0, None, "none")
     render(chart, {}, rendered_output=output, hashes=hashes, stream=False)
     monkeypatch.setenv(ENVIRONMENT, "[]")
+    refresh_env()
     assert before != fingerprint(tmp_path, 0, None, "none")
     with pytest.raises(RenderFailure, match="HH1106"):
         render(chart, {}, rendered_output=output, hashes=hashes, stream=False)
@@ -188,6 +193,7 @@ def test_blocking_ignored_failure_is_not_a_witness(tmp_path: Path, monkeypatch: 
 
     monkeypatch.setattr(runner, "render", fail)
     monkeypatch.setenv(ENVIRONMENT, '["HH1001"]')
+    refresh_env()
     result = check_chart(chart, max_examples=3, exhaustive=exhaustive, input_strategy=None if exhaustive else st.just({}), time_limit=10)
     assert result["status"] == "ignored"
     assert result["coverage_complete"] is False
@@ -211,6 +217,7 @@ def test_audit_keeps_ignored_findings(monkeypatch: pytest.MonkeyPatch) -> None:
     chart = Chart.load(ROOT / "examples/hidden-levers")
     before = audit(chart)
     monkeypatch.setenv(ENVIRONMENT, '["HH2001"]')
+    refresh_env()
     after = audit(chart)
     assert before["findings"] != after["findings"]
     assert after["ignored_findings"]
@@ -239,6 +246,7 @@ def test_cli_restores_policy_after_failure(
     import os
 
     monkeypatch.setenv(ENVIRONMENT, '["HH1106"]')
+    refresh_env()
     assert main(["test", "--log-file", "/dev/stderr", str(tmp_path), option, value]) == 2
     assert "Unknown rule codes" in json.loads(capsys.readouterr().out)["error"]
     assert os.environ[ENVIRONMENT] == '["HH1106"]'

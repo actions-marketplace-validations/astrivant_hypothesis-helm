@@ -14,6 +14,7 @@ from hypothesis_helm_benchmarking.studies.matrix import bundle_key
 
 from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
@@ -168,6 +169,7 @@ def test_nonblocking_findings_still_expand_regions(expansion_chart: Chart, monke
         None: The faulty region expands fully without failing the error-only gate.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error", "severity": {"HH1101": "warning"}}}))
+    refresh_env()
 
     def render(chart: Chart, values: dict[str, object], **kwargs: object) -> list[dict[str, object]]:
         """

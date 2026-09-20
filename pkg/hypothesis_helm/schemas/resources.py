@@ -4,7 +4,6 @@ Look up manifest destinations in supplied, cached, or bundled Kubernetes schemas
 
 import hashlib
 import json
-import os
 from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
@@ -12,6 +11,7 @@ from pathlib import Path
 from hypothesis_helm_catalog.builder import KEYWORDS, LIBRARY, scalar_domain
 from jsonschema import validators
 
+from hypothesis_helm.environment import env
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.paths import dereference
 from hypothesis_helm.schemas.policy import inherited_policy, intersect
@@ -143,7 +143,7 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
         tuple[dict[str, object], str] | None: Scalar restriction and provenance, or unknown.
     """
     custom = resource_schemas()
-    live = mapping(json.loads(os.environ.get("HYPOTHESIS_HELM_CONFORMITY", "{}")))
+    live = mapping(json.loads(env.get("HYPOTHESIS_HELM_CONFORMITY", "{}")))
     catalog = library()
     if live.get("catalog"):
         candidate = cached_catalog(Path(str(live["catalog"])), str(live["catalog_digest"]))

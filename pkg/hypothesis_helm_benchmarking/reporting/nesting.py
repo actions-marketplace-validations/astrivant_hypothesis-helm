@@ -1,15 +1,17 @@
+# Configure the shared Matplotlib environment before importing its plotting modules.
+# ruff: noqa: E402
 """
 Publish nesting-depth matrices and PCA frames shared across depth profiles.
 """
 
 import csv
-import os
 import tempfile
 from collections import Counter
 from pathlib import Path
 from textwrap import dedent
 
 import numpy as np
+from hypothesis_helm.environment import env, set_env
 from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 
@@ -21,7 +23,7 @@ from hypothesis_helm_benchmarking.reporting.descriptions import describe
 __all__ = ("LABELS", "plot")
 
 
-os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
+set_env("MPLCONFIGDIR", env.get("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib")))
 import matplotlib
 
 matplotlib.use("Agg")

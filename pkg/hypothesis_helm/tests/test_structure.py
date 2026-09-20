@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from hypothesis_helm.execution.estimate import estimate_suite
-from hypothesis_helm.execution.structure import inspect_structure, structure
+from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.execution.planning.estimate import estimate_suite
+from hypothesis_helm.execution.state.structure import inspect_structure, structure
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.schemas.contracts import mapping
 
@@ -97,6 +98,7 @@ def test_execution_and_estimate_markers(tmp_path: Path, monkeypatch: pytest.Monk
         None: Structure comparisons remain independent of scalar-sensitive outcome caching.
     """
     monkeypatch.setenv("CI", "false")
+    refresh_env()
     (tmp_path / "test_chart_values.py").write_text("def test_pass(): pass\n")
     values = tmp_path / "values.coalesced.yaml"
     values.write_text("field: first\n")

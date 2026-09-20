@@ -6,7 +6,6 @@ import fcntl
 import hashlib
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -17,25 +16,26 @@ from uuid import uuid4
 from rich.console import Console
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.execution.cache import (
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
+from hypothesis_helm.execution.planning.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
+from hypothesis_helm.execution.planning.sampling import REPORT as SAMPLING_REPORT
+from hypothesis_helm.execution.planning.traversal import ALGORITHM, validate_strategy
+from hypothesis_helm.execution.runtime.environment import in_ci
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.state.cache import (
     fingerprint,
     merge_outcomes,
     read_outcomes,
     seed_key,
 )
-from hypothesis_helm.execution.environment import in_ci
-from hypothesis_helm.execution.manifests import ManifestStore
-from hypothesis_helm.execution.parallel import run_parallel, worker_limit
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.render_hashes import (
+from hypothesis_helm.execution.state.manifests import ManifestStore
+from hypothesis_helm.execution.state.render_hashes import (
     STATISTICS_DIRECTORY,
     summarize_process_statistics,
 )
-from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
-from hypothesis_helm.execution.sampling import ENVIRONMENT as SAMPLING_ENVIRONMENT
-from hypothesis_helm.execution.sampling import REPORT as SAMPLING_REPORT
-from hypothesis_helm.execution.structure import inspect_structure
-from hypothesis_helm.execution.traversal import ALGORITHM, validate_strategy
+from hypothesis_helm.execution.state.structure import inspect_structure
+from hypothesis_helm.execution.workers.parallel import run_parallel, worker_limit
 from hypothesis_helm.findings.severity import junit_findings
 from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
@@ -157,7 +157,7 @@ def run_suite(
         if collect_only:
             command.append("--collect-only")
         command.append(str(module))
-        environment = dict(os.environ)
+        environment = dict(env)
         environment["HYPOTHESIS_HELM_FAIL_FAST"] = "1" if fail_fast else "0"
         environment["HYPOTHESIS_HELM_TRAVERSAL_STRATEGY"] = traversal_strategy
         environment["HYPOTHESIS_HELM_TRAVERSAL_SEED"] = str(seed)
@@ -212,7 +212,7 @@ def run_suite(
                 snapshot.write_text(json.dumps(cached))
                 environment["HYPOTHESIS_HELM_CACHE_READ"] = str(snapshot)
                 logging.getLogger(__name__).info("Retrying failed or incomplete paths from %s", cache_file)
-            command[-1:-1] = ["-p", "hypothesis_helm.execution.cache"]
+            command[-1:-1] = ["-p", "hypothesis_helm.execution.state.cache"]
         environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
         environment.pop("PYTEST_ADDOPTS", None)
         environment.pop("PYTEST_PLUGINS", None)

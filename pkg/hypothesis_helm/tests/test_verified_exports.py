@@ -14,6 +14,7 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.minimum import export_minimal
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.contracts import mapping
 
 pytestmark = [
@@ -262,9 +263,13 @@ def test_ci_commit_only_exported_files(chart: Chart, tmp_path: Path, monkeypatch
     import sys
 
     monkeypatch.setenv("GIT_AUTHOR_NAME", "Test")
+    refresh_env()
     monkeypatch.setenv("GIT_AUTHOR_EMAIL", "test@example.invalid")
+    refresh_env()
     monkeypatch.setenv("GIT_COMMITTER_NAME", "Test")
+    refresh_env()
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "test@example.invalid")
+    refresh_env()
     remote = tmp_path.parent / f"{tmp_path.name}-remote.git"
 
     def git(*arguments: str) -> str:

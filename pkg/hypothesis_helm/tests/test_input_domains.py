@@ -21,8 +21,9 @@ from hypothesis_helm.charts.testing.paths import path_strategy
 from hypothesis_helm.charts.testing.rendering import validate_resources
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.cache import fingerprint
+from hypothesis_helm.execution.state.cache import fingerprint
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.finite import enumerate_values
 from hypothesis_helm.schemas.paths import enumerate_paths
@@ -99,6 +100,7 @@ def explicit_policy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, empty: b
     )
     policy = load_policy(config)
     monkeypatch.setenv(ENVIRONMENT, json.dumps(policy))
+    refresh_env()
     return policy
 
 
@@ -296,6 +298,7 @@ def test_custom_schema_required_and_used(tmp_path: Path, monkeypatch: pytest.Mon
     config = tmp_path / "policy.yaml"
     config.write_text(yamlio.dump({"resource_schemas": {"example.org/v1/Widget": "widget.json"}}))
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
+    refresh_env()
     validate_resources([resource])
     with pytest.raises(RenderFailure, match="HH1108"):
         validate_resources([{**resource, "spec": {"size": 0}}])
@@ -321,6 +324,7 @@ def test_cache_and_generated_snapshot(tmp_path: Path, monkeypatch: pytest.Monkey
     suite = tmp_path / "suite"
     generate_tests(chart, suite, max_examples=3)
     monkeypatch.delenv(ENVIRONMENT)
+    refresh_env()
     with prepared_chart(chart.path, suite) as prepared:
         validator = validators.validator_for(prepared.generation_schema())(prepared.generation_schema())
         assert not validator.is_valid(json_value({**chart.defaults, "secretName": ">0"}))

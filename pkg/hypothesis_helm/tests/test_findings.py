@@ -14,6 +14,7 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import main
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.generator import FindingGenerator
@@ -107,10 +108,12 @@ def test_specific_ignore_does_not_ignore_other_template_findings(chart: Chart, m
     """
     (chart.path / "templates" / "example.yaml").write_text("{{ .Values.enabled | upper }}")
     monkeypatch.setenv(ENVIRONMENT, '["HH1001", "HH3001"]')
+    refresh_env()
     result = check_chart(chart, max_examples=1, input_strategy=st.just({"enabled": True}), time_limit=10)
     assert result["status"] == "failed"
     assert result["code"] == "HH3002"
     monkeypatch.setenv(ENVIRONMENT, '["HH3002"]')
+    refresh_env()
     result = check_chart(chart, max_examples=1, input_strategy=st.just({"enabled": True}), time_limit=10)
     assert result["status"] == "ignored"
     assert result["coverage_complete"] is False

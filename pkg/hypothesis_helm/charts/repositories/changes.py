@@ -3,12 +3,12 @@ Resolve CI comparison revisions and retain conservative, repository-relative Git
 """
 
 import json
-import os
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.processes import Processes
 
 __all__ = ("MINIMAL_TRAILER", "chart_changed", "comparison", "git", "optional_git")
 
@@ -57,20 +57,20 @@ def comparison(root: Path, base_ref: str | None = None, *, environment: Mapping[
     Args:
         root (Path): Source checkout, not the isolated prepared chart.
         base_ref (str | None): Explicit comparison reference, taking precedence over automatic detection.
-        environment (Mapping[str, str] | None): Provider variables; current environment by default.
+        environment (Mapping[str, str] | None): Provider variables; shared environment snapshot by default.
 
     Returns:
         dict[str, object]: Resolved base, changed paths and an explicit conservative fallback.
     """
-    env = os.environ if environment is None else environment
+    settings = env if environment is None else environment
     report: dict[str, object] = {"status": "unavailable", "base_ref": base_ref, "changed_files": []}
     try:
         repository = Path(git(root, "rev-parse", "--show-toplevel").strip()).resolve()
         report["repository"] = str(repository)
         event: dict[str, object] = {}
         # The surrounding CI project may be scanning a different remote repository.
-        ci_root = env.get("GITHUB_WORKSPACE") or env.get("CI_PROJECT_DIR") or env.get("CIRCLE_WORKING_DIRECTORY")
-        provider = env if ci_root is None or Path(ci_root).expanduser().resolve() == repository else {}
+        ci_root = settings.get("GITHUB_WORKSPACE") or settings.get("CI_PROJECT_DIR") or settings.get("CIRCLE_WORKING_DIRECTORY")
+        provider = settings if ci_root is None or Path(ci_root).expanduser().resolve() == repository else {}
         if provider.get("GITHUB_EVENT_PATH"):
             try:
                 loaded = json.loads(Path(provider["GITHUB_EVENT_PATH"]).read_text())
@@ -93,7 +93,7 @@ def comparison(root: Path, base_ref: str | None = None, *, environment: Mapping[
             or provider.get("CIRCLE_BRANCH")
             or optional_git(repository, "symbolic-ref", "--short", "HEAD")
         )
-        explicit = base_ref or env.get("HYPOTHESIS_HELM_BASE_REF")
+        explicit = base_ref or settings.get("HYPOTHESIS_HELM_BASE_REF")
         target = provider.get("GITHUB_BASE_REF") or provider.get("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
         merge_base = True
         if explicit:

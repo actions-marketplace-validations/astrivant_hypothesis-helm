@@ -25,6 +25,7 @@ from hypothesis_helm.compiler.complexity import maximum_score, output_profile
 from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.lua.bounds import BoundEvaluator
 from hypothesis_helm.compiler.passes.pruning import Pruner, safe_values
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import ManifestParseError, RenderFailure
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
@@ -407,6 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         int: Zero after emitting the structured complexity result.
     """
+    refresh_env()
     from hypothesis_helm.compiler.passes.inputs import load_input_chart
 
     parser = argparse.ArgumentParser(description="Compute potential rendered-chart complexity with the supported compiler subset.")

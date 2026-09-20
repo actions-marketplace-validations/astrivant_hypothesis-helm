@@ -18,6 +18,7 @@ import pytest
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.cli import argument_parser
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -77,6 +78,7 @@ def test_workers_share_one_chart_without_duplicate_paths(tmp_path: Path, monkeyp
         None: Separate processes finish ten examples per path and reconcile coverage.
     """
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    refresh_env()
     chart = fixture_chart(tmp_path)
     result = check_paths(
         chart, budget=30, max_examples=10, seed=0, helm="helm", timeout=5, artifacts=tmp_path / "results", jobs=12, filtering=True
@@ -109,6 +111,7 @@ def test_missing_chart_stops_queue_without_counterexamples(tmp_path: Path, monke
         None: Lost input is an execution error, no shrinking occurs, and every owned worker exits.
     """
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    refresh_env()
     chart = fixture_chart(tmp_path)
     binary = tmp_path / "disappearing-helm"
     binary.write_text(
@@ -159,6 +162,7 @@ def test_deadline_stops_workers_and_helm_children(tmp_path: Path, monkeypatch: p
         None: The deadline is shared, queued paths remain unvisited, and descendants are joined.
     """
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    refresh_env()
     chart = fixture_chart(tmp_path)
     slow = tmp_path / "slow-helm"
     slow.write_text(
@@ -196,7 +200,7 @@ def test_deadline_stops_workers_and_helm_children(tmp_path: Path, monkeypatch: p
             signal.raise_signal(stop_signal)
         return result
 
-    monkeypatch.setattr("hypothesis_helm.execution.path_queue.wait", expire_after_children_start)
+    monkeypatch.setattr("hypothesis_helm.execution.workers.path_queue.wait", expire_after_children_start)
     # Startup can exceed four seconds during parallel suite execution. The budget is
     # a startup watchdog; the handshake above triggers expiry at the state under test.
     result = check_paths(
@@ -249,7 +253,7 @@ def test_deadline_before_first_path_keeps_all_paths_unvisited(tmp_path: Path, mo
         assert len(sequence(context["paths"])) == 8
         raise TimeLimitReached()
 
-    monkeypatch.setattr("hypothesis_helm.execution.path_queue.execute", expire)
+    monkeypatch.setattr("hypothesis_helm.execution.workers.path_queue.execute", expire)
     result = check_paths(
         chart, budget=60, max_examples=10, seed=0, helm="helm", timeout=60, artifacts=tmp_path / "results", jobs=3, filtering=True
     )
@@ -287,6 +291,7 @@ def test_empty_chart_queue_starts_no_workers(tmp_path: Path, monkeypatch: pytest
         None: The chart reports zero workers and no invented path work.
     """
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    refresh_env()
     chart = fixture_chart(tmp_path)
     chart.defaults = {}
     chart.schema = {"type": "object", "additionalProperties": False, "properties": {}}
@@ -348,7 +353,7 @@ def test_returned_interrupt_stops_scheduling(tmp_path: Path, monkeypatch: pytest
         return []
 
     monkeypatch.setattr("hypothesis_helm.charts.testing.paths.check_chart", cancelled)
-    monkeypatch.setattr("hypothesis_helm.execution.path_queue.execute", empty_queue)
+    monkeypatch.setattr("hypothesis_helm.execution.workers.path_queue.execute", empty_queue)
     result = check_paths(
         chart, budget=30, max_examples=10, seed=0, helm="helm", timeout=5, artifacts=tmp_path / "results", jobs=jobs, filtering=True
     )
@@ -369,6 +374,7 @@ def test_fail_fast_stops_claiming_paths(tmp_path: Path, monkeypatch: pytest.Monk
         None: The coordinator keeps the failure and leaves the rest of the queue unstarted.
     """
     monkeypatch.setenv("PATH", f"{Path(sys.executable).parent}:{os.environ['PATH']}")
+    refresh_env()
     chart = fixture_chart(tmp_path)
     template = chart.path / "templates/config.yaml"
     template.write_text(

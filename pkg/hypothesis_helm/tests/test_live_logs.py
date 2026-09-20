@@ -22,9 +22,10 @@ from hypothesis_helm.charts.testing.prioritized import check_prioritized
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
-from hypothesis_helm.execution.path_queue import execute
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.workers.path_queue import execute
 from hypothesis_helm.reporting.logs import WORKER_PREFIX, FindingLog, WorkerLogFormatter, WorkerLogs
 from hypothesis_helm.rules import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -146,6 +147,7 @@ def test_observed_and_final_findings(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert "[HH1101]" in caplog.text and "$.value = 1" in caplog.text
     assert "private raw manifest" not in caplog.text
     monkeypatch.setenv(ENVIRONMENT, '["HH1101"]')
+    refresh_env()
     caplog.clear()
     with caplog.at_level(logging.WARNING):
         check_chart(chart, input_strategy=chart.strategy(), check_defaults=False, max_examples=4)

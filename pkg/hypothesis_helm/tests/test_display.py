@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.reporting.display import start_progress
 
 
@@ -22,6 +23,9 @@ def local_progress_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     for name in ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "TF_BUILD", "JENKINS_URL", "BUILD_BUILDID", "BUILDKITE"):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    refresh_env()
 
 
 def test_progress_summary_uses_stderr(capsys: pytest.CaptureFixture[str]) -> None:

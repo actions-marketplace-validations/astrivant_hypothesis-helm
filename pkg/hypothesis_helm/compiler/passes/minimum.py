@@ -7,7 +7,6 @@ from __future__ import annotations
 import copy
 import json
 import math
-import os
 import shutil
 import subprocess
 import tempfile
@@ -21,9 +20,10 @@ from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.constants import fill_missing
 from hypothesis_helm.compiler.passes.inputs import InputInventory
+from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.execution import TimeLimitReached
-from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.execution.render_hashes import RenderHashes
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.reporting.budget import execution_timer
 from hypothesis_helm.schemas.conformity import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping, sequence
@@ -136,7 +136,7 @@ def export_minimal(
     model = ValuesModel.from_schema(chart.schema)
     inventory = InputInventory.build(chart)
     example = fill_missing(model, chart.defaults, inventory.known)
-    conformity = json.loads(os.environ[ENVIRONMENT]) if os.environ.get(ENVIRONMENT) else None
+    conformity = json.loads(env[ENVIRONMENT]) if env.get(ENVIRONMENT) else None
     try:
         with tempfile.TemporaryDirectory(prefix="helm-minimum-") as temporary:
             with execution_timer(budget):
