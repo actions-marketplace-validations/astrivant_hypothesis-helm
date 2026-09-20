@@ -475,23 +475,26 @@ def test_helper_projection_preserves_input_origins(tmp_path: Path, helper: str, 
     assert {tuple(sequence(rule["path"])) for rule in chart.input_domains().rules} >= {("secretName",), ("port",)}
 
 
-def test_symbolic_root_context_keeps_unsupported_tpl_explicit(tmp_path: Path) -> None:
+def test_symbolic_root_context_constrains_tpl_to_literal_inputs(tmp_path: Path) -> None:
     """
-    Report unsupported dynamic output without trying to JSON-encode symbolic helper context.
+    Constrain template-valued references to literal input without serializing the helper context.
 
     Args:
         tmp_path (Path): Isolated chart with a helper forwarding the root context to tpl.
 
     Returns:
-        None: Dynamic output remains unconstrained with an actionable analysis limitation.
+        None: Literal names are constrained and supplied template-valued defaults remain unchanged.
     """
     chart = fixture_chart(tmp_path)
     (tmp_path / "templates/_helpers.tpl").write_text('{{- define "secret" -}}{{- tpl .Values.secretName $ -}}{{- end -}}')
     template = tmp_path / "templates/pod.yaml"
     template.write_text(template.read_text().replace(".Values.secretName | quote", 'include "secret" .'))
     domains = chart.input_domains()
-    assert not domains.rules
-    assert "helper or transformed output" in str(domains.diagnostics)
+    assert {tuple(sequence(rule["path"])) for rule in domains.rules} >= {("secretName",), ("port",)}
+    schema = chart.generation_schema()
+    validator = validators.validator_for(schema)(schema)
+    assert validator.is_valid(json_value({**chart.defaults, "secretName": "literal-name"}))
+    assert not validator.is_valid(json_value({**chart.defaults, "secretName": "{{ .Release.Name }}"}))
     assert "JSON serializable" not in str(domains.diagnostics)
 
 

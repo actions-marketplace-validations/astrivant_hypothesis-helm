@@ -6,6 +6,7 @@
 - [Branch knowledge](#branch-knowledge)
 - [Input inventory](#input-inventory)
 - [Dependency discovery and activation](#dependency-discovery-and-activation)
+- [Destination domains](#destination-domains)
 - [Explicit rejection discovery](#explicit-rejection-discovery)
   - [Fixed Helm context and concrete templates](#fixed-helm-context-and-concrete-templates)
   - [Incomplete-analysis warnings](#incomplete-analysis-warnings)
@@ -68,6 +69,42 @@ Missing child sources, ambiguous imports, and unsupported forwarding are reporte
 Activation states are predictions checked through Helm execution. They do not
 authorize skipping renders: charts with dependencies are outside the current
 exact-equivalence and topology proof contract.<sup>[\[2\]](../scanning/README.md#discovery-and-testing)
+
+## Destination domains
+
+The [destination pass](../../pkg/hypothesis_helm/compiler/passes/domains.py) connects a values path to a Kubernetes manifest field.
+It uses the shared parsed templates, including installed dependencies, rather than a table of known charts.
+
+```mermaid
+flowchart LR
+    A[Parsed templates and helpers] --> B[Input origins and lexical scopes]
+    B --> C[Symbolic output and branch guards]
+    C --> D[Manifest field locations]
+    D --> E[Kubernetes destination schemas]
+    E --> F[Guarded generation constraints]
+    C --> G[Unresolved expressions remain explicit]
+```
+
+The symbolic interpreter follows helper arguments, local aliases, assignments and supported transformations.
+The layout analysis tracks block-YAML field paths and joins branch contexts. Independent conditions therefore do
+not require a Cartesian product of complete manifests. The final pass propagates a destination's constraints back
+through supported operations, retaining the conditions under which an input supplies that field.
+When only part of a condition is understood, it can establish a smaller region: for example, `not (A and unknown)`
+is certainly true when `A` is false. Constraints apply in that established region; uncertain inputs retain their domain.
+Conflicting helper definitions are analyzed as alternatives, and only constraints established by every alternative survive.
+
+| Evidence | Decision |
+| --- | --- |
+| A helper forwards a string into a Secret or ConfigMap reference | Generate names accepted by the destination's schema. |
+| An empty value selects a fallback name | Keep the empty input; constrain the nonempty reference branch. |
+| Literal maps are serialized and merged into annotations | Generate scalar contributions accepted by the annotation schema. |
+| A quoted expression is unsupported | Leave that expression unresolved; preserve independent field mappings. |
+| An unknown fragment can change YAML structure | Block mappings in the affected structure. |
+| Input mutation, imported origins, or a resource identity is unresolved | Do not infer constraints that depend on that result. |
+
+This pass narrows the **generation domain**. It does not establish exact-output equivalence or authorize render pruning.
+It preserves source-schema contradictions as diagnostics, and the supplied defaults still go to Helm unchanged.
+See [input domains](../input-domains/README.md#default-destination-catalog) for supported operations and remaining limits.
 
 ## Explicit rejection discovery
 

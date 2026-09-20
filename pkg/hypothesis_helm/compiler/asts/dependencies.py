@@ -24,7 +24,6 @@ class Dependency:
         references (tuple[Reference, ...]): Template references projected into parent values.
         templates (tuple[str, ...]): Logical template paths belonging to this child.
         reason (str | None): Unsupported metadata or loading details that prevent guidance.
-        input_rules (tuple[dict[str, object], ...]): Reviewed generation domains, namespaced to this dependency instance.
         syntax (tuple[tuple[str, tuple[Node, ...]], ...]): Parsed sources retained after dependency archive inspection.
         declared_schema (bool): Whether this child explicitly supplies a values schema.
     """
@@ -39,7 +38,6 @@ class Dependency:
     references: tuple[Reference, ...]
     templates: tuple[str, ...]
     reason: str | None = None
-    input_rules: tuple[dict[str, object], ...] = ()
     syntax: tuple[tuple[str, tuple[Node, ...]], ...] = ()
     declared_schema: bool = False
 

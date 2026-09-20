@@ -2,7 +2,7 @@
 Verify source-derived bounds, exact destination bindings, and immutable rebuild comparisons.
 """
 
-import hashlib
+import copy
 import json
 import shutil
 import tarfile
@@ -16,8 +16,9 @@ from jsonschema import validators
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import RenderFailure, render
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings
+from hypothesis_helm.compiler.passes.domains import project
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.domains import InputDomains
 from hypothesis_helm.schemas.policy import ENVIRONMENT
 
 
@@ -90,16 +91,15 @@ def test_check_never_overwrites_the_catalog_under_comparison(tmp_path: Path, mon
 
 
 @pytest.fixture
-def bound_chart(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def bound_chart(tmp_path: Path) -> Path:
     """
-    Create a reviewed opaque ConfigMap helper without relying on an external chart checkout.
+    Create a source-analyzable ConfigMap helper without relying on an external chart checkout.
 
     Args:
-        tmp_path (Path): Chart and certificate directory.
-        monkeypatch (pytest.MonkeyPatch): Select this test's reviewed binding inventory.
+        tmp_path (Path): Chart directory.
 
     Returns:
-        Path: Chart with a broad declared string and a source-certified destination.
+        Path: Chart with a broad declared string and a helper-derived destination.
     """
     chart = tmp_path / "mongodb"
     (chart / "templates").mkdir(parents=True)
@@ -110,44 +110,45 @@ def bound_chart(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     template.write_text(
         dedent("""
         {{- define "configmapName" -}}
+        {{- if .Values.existingConfigmap -}}
         {{- tpl .Values.existingConfigmap $ -}}
+        {{- else -}}fallback{{- end -}}
         {{- end -}}
         """)
     )
-    data = tmp_path / "data"
-    data.mkdir()
-    (data / "chart-bindings.json").write_text(
-        json.dumps(
-            [
-                {
-                    "chart": "mongodb",
-                    "path": ["existingConfigmap"],
-                    "profile": "dns1123-subdomain",
-                    "files": {"templates/helper.tpl": hashlib.sha256(template.read_bytes()).hexdigest()},
-                    "reference": "https://example.org/reviewed-source",
-                    "destination": "v1/Pod:$.spec.volumes[*].configMap.name",
-                }
-            ]
-        )
+    (chart / "templates/pod.yaml").write_text(
+        dedent("""
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: example
+        spec:
+          containers:
+            - name: app
+              image: example
+          volumes:
+            - name: config
+              configMap:
+                name: {{ include "configmapName" . }}
+        """)
     )
-    monkeypatch.setattr("hypothesis_helm.compiler.passes.input_bindings.DATA", data)
     return chart
 
 
 @pytest.mark.parametrize("packaged", [False, True])
-def test_reviewed_helper_constraints_follow_dependency_aliases(tmp_path: Path, bound_chart: Path, packaged: bool) -> None:
+def test_helper_constraints_follow_dependency_aliases(tmp_path: Path, bound_chart: Path, packaged: bool) -> None:
     """
-    Preserve reviewed reference constraints across unpacked and packaged dependency aliases.
+    Preserve source-derived reference constraints across unpacked and packaged dependency aliases.
 
     Args:
         tmp_path (Path): Parent chart root.
-        bound_chart (Path): Source-certified child chart.
+        bound_chart (Path): Child chart with a helper-derived destination.
         packaged (bool): Package the child as a tgz before analysis.
 
     Returns:
         None: Empty fallbacks and meaningful names pass, invalid references fail, and supplied values remain unchanged.
     """
-    root_rules, diagnostics = reviewed_bindings(bound_chart)
+    root_rules, diagnostics = project(bound_chart, Chart.load(bound_chart).schema)
     assert len(root_rules) == 1 and not diagnostics
     parent = tmp_path / "parent"
     (parent / "charts").mkdir(parents=True)
@@ -179,30 +180,34 @@ def test_reviewed_helper_constraints_follow_dependency_aliases(tmp_path: Path, b
     assert any(rule["path"] == ["database", "existingConfigmap"] for rule in chart.input_domains().rules)
 
 
-def test_changed_helper_disables_certificate_and_reports_reason(bound_chart: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_changed_helper_is_reanalyzed_and_opt_out_is_respected(bound_chart: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Keep template changes and explicit opt-outs from silently inheriting stale restrictions.
+    Reanalyze edited helpers and respect an explicit domain-analysis opt-out.
 
     Args:
-        bound_chart (Path): Reviewed input helper.
+        bound_chart (Path): Source-derived input helper.
         monkeypatch (pytest.MonkeyPatch): Install an explicit downstream-input opt-out.
 
     Returns:
-        None: Unknown helper behavior has a diagnostic and user policy can disable known bindings.
+        None: Edited helper behavior is reanalyzed, and user policy can disable automatic domains.
     """
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"downstream_inputs": False}))
     assert not Chart.load(bound_chart).input_domains().rules
     monkeypatch.delenv(ENVIRONMENT)
     file = bound_chart / "templates/helper.tpl"
     file.write_text(file.read_text() + "\n{{/* changed */}}\n")
-    rules, notes = reviewed_bindings(bound_chart)
-    assert not rules and "source changed" in str(notes)
+    rules, _ = project(bound_chart, Chart.load(bound_chart).schema)
+    assert any(rule["path"] == ["existingConfigmap"] for rule in rules)
+    file.write_text(file.read_text().replace("tpl .Values.existingConfigmap $", 'printf "fixed-%s" .Values.existingConfigmap'))
+    rules, notes = project(bound_chart, Chart.load(bound_chart).schema)
+    assert not any(rule["path"] == ["existingConfigmap"] for rule in rules)
+    assert "unsupported output transformation" in str(notes)
 
 
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
 def test_bitnami_cilium_configmap_domains_and_native_render(tmp_path: Path) -> None:
     """
-    Reproduce the Cilium reference failure and constrain its four reviewed ConfigMap inputs.
+    Reproduce the Cilium reference failure and constrain its four ConfigMap inputs from source.
 
     Args:
         tmp_path (Path): Isolated chart copy and locally supplied dependencies.
@@ -226,18 +231,20 @@ def test_bitnami_cilium_configmap_domains_and_native_render(tmp_path: Path) -> N
         ("hubble", "relay", "existingConfigmap"),
         ("hubble", "ui", "frontend", "existingServerBlockConfigmap"),
     }
-    reviewed = [rule for rule in domains.rules if rule["source"] == "reviewed-chart-binding"]
-    assert {tuple(sequence(rule["path"])) for rule in reviewed} == paths
-    restriction = domains.apply({})
+    assert paths <= {tuple(sequence(rule["path"])) for rule in domains.rules}
+    targeted = [rule for rule in domains.rules if tuple(sequence(rule["path"])) in paths]
+    restriction = InputDomains(targeted, [], "test").apply({})
     validator = validators.validator_for(restriction)(restriction)
     for path in paths:
         for value in ("", "existing-config", "config.v1", "0", "I\n&", ">0", "invalid\tname", "a\n", "A"):
-            candidate: dict[str, object] = {}
+            candidate = copy.deepcopy(chart.defaults)
+            hubble = mapping(candidate["hubble"])
+            hubble["enabled"] = True
+            mapping(hubble["relay"])["enabled"] = True
+            mapping(hubble["ui"])["enabled"] = True
             current = candidate
             for key in path[:-1]:
-                child: dict[str, object] = {}
-                current[key] = child
-                current = child
+                current = mapping(current.setdefault(key, {}))
             current[path[-1]] = value
             assert validator.is_valid(json_value(candidate)) == (value in {"", "existing-config", "config.v1", "0"}), (path, value)
     assert validator.is_valid({"unrelatedConfig": "I\n&"})

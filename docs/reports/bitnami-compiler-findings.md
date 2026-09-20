@@ -114,7 +114,7 @@ The resulting examples included:
 | APISIX's etcd PDB | `maxUnavailable: "-"` | Nonnegative count or percentage, plus supported empty fallback |
 
 See [domains.py](../../pkg/hypothesis_helm/compiler/passes/domains.py) and
-[domain_helpers.py](../../pkg/hypothesis_helm/compiler/passes/domain_helpers.py).
+[domain_interpreter.py](../../pkg/hypothesis_helm/compiler/passes/domain_interpreter.py).
 
 Analyze independently justified output fragments with their guards and scope intact. Expand supported helper contexts and collection
 element shapes. Do not infer a domain merely from a field's name, or drop an unknown fragment in a way that changes surrounding YAML.

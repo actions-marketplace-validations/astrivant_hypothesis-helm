@@ -24,7 +24,7 @@ LIMITS: dict[str, tuple[int, str]] = {
     "max_string_chars": (16384, "Characters in a transformation operand or replacement result."),
     "max_regex_pattern_chars": (256, "Characters in an analyzed ASCII regex pattern."),
     "max_regex_subject_chars": (4096, "Characters in an analyzed ASCII regex subject."),
-    "max_symbolic_variants": (64, "Branch variants per destination projection."),
+    "max_symbolic_variants": (64, "Alternatives at one destination-projection branch join."),
     "max_indent_width": (128, "Spaces in a projected indent/nindent operation."),
     "max_proof_bytes": (16 * 1024 * 1024, "Chart bytes retained for an exact-pruning proof snapshot."),
     "max_output_nodes": (100000, "Manifest nodes inspected per complexity measurement."),

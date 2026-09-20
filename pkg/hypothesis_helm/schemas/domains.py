@@ -51,7 +51,6 @@ class InputDomains:
         from hypothesis_helm.charts.suites.generate import coalesce
         from hypothesis_helm.compiler.passes.dependencies import Dependencies
         from hypothesis_helm.compiler.passes.domains import project
-        from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings
 
         policy = inherited_policy()
         if chart.dependency_model is None:
@@ -74,13 +73,9 @@ class InputDomains:
             if not _schema_nodes(schema, path, schema):
                 raise ValueError(f"Input constraint {rule['path']} has no known path in chart {chart.path.name}")
             rules.append({**rule, "path": list(path)})
-        projected, projection_diagnostics = project(chart.path, schema) if policy.get("downstream_inputs", True) else ([], [])
-        if policy.get("downstream_inputs", True):
-            bindings, notes = reviewed_bindings(chart.path)
-            projected.extend(bindings)
-            projected.extend(rule for dependency in chart.dependency_model.nodes for rule in dependency.input_rules)
-            projection_diagnostics.extend(notes)
-            projection_diagnostics.extend(note for note in chart.dependency_model.diagnostics if "reason" in note)
+        projected, projection_diagnostics = (
+            project(chart.path, schema, chart.dependency_model) if policy.get("downstream_inputs", True) else ([], [])
+        )
         diagnostics.extend(projection_diagnostics)
         for rule in projected:
             path = tuple(str(part) for part in sequence(rule["path"]))

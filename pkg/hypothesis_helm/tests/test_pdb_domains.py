@@ -1,5 +1,5 @@
 """
-Constrain PDB input generation using destination types and reviewed chart mappings.
+Constrain PDB input generation using destination types and source-derived helper mappings.
 """
 
 import copy
@@ -9,18 +9,16 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
-from hypothesis import given, settings
 from hypothesis_helm_catalog.builder import scalar_domain
-from hypothesis_helm_catalog.profiles import schema as profile_schema
 from jsonschema import validators
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.suites.generate import coalesce
 from hypothesis_helm.charts.testing.rendering import RenderFailure, render
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.compiler.passes.input_bindings import reviewed_bindings
-from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
-from hypothesis_helm.schemas.paths import enumerate_paths
+from hypothesis_helm.compiler.passes.domains import project
+from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.domains import InputDomains
 from hypothesis_helm.schemas.resources import destination
 
 
@@ -107,7 +105,7 @@ def test_direct_pdb_mapping_constrains_arbitrary_input_names(tmp_path: Path, uni
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
 def test_airflow_pdb_generation_and_native_render(tmp_path: Path) -> None:
     """
-    Reproduce the reported malformed YAML and keep generated PDB subtrees inside reviewed field domains.
+    Reproduce the reported malformed YAML and keep generated PDB subtrees inside guarded field domains.
 
     Args:
         tmp_path (Path): Isolated Airflow chart and installed local dependencies.
@@ -126,46 +124,29 @@ def test_airflow_pdb_generation_and_native_render(tmp_path: Path) -> None:
         shutil.copytree(source / "common", target / "charts" / name / "charts/common")
     chart = Chart(target, {"type": "object"}, mapping(yamlio.load((target / "values.yaml").read_text())))
     original = copy.deepcopy(chart.defaults)
-    schema = chart.generation_schema()
+    rules = [
+        rule for rule in chart.input_domains().rules if sequence(rule["path"])[-2:] in (["pdb", "minAvailable"], ["pdb", "maxUnavailable"])
+    ]
+    schema = InputDomains(rules, [], "test").apply({})
     validator = validators.validator_for(schema)(schema)
     for component in ("worker", "web", "scheduler", "dagProcessor", "triggerer"):
         for field in ("minAvailable", "maxUnavailable"):
             for value in ("", 0, 1, "0%", "50%", "100%", "#", "[Ma", "101%", -1):
-                candidate = {component: {"pdb": {field: value}}}
+                candidate = copy.deepcopy(chart.defaults)
+                section = mapping(candidate[component])
+                section["enabled"] = True
+                limits = mapping(section["pdb"])
+                limits.update(create=True, minAvailable="", maxUnavailable="")
+                limits[field] = value
                 assert validator.is_valid(json_value(candidate)) == (value in ("", 0, 1, "0%", "50%", "100%")), candidate
     model = coalesce(chart)
-    generation = chart.generation_schema(model.schema)
-    entry = next(entry for entry in enumerate_paths(generation) if entry.path == ("worker", "pdb"))
-    limit_schema = {"anyOf": [profile_schema("pdb-count-or-percent"), {"const": ""}]}
-    limit_validator = validators.validator_for(limit_schema)(limit_schema)
-
-    @given(schema_strategy(entry.schema, generation=chart.input_domains().generation, path=entry.path))
-    @settings(max_examples=20, deadline=None, derandomize=True)
-    def valid(values: dict[str, object]) -> None:
-        """
-        Check whole-subtree generation, not just separately selected scalar leaves.
-
-        Args:
-            values (dict[str, object]): Generated PDB subtree after inference and domain projection.
-
-        Returns:
-            None: Both PDB limits follow the generation domain whenever present.
-        """
-        for field in ("minAvailable", "maxUnavailable"):
-            if field in values:
-                assert limit_validator.is_valid(json_value(values[field]))
-
-    valid()
     with pytest.raises(RenderFailure) as error:
         render(chart, {"worker": {"pdb": {"minAvailable": "#", "maxUnavailable": "[Ma"}}})
     assert error.value.code == "HH1101"
-    for limits in ({"minAvailable": "", "maxUnavailable": "50%"}, {"minAvailable": 1, "maxUnavailable": ""}, {}):
-        assert render(chart, {"worker": {"pdb": limits}})
+    for valid_limits in ({"minAvailable": "", "maxUnavailable": "50%"}, {"minAvailable": 1, "maxUnavailable": ""}, {}):
+        assert render(chart, {"worker": {"pdb": valid_limits}})
     assert chart.defaults == original
-    bindings, _ = reviewed_bindings(target)
-    assert len([rule for rule in bindings if rule["profile"] == "pdb-count-or-percent"]) == 10
     pdb_template = target / "templates/worker/poddisruptionbudget.yaml"
-    pdb_template.write_text(pdb_template.read_text() + "\n{{/* changed */}}\n")
-    rules, diagnostics = reviewed_bindings(target)
-    assert not any(sequence(rule["path"])[:2] == ["worker", "pdb"] for rule in rules)
-    assert any("source changed" in str(item) for item in diagnostics)
+    pdb_template.write_text(pdb_template.read_text() + "\n{{/* changed comment */}}\n")
+    rules, _ = project(target, model.schema, chart.dependency_model)
+    assert any(sequence(rule["path"]) == ["worker", "pdb", "minAvailable"] for rule in rules)

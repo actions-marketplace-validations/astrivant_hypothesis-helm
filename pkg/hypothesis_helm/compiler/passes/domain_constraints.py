@@ -1,0 +1,287 @@
+"""
+Translate supported symbolic origins and branch predicates into generation constraints.
+"""
+
+import copy
+import json
+import re
+
+from hypothesis_helm.compiler.asts.projections import Input, LocalMap, Operation, Piece, output
+from hypothesis_helm.schemas.contracts import mapping, sequence
+from hypothesis_helm.schemas.policy import intersect, restrict
+
+
+def at(path: tuple[str, ...], schema: dict[str, object]) -> dict[str, object]:
+    """
+    Require a values path when expressing a predicate about its value.
+
+    Args:
+        path (tuple[str, ...]): Referenced input.
+        schema (dict[str, object]): Leaf predicate.
+
+    Returns:
+        dict[str, object]: Predicate including existence of every parent.
+    """
+    result = restrict({"type": "object"}, path, schema)
+    current = result
+    for segment in path:
+        current["type"] = "object"
+        current["required"] = [segment]
+        current = mapping(mapping(current["properties"])[segment])
+    return result
+
+
+def predicate(value: object) -> dict[str, object] | None:
+    """
+    Express Go emptiness and supported Boolean operations without guessing unknown conditions.
+
+    Args:
+        value (object): Symbolic Boolean or value tested for truth.
+
+    Returns:
+        dict[str, object] | None: JSON Schema predicate, or an unresolved condition.
+    """
+    if value is None or type(value) in {str, int, float, bool}:
+        return {} if value else {"not": {}}
+    if isinstance(value, Input):
+        empty = {
+            "anyOf": [
+                {"enum": [None, False, 0, ""]},
+                {"type": "array", "maxItems": 0},
+                {"type": "object", "maxProperties": 0},
+            ]
+        }
+        return at(value.path, {"not": empty})
+    if not isinstance(value, Operation):
+        return None
+    name, args = value.name, value.arguments
+    if name in {"truth", "not", "empty"} and len(args) == 1:
+        child = predicate(args[0])
+        return child if name == "truth" else {"not": child} if child is not None else None
+    if name in {"and", "or"}:
+        children = [predicate(arg) for arg in args]
+        if any(child is None for child in children):
+            return None
+        return {"allOf" if name == "and" else "anyOf": children}
+    if name in {"eq", "ne"} and len(args) == 2:
+        left, right = args
+        if isinstance(right, Input):
+            left, right = right, left
+        if isinstance(left, Input) and (right is None or type(right) in {str, int, bool}):
+            result = at(left.path, {"const": right})
+            if right is None:
+                result = {"anyOf": [result, {"not": at(left.path, {})}]}
+            return {"not": result} if name == "ne" else result
+    if name in {"contains", "hasPrefix", "hasSuffix"} and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], Input):
+        pattern = re.escape(args[0])
+        pattern = "^" + pattern if name == "hasPrefix" else pattern + r"(?![\s\S])" if name == "hasSuffix" else pattern
+        return at(args[1].path, {"type": "string", "pattern": pattern})
+    return None
+
+
+def guard_bounds(value: object) -> tuple[dict[str, object], dict[str, object]]:
+    """
+    Establish sufficient true and false regions when part of a Boolean condition is unknown.
+
+    Args:
+        value (object): Symbolic condition, possibly containing renderer-dependent operands.
+
+    Returns:
+        tuple[dict[str, object], dict[str, object]]: Disjoint sufficient truth and falsity predicates; neither covers uncertainty.
+    """
+    if isinstance(value, Operation):
+        name, args = value.name, value.arguments
+        if name in {"not", "empty", "truth"} and len(args) == 1:
+            yes, no = guard_bounds(args[0])
+            return (yes, no) if name == "truth" else (no, yes)
+        if name in {"and", "or"} and args:
+            children = [guard_bounds(arg) for arg in args]
+            return (
+                combine([pair[0] for pair in children], conjunction=name == "and"),
+                combine([pair[1] for pair in children], conjunction=name != "and"),
+            )
+    known = predicate(value)
+    if known is None:
+        return {"not": {}}, {"not": {}}
+    return known, {"not": known}
+
+
+def combine(predicates: list[dict[str, object]], *, conjunction: bool) -> dict[str, object]:
+    """
+    Simplify Boolean schema constants without weakening their logical meaning.
+
+    Args:
+        predicates (list[dict[str, object]]): Boolean clauses over the values document.
+        conjunction (bool): Require all clauses rather than any clause.
+
+    Returns:
+        dict[str, object]: A constant, single clause, or explicit conjunction/disjunction.
+    """
+    neutral: dict[str, object] = {} if conjunction else {"not": {}}
+    absorbing: dict[str, object] = {"not": {}} if conjunction else {}
+    if absorbing in predicates:
+        return absorbing
+    selected = [item for item in predicates if item != neutral]
+    if not selected:
+        return neutral
+    return selected[0] if len(selected) == 1 else {"allOf" if conjunction else "anyOf": selected}
+
+
+def literal_domain(schema: dict[str, object]) -> dict[str, object] | None:
+    """
+    Restrict a finite destination shape to values that tpl cannot interpret as template code.
+
+    Args:
+        schema (dict[str, object]): Self-contained downstream domain.
+
+    Returns:
+        dict[str, object] | None: Literal-only generation domain, or unknown for open recursive shapes.
+    """
+    result = copy.deepcopy(schema)
+    kinds = result.get("type", [])
+    kinds = [kinds] if isinstance(kinds, str) else sequence(kinds)
+    if not kinds:
+        return None
+    if "string" in kinds:
+        result = intersect(result, {"not": {"type": "string", "pattern": r"\{\{"}})
+    if "object" in kinds:
+        key_domain = {"not": {"pattern": r"\{\{"}}
+        result["propertyNames"] = {"allOf": [result["propertyNames"], key_domain]} if "propertyNames" in result else key_domain
+        for key in ("properties",):
+            if isinstance(result.get(key), dict):
+                children = {name: literal_domain(mapping(child)) for name, child in mapping(result[key]).items()}
+                if any(child is None for child in children.values()):
+                    return None
+                result[key] = children
+        extra = result.get("additionalProperties", True)
+        if extra is True:
+            return None
+        if isinstance(extra, dict):
+            child = literal_domain(mapping(extra))
+            if child is None:
+                return None
+            result["additionalProperties"] = child
+    if "array" in kinds:
+        if not isinstance(result.get("items"), dict):
+            return None
+        child = literal_domain(mapping(result["items"]))
+        if child is None:
+            return None
+        result["items"] = child
+    return result
+
+
+def normalize(value: object) -> object:
+    """
+    Remove reversible serialization boundaries while retaining tpl's literal-input obligation.
+
+    Args:
+        value (object): Symbolic output or intermediate map.
+
+    Returns:
+        object: Equivalent provenance expression for backward domain propagation.
+    """
+    if isinstance(value, Piece):
+        return Piece(normalize(value.value), value.file, value.line)
+    if not isinstance(value, Operation):
+        return value
+    args = tuple(normalize(arg) for arg in value.arguments)
+    if value.name in {"deepCopy", "mustDeepCopy"} and len(args) == 1:
+        return args[0]
+    if value.name == "text":
+        pieces = [arg for arg in args if isinstance(arg, Piece)]
+        return output(pieces)
+    if value.name == "fromYaml" and len(args) == 1:
+        child = args[0]
+        if isinstance(child, Operation) and child.name == "render-text":
+            return normalize(Operation("fromYaml", child.arguments))
+        if isinstance(child, Operation) and child.name == "toYaml":
+            return child.arguments[0]
+        if isinstance(child, Operation) and child.name == "choose":
+            test, yes, no = child.arguments
+            return normalize(Operation("choose", (test, Operation("fromYaml", (yes,)), Operation("fromYaml", (no,)))))
+        if isinstance(child, Operation) and child.name in {"tpl", "literal"}:
+            return Operation("literal", (normalize(Operation("fromYaml", child.arguments[:1])),))
+    if value.name == "choose" and len(args) == 3:
+        test, yes, no = args
+        known = predicate(test)
+        if known == {}:
+            return yes
+        if known == {"not": {}}:
+            return no
+        if yes == no:
+            return yes
+        # tpl is the identity on the generated literal domain. Both branches
+        # must refer to the same value; this never recognizes a helper by name.
+        for templated, plain in ((yes, no), (no, yes)):
+            if isinstance(templated, Operation) and templated.name in {"tpl", "literal"} and templated.arguments[0] == plain:
+                return Operation("literal", (plain,))
+    return Operation(value.name, args)
+
+
+def constraints(
+    value: object, schema: dict[str, object], *, guards: tuple[dict[str, object], ...] = (), quoted: bool = False, serialized: bool = False
+) -> list[dict[str, object]]:
+    """
+    Propagate destination requirements through supported transformations and branches.
+
+    Args:
+        value (object): Symbolic output expression.
+        schema (dict[str, object]): Required downstream shape.
+        guards (tuple[dict[str, object], ...]): Conditions selecting this output.
+        quoted (bool): The renderer converts this input into a quoted string.
+        serialized (bool): The renderer emits a structured YAML or JSON value.
+
+    Returns:
+        list[dict[str, object]]: Guarded input restrictions; unsupported preimages remain unconstrained.
+    """
+    value = normalize(value)
+    if isinstance(value, Input):
+        return [{"path": list(value.path), "schema": schema, "guards": list(guards), "quoted": quoted, "serialized": serialized}]
+    if isinstance(value, LocalMap):
+        if not serialized:
+            return []
+        result = []
+        # Validate contributors to homogeneous maps (annotations, labels), where
+        # scalar replacement preserves the output type regardless of precedence.
+        extra = schema.get("additionalProperties")
+        types = extra.get("type", []) if isinstance(extra, dict) else []
+        types = [types] if isinstance(types, str) else sequence(types)
+        homogeneous = bool(types) and set(types) <= {"string", "boolean", "integer", "number", "null"}
+        if value.sources and homogeneous and not schema.get("required") and not schema.get("properties"):
+            for source in value.sources:
+                result.extend(constraints(source, schema, guards=guards, quoted=quoted, serialized=serialized))
+        if not value.sources:
+            properties = mapping(schema.get("properties", {}))
+            for key, child in value.entries.items():
+                restriction = properties.get(key, extra)
+                if isinstance(restriction, dict):
+                    result.extend(constraints(child, restriction, guards=guards, serialized=serialized))
+        return result
+    if not isinstance(value, Operation):
+        return []
+    name, args = value.name, value.arguments
+    if name in {"toYaml", "toJson", "quote", "tpl", "literal", "string-identity", "render-text"} and args:
+        target = literal_domain(schema) if name in {"tpl", "literal"} else schema
+        if target is None:
+            return []
+        return constraints(
+            args[0],
+            target,
+            guards=guards,
+            quoted=quoted or name in {"quote", "string-identity"},
+            serialized=serialized or name in {"toYaml", "toJson"},
+        )
+    if name == "choose" and len(args) == 3:
+        condition = predicate(args[0])
+        if condition is None:
+            # Only a restriction established in both unknown branches survives.
+            branches = [constraints(arg, schema, guards=guards, quoted=quoted, serialized=serialized) for arg in args[1:]]
+            other = {json.dumps(rule, sort_keys=True) for rule in branches[1]}
+            return [rule for rule in branches[0] if json.dumps(rule, sort_keys=True) in other]
+        return [
+            rule
+            for branch, guard in ((args[1], condition), (args[2], {"not": condition}))
+            for rule in constraints(branch, schema, guards=(*guards, mapping(guard)), quoted=quoted, serialized=serialized)
+        ]
+    return []

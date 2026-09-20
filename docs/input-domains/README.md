@@ -60,49 +60,40 @@ The rebuild combines pinned OpenAPI schemas, supported Go validation annotations
 With `--validate-schemas`, generation also uses the selected cached schema version. A locally rebuilt catalog in the same
 cache supplements that version; its digest becomes part of the test cache identity.
 
-The compiler follows `.Values.field` references through direct output and pure `include`/`template` helper calls with named arguments
-and local aliases. It handles string `quote` and collection `toYaml`, including `indent` and `nindent`. Collection
-constraints retain object fields, required members, array item types and typed additional properties from the schema.
-The catalog includes fields that declare only a type, such as annotation values that must be strings.
-It also retains scalar `oneOf`/`anyOf` alternatives, including fields that accept either integers or strings.
+The compiler traces a manifest field back to its values path through helper arguments, local aliases,
+branch assignments, and supported transformations. It reads the chart's templates each time; there is no
+library of chart names or template hashes that substitutes for this analysis.
 
-Supported Boolean and string-equality conditions remain attached to each restriction, which applies only when that
-branch emits the field. Loops, transformed helper output, ambiguous types and branch variants beyond
-`compiler.max_symbolic_variants` (64 by default) remain
-unresolved in this destination pass. A template containing unsupported output is left unchanged and its limitation
-is reported. The broader [rejection evaluator](../compiler/analysis.md#explicit-rejection-discovery) has a separate contract.
-Numeric-looking strings such as `"0"` remain eligible when their destination permits them, so missing YAML quoting
-can still be detected. Source schemas and supplied defaults are not rewritten.
+| Template structure | How generation uses it |
+| --- | --- |
+| Direct references, named helper arguments, `with`, and local variables | Carry the original values path to the manifest field. |
+| `if`, `default`, `coalesce`, and `ternary` | Attach the condition selecting that input; keep unused fallback inputs available. |
+| `quote`, string identity formatting, `toYaml`, `toJson`, `indent`, and `nindent` | Follow supported conversions, checking the source type before applying a destination constraint. |
+| A bounded literal list of maps merged into a fresh local map | Constrain contributors to homogeneous destinations such as string-valued annotations. |
+| `tpl` on a traced value | Generate literal values without template delimiters where that establishes the destination; supplied defaults remain unchanged. |
+| Prepared dependency, including an alias or archive | Analyze its parsed templates in the parent's values namespace, retaining dependency activation guards. |
 
-Helper analysis defaults to 16 nested calls. Set `compiler.max_call_depth` in the
-configuration below to analyze deeper chains.
-This controls both destination typing and rejection analysis, independently of Helm's
-rendering limits. The same mapping configures file, byte, statement, projection and search budgets.
-Unresolved cases remain ordinary tests; see
+The analysis joins independent branches instead of enumerating every combination of those branches.
+Partly known conditions can establish a smaller activation region without guessing the unknown operands.
+An unsupported scalar transformation leaves that field unchanged. An unresolved YAML fragment can also block
+mappings inside its containing structure. Shared input mutation, unresolved resource identities, and analysis-budget
+exhaustion remain explicit limitations. Independently established mappings survive where their structure is known.
+
+These are generation constraints, not a proof that two rendered manifests are equivalent. They do not authorize
+skipping a candidate as an equivalent output. Map-merge contributors are generated within the destination's
+value types, including contributors whose keys could be overwritten. Arbitrary transformation inverses, dynamic
+loops, and forwarded dependency globals remain unresolved when their origins cannot be established.
+
+For example, a helper forwarding a ConfigMap reference receives the same naming constraints in a new chart as
+in Cilium or MongoDB. An empty fallback remains available when the helper selects another name for empty input.
+PDB limits receive their count-or-percentage constraints only when the source branch emits them. Numeric-looking
+strings such as `"0"` remain eligible when their destination permits them, so missing YAML quoting can still be detected.
+The source schema and supplied defaults are not rewritten, and conflicting declared types are reported.
+
+Helper analysis defaults to 16 nested calls. Set `compiler.max_call_depth` in the configuration below to analyze
+deeper chains. `max_discovery_nodes` bounds analysis work; `max_symbolic_variants` bounds alternatives at a branch
+join. These settings are independent of Helm's rendering limits. Unresolved cases remain ordinary tests; see
 [compiler analysis budgets](../compiler/analysis.md#explicit-rejection-discovery).
-
-Reviewed chart bindings can bridge an opaque helper when the relevant template files match recorded SHA-256 hashes.
-The bundled bindings cover MongoDB's `existingConfigmap`, `arbiter.existingConfigmap` and `hidden.existingConfigmap`,
-plus Cilium's `existingConfigmap`, `envoy.existingConfigmap`, `hubble.relay.existingConfigmap` and
-`hubble.ui.frontend.existingServerBlockConfigmap`. They also apply through installed dependencies and aliases.
-Generated nonempty references follow ConfigMap naming rules; the empty fallback remains available.
-For example, Cilium's `envoy.existingConfigmap` can be `existing-config` or `""`, but cannot be `"I\n&"`.
-Multiline strings remain available for unrelated fields that accept configuration text.
-Airflow's `web`, `scheduler`, `dagProcessor`, `triggerer` and `worker` PDB limits have reviewed bindings as well.
-Their `minAvailable` and `maxUnavailable` accept nonnegative replica counts or percentages from `0%` through `100%`;
-the chart's empty-string fallback remains available. For example, `"50%"` is eligible while `"#"` and `"[Ma"` are excluded.
-The source schema still controls the input type, so a field inferred as a string samples percentages and the empty fallback.
-This constrains individual fields; it does not enforce the separate API rule against setting both PDB limits.
-The same PDB bindings cover etcd. APISIX's extra ConfigMap references use ConfigMap
-naming rules. Apache's service annotations and Redis's headless-service annotations
-use the destination schema's map-of-strings domain, including through dependency
-aliases. An array-valued annotation therefore cannot dominate generated tests;
-ordinary multiline annotation strings remain eligible.
-MongoDB 16.5.45 has a separate reviewed snapshot for charts such as Appsmith that
-depend on that release. If any reviewed version matches, stale alternatives for
-the same input do not produce a source-mismatch warning.
-Supplied values and `tpl` expressions are preserved. Changed templates disable that binding and produce a
-diagnostic. These are reviewed mappings for the recorded sources, not general analysis of arbitrary helpers.
 
 The catalog imports explicit scalar constraints and integer format limits. It also includes these reviewed supplements:
 
@@ -212,7 +203,7 @@ compiler:
   max_string_chars: 16384  # Characters in a transformation operand or replacement result.
   max_regex_pattern_chars: 256  # Characters in an analyzed ASCII regex pattern.
   max_regex_subject_chars: 4096  # Characters in an analyzed ASCII regex subject.
-  max_symbolic_variants: 64  # Branch variants per destination projection.
+  max_symbolic_variants: 64  # Alternatives at one destination-projection branch join.
   max_indent_width: 128  # Spaces in a projected indent/nindent operation.
   max_proof_bytes: 16777216  # Chart bytes retained for an exact-pruning proof snapshot.
   max_output_nodes: 100000  # Manifest nodes inspected per complexity measurement.
