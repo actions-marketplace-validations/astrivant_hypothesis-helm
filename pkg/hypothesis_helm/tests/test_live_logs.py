@@ -19,10 +19,10 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.repositories.scan import exercise_chart
 from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.testing.prioritized import check_prioritized
-from hypothesis_helm.charts.testing.rendering import RenderFailure
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.path_queue import execute
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.reporting.logs import WORKER_PREFIX, FindingLog, WorkerLogFormatter, WorkerLogs

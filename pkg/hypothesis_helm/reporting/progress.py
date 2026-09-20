@@ -42,7 +42,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) ->
         Generator[None, pytest.TestReport, pytest.TestReport]: Hook wrapper that yields control to pytest,
             receives its ordinary report and returns that report with the original severity decision attached.
     """
-    from hypothesis_helm.rules import RenderFailure
+    from hypothesis_helm.exceptions.rendering import RenderFailure
 
     error = call.excinfo.value if call.excinfo is not None else None
     cause = error if isinstance(error, RenderFailure) else getattr(error, "__cause__", None)

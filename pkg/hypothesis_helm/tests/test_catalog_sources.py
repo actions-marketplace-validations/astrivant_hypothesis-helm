@@ -14,9 +14,10 @@ from hypothesis_helm_catalog import builder, sources
 from jsonschema import validators
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.domains import project
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.domains import InputDomains
 from hypothesis_helm.schemas.policy import ENVIRONMENT

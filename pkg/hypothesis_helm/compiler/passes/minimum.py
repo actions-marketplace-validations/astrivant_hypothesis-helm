@@ -21,9 +21,10 @@ from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.constants import fill_missing
 from hypothesis_helm.compiler.passes.inputs import InputInventory
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.render_hashes import RenderHashes
-from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
+from hypothesis_helm.reporting.budget import execution_timer
 from hypothesis_helm.schemas.conformity import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping, sequence
 from hypothesis_helm.schemas.model import ValuesModel

@@ -6,8 +6,9 @@ from collections.abc import Sequence
 
 from attrs import define, field
 
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import configuration_key
-from hypothesis_helm.schemas.finite import NonFiniteSchema, enumerate_values
+from hypothesis_helm.schemas.finite import enumerate_values
 from hypothesis_helm.schemas.model import ValueNode, ValuesModel
 from hypothesis_helm.schemas.replay import select
 

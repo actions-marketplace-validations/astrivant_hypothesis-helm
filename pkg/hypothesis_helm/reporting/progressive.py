@@ -14,9 +14,9 @@ from rich.console import Console
 
 from hypothesis_helm.compiler.asts.templates import specialize
 from hypothesis_helm.compiler.passes.pruning import Pruner, safe_values
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.combinations import InteractionPlan, trim_values
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
-from hypothesis_helm.schemas.finite import NonFiniteSchema
 from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import concatenate, select
 

@@ -11,14 +11,9 @@ from functools import partial
 
 from jsonschema import validators
 
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.replay import Replay, concatenate, select, transform
-
-
-class NonFiniteSchema(ValueError):
-    """
-    The schema cannot be safely enumerated within the requested limit.
-    """
 
 
 def enumerate_values(schema: dict[str, object], limit: int = 1000) -> Sequence[dict[str, object]]:

@@ -11,8 +11,9 @@ from pathlib import Path
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.processes import Processes
-from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer, parse_time_limit
+from hypothesis_helm.reporting.budget import execution_timer, parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 
 from hypothesis_helm_benchmarking.analysis.selection import decision

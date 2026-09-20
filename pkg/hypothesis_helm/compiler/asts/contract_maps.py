@@ -5,7 +5,7 @@ Evaluate fresh flat-map merges without modeling mutations of shared chart inputs
 import re
 
 from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
-from hypothesis_helm.compiler.asts.transformations import UnsupportedTransformation
+from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
 
 def fresh_merge(expression: object) -> bool:

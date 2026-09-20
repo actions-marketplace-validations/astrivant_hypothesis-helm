@@ -17,18 +17,20 @@ from jsonschema import validators
 from hypothesis_helm.charts.model import Chart, _default_paths, merge_values
 from hypothesis_helm.charts.suites.generate import Model, coalesce
 from hypothesis_helm.charts.suites.runtime import path_values
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
+from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.traversal import ALGORITHM, SELECTION_ORDER, order_paths, validate_strategy
 from hypothesis_helm.findings.policy import RuleScope, chart_rules
 from hypothesis_helm.findings.severity import policy as finding_policy
-from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
+from hypothesis_helm.reporting.budget import execution_timer
 from hypothesis_helm.reporting.logs import input_baseline
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.rules import check, ignored, ignored_codes

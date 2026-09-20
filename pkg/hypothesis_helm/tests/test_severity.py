@@ -15,13 +15,13 @@ from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.compiler.asts.contracts import Contracts
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.severity import blocks, level, validate
 from hypothesis_helm.reporting.errors import chart_errors
 from hypothesis_helm.reporting.shards import aggregate
 from hypothesis_helm.rules import ENVIRONMENT as IGNORED
-from hypothesis_helm.rules import RenderFailure
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 

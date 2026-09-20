@@ -12,9 +12,9 @@ from typing import Self
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render_output
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
-from hypothesis_helm.reporting.budget import TimeLimitReached
 
 type RenderTask = tuple[dict[str, object], Future[str]]
 

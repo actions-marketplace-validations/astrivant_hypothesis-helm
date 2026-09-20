@@ -10,9 +10,9 @@ import pytest
 from jsonschema import validators
 
 from hypothesis_helm.cli import main
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import json_value
-from hypothesis_helm.schemas.finite import NonFiniteSchema
 from hypothesis_helm.schemas.groups import ExhaustiveGroup, infer_groups, parse_group
 from hypothesis_helm.tests.test_combinations import boolean_schema
 

@@ -21,9 +21,10 @@ from hypothesis.strategies import DataObject
 from jsonschema import validators
 
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.findings.severity import blocks, level
 from hypothesis_helm.reporting.logs import FindingLog, chart_name

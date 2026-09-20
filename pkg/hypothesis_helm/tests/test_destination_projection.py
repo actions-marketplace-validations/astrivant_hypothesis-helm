@@ -10,11 +10,12 @@ from textwrap import dedent, indent
 import pytest
 from jsonschema import validators
 
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.projections import Input, Operation
 from hypothesis_helm.compiler.passes.domain_constraints import guard_bounds
 from hypothesis_helm.compiler.passes.domains import project
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.tests.test_input_domains import fixture_chart
 

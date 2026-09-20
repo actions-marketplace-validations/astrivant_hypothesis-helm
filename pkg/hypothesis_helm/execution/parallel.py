@@ -13,12 +13,12 @@ from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import Literal
 
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.feedback import ThroughputController
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
 from hypothesis_helm.execution.traversal import validate_strategy
 from hypothesis_helm.findings.severity import junit_stops
-from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.display import start_progress
 
 LOGGER = logging.getLogger(__name__)

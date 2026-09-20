@@ -16,9 +16,10 @@ from hypothesis_helm.compiler.asts.origins import (
     paths,
     select,
 )
-from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, UnsupportedTransformation, calculate
+from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, calculate
 from hypothesis_helm.compiler.builtins import BUILTINS
 from hypothesis_helm.compiler.passes.discovery_flow import truth
+from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
 CERTIFICATES = frozenset(
     {"genCA", "genCAWithKey", "genSelfSignedCert", "genSelfSignedCertWithKey", "genSignedCert", "genSignedCertWithKey"}

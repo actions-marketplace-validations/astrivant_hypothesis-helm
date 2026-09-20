@@ -17,12 +17,9 @@ from attrs import Factory, define, field, frozen
 
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.limits import active_limits
+from hypothesis_helm.exceptions.compiler import Unavailable
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence
-
-
-class Unavailable(ValueError):
-    """Keep unavailable native context outside the compiler's supported domain."""
 
 
 def archive_files(stream: io.BytesIO, *, limits: dict[str, int] | None = None) -> dict[str, bytes]:

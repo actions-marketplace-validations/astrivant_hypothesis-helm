@@ -103,7 +103,7 @@ def test_deadline_saves_no_partial_pca(tmp_path: Path, monkeypatch: pytest.Monke
     Returns:
         None: Censored output retains accurate work statistics and has no fitted PCA.
     """
-    from hypothesis_helm.reporting.budget import TimeLimitReached
+    from hypothesis_helm.exceptions.execution import TimeLimitReached
 
     def expired(*args: object, **kwargs: object) -> list[dict[str, object]]:
         """

@@ -13,13 +13,14 @@ from hypothesis_helm.charts.inspection.audit import audit_findings
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import argument_parser, main
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.policy import RuleScope, candidate_paths, resolve_codes
 from hypothesis_helm.reporting.repository import write_reports
 from hypothesis_helm.rules import ENVIRONMENT as RULE_ENVIRONMENT
-from hypothesis_helm.rules import RenderFailure, ignored, may_check
+from hypothesis_helm.rules import ignored, may_check
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 from hypothesis_helm.tests.test_input_domains import fixture_chart

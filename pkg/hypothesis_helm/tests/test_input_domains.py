@@ -18,9 +18,10 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.suites.generate import generate_tests
 from hypothesis_helm.charts.suites.runtime import prepared_chart
 from hypothesis_helm.charts.testing.paths import path_strategy
-from hypothesis_helm.charts.testing.rendering import RenderFailure, validate_resources
+from hypothesis_helm.charts.testing.rendering import validate_resources
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.cache import fingerprint
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.finite import enumerate_values

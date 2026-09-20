@@ -23,6 +23,7 @@ from hypothesis_helm.compiler.passes.exports import export_repository
 from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.execution.estimate import estimate_suite
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.execution.sensitivity import validate_order
@@ -44,7 +45,6 @@ from hypothesis_helm.rules import load_ignored, may_check
 from hypothesis_helm.schemas.conformity import ENVIRONMENT, prepare
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.factors import factor_space
-from hypothesis_helm.schemas.finite import NonFiniteSchema
 from hypothesis_helm.schemas.groups import parse_group
 from hypothesis_helm.schemas.policy import ENVIRONMENT as INPUT_ENVIRONMENT
 from hypothesis_helm.schemas.policy import load_policy

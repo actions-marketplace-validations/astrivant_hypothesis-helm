@@ -14,11 +14,12 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import main
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.reporting.errors import chart_errors
 from hypothesis_helm.reporting.repository import write_reports
-from hypothesis_helm.rules import ENVIRONMENT, RenderFailure
+from hypothesis_helm.rules import ENVIRONMENT
 
 ROOT = Path(__file__).resolve().parents[3]
 

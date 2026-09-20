@@ -12,8 +12,9 @@ from hypothesis import given, settings
 from jsonschema import validate
 
 from hypothesis_helm import Chart, check_chart
-from hypothesis_helm.charts.testing.runner import RenderFailure, audit, merge_values, validate_resources
+from hypothesis_helm.charts.testing.runner import audit, merge_values, validate_resources
 from hypothesis_helm.cli import main
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import mapping, number, sequence, text
 
 ROOT = Path(__file__).resolve().parents[3]

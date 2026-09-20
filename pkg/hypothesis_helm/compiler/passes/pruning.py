@@ -452,8 +452,9 @@ class Pruner:
                 partitions.append((name, output.partition))
                 influences.update(output.influences)
         if reason is not None:
+            from hypothesis_helm.exceptions.rendering import RenderFailure
             from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths
-            from hypothesis_helm.rules import RenderFailure, ignored
+            from hypothesis_helm.rules import ignored
 
             self.reasons[reason] = self.reasons.get(reason, 0) + 1
             if not ignored("HH2007"):

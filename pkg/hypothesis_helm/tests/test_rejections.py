@@ -10,11 +10,12 @@ from textwrap import dedent
 import pytest
 from hypothesis import strategies as st
 
-from hypothesis_helm.charts.testing.runner import Chart, RenderFailure, check_chart, render
+from hypothesis_helm.charts.testing.runner import Chart, check_chart, render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts, calls, expression
 from hypothesis_helm.compiler.asts.templates import lower, walk
 from hypothesis_helm.compiler.passes.rejections import matches_rejection
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.reporting.repository import write_reports
 from hypothesis_helm.schemas.contracts import mapping
 

@@ -13,10 +13,10 @@ from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.compiler.asts.contracts import Contracts
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.findings.severity import attributes, for_paths, policy
 from hypothesis_helm.reporting.errors import chart_errors
-from hypothesis_helm.rules import RenderFailure
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 from hypothesis_helm.schemas.selectors import SourceScope

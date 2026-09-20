@@ -22,9 +22,10 @@ from hypothesis_helm_benchmarking.execution.runner import Job, execute_worker
 from hypothesis_helm_benchmarking.reporting.plots import paired_ratios
 from hypothesis_helm_benchmarking.studies.performance import parser
 
-from hypothesis_helm.charts.testing.runner import Chart, RenderFailure
+from hypothesis_helm.charts.testing.runner import Chart
+from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.integrations.sharding import Shard
-from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
 

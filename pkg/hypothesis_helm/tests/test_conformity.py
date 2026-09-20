@@ -14,9 +14,9 @@ import pytest
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.cache import fingerprint
 from hypothesis_helm.execution.render_hashes import RenderHashes
-from hypothesis_helm.rules import RenderFailure
 from hypothesis_helm.schemas import conformity
 from hypothesis_helm.schemas.contracts import mapping, sequence
 

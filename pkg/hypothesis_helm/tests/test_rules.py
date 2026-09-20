@@ -10,9 +10,10 @@ from hypothesis import strategies as st
 
 from hypothesis_helm.charts.inspection.audit import audit
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render, validate_resources
+from hypothesis_helm.charts.testing.rendering import render, validate_resources
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import argument_parser, main
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.cache import fingerprint
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.findings.generator import FindingGenerator

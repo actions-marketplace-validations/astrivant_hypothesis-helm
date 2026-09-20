@@ -17,7 +17,7 @@ from jsonschema import validators
 from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.testing.rendering import RenderFailure, validate_resources
+from hypothesis_helm.charts.testing.rendering import validate_resources
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.conditions import condition_path
 from hypothesis_helm.compiler.asts.templates import Node, specialize, value_path, walk
@@ -25,9 +25,11 @@ from hypothesis_helm.compiler.complexity import maximum_score, output_profile
 from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.lua.bounds import BoundEvaluator
 from hypothesis_helm.compiler.passes.pruning import Pruner, safe_values
+from hypothesis_helm.exceptions.rendering import RenderFailure
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
 from hypothesis_helm.schemas.factors import FactorSpace, factor_space
-from hypothesis_helm.schemas.finite import NonFiniteSchema, enumerate_values
+from hypothesis_helm.schemas.finite import enumerate_values
 from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import select
 

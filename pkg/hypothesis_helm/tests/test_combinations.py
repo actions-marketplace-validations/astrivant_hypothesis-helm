@@ -11,9 +11,9 @@ from jsonschema import validators
 
 from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.cli import main
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import json_value
-from hypothesis_helm.schemas.finite import NonFiniteSchema
 
 
 def boolean_schema(count: int) -> dict[str, object]:

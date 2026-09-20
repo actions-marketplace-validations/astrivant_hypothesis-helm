@@ -12,8 +12,8 @@ import pytest
 
 from hypothesis_helm.charts.model import Chart, merge_values
 from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.sensitivity import SensitivityOrder, mutations, validate_order
-from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
 
 

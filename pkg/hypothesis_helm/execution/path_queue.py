@@ -19,9 +19,9 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
-from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.checkpoints import save
 from hypothesis_helm.reporting.logs import WorkerLogFormatter, WorkerLogs
 from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format

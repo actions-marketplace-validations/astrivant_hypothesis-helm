@@ -94,6 +94,20 @@ suites, or regenerate them if they contain no custom edits.
 [`execution/`](../../pkg/hypothesis_helm/execution) package owns worker processes, queues,
 signals and scheduling shared by those operations.
 
+Package-owned exceptions are defined in [`exceptions/`](../../pkg/hypothesis_helm/exceptions)
+and imported directly from the module for their concern:
+
+| Module | Exceptions |
+| --- | --- |
+| `hypothesis_helm.exceptions.compiler` | Unsupported analysis (`Unknown`, `Unavailable`, `UnsupportedTransformation`), explicit chart rejection (`Rejection`), and loop control (`LoopControl`). |
+| `hypothesis_helm.exceptions.rendering` | `RenderFailure`, with its finding code and evidence. |
+| `hypothesis_helm.exceptions.schemas` | `NonFiniteSchema`, when exhaustive enumeration cannot be established. |
+| `hypothesis_helm.exceptions.execution` | `TimeLimitReached`, a cancellation signal outside ordinary `Exception` handlers. |
+
+Benchmarking imports these shared definitions. The catalog and pipeline currently define no custom
+exceptions. New package-specific exceptions belong in that package's own `exceptions/` directory;
+built-in and third-party exceptions retain their original definitions.
+
 ## Syntax trees and compiler passes
 
 The [compiler guide](../compiler/README.md) describes the flow from template

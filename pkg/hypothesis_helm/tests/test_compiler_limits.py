@@ -10,13 +10,14 @@ from textwrap import dedent
 import pytest
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.limits import DEFAULT_LIMITS
 from hypothesis_helm.compiler.passes.domains import project
 from hypothesis_helm.compiler.passes.rejections import matches_rejection
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.cache import fingerprint
 from hypothesis_helm.schemas.policy import ENVIRONMENT, load_policy
 

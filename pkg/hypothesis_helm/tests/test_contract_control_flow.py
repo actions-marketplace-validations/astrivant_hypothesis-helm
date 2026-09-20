@@ -10,12 +10,14 @@ from textwrap import dedent
 import pytest
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contract_values import BoundValue
-from hypothesis_helm.compiler.asts.contracts import Contracts, Evaluation, FieldAccess, Unknown, calls, expression
+from hypothesis_helm.compiler.asts.contracts import Contracts, Evaluation, FieldAccess, calls, expression
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
+from hypothesis_helm.exceptions.compiler import Unknown
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import mapping
 
 

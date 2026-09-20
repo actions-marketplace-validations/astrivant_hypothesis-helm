@@ -14,8 +14,8 @@ from hypothesis_helm_benchmarking.studies.matrix import bundle_key
 
 from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.compiler.passes.expansion import FailureExpansion
-from hypothesis_helm.reporting.budget import TimeLimitReached
-from hypothesis_helm.rules import RenderFailure
+from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 from hypothesis_helm.schemas.policy import ENVIRONMENT
 

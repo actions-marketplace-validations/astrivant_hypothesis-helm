@@ -12,10 +12,10 @@ from attrs import define, field
 from jsonschema import validators
 
 from hypothesis_helm.charts.model import Chart, merge_values
-from hypothesis_helm.charts.testing.rendering import RenderFailure
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import ACTIVE_CODES, RuleScope

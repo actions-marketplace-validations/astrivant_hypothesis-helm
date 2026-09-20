@@ -12,7 +12,8 @@ from pathlib import Path
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
-from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
+from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.reporting.budget import execution_timer
 from hypothesis_helm.reporting.logs import input_baseline
 from hypothesis_helm.rules import ignored_codes
 from hypothesis_helm.schemas.characters import generated_text_policy

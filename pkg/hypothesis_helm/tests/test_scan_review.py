@@ -17,11 +17,12 @@ from hypothesis_helm.charts.inspection.audit import audit_findings
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.suites.runtime import _replace
 from hypothesis_helm.charts.testing.paths import check_paths
-from hypothesis_helm.charts.testing.rendering import RenderFailure, render
+from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.path_queue import execute
-from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.checkpoints import save
 from hypothesis_helm.reporting.logs import WorkerLogFormatter, WorkerLogs, diagnostic_line
 from hypothesis_helm.schemas.contracts import mapping, sequence

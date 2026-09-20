@@ -19,7 +19,7 @@ from hypothesis_helm_benchmarking.studies.matrix import bundle_key, measure, ref
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
-from hypothesis_helm.reporting.budget import TimeLimitReached
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 
 
 def test_error_population_control() -> None:

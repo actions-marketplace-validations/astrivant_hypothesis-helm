@@ -11,6 +11,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from types import FrameType
 
+from hypothesis_helm.exceptions.execution import TimeLimitReached
+
 
 def parse_time_limit(value: str) -> float:
     """
@@ -28,12 +30,6 @@ def parse_time_limit(value: str) -> float:
         if math.isfinite(seconds) and seconds > 0:
             return seconds
     raise argparse.ArgumentTypeError("time limit must be positive, e.g. 180, 30s or 3m")
-
-
-class TimeLimitReached(BaseException):
-    """
-    Stop execution without turning a budget deadline into a shrinking counterexample.
-    """
 
 
 @contextmanager

@@ -57,17 +57,3 @@ class Scope:
             self.parent.bind(name, value, assign=True)
         else:
             raise KeyError(name)
-
-
-@define
-class LoopControl(Exception):
-    """
-    Carry a loop jump and text emitted before it through nested lexical blocks.
-
-    Attributes:
-        action (str): Break or continue for the enclosing range.
-        output (str): Text already emitted in the interrupted iteration.
-    """
-
-    action: str
-    output: str = ""

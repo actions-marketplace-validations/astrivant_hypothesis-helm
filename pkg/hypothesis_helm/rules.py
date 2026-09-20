@@ -7,8 +7,8 @@ import logging
 import os
 from pathlib import Path
 
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.catalog import CATALOG
-from hypothesis_helm.findings.generator import Finding, FindingGenerator
 from hypothesis_helm.findings.policy import ACTIVE_CODES, chart_rules, resolve_codes
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import configuration, inherited_policy
@@ -128,38 +128,6 @@ def record_ignored(code: str, message: str) -> None:
         None: Emit an informational diagnostic.
     """
     LOGGER.info("[%s] Ignored: %s", code, message)
-
-
-class RenderFailure(AssertionError):
-    """
-    Attach a stable check identifier to a reproducible render failure.
-
-    Attributes:
-        code (str): Stable identifier, independent of report grouping order.
-        finding (Finding): Structured observation carried by this exception.
-        controls (dict[str, object]): Frozen severity and failure decision from the detecting scope.
-        resources (list[object] | None): Parsed output available before validation failed.
-    """
-
-    code: str
-    finding: Finding
-    controls: dict[str, object]
-    resources: list[object] | None = None
-
-    def __init__(self, message: str, code: str = "HH1001") -> None:
-        """
-        Retain the diagnostic and its explicit rule identity.
-
-        Args:
-            message (str): Original renderer or validator diagnostic.
-            code (str): Explicit detected condition, or an unclassified template failure.
-        """
-        self.finding = FindingGenerator.create(code, message)
-        self.code = self.finding.rule.code
-        from hypothesis_helm.findings.severity import attributes
-
-        self.controls = attributes(self.code)
-        super().__init__(f"[{self.code}] {message}")
 
 
 def check(condition: bool, code: str, message: str) -> None:

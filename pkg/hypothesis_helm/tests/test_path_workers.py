@@ -18,7 +18,7 @@ import pytest
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.cli import argument_parser
-from hypothesis_helm.reporting.budget import TimeLimitReached
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 

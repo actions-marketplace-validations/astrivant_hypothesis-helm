@@ -14,7 +14,8 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contract_scope import Scope
 from hypothesis_helm.compiler.asts.contract_values import BoundValue, native
 from hypothesis_helm.compiler.asts.contracts import Contracts, Evaluation, expression
-from hypothesis_helm.compiler.asts.transformations import UnsupportedTransformation, calculate
+from hypothesis_helm.compiler.asts.transformations import calculate
+from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.tests.test_contract_control_flow import control_chart as control_chart
 

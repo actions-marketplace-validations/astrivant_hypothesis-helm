@@ -14,9 +14,9 @@ from hypothesis_helm_benchmarking.charts.generator import generate
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.exhaustive import ExhaustiveRenders
-from hypothesis_helm.charts.testing.rendering import RenderFailure
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values.yamlio import load_all
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.replay import Replay
 

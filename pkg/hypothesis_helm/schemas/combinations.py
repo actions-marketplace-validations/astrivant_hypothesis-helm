@@ -13,9 +13,9 @@ from collections.abc import Callable, Sequence
 from attrs import define, field
 from jsonschema import validators
 
+from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import json_value
 from hypothesis_helm.schemas.factors import factor_space
-from hypothesis_helm.schemas.finite import NonFiniteSchema
 from hypothesis_helm.schemas.groups import ExhaustiveGroup
 from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import Replay, select

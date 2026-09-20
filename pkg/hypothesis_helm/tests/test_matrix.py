@@ -11,7 +11,8 @@ from hypothesis_helm_benchmarking.charts.generator import generate
 from hypothesis_helm_benchmarking.charts.structures import STRUCTURES, expected_manifests
 from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES, measure, reference_space
 
-from hypothesis_helm.charts.testing.runner import Chart, RenderFailure
+from hypothesis_helm.charts.testing.runner import Chart
+from hypothesis_helm.exceptions.rendering import RenderFailure
 
 
 @pytest.mark.parametrize("structure", STRUCTURES)

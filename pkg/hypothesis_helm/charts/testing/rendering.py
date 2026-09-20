@@ -16,12 +16,12 @@ from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.render_hashes import RenderHashes, process_hashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.reporting.output import emit_manifest
-from hypothesis_helm.rules import RenderFailure as RenderFailure
 from hypothesis_helm.rules import check, effective_ignored_codes, ignored
 from hypothesis_helm.schemas.conformity import ENVIRONMENT, validate
 from hypothesis_helm.schemas.contracts import (

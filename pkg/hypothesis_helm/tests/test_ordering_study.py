@@ -15,7 +15,7 @@ from hypothesis_helm_benchmarking.execution.ordering import Observation, methods
 from hypothesis_helm_benchmarking.studies.ordering import verify
 
 from hypothesis_helm.charts.model import Chart
-from hypothesis_helm.reporting.budget import TimeLimitReached
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 

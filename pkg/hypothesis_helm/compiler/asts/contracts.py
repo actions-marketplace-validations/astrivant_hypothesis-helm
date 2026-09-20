@@ -4,7 +4,6 @@ Evaluate explicit template rejection contracts without interpreting arbitrary He
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
@@ -18,7 +17,7 @@ from attrs import define, evolve, field, frozen
 from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.compiler.asts.contract_maps import fresh_merge, merge_flat_sources
-from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, LoopControl, Scope
+from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, Scope
 from hypothesis_helm.compiler.asts.contract_values import (
     BoundValue,
     ConstantList,
@@ -29,12 +28,13 @@ from hypothesis_helm.compiler.asts.contract_values import (
     UnorderedKeys,
     native,
 )
-from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext, Unavailable
+from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext
 from hypothesis_helm.compiler.asts.templates import Node, lower, walk
-from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, TransformedDomain, UnsupportedTransformation, calculate, inputs
+from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, TransformedDomain, calculate, inputs
 from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE
 from hypothesis_helm.compiler.limits import active_limits, call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
+from hypothesis_helm.exceptions.compiler import LoopControl, Rejection, Unavailable, Unknown, UnsupportedTransformation
 
 TOKENS = re.compile(r'\s*("(?:\\.|[^"\\])*"|`[^`]*`|[()|]|[^\s()|]+)')
 ASSIGNMENT = re.compile(r"(\$\w+)\s*(:=|=)\s*(.*)", re.DOTALL)
@@ -90,19 +90,6 @@ def declares_path(schema: object, path: tuple[str, ...]) -> bool:
     return declares_path(additional, path[1:]) if isinstance(additional, dict) else additional is not True
 
 
-class Unknown(ValueError):
-    """
-    Indicate that the contract cannot be evaluated in the supported subset.
-
-    Attributes:
-        source (str | None): Innermost template source where evaluation stopped.
-        line (int): Source line, or zero when parsing did not establish a location.
-    """
-
-    source: str | None = None
-    line: int = 0
-
-
 @frozen
 class FieldAccess:
     """
@@ -115,73 +102,6 @@ class FieldAccess:
 
     receiver: object
     fields: tuple[str, ...]
-
-
-@frozen
-class Rejection(Exception):
-    """
-    Retain an evaluated rejection and the input evidence used to reach it.
-
-    Attributes:
-        source (str): Template containing the rejection sink.
-        line (int): Source line containing fail or required.
-        message (str): Explicit chart-authored rejection message.
-        inputs (dict[str, object]): Values inspected by the contract, including related fields.
-        conditions (tuple[str, ...]): Evaluated branch conditions and their outcomes.
-        enums (dict[str, tuple[str, ...]]): Literal allowlists inspected on the rejecting branch.
-        text (ContractText | None): Exact message including known unordered key-list fragments.
-        declared_schema (bool): The rejecting input belongs to an explicitly declared child schema.
-        transformed_domains (tuple[TransformedDomain, ...]): Branch-local constraints on transformed outputs.
-        transformed (bool): Prediction evaluated a supported transformation and needs native verification.
-        contextual (bool): Prediction used capabilities, files or tpl and always needs native verification.
-    """
-
-    source: str
-    line: int
-    message: str
-    inputs: dict[str, object]
-    conditions: tuple[str, ...]
-    enums: dict[str, tuple[str, ...]] = field(factory=dict)
-    text: ContractText | None = None
-    declared_schema: bool = False
-    transformed_domains: tuple[TransformedDomain, ...] = ()
-    transformed: bool = False
-    contextual: bool = False
-
-    @property
-    def key(self) -> str:
-        """
-        Identify a rejection independently of candidate values.
-
-        Returns:
-            str: Stable source/message fingerprint within this loaded chart.
-        """
-        domain = (
-            json.dumps({"enums": self.enums, "transformed_domains": [item.report() for item in self.transformed_domains]}, sort_keys=True)
-            if self.transformed_domains
-            else json.dumps(self.enums, sort_keys=True)
-            if self.enums
-            else self.message
-        )
-        return hashlib.sha256(f"{self.source}:{self.line}:{domain}".encode()).hexdigest()[:16]
-
-    def report(self) -> dict[str, object]:
-        """
-        Export contract evidence separately from manifest failures.
-
-        Returns:
-            dict[str, object]: Source, requirement text, evaluated conditions, and joint values.
-        """
-        return {
-            "id": self.key,
-            "source": self.source,
-            "line": self.line,
-            "requirement": self.message.strip(),
-            "inputs": dict(reversed(list(self.inputs.items()))),
-            "conditions": list(self.conditions),
-            "enums": {path: list(values) for path, values in self.enums.items()},
-            "transformed_domains": [domain.report() for domain in self.transformed_domains],
-        }
 
 
 @lru_cache(maxsize=8192)
@@ -589,8 +509,9 @@ class Contracts:
         Returns:
             None: A deduplicated diagnostic is retained and an enabled warning is logged.
         """
+        from hypothesis_helm.exceptions.rendering import RenderFailure
         from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths
-        from hypothesis_helm.rules import RenderFailure, ignored
+        from hypothesis_helm.rules import ignored
 
         source = getattr(error, "source", None) or source
         line = getattr(error, "line", 0)

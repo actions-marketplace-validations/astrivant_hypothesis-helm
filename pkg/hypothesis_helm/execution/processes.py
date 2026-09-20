@@ -12,8 +12,8 @@ from typing import TextIO
 
 from attrs import define, field
 
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
-from hypothesis_helm.reporting.budget import TimeLimitReached
 
 
 def _signal_group(child: subprocess.Popen[str], sig: int, *, permission_grace: float = 1.0) -> bool:

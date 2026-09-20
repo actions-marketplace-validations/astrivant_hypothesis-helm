@@ -12,6 +12,7 @@ from attrs import frozen
 
 from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
 from hypothesis_helm.compiler.limits import active_limits
+from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
 FUNCTIONS = frozenset(
     {
@@ -55,10 +56,6 @@ FUNCTIONS = frozenset(
 )
 MIN_INTEGER = -(2**63)
 MAX_INTEGER = 2**63 - 1
-
-
-class UnsupportedTransformation(ValueError):
-    """Leave unsupported types, conversions, or overflow for native Helm execution."""
 
 
 @lru_cache(maxsize=1024)

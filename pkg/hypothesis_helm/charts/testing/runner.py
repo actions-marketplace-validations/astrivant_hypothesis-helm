@@ -26,7 +26,6 @@ from hypothesis_helm.charts.model import merge_values as merge_values
 from hypothesis_helm.charts.testing.candidates import CandidateChecks
 from hypothesis_helm.charts.testing.exhaustive import ExhaustiveRenders
 from hypothesis_helm.charts.testing.planning import PlanningOptions, build_plan
-from hypothesis_helm.charts.testing.rendering import RenderFailure as RenderFailure
 from hypothesis_helm.charts.testing.rendering import render as render
 from hypothesis_helm.charts.testing.rendering import validate_resources as validate_resources
 from hypothesis_helm.charts.values import yamlio
@@ -34,6 +33,8 @@ from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
+from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.render_hashes import RenderHashes
 from hypothesis_helm.execution.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.sensitivity import SensitivityOrder, validate_order
@@ -41,7 +42,6 @@ from hypothesis_helm.execution.traversal import order_configurations, validate_s
 from hypothesis_helm.findings.policy import chart_rules
 from hypothesis_helm.findings.severity import attributes
 from hypothesis_helm.findings.severity import policy as finding_policy
-from hypothesis_helm.reporting.budget import TimeLimitReached
 from hypothesis_helm.reporting.changes import compare
 from hypothesis_helm.reporting.checkpoints import save as save_checkpoint
 from hypothesis_helm.reporting.logs import FindingLog, chart_name, input_baseline

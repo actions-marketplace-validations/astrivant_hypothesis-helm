@@ -17,7 +17,7 @@ from hypothesis import strategies as st
 from hypothesis_helm.charts.suites.generate import ValuePath, coalesce
 from hypothesis_helm.charts.suites.runtime import check_path
 from hypothesis_helm.charts.testing.paths import path_strategy
-from hypothesis_helm.charts.testing.runner import Chart, RenderFailure, check_chart, render
+from hypothesis_helm.charts.testing.runner import Chart, check_chart, render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, unpack
@@ -25,6 +25,7 @@ from hypothesis_helm.compiler.passes.graph import export_graph
 from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
+from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.groups import infer_groups
 from hypothesis_helm.schemas.model import ValuesModel

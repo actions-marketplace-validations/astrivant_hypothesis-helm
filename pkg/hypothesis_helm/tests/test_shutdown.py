@@ -447,7 +447,8 @@ def test_timeout_alarm_waits_for_real_child_cleanup(tmp_path: Path, monkeypatch:
     Returns:
         None: The deadline propagates only after the child is joined and handlers are restored.
     """
-    from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
+    from hypothesis_helm.exceptions.execution import TimeLimitReached
+    from hypothesis_helm.reporting.budget import execution_timer
 
     children: list[subprocess.Popen[str]] = []
     create = subprocess.Popen
@@ -533,7 +534,8 @@ def test_deferred_deadline_preserves_cleanup_failure(monkeypatch: pytest.MonkeyP
     Returns:
         None: Both causes remain visible and unsuccessful ownership is retained.
     """
-    from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
+    from hypothesis_helm.exceptions.execution import TimeLimitReached
+    from hypothesis_helm.reporting.budget import execution_timer
 
     child = Mock(spec=subprocess.Popen, pid=12345, stdin=None, stdout=None, stderr=None)
     child.wait.side_effect = OSError("join failed")
@@ -673,7 +675,8 @@ def test_registration_finishes_before_cancellation(tmp_path: Path, monkeypatch: 
     Returns:
         None: The child is registered, stopped and joined before cancellation propagates.
     """
-    from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer
+    from hypothesis_helm.exceptions.execution import TimeLimitReached
+    from hypothesis_helm.reporting.budget import execution_timer
 
     created: list[subprocess.Popen[str]] = []
     spawn = subprocess.Popen

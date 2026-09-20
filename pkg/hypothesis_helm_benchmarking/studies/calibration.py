@@ -18,10 +18,11 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.compiler.passes.sampling import profile
 from hypothesis_helm.compiler.passes.topology import trim_topology
+from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.aggressive import CALIBRATION_VERSION, changed_fields, descriptor
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.sampling import Sampling
-from hypothesis_helm.reporting.budget import TimeLimitReached, execution_timer, parse_time_limit
+from hypothesis_helm.reporting.budget import execution_timer, parse_time_limit
 from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.combinations import plan_interactions, trim_values
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
