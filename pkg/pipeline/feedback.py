@@ -13,6 +13,8 @@ from typing import cast
 from pipeline.graph import Graph
 from pipeline.workloads import Control, Outcome, Statistics, Work
 
+__all__ = ("FeedbackGraph",)
+
 
 class FeedbackGraph:
     """

@@ -16,6 +16,9 @@ from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_sh
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path
 from hypothesis_helm_benchmarking.execution.profiling import PROFILE_DIRECTORY, capture
 
+__all__ = ("COMMANDS", "main")
+
+
 COMMANDS = {
     "smoke": "execution.shell",
     "shards": "execution.shell",

@@ -16,6 +16,8 @@ from hypothesis_helm.compiler.asts.actions import Action, parse
 from hypothesis_helm.compiler.asts.renderer import archive_files
 from hypothesis_helm.compiler.limits import active_limits
 
+__all__ = ("DiscoverySources", "signature")
+
 
 def signature(nodes: list[Action]) -> tuple[object, ...]:
     """

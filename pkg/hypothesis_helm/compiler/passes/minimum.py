@@ -29,6 +29,8 @@ from hypothesis_helm.schemas.conformity import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping, sequence
 from hypothesis_helm.schemas.model import ValuesModel
 
+__all__ = ("export_minimal", "remove_paths", "resource_count", "value_paths")
+
 
 def value_paths(value: object, prefix: tuple[str | int, ...] = ()) -> list[tuple[str | int, ...]]:
     """

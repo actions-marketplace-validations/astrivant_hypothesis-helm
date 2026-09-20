@@ -6,6 +6,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+__all__ = ("RenderFailure",)
+
+
 if TYPE_CHECKING:
     from hypothesis_helm.findings.generator import Finding
 

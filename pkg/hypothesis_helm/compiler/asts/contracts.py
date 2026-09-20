@@ -36,6 +36,21 @@ from hypothesis_helm.compiler.limits import active_limits, call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.exceptions.compiler import LoopControl, Rejection, Unavailable, Unknown, UnsupportedTransformation
 
+__all__ = (
+    "ASSIGNMENT",
+    "Contracts",
+    "Evaluation",
+    "FieldAccess",
+    "RANGE_ASSIGNMENT",
+    "TOKENS",
+    "calls",
+    "context_effects",
+    "declares_path",
+    "expression",
+    "tpl_nodes",
+)
+
+
 TOKENS = re.compile(r'\s*("(?:\\.|[^"\\])*"|`[^`]*`|[()|]|[^\s()|]+)')
 ASSIGNMENT = re.compile(r"(\$\w+)\s*(:=|=)\s*(.*)", re.DOTALL)
 RANGE_ASSIGNMENT = re.compile(r"(\$\w+)(?:\s*,\s*(\$\w+))?\s*(:=|=)\s*(.*)", re.DOTALL)

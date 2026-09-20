@@ -7,6 +7,9 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+__all__ = ("DEFAULT_LIMITS", "LIMITS", "active_limits", "call_depth", "compiler_limits", "policy_limits")
+
+
 # Resource budgets only. Language semantics, numeric precision and proof requirements
 # are not configurable: changing those would change what the analysis can establish.
 LIMITS: dict[str, tuple[int, str]] = {

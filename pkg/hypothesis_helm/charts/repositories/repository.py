@@ -20,6 +20,9 @@ from hypothesis_helm.charts.repositories.changes import optional_git
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.reporting.links import repository_url
 
+__all__ = ("RepositorySource", "local_provenance", "remote_name", "run_git")
+
+
 LOGGER = logging.getLogger(__name__)
 
 

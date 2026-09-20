@@ -17,6 +17,8 @@ from hypothesis_helm.schemas.policy import inherited_policy, path_parts, restric
 from hypothesis_helm.schemas.selectors import matching_rules
 from hypothesis_helm.schemas.settings import generation_settings, settings_at
 
+__all__ = ("InputDomains",)
+
 
 @frozen
 class InputDomains:
@@ -85,6 +87,7 @@ class InputDomains:
                 for node in nodes
                 for kind in ([node["type"]] if isinstance(node.get("type"), str) else sequence(node.get("type", [])))
             }
+            # Quoting changes representation; a destination string constraint is not automatically an input-type constraint.
             if rule["quoted"] and kinds != {"string"}:
                 diagnostics.append({"path": list(path), "reason": "quote converts a non-string or unknown input; domain unchanged"})
                 continue

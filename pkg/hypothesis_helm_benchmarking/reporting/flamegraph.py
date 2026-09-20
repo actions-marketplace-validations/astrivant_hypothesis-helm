@@ -14,6 +14,8 @@ from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
 from hypothesis_helm_benchmarking.execution.profiling import Frame
 from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
+__all__ = ("layout", "main", "merge", "plot", "render_profiles")
+
 
 def merge(profiles: list[dict[str, object]]) -> list[Frame]:
     """

@@ -22,6 +22,9 @@ from hypothesis_helm.rules import AUDIT_RULES, ignored_codes
 from hypothesis_helm.schemas.contracts import sequence
 from hypothesis_helm.schemas.opaque import MESSAGE, opaque_paths, warn_opaque
 
+__all__ = ("audit", "audit_findings")
+
+
 LOGGER = logging.getLogger(__name__)
 
 

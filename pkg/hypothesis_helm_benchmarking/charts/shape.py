@@ -10,6 +10,8 @@ from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path, record_change
 
+__all__ = ("fault_outputs", "reshape_faults")
+
 
 def reshape_faults(path: Path, copies: int, wrappers: int, *, workspace: FixtureWorkspace | None = None) -> None:
     """

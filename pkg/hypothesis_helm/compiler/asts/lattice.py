@@ -10,6 +10,9 @@ from immutables import Map
 from hypothesis_helm.compiler.asts.conditions import Condition
 from hypothesis_helm.schemas.model import ValuesModel
 
+__all__ = ("Domain", "Path", "Scalar", "State")
+
+
 type Path = tuple[str, ...]
 type Scalar = str | bool
 
@@ -35,6 +38,7 @@ class Domain:
         Returns:
             Domain: Least upper bound of both sets.
         """
+        # Either branch may execute. Unknown on either side prevents a finite union from being a sound bound.
         return Domain() if self.values is None or other.values is None else Domain(self.values | other.values)
 
     def meet(self, other: Domain) -> Domain:
@@ -72,6 +76,7 @@ class State:
         Returns:
             None: Equivalent states have identical representations.
         """
+        # One impossible field makes the whole branch unreachable, regardless of the other fields.
         if not self.reachable or any(domain.values == frozenset() for domain in self.fields.values()):
             object.__setattr__(self, "reachable", False)
             object.__setattr__(self, "fields", Map())
@@ -119,6 +124,7 @@ class State:
             return other
         if not other.reachable:
             return self
+        # A fact absent from the other branch becomes unknown after the branches meet.
         return State(Map((path, domain.join(other.fields.get(path, Domain()))) for path, domain in self.fields.items()))
 
     def meet(self, other: State) -> State:

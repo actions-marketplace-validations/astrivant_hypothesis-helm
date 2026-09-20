@@ -11,6 +11,9 @@ from typing import Self
 
 from hypothesis_helm.execution.signals import DeferredSignals
 
+__all__ = ("Cancellation", "initialize")
+
+
 CANCEL: Event | None = None
 
 

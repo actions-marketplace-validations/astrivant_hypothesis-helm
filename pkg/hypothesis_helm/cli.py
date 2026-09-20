@@ -50,6 +50,8 @@ from hypothesis_helm.schemas.policy import ENVIRONMENT as INPUT_ENVIRONMENT
 from hypothesis_helm.schemas.policy import load_policy
 from hypothesis_helm.schemas.selectors import SourceScope, chart_identity, source_identity
 
+__all__ = ("ExamplesAction", "FailAction", "FilterAction", "argument_parser", "local_discovery", "main", "parse_code_list", "parse_jobs")
+
 
 class FailAction(argparse.Action):
     """

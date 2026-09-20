@@ -6,6 +6,8 @@ from attrs import frozen
 
 from hypothesis_helm_benchmarking.charts.stress import Stress
 
+__all__ = ("Parameters",)
+
 
 @frozen
 class Parameters:

@@ -14,6 +14,8 @@ from hypothesis_helm.execution.signals import DeferredSignals, Termination
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from pipeline import Operation, OperationQueue
 
+__all__ = ("remaining", "resume")
+
 
 def remaining(journal: Path) -> tuple[Operation, ...]:
     """
@@ -26,6 +28,7 @@ def remaining(journal: Path) -> tuple[Operation, ...]:
         tuple[Operation, ...]: Remaining queue, including failed operations for retry.
     """
     records = [mapping(item) for item in sequence(mapping(json.loads(journal.read_text()))["operations"])]
+    # A journal entry counts as satisfied only after completion, not merely after a process was started.
     completed = {
         str(item["name"])
         for item in records
@@ -66,6 +69,7 @@ def resume(journal: Path, workers: int, *, dry_run: bool = False) -> None:
     root = next((path for path in journal.parents if (path / "measured-source-hashes.json").is_file()), None)
     if root is None:
         raise ValueError("Resume requires a prepared refresh workspace with measured-source-hashes.json")
+    # Resume the measured implementation; mixing newer code into old measurements would invalidate the comparison.
     sources = mapping(json.loads((root / "measured-source-hashes.json").read_text()))
     for name, expected in sources.items():
         if hashlib.sha256((root / "frozen-source" / name).read_bytes()).hexdigest() != expected:

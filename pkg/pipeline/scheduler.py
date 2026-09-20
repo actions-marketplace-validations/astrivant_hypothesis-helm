@@ -19,6 +19,8 @@ from pipeline.policy import ShortestRemaining
 from pipeline.shutdown import ShutdownContract, ShutdownState
 from pipeline.workloads import Control, Estimate, Outcome, Statistics, Work, Workload
 
+__all__ = ("Scheduler", "State")
+
 
 @dataclass
 class State:
@@ -147,6 +149,7 @@ class Scheduler:
             if unit.work.name in works:
                 raise ValueError(f"duplicate work: {unit.work.name}")
             works[unit.work.name] = unit.work
+        # Validate the proposed graph before publishing any of its nodes to the running scheduler.
         self._validate(works)
         additions = {}
         for unit in units:
@@ -190,6 +193,7 @@ class Scheduler:
             if self.closed:
                 acknowledgement.set_exception(RuntimeError("scheduler stopped"))
             else:
+                # Only the coordinator mutates dependencies; callers receive confirmation after validation.
                 self.messages.put(("dependencies", (name, requires, acknowledgement)))
         return acknowledgement
 

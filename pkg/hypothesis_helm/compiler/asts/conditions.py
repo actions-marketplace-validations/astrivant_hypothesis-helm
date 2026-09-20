@@ -11,6 +11,8 @@ from attrs import frozen
 from hypothesis_helm.compiler.asts.lexing import SPACE
 from hypothesis_helm.compiler.asts.templates import value_path
 
+__all__ = ("Condition", "condition_path", "parse_condition")
+
 
 @frozen
 class Condition:

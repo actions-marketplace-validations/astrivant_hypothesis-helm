@@ -7,6 +7,9 @@ import shutil
 import sys
 from pathlib import Path
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 inventory_path = root / "topology-inventory.json"
 inventory = json.loads(inventory_path.read_text())

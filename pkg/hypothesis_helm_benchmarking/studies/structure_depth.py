@@ -22,6 +22,8 @@ from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.studies.expansion import compare
 from hypothesis_helm_benchmarking.studies.pca import run_case
 
+__all__ = ("main", "sweep")
+
 
 def sweep(
     chart: Chart,

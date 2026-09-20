@@ -5,6 +5,8 @@ Render the argument parser consistently in the README and command reference.
 import argparse
 import os
 
+__all__ = ("help_markdown",)
+
 
 def help_markdown(*, headings: bool = True) -> str:
     """

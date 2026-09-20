@@ -9,6 +9,8 @@ from hypothesis_helm.schemas.contracts import mapping, number, sequence
 
 from hypothesis_helm_benchmarking.reporting.plots import finish
 
+__all__ = ("plot",)
+
 
 def plot(output: Path, document: dict[str, object]) -> bool:
     """

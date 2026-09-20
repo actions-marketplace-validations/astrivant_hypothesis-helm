@@ -10,6 +10,9 @@ from hypothesis_helm.rules import ignored
 from hypothesis_helm.schemas.contracts import sequence
 from hypothesis_helm.schemas.paths import ValuePath, dereference, enumerate_paths
 
+__all__ = ("MESSAGE", "described", "opaque_paths", "warn_opaque")
+
+
 LOGGER = logging.getLogger(__name__)
 MESSAGE = (
     "Object permits unspecified entries without describing their field types. "

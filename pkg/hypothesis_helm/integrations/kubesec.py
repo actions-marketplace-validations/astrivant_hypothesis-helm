@@ -17,6 +17,9 @@ from hypothesis_helm.reporting.security import aggregate, publish, read_result
 from hypothesis_helm.schemas.conformity import prepare, validate
 from hypothesis_helm.schemas.contracts import mapping
 
+__all__ = ("SUPPORTED", "main", "scan", "worker_count")
+
+
 SUPPORTED = {"Pod", "Deployment", "StatefulSet", "DaemonSet"}
 
 

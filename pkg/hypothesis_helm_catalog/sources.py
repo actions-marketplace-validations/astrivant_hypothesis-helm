@@ -14,6 +14,9 @@ from jsonschema import validators
 
 from hypothesis_helm_catalog import toolchain
 
+__all__ = ("BINDINGS", "REPOSITORY", "REVISION", "VERSION", "checkout", "destinations", "rebuild", "verify")
+
+
 REVISION = "66452049f3d692768c39c797b21b793dce80314e"
 VERSION = "1.35.0"
 REPOSITORY = "https://github.com/kubernetes/kubernetes.git"
@@ -141,6 +144,7 @@ def destinations(source: Path, extracted: dict[str, object], *, reviewed: list[d
         properties = mapping(mapping(definitions.get(owner, {})).get("properties", {}))
         if name not in properties:
             raise ValueError(f"Reviewed API field missing for {row['id']}: {identity}; review its binding before rebuilding")
+        # Descriptions detect upstream changes; the explicit API type/field establishes the binding.
         if mapping(properties[name]).get("description") != row["description"]:
             raise ValueError(f"Source description changed for {row['id']} at {identity}; review its domain before rebuilding")
         fields[identity] = [

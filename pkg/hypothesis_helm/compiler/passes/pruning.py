@@ -27,6 +27,21 @@ from hypothesis_helm.compiler.passes.branches import analyze
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
 from hypothesis_helm.schemas.model import ValuesModel
 
+__all__ = (
+    "DistanceBounds",
+    "EPSILON",
+    "Pruner",
+    "Representative",
+    "VERSION",
+    "Witness",
+    "compatible_defaults",
+    "exact_literal",
+    "safe_schema",
+    "safe_values",
+    "snapshot",
+)
+
+
 LOGGER = logging.getLogger(__name__)
 VERSION = "helm-pure-equivalence-v2"
 EPSILON = 0.5
@@ -58,9 +73,11 @@ class DistanceBounds:
         if not (0 <= self.lower <= self.upper <= 1) or not math.isfinite(epsilon) or not 0 < epsilon <= 1:
             raise ValueError("invalid discrete distance bounds or epsilon")
         if self.upper < epsilon:
+            # Distance is either 0 or 1; only a bound that rules out distance 1 permits skipping Helm.
             return "discard"
         if self.lower > epsilon:
             return "render-novel"
+        # Uncertainty is work for the renderer, not evidence that two outputs are equal.
         return "render-ambiguous"
 
 
@@ -329,6 +346,7 @@ class Pruner:
         """
         self.defaults = copy.deepcopy(self.defaults)
         try:
+            # Proofs refer to these exact bytes; a later source change invalidates their reuse.
             self.files = snapshot(self.chart)
             self.stamp = hashlib.sha256(repr(sorted(self.files.items())).encode()).hexdigest()
             if any(name.casefold() == ".helmignore" or name.casefold().startswith("charts/") for name in self.files):

@@ -15,6 +15,8 @@ from jsonschema import validators
 
 from hypothesis_helm.schemas.contracts import Json, configuration_key
 
+__all__ = ("Mutation", "analyze", "distance", "features")
+
 
 @define(frozen=True)
 class Mutation:

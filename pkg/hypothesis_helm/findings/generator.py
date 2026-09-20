@@ -12,6 +12,8 @@ from hypothesis_helm.findings.catalog import CATALOG, Rule
 from hypothesis_helm.findings.configuration import GENERATION_EXAMPLE
 from hypothesis_helm.findings.severity import attributes
 
+__all__ = ("Finding", "FindingGenerator")
+
 
 @frozen
 class Finding:

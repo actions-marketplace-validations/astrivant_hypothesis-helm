@@ -24,6 +24,8 @@ from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.studies.filtering import save
 from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES, bundle_key, measure
 
+__all__ = ("main", "reference", "verify")
+
 
 def reference(chart: Chart, spec: dict[str, object]) -> tuple[set[str], Counter[str]]:
     """

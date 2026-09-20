@@ -10,6 +10,9 @@ from types import MappingProxyType
 
 from hypothesis_helm.schemas.model import MISSING, Missing, ValueNode, ValuesModel
 
+__all__ = ("ZERO_FACTORIES", "fill_missing", "zero_candidate")
+
+
 # Factories return fresh containers; Boolean false and integer zero remain distinct types.
 ZERO_FACTORIES: Mapping[str, Callable[[], object]] = MappingProxyType(
     {"boolean": bool, "integer": int, "number": float, "string": str, "array": list, "object": dict, "null": lambda: None}

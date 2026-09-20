@@ -10,6 +10,9 @@ from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
 
+__all__ = ("MINIMAL_TRAILER", "chart_changed", "comparison", "git", "optional_git")
+
+
 MINIMAL_TRAILER = "Hypothesis-Helm-Minimal-Values: true"
 
 

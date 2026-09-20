@@ -16,6 +16,9 @@ from attrs import define, field
 from hypothesis_helm.charts.repositories.changes import chart_changed
 from hypothesis_helm.execution.cache import fingerprint, merge_outcomes, read_outcomes
 
+__all__ = ("ChartCache", "RETENTION_SECONDS")
+
+
 LOGGER = logging.getLogger(__name__)
 RETENTION_SECONDS = 21 * 24 * 60 * 60
 
@@ -83,6 +86,7 @@ class ChartCache:
             binary = shutil.which(args.helm)
             if binary is None:
                 return cls(reason="Helm binary unavailable for cache verification")
+            # A renderer upgrade invalidates results even when chart files and CLI settings are unchanged.
             digest.update(hashlib.sha256(Path(binary).read_bytes()).digest())
             calibration = getattr(args, "sampling_calibration", None)
             if calibration:
@@ -128,6 +132,7 @@ class ChartCache:
             and traversal.get("remaining_paths", 0) == 0
             and traversal.get("completed_paths", 0) == traversal.get("selected_paths", 0)
         )
+        # A timeout without a finding is incomplete coverage, not a reusable successful scan.
         outcome = "passed" if result.get("status") == "passed" and complete else "failed"
         try:
             merge_outcomes(self.path, self.baseline, {self.key: outcome})

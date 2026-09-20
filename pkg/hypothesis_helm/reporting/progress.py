@@ -25,6 +25,18 @@ from hypothesis_helm.execution.traversal import order_paths
 from hypothesis_helm.integrations.sharding import parse_shard
 from hypothesis_helm.reporting.display import start_progress
 
+__all__ = (
+    "format_path",
+    "pytest_collection_finish",
+    "pytest_collection_modifyitems",
+    "pytest_configure",
+    "pytest_runtest_logfinish",
+    "pytest_runtest_makereport",
+    "pytest_runtest_setup",
+    "pytest_sessionfinish",
+)
+
+
 LOGGER = logging.getLogger(__name__)
 DISPLAY: tuple[Progress, TaskID] | None = None
 

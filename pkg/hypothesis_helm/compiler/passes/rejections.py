@@ -17,6 +17,8 @@ from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.exceptions.compiler import Rejection
 from hypothesis_helm.schemas.contracts import configuration_key
 
+__all__ = ("RejectionPolicy", "matches_rejection")
+
 
 def matches_rejection(error: str, rejection: Rejection) -> bool:
     """

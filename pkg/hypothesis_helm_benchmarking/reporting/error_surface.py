@@ -15,6 +15,8 @@ from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.variation import repeated_line
 from hypothesis_helm_benchmarking.studies.error_surface import METRICS
 
+__all__ = ("plot",)
+
 
 def plot(output: Path, document: dict[str, object]) -> None:
     """

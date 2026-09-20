@@ -26,6 +26,9 @@ from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES, measure, reference_space
 
+__all__ = ("AXES", "METHODS", "METRICS", "RATES", "grid_values", "main", "output_size", "save", "verify")
+
+
 METHODS = (*STRATEGIES, "sample-random")
 RATES = (0, 1, 5, *range(10, 101, 10))
 AXES = ("depth", "redundancy", "clustering")

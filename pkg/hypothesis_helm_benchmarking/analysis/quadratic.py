@@ -7,6 +7,8 @@ import math
 import numpy as np
 from attrs import frozen
 
+__all__ = ("Polynomial", "fit")
+
 
 @frozen
 class Polynomial:
@@ -81,6 +83,7 @@ def fit(points: list[tuple[float, float, float]], degree: int = 2) -> Polynomial
     v = 2 * (y - bounds[2]) / (bounds[3] - bounds[2]) - 1
     design = np.column_stack([u**i * v**j for i, j in powers])
     coefficients, _, rank, _ = np.linalg.lstsq(design, z, rcond=None)
+    # Extra observations do not help if their coordinates cannot distinguish all model coefficients.
     if rank != terms:
         raise ValueError(f"factor settings cannot identify all {terms} degree-{degree} coefficients")
     residual = z - design @ coefficients

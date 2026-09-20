@@ -2,6 +2,8 @@
 Update historical benchmark method labels for display without rewriting measurement files.
 """
 
+__all__ = ("current_labels",)
+
 
 def current_labels(value: object) -> object:
     """

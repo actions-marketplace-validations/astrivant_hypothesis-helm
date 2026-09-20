@@ -7,6 +7,9 @@ from pathlib import Path
 from attrs import frozen
 from pipeline import Operation
 
+__all__ = ("Refresh", "STUDIES", "source_path")
+
+
 STUDIES = (
     "performance",
     "discovery",

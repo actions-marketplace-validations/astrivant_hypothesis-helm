@@ -14,6 +14,9 @@ from hypothesis_helm.execution.environment import in_ci
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
+__all__ = ("BenchmarkProgress",)
+
+
 T = TypeVar("T")
 ACTIVE: ContextVar[Progress | None] = ContextVar("benchmark_progress", default=None)
 

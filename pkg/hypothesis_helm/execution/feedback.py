@@ -4,6 +4,8 @@ Tune active concurrency from measured completion throughput.
 
 from attrs import define, field
 
+__all__ = ("PID", "ThroughputController")
+
 
 @define
 class PID:

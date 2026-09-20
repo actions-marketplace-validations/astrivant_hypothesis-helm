@@ -21,6 +21,8 @@ from hypothesis_helm.execution.structure import inspect_structure
 from hypothesis_helm.execution.traversal import validate_strategy
 from hypothesis_helm.integrations.sharding import Shard
 
+__all__ = ("budgets", "estimate_suite")
+
 
 def budgets(module: Path) -> dict[str, int | None]:
     """

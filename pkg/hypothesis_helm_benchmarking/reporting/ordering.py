@@ -14,6 +14,9 @@ from matplotlib.colors import to_hex
 from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.variation import repeated_line
 
+__all__ = ("FIGURES", "publish")
+
+
 FIGURES = ("sensitivity-order-sweep", "ordering-discovery", "ordering-bug-types")
 
 

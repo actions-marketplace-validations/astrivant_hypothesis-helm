@@ -10,6 +10,9 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm_benchmarking.charts.parameters import Parameters
 from hypothesis_helm_benchmarking.studies.discovery import faults
 
+__all__ = ()
+
+
 root = Path(sys.argv[1]) / "parameters"
 root.mkdir(parents=True, exist_ok=True)
 for name, settings in {

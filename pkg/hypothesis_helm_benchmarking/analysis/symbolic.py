@@ -8,6 +8,8 @@ import statistics
 
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = ("partition", "surfaces")
+
 
 def partition(rows: list[dict[str, object]], repeats: int, seed: int) -> dict[str, list[tuple[float, float, float]]]:
     """

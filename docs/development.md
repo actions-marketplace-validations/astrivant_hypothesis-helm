@@ -251,6 +251,18 @@ sampling budget modest. Use branch analysis and broader testing to assess covera
 
 ## Package organization
 
+Every maintained Python module declares `__all__` explicitly. Export functions, classes, type aliases, and constants owned by that module,
+plus intentional re-exports from another project module. Keep standard-library and third-party imports, loggers, generic type variables,
+and mutable execution state out of the list. Import dependencies directly from their own packages.
+
+An organizing package can use `__all__ = ()`; it does not need to eagerly import all its submodules. The root `hypothesis_helm` API stays lazy
+so importing it does not initialize the testing engine. Refresh recipe scripts also have empty exports because they are executable steps,
+not library interfaces. Tests check export ownership and representative wildcard imports.
+
+`__all__` controls `from module import *`, not access permissions. Explicit imports and attribute access still follow Python's usual rules.
+Use short comments near decisions that need context: why a branch remains unresolved, what a cache entry proves, which process owns cleanup,
+or how a measurement stays comparable. Avoid comments that merely repeat the next statement; update them with the behavior they explain.
+
 The package root contains the CLI and the lazy public API (`Chart`, `check_chart`,
 `coalesce`, and `generate_tests`). Related implementation modules live together:
 

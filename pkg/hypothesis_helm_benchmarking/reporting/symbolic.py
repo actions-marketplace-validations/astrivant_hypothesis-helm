@@ -9,6 +9,8 @@ from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
+__all__ = ("plot",)
+
 
 def plot(output: Path, ledger: dict[str, object]) -> None:
     """

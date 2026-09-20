@@ -28,6 +28,8 @@ from hypothesis_helm.rules import check as check_rule
 from hypothesis_helm.rules import ignored, record_ignored
 from hypothesis_helm.schemas.contracts import json_value
 
+__all__ = ("CandidateChecks",)
+
 
 @define(kw_only=True)
 class CandidateChecks:

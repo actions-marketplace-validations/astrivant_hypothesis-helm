@@ -23,6 +23,8 @@ from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
 from hypothesis_helm_benchmarking.charts.generator import generate
 from hypothesis_helm_benchmarking.execution.provenance import code_digest
 
+__all__ = ("main",)
+
 
 def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = None) -> int:
     """

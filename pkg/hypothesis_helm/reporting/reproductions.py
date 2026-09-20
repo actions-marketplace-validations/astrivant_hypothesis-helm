@@ -8,6 +8,8 @@ from collections.abc import Iterator
 
 from deepdiff import DeepDiff
 
+__all__ = ("changed_values", "failing_input", "input_summary", "leaves", "value_path")
+
 
 def changed_values(values: dict[str, object], defaults: dict[str, object]) -> dict[str, object]:
     """

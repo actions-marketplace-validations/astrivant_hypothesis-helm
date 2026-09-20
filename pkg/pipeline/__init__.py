@@ -21,3 +21,26 @@ from pipeline.workloads import Outcome as Outcome
 from pipeline.workloads import Statistics as Statistics
 from pipeline.workloads import Work as Work
 from pipeline.workloads import Workload as Workload
+
+# Re-export project contracts here; executors and threading primitives stay in their defining libraries.
+__all__ = (
+    "BreadthFirst",
+    "Control",
+    "DepthFirst",
+    "Estimate",
+    "FIFO",
+    "FeedbackGraph",
+    "Finalizer",
+    "Graph",
+    "Operation",
+    "OperationQueue",
+    "Outcome",
+    "ProcessOwner",
+    "Scheduler",
+    "ShortestRemaining",
+    "ShutdownContract",
+    "ShutdownState",
+    "Statistics",
+    "Work",
+    "Workload",
+)

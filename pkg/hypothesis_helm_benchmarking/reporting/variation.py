@@ -8,6 +8,8 @@ from statistics import mean, stdev
 
 from matplotlib.axes import Axes
 
+__all__ = ("bands", "repeated_line")
+
 
 def bands(
     axis: Axes,

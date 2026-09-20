@@ -9,6 +9,8 @@ import hypothesis_helm
 import hypothesis_helm_catalog
 import pipeline
 
+__all__ = ("code_digest",)
+
 
 def code_digest() -> str:
     """
@@ -25,5 +27,6 @@ def code_digest() -> str:
     for base in roots:
         for path in sorted(base.rglob("*")):
             if path.is_file() and path.suffix in {".py", ".json"} and "tests" not in path.parts:
+                # Include paths as well as bytes: moving identical code can still change imports and measured behavior.
                 digest.update(f"{base.name}/{path.relative_to(base)}".encode() + b"\0" + path.read_bytes())
     return digest.hexdigest()

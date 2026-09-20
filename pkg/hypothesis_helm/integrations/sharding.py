@@ -8,6 +8,18 @@ from collections.abc import Mapping
 
 from attrs import frozen
 
+__all__ = (
+    "CIProvider",
+    "CI_PROVIDERS",
+    "CircleCI",
+    "GitHubActions",
+    "GitLabCI",
+    "Shard",
+    "parse_shard",
+    "parse_shard_option",
+    "resolve_shard",
+)
+
 
 @frozen
 class CIProvider:

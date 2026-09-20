@@ -28,6 +28,8 @@ from hypothesis_helm_benchmarking.execution.profiling import profile_settings
 from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.execution.runner import measure
 
+__all__ = ("parser", "positive_counts", "run", "save")
+
 
 def positive_counts(value: str) -> list[int]:
     """

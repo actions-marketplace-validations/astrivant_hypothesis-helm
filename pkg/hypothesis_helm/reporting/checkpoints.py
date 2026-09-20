@@ -8,6 +8,8 @@ from pathlib import Path
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.signals import DeferredSignals
 
+__all__ = ("save",)
+
 
 def save(path: Path, value: dict[str, object]) -> None:
     """

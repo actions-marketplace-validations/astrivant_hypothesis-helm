@@ -16,6 +16,19 @@ from hypothesis_helm.findings.severity import level
 from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.reporting.reproductions import changed_values
 
+__all__ = (
+    "FindingLog",
+    "LogFormatter",
+    "WORKER_PREFIX",
+    "WorkerLogFormatter",
+    "WorkerLogs",
+    "chart_name",
+    "compact",
+    "diagnostic_line",
+    "input_baseline",
+)
+
+
 LOGGER = logging.getLogger(__name__)
 WORKER_PREFIX = "HYPOTHESIS_HELM_LOG "
 

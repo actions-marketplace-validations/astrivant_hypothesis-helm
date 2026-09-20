@@ -7,6 +7,9 @@ import sys
 import time
 from pathlib import Path
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 while not (root / "graph-source-ready.txt").exists():
     time.sleep(5)

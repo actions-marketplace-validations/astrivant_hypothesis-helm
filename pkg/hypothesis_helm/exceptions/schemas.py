@@ -2,6 +2,8 @@
 Identify schema domains that cannot be safely enumerated.
 """
 
+__all__ = ("NonFiniteSchema",)
+
 
 class NonFiniteSchema(ValueError):
     """

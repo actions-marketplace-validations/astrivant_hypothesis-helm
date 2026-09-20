@@ -29,6 +29,9 @@ from hypothesis_helm.schemas.groups import ExhaustiveGroup, infer_groups
 from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import concatenate, select, transform
 
+__all__ = ("PlannedRun", "PlanningOptions", "build_plan", "select_cases")
+
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -180,6 +183,7 @@ def select_cases(
         )
     else:
         selected, sampling_report = options.sampling.select(selected, configuration_key, options.random_seed, protected=protected)
+    # Ordering changes which retained cases run first; it must not change which cases the filters selected.
     sampling_report["unit"] = "non-default configuration"
     ordered = order_configurations(
         selected,

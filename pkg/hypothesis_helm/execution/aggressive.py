@@ -13,6 +13,9 @@ from hypothesis_helm.compiler.passes.sampling import fingerprint, profile
 from hypothesis_helm.execution.sampling import Sampling
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
+__all__ = ("CALIBRATION_VERSION", "DEFAULT_CALIBRATION", "changed_fields", "coordinates", "descriptor", "matching_profiles", "select")
+
+
 CALIBRATION_VERSION = "aggressive-calibration-v1"
 DEFAULT_CALIBRATION = Path(__file__).with_name("calibration.json")
 LOGGER = logging.getLogger(__name__)
@@ -205,6 +208,7 @@ def select(
         cell = None
     floor = int(str(cell["minimum_cases"])) if cell else 1
     field_floor = int(str(cell["minimum_fields"])) if cell else 0
+    # Without matching measurements, keep the entire eligible plan instead of guessing a smaller safe sample.
     selected, report = Sampling(70 if cell else 100, floor).select(
         values,
         configuration_key,

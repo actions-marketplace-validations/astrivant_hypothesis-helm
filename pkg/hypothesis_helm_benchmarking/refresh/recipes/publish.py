@@ -12,6 +12,9 @@ from hypothesis_helm_benchmarking.refresh.plan import STUDIES
 from hypothesis_helm_benchmarking.reporting.publication import STUDIES as PUBLISHED_STUDIES
 from hypothesis_helm_benchmarking.reporting.publication import publish_study
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 target = Path(".")
 statuses = dict(line.split("\t") for line in (root / "status.tsv").read_text().splitlines())

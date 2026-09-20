@@ -14,6 +14,8 @@ from hypothesis_helm.schemas.contracts import configuration_key, mapping
 from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import select
 
+__all__ = ("trim_topology",)
+
 
 def trim_topology(
     chart: Path,

@@ -43,6 +43,8 @@ from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format
 from hypothesis_helm.reporting.provenance import trace_run
 from hypothesis_helm.schemas.selectors import chart_identity, source_identity
 
+__all__ = ("run_suite",)
+
 
 def run_suite(
     directory: Path,

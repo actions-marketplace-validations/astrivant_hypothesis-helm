@@ -18,6 +18,9 @@ from hypothesis_helm_benchmarking.analysis.selection import explanation
 from hypothesis_helm_benchmarking.charts.fixture import read_spec
 from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
+__all__ = ("LABELS", "plot")
+
+
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
 import matplotlib
 

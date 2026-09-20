@@ -12,6 +12,8 @@ from hypothesis_helm.integrations.kubesec import scan
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.schemas.conformity import prepare
 
+__all__ = ("main", "write_outputs")
+
 
 def write_outputs(values: dict[str, str]) -> None:
     """

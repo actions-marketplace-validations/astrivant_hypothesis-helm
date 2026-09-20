@@ -22,6 +22,9 @@ from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.studies.expansion import compare
 from hypothesis_helm_benchmarking.studies.pca import run_case, selections
 
+__all__ = ("PROFILES", "main", "pooled_projection", "select_plan")
+
+
 PROFILES = {"shallow": {1: 1.0}, "deep": {5: 1.0}, "random": dict.fromkeys(range(1, 6), 1.0)}
 
 

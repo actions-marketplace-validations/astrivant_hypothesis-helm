@@ -14,6 +14,8 @@ from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = ("load_mutations", "main")
+
 
 def load_mutations(path: Path) -> list[Mutation]:
     """

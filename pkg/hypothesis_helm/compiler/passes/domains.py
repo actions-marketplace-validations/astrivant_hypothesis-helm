@@ -16,6 +16,8 @@ from hypothesis_helm.compiler.passes.domain_interpreter import Interpreter
 from hypothesis_helm.compiler.passes.domain_layout import Layout
 from hypothesis_helm.schemas.contracts import sequence
 
+__all__ = ("activation", "project")
+
 
 def activation(node: Dependency) -> dict[str, object]:
     """
@@ -39,6 +41,7 @@ def activation(node: Dependency) -> dict[str, object]:
         if node.tags
         else {}
     )
+    # Build from the fallback outward so the first usable Boolean condition has Helm's precedence.
     for path in reversed(node.conditions):
         enabled = {"anyOf": [at(path, {"const": True}), {"allOf": [{"not": at(path, {"type": "boolean"})}, enabled]}]}
     return enabled
@@ -70,6 +73,7 @@ def project(
     notes: list[dict[str, object]] = [{"reason": message} for message in contracts.diagnostics]
     imports = [note for note in contracts.dependencies.diagnostics if "import-values forwarding" in str(note.get("message", ""))]
     if imports:
+        # A constraint on a forwarded value cannot be assigned to a caller until its input origin is known.
         return [], [{**note, "reason": "imported input origins unresolved; domain unchanged"} for note in imports]
     for name, nodes in sorted(contracts.templates.items()):
         if Path(name).name.startswith("_") or Path(name).suffix not in {".yaml", ".yml"}:

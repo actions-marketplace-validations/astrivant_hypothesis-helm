@@ -8,6 +8,8 @@ from pathlib import Path
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping
 
+__all__ = ("name_inputs",)
+
 
 def name_inputs(chart: Path, spec: dict[str, object], names: list[str] | None = None) -> dict[str, object]:
     """

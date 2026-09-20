@@ -6,6 +6,8 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
+__all__ = ("Finalizer", "ShutdownContract", "ShutdownState")
+
 
 @dataclass(frozen=True)
 class ShutdownState:

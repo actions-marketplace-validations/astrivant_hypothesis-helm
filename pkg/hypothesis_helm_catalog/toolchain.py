@@ -10,6 +10,9 @@ from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
 
+__all__ = ("TOOL", "build", "fingerprint")
+
+
 TOOL = Path(__file__).with_name("upstream")
 
 

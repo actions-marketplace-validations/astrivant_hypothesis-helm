@@ -26,6 +26,9 @@ from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.reporting.variation import bands, repeated_line
 
+__all__ = ("METHODS", "main", "measure", "plot", "save")
+
+
 METHODS = ("baseline", "sample-random", "filter", "filter-adaptive")
 
 

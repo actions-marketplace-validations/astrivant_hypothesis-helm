@@ -42,6 +42,9 @@ from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.studies.sparsity import quality
 
+__all__ = ("STRATEGIES", "bundle_key", "main", "measure", "reference_space")
+
+
 STRATEGIES = ("default", "exact-equivalence", "random", "topology", "combined", *PRESETS)
 
 

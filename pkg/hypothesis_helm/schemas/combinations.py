@@ -20,6 +20,8 @@ from hypothesis_helm.schemas.groups import ExhaustiveGroup
 from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import Replay, select
 
+__all__ = ("InteractionPlan", "plan_interactions", "trim_indices", "trim_values")
+
 
 @define
 class InteractionPlan:

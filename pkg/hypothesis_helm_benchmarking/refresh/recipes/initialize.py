@@ -18,6 +18,9 @@ from hypothesis_helm.execution.traversal import SELECTION_ORDER
 from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.refresh.plan import STUDIES
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 if root.exists():
     # The queue creates only its journal and logs before initialization runs.

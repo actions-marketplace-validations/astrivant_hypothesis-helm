@@ -8,6 +8,8 @@ from hypothesis_helm.compiler.asts.conditions import parse_condition
 from hypothesis_helm.compiler.asts.lattice import State
 from hypothesis_helm.compiler.asts.templates import Node, value_path
 
+__all__ = ("BranchAnalysis", "analyze")
+
 
 @frozen
 class BranchAnalysis:

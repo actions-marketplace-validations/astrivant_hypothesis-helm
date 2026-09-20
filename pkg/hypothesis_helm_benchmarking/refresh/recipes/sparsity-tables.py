@@ -9,6 +9,9 @@ from pathlib import Path
 
 from hypothesis_helm.reporting.contents import with_contents
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 for study in ["sparsity", "structure-sparsity"]:
     directory = root / "outputs" / study

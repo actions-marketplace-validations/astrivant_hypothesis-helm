@@ -11,6 +11,9 @@ from urllib.parse import unquote, urlsplit
 
 from hypothesis_helm_benchmarking.reporting.publication import STUDIES, document_links
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 benchmarks = Path("docs/benchmarking")
 checksums = json.loads((root / "sha256.json").read_text())

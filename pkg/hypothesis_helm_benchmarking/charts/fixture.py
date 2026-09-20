@@ -15,6 +15,8 @@ from attrs import define, field
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.schemas.contracts import mapping
 
+__all__ = ("FixtureWorkspace", "case_path", "chart_path", "read_spec", "record_change")
+
 
 def chart_path(logical: Path, *, workspace: FixtureWorkspace | None = None) -> Path:
     """

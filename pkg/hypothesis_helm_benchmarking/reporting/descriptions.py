@@ -6,6 +6,9 @@ from textwrap import fill
 
 from matplotlib.figure import Figure
 
+__all__ = ("INTRODUCTIONS", "describe")
+
+
 INTRODUCTIONS = {
     "progressive": (
         "Permutation testing under a time ceiling",

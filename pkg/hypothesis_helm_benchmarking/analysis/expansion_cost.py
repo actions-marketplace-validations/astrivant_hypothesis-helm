@@ -4,6 +4,8 @@ Calculate exact sampling expectations for an explicitly bounded region-expansion
 
 import math
 
+__all__ = ("equal_regions", "expected_checks")
+
 
 def expected_checks(size: int, errors: int, sample: int) -> float:
     """

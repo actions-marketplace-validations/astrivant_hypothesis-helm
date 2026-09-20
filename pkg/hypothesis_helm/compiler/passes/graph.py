@@ -22,6 +22,8 @@ from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping
 
+__all__ = ("export_graph",)
+
 
 def export_graph(
     chart: Chart,

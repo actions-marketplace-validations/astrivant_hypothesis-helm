@@ -21,6 +21,9 @@ from hypothesis_helm.execution.traversal import validate_strategy
 from hypothesis_helm.findings.severity import junit_stops
 from hypothesis_helm.reporting.display import start_progress
 
+__all__ = ("run_parallel", "worker_limit")
+
+
 LOGGER = logging.getLogger(__name__)
 
 

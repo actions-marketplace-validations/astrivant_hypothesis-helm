@@ -6,6 +6,9 @@ from textwrap import dedent
 
 from hypothesis_helm.compiler.limits import LIMITS
 
+__all__ = ("COMPILER_EXAMPLE", "COMPLETE_EXAMPLE", "GENERATION_EXAMPLE")
+
+
 COMPILER_EXAMPLE = "compiler:\n" + "".join(f"  {name}: {default}  # {description}\n" for name, (default, description) in LIMITS.items())
 
 GENERATION_EXAMPLE = (

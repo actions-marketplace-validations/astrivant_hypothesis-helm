@@ -19,6 +19,9 @@ from typing import Protocol, TextIO
 from pipeline.output import OperationOutput
 from pipeline.workloads import Statistics
 
+__all__ = ("Operation", "OperationQueue", "ProcessOwner")
+
+
 NOTIFY = partial(print, flush=True)
 
 

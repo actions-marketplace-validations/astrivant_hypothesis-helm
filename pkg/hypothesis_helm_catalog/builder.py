@@ -11,6 +11,9 @@ from pathlib import Path
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import intersect
 
+__all__ = ("DATA", "KEYWORDS", "LIBRARY", "REVISION", "build", "main", "scalar_domain")
+
+
 REVISION = "970cc70507e1880a7a3b64184b6aad417a1d8d85"
 DATA = Path(__file__).with_name("data")
 LIBRARY = DATA / "input-domains.json"
@@ -65,6 +68,7 @@ def scalar_domain(node: dict[str, object]) -> dict[str, object]:
 
     for key in compositions:
         alternatives = node.get(key)
+        # Dropping an unsupported oneOf arm could reject inputs the original schema admits.
         if isinstance(alternatives, list) and all(supported(child) for child in alternatives):
             result[key] = [scalar_domain(mapping(child)) for child in alternatives]
     return result

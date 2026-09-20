@@ -34,6 +34,8 @@ from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.studies.matrix import bundle_key, reference_space
 
+__all__ = ("expand_selections", "main", "run_case", "selections")
+
 
 def selections(
     chart: Chart, values: list[dict[str, object]], level: int, seed: int, *, strength: int = 2

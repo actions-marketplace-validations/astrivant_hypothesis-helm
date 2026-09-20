@@ -7,6 +7,8 @@ from textwrap import dedent
 
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = ("expected_topology", "validate_topology", "write_topology")
+
 
 def write_topology(chart: Path, offset: int, opaque: bool = False) -> dict[str, object]:
     """

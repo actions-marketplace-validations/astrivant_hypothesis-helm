@@ -26,6 +26,9 @@ from hypothesis_helm_benchmarking.studies.error_surface import METHODS, RATES, s
 from hypothesis_helm_benchmarking.studies.error_surface import verify as verify_pairing
 from hypothesis_helm_benchmarking.studies.matrix import measure, reference_space
 
+__all__ = ("REFERENCE", "main", "verify")
+
+
 REFERENCE = "https://www.itl.nist.gov/div898/handbook/pri/section3/pri336.htm"
 
 

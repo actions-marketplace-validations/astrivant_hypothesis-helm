@@ -21,6 +21,8 @@ from hypothesis_helm.compiler.asts.templates import Node, lower
 from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
 
+__all__ = ("Dependencies", "assign", "fill_defaults", "lookup", "overlaps", "unpack")
+
 
 def lookup(values: object, path: tuple[str | int, ...]) -> object:
     """

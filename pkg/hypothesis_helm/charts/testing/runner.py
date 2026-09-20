@@ -57,6 +57,9 @@ from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import concatenate, select
 from hypothesis_helm.schemas.settings import hypothesis_parameters
 
+__all__ = ("Chart", "audit", "check_chart", "merge_values", "render", "validate_resources")
+
+
 LOGGER = logging.getLogger(__name__)
 
 

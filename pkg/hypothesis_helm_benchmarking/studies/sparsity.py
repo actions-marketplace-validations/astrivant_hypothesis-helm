@@ -25,6 +25,8 @@ from hypothesis_helm_benchmarking.execution.runner import Job, execute_worker
 from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 
+__all__ = ("plot", "quality", "run", "samples")
+
 
 def quality(observed: dict[str, int], reference: dict[str, int], *, ordered: bool = True) -> dict[str, float]:
     """

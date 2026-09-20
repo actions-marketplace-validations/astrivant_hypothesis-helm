@@ -18,6 +18,8 @@ from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, calculate
 from hypothesis_helm.compiler.builtins import MUTATIONS
 from hypothesis_helm.exceptions.compiler import Unknown, UnsupportedTransformation
 
+__all__ = ("Interpreter", "emits", "fresh")
+
 
 @define
 class Interpreter:

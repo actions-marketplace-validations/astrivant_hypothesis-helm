@@ -16,6 +16,8 @@ from typing import NotRequired, TypedDict
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
 from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
+__all__ = ("COLORS", "Graph", "GraphEdge", "GraphNode", "analyze", "main", "plot")
+
 
 class GraphNode(TypedDict):
     """

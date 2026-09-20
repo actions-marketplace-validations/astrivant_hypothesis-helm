@@ -12,6 +12,8 @@ from attrs import asdict, frozen
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path, record_change
 
+__all__ = ("Fault", "select_faults", "write_faults")
+
 
 @frozen
 class Fault:

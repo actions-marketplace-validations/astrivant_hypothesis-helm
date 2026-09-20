@@ -2,6 +2,8 @@
 Construct shared benchmark oracle resource envelopes without generator dependencies.
 """
 
+__all__ = ("configmap",)
+
 
 def configmap(name: str, data: dict[str, object]) -> dict[str, object]:
     """

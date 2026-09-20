@@ -2,6 +2,8 @@
 Check whether configurable paths are explicitly represented in source values.
 """
 
+__all__ = ("has_path",)
+
 
 def has_path(value: object, path: tuple[str | int, ...]) -> bool:
     """

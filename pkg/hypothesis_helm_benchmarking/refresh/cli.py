@@ -20,6 +20,8 @@ from pipeline import OperationQueue
 
 from hypothesis_helm_benchmarking.refresh.plan import Refresh, source_path
 
+__all__ = ("RefreshLock", "main")
+
 
 class RefreshLock:
     """

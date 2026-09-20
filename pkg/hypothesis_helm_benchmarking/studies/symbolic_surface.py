@@ -22,6 +22,8 @@ from hypothesis_helm_benchmarking.analysis.symbolic import partition, surfaces
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
 from hypothesis_helm_benchmarking.reporting.labels import current_labels
 
+__all__ = ("Regressor", "coordinates", "main", "score")
+
 
 class Regressor(Protocol):
     """

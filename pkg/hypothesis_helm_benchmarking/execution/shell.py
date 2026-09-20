@@ -12,6 +12,8 @@ from hypothesis_helm.execution.processes import Processes
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
 
+__all__ = ("main",)
+
 
 def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = None) -> int:
     """

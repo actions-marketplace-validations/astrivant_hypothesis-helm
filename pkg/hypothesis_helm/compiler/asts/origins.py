@@ -6,6 +6,23 @@ from __future__ import annotations
 
 from attrs import define, frozen
 
+__all__ = (
+    "Choice",
+    "Derived",
+    "Dictionary",
+    "Literal",
+    "Origin",
+    "Projection",
+    "Record",
+    "Sequence",
+    "Text",
+    "identity",
+    "join",
+    "paths",
+    "select",
+    "unresolved",
+)
+
 
 @frozen
 class Literal:

@@ -27,6 +27,8 @@ from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES, measure, reference_space
 
+__all__ = ("main", "plot")
+
 
 def plot(output: Path, document: dict[str, object]) -> None:
     """

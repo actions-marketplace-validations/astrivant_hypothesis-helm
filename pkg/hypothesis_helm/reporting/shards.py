@@ -20,6 +20,8 @@ from hypothesis_helm.reporting.provenance import finish_epoch
 from hypothesis_helm.reporting.repository import write_reports
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = ("aggregate", "read_reports")
+
 
 def read_reports(inputs: list[Path]) -> list[dict[str, object]]:
     """

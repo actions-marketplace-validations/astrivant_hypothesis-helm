@@ -21,6 +21,9 @@ from hypothesis_helm.reporting.references import with_finding_reference
 from hypothesis_helm.reporting.reproductions import input_summary
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = ("HELM_DEBUG_HINT", "artifact_link", "chart_heading", "display_error", "wrap_markdown", "write_reports")
+
+
 HELM_DEBUG_HINT = re.compile(r"(?m)^[ \t]*Use --debug flag to render out invalid YAML[ \t]*\r?$\n?")
 
 
@@ -146,6 +149,7 @@ def write_reports(
     Returns:
         tuple[Path, Path]: Markdown and PDF output paths.
     """
+    # Both formats share one grouping and one run identity; formatting must not change the underlying findings.
     deduplicate_errors(report)
     trace_run(report)
     if stem.suffix.lower() in (".md", ".pdf"):

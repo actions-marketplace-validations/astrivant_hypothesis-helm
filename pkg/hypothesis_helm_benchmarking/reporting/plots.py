@@ -11,6 +11,9 @@ from pathlib import Path
 from statistics import NormalDist, mean
 from textwrap import fill
 
+__all__ = ("COLORS", "Point", "finish", "groups", "measured_line", "numeric", "paired_ratios", "plot", "scaling_plots")
+
+
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
 
 import matplotlib

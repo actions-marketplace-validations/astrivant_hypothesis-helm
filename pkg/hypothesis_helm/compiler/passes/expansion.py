@@ -13,6 +13,8 @@ from attrs import define, field
 from hypothesis_helm.compiler.passes.topology import trim_topology
 from hypothesis_helm.schemas.contracts import configuration_key
 
+__all__ = ("FailureExpansion",)
+
 
 @define
 class FailureExpansion:

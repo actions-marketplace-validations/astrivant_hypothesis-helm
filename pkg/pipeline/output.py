@@ -7,6 +7,8 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 
+__all__ = ("OperationOutput",)
+
 
 class OperationOutput:
     """

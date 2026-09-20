@@ -25,6 +25,8 @@ from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.studies.matrix import bundle_key
 from hypothesis_helm_benchmarking.studies.pca import run_case
 
+__all__ = ("compare", "erroneous", "main")
+
 
 def erroneous(outcome: dict[str, object]) -> bool:
     """

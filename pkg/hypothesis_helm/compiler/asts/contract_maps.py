@@ -7,6 +7,8 @@ import re
 from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
 from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
+__all__ = ("fresh_merge", "merge_flat_sources")
+
 
 def fresh_merge(expression: object) -> bool:
     """

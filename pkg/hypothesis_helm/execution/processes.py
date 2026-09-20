@@ -15,6 +15,8 @@ from attrs import define, field
 from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.signals import DeferredSignals, Termination
 
+__all__ = ("Processes",)
+
 
 def _signal_group(child: subprocess.Popen[str], sig: int, *, permission_grace: float = 1.0) -> bool:
     """
@@ -98,6 +100,7 @@ class Processes:
                     with self._lock:
                         if self._stopping.is_set():
                             return subprocess.CompletedProcess(command, 130, "", "")
+                        # Spawning and registering share the shutdown lockout, so cancellation cannot miss a new child.
                         child = subprocess.Popen(
                             command,
                             cwd=cwd,

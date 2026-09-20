@@ -29,6 +29,8 @@ from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 
+__all__ = ("Fault", "faults", "fixture", "plot", "run")
+
 
 def faults(complexity: int, maximum: int, per_order: int, seed: int) -> list[Fault]:
     """

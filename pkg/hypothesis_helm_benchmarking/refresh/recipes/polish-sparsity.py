@@ -9,6 +9,9 @@ from pathlib import Path
 from hypothesis_helm_benchmarking.studies.sparsity import plot
 from matplotlib import pyplot as plt
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 with plt.rc_context({"xtick.labelsize": 8}):
     for study in ["sparsity", "structure-sparsity"]:

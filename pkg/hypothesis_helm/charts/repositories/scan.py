@@ -50,6 +50,9 @@ from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.factors import factor_space
 from hypothesis_helm.schemas.selectors import SourceScope
 
+__all__ = ("VERSION", "discover_charts", "exercise_chart", "scan", "scan_checkout")
+
+
 LOGGER = logging.getLogger(__name__)
 VERSION = re.compile(r"^v?(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:\.(0|[1-9]\d*))?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 

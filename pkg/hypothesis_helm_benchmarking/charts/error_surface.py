@@ -19,6 +19,8 @@ from hypothesis_helm_benchmarking.charts.manifests import configmap
 from hypothesis_helm_benchmarking.charts.names import name_inputs
 from hypothesis_helm_benchmarking.charts.workload import expected_output
 
+__all__ = ("ErrorPopulation", "configure_surface", "surface_manifests")
+
 
 def configure_surface(logical: Path, depth: int, *, workspace: FixtureWorkspace | None = None) -> dict[str, object]:
     """

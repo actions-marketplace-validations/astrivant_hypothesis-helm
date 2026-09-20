@@ -8,6 +8,9 @@ from typing import TYPE_CHECKING, Protocol, cast
 
 from lupa.lua54 import LuaError, LuaRuntime  # type: ignore[import-untyped]
 
+__all__ = ("BoundEvaluator", "Runtime")
+
+
 if TYPE_CHECKING:
     from hypothesis_helm.compiler.passes.complexity import Component
 
@@ -77,6 +80,7 @@ class BoundEvaluator:
             Runtime,
             LuaRuntime(register_eval=False, register_builtins=False, unpack_returned_tuples=True, max_memory=self.max_memory_bytes),
         )
+        # Execute only our packaged arithmetic kernel; chart text never becomes Lua code.
         factory = cast(Callable[[object], object], self.runtime.execute(files(__package__).joinpath("bounds.lua").read_text()))
         # Keep all containers alive through recursive conversion; its identity memo
         # must not encounter reused IDs from ephemeral generator/tuple conversions.

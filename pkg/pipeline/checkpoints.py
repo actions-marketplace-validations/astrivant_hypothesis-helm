@@ -12,6 +12,8 @@ from typing import cast
 
 from pipeline.workloads import Estimate, Statistics, Work
 
+__all__ = ("load", "save")
+
 
 def save(directory: Path, work: Work, payload: dict[str, object], statistics: Statistics) -> None:
     """
@@ -40,6 +42,7 @@ def save(directory: Path, work: Work, payload: dict[str, object], statistics: St
             stream.write(envelope)
             stream.flush()
             os.fsync(stream.fileno())
+        # Readers see either the previous complete checkpoint or this complete one, never a partial write.
         temporary.replace(directory / f"{work.name}.json")
     finally:
         temporary.unlink(missing_ok=True)
@@ -67,6 +70,7 @@ def load(directory: Path, work: Work) -> tuple[dict[str, object], Statistics] | 
     if hashlib.sha256(body.encode()).hexdigest() != envelope["sha256"]:
         raise ValueError("checkpoint checksum mismatch")
     document = json.loads(body)
+    # Intact bytes are insufficient: a checkpoint for different work must not resume this workload.
     if document["version"] != 1 or document["name"] != work.name or document["fingerprint"] != work.fingerprint:
         raise ValueError("checkpoint input or implementation changed")
     if not isinstance(document["payload"], dict):

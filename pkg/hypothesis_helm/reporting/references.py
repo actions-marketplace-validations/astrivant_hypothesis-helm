@@ -7,6 +7,9 @@ import re
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.reporting.contents import heading_inventory
 
+__all__ = ("APPENDIX_TITLE", "CODE", "TOKENS", "linked_codes", "with_finding_reference")
+
+
 APPENDIX_TITLE = "Appendix: finding codes"
 CODE = re.compile(r"HH\d{4}\Z")
 TOKENS = re.compile(r"\[[^\]\n]+\]\((?:<[^>]+>|[^\s)]+)\)|(`+)(.*?)\1(?!`)|\[?\b(HH\d{4})\b\]?")

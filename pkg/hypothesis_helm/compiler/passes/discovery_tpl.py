@@ -7,6 +7,8 @@ import json
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.origins import Choice, Literal, Origin, Text
 
+__all__ = ("sources", "values")
+
 
 def values(origin: Origin, defaults: object) -> tuple[tuple[object, ...], bool]:
     """

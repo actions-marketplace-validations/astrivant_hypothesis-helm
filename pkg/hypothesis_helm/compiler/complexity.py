@@ -9,6 +9,8 @@ from collections.abc import Sequence
 
 from hypothesis_helm.compiler.limits import active_limits
 
+__all__ = ("maximum_score", "output_profile")
+
 
 def maximum_score(nodes: int) -> int:
     """

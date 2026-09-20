@@ -19,6 +19,8 @@ from hypothesis_helm.reporting.links import LINK, linked_prose
 from hypothesis_helm.reporting.overview import CellLink
 from hypothesis_helm.reporting.references import APPENDIX_TITLE
 
+__all__ = ("write_pdf",)
+
 
 def write_pdf(
     content: str,

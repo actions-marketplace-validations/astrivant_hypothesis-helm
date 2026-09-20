@@ -7,6 +7,8 @@ import json
 from functools import lru_cache
 from pathlib import Path
 
+__all__ = ("schema",)
+
 
 @lru_cache(maxsize=1)
 def _profiles() -> dict[str, dict[str, object]]:

@@ -13,6 +13,9 @@ from hypothesis_helm.schemas.contracts import mapping, number, sequence
 from hypothesis_helm_benchmarking.charts.fixture import read_spec
 from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
+__all__ = ("plot",)
+
+
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
 import matplotlib
 

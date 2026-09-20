@@ -6,6 +6,9 @@ import re
 
 from attrs import frozen
 
+__all__ = ("SPACE", "Token", "block_spacing", "lex")
+
+
 SPACE = " \t\r\n"
 
 

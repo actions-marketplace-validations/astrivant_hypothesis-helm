@@ -17,6 +17,9 @@ from jsonschema import validators
 
 from hypothesis_helm.charts.values import yamlio
 
+__all__ = ("Chart", "merge_values")
+
+
 if TYPE_CHECKING:
     from hypothesis_helm.compiler.passes.dependencies import Dependencies
     from hypothesis_helm.schemas.domains import InputDomains

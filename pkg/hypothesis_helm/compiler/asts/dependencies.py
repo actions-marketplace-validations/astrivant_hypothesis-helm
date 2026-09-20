@@ -7,6 +7,8 @@ from attrs import frozen
 from hypothesis_helm.charts.inspection.templates import Reference
 from hypothesis_helm.compiler.asts.templates import Node
 
+__all__ = ("Dependency",)
+
 
 @frozen
 class Dependency:

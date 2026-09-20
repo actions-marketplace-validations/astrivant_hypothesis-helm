@@ -17,6 +17,9 @@ from hypothesis_helm_benchmarking.analysis.selection import LABELS as PRESET_LAB
 from hypothesis_helm_benchmarking.analysis.selection import decision, explanation
 from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
+__all__ = ("LABELS", "plot")
+
+
 os.environ.setdefault("MPLCONFIGDIR", str(Path(tempfile.gettempdir()) / "hypothesis-helm-matplotlib"))
 
 import matplotlib

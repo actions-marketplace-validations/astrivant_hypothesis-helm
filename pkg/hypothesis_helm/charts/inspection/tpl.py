@@ -8,6 +8,8 @@ from pathlib import Path
 
 from hypothesis_helm.charts.values import yamlio
 
+__all__ = ("arguments", "source_text")
+
 
 def arguments(tokens: list[str]) -> list[list[str]]:
     """

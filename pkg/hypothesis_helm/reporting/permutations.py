@@ -15,6 +15,9 @@ from attrs import define, field
 
 from hypothesis_helm.schemas.combinations import InteractionPlan
 
+__all__ = ("PermutationStatistics",)
+
+
 LOGGER = logging.getLogger(__name__)
 
 

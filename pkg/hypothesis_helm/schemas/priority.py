@@ -16,6 +16,8 @@ from hypothesis_helm.charts.suites.generate import coalesce
 from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy
 from hypothesis_helm.schemas.model import ValueNode, ValuesModel
 
+__all__ = ("PriorityInputs",)
+
 
 @define
 class PriorityInputs:

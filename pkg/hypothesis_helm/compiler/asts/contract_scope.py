@@ -6,6 +6,9 @@ from __future__ import annotations
 
 from attrs import define, field
 
+__all__ = ("Scope", "UNRESOLVED")
+
+
 UNRESOLVED = object()
 
 

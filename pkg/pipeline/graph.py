@@ -14,6 +14,8 @@ from pipeline.scheduler import Scheduler
 from pipeline.shutdown import Finalizer, ShutdownContract
 from pipeline.workloads import Control, Estimate, Outcome, Statistics, Work, Workload
 
+__all__ = ("Graph",)
+
 
 class Graph:
     """

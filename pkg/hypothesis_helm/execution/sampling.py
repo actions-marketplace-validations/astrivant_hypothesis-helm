@@ -11,6 +11,9 @@ from attrs import frozen
 
 from hypothesis_helm.schemas.replay import select as select_indices
 
+__all__ = ("DEFAULT_SAMPLING", "ENVIRONMENT", "REPORT", "Sampling")
+
+
 T = TypeVar("T")
 ENVIRONMENT = "HYPOTHESIS_HELM_SAMPLING"
 REPORT = "HYPOTHESIS_HELM_SAMPLING_REPORT"
@@ -74,6 +77,7 @@ class Sampling:
         identities = [key(value) for value in values]
         if len(set(identities)) != len(identities):
             raise ValueError("sampling requires unique case identities")
+        # Structural representatives survive sampling even when they exceed the requested percentage.
         required = set(identities) & (protected or set())
         count = min(len(values), max(self.minimum, math.ceil(len(values) * self.percent / 100), len(required)))
         selected = values

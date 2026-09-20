@@ -12,6 +12,8 @@ from hypothesis_helm.schemas.finite import enumerate_values
 from hypothesis_helm.schemas.model import ValueNode, ValuesModel
 from hypothesis_helm.schemas.replay import select
 
+__all__ = ("FactorSpace", "factor_space")
+
 
 @define
 class FactorSpace:
@@ -63,6 +65,7 @@ def factor_space(schema: dict[str, object] | ValuesModel, limit: int = 10000) ->
             None: Populates factors, domains and the object skeleton.
         """
         node, path = declaration.schema, declaration.path
+        # An unconstrained key space has no finite list of assignments to enumerate completely.
         if node.get("additionalProperties") is not False or node.get("patternProperties"):
             raise NonFiniteSchema(f"permutations need closed objects at {path!r}; set additionalProperties: false")
         for name, child in declaration.children.items():
@@ -73,6 +76,7 @@ def factor_space(schema: dict[str, object] | ValuesModel, limit: int = 10000) ->
                 base[name] = nested
                 discover(child, nested)
             else:
+                # Treat omission as a distinct assignment for optional fields, not as a null value.
                 wrapper: dict[str, object] = {
                     "type": "object",
                     "additionalProperties": False,

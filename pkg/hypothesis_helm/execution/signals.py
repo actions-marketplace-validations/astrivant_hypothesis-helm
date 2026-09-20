@@ -7,6 +7,8 @@ import threading
 from types import FrameType, TracebackType
 from typing import Self
 
+__all__ = ("DeferredSignals", "Termination")
+
 
 class Termination:
     """

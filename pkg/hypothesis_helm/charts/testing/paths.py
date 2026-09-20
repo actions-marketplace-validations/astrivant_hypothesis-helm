@@ -39,6 +39,9 @@ from hypothesis_helm.schemas.contracts import json_value, schema_strategy
 from hypothesis_helm.schemas.paths import ValuePath, enumerate_paths
 from hypothesis_helm.schemas.priority import PriorityInputs
 
+__all__ = ("GENERATION_ERRORS", "check_paths", "path_strategy")
+
+
 LOGGER = logging.getLogger(__name__)
 GENERATION_ERRORS = {"Unsatisfiable", "FailedHealthCheck", "SchemaError", "InvalidArgument"}
 

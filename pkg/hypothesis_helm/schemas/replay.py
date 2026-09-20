@@ -8,6 +8,9 @@ import bisect
 from collections.abc import Callable, Iterator, Sequence
 from typing import Generic, TypeVar, overload
 
+__all__ = ("Replay", "concatenate", "select", "transform")
+
+
 T = TypeVar("T")
 U = TypeVar("U")
 
@@ -102,6 +105,7 @@ def select(source: Sequence[T], indices: Sequence[int]) -> Replay[T]:  # noqa: U
     Returns:
         Replay[T]: Replayable selection owning a snapshot of its position list.
     """
+    # Freeze the selection, not the generated values; each access reconstructs its own value.
     positions = indices if isinstance(indices, range) else tuple(indices)
     return Replay(len(positions), lambda index: source[positions[index]])
 
@@ -144,6 +148,7 @@ def concatenate(*sources: Sequence[T]) -> Replay[T]:  # noqa: UP047
         Returns:
             T: Value reconstructed by its source.
         """
+        # Repeated boundaries represent empty sources; bisect_right skips those without allocating values.
         owner = bisect.bisect_right(stops, index)
         return sources[owner][index - (stops[owner - 1] if owner else 0)]
 

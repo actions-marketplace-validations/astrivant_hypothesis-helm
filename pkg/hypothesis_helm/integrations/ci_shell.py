@@ -19,6 +19,8 @@ from ruamel.yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from hypothesis_helm.schemas.contracts import mapping
 
+__all__ = ("ShellBlock", "blocks", "check", "main", "replacement")
+
 
 @frozen
 class ShellBlock:

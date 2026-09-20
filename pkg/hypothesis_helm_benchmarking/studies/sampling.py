@@ -35,6 +35,8 @@ from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.reporting.variation import bands
 from hypothesis_helm_benchmarking.studies.matrix import bundle_key, reference_space
 
+__all__ = ("main", "plot")
+
 
 def plot(output: Path, document: dict[str, object]) -> None:
     """

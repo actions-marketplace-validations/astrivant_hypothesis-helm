@@ -5,6 +5,8 @@ Compose Boolean routing expressions without treating missing observations as fal
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+__all__ = ("AND", "Gate", "NOT", "NXOR", "OR", "Signal", "XOR")
+
 
 @dataclass(frozen=True)
 class Gate:

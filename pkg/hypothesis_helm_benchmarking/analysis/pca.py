@@ -13,6 +13,8 @@ from numpy.typing import NDArray
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path, record_change
 
+__all__ = ("inject_errors", "manifest_features", "project")
+
 
 def inject_errors(
     chart: Path, values: list[dict[str, object]], percent: float, seed: int, *, workspace: FixtureWorkspace | None = None
@@ -35,6 +37,7 @@ def inject_errors(
     percent = float(percent)
     record_change(chart, "uniform_errors", {"percent": percent, "seed": seed}, workspace=workspace)
     chart = chart_path(chart, workspace=workspace)
+    # Fix the fault oracle independently of filtering, so every method is judged against the same failures.
     faulty = set(random.Random(seed).sample(range(len(values)), math.floor(len(values) * percent / 100)))
     paths = sorted(values[0])
 
@@ -166,6 +169,7 @@ def project(
     _, singular, vectors = np.linalg.svd(standardized, full_matrices=False)
     dimensions = min(2, len(singular))
     basis = vectors[:dimensions].copy()
+    # SVD permits either sign for an axis; fix it so repeated plots do not appear mirrored.
     for component in basis:
         if component[np.argmax(np.abs(component))] < 0:
             component *= -1

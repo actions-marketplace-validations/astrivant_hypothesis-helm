@@ -5,6 +5,9 @@ Interpret process environment markers consistently across execution and reportin
 import os
 from collections.abc import Mapping
 
+__all__ = ("CI_PROVIDERS", "DISABLED", "in_ci")
+
+
 CI_PROVIDERS = ("GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "TF_BUILD", "JENKINS_URL", "BUILD_BUILDID", "BUILDKITE")
 DISABLED = frozenset({"", "0", "false", "no", "off"})
 

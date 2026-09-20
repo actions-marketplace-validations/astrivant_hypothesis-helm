@@ -12,6 +12,8 @@ from threading import Event
 from pipeline import BreadthFirst, Control, Outcome, Scheduler, ShutdownContract, Statistics, Work
 from pipeline.gates import AND, NOT, OR, Signal
 
+__all__ = ("Heartbeat", "main")
+
 
 @dataclass
 class Heartbeat:

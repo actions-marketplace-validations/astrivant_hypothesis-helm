@@ -10,6 +10,9 @@ from typing import TypeVar
 from hypothesis_helm.schemas.contracts import configuration_key
 from hypothesis_helm.schemas.replay import select
 
+__all__ = ("ALGORITHM", "SELECTION_ORDER", "STRATEGIES", "order_configurations", "order_paths", "validate_strategy")
+
+
 STRATEGIES = ("random", "linear", "root-first", "leaf-first", "sensitivity-first")
 ALGORITHM = "seeded-path-priority-v1"
 SELECTION_ORDER = "discover, filter, sample, traverse, execute"
@@ -75,6 +78,7 @@ def order_paths(  # noqa: UP047 - pinned pydocstyle 6 cannot parse PEP 695 funct
         Returns:
             bytes: Seeded digest used solely for execution ordering.
         """
+        # Identity-based priorities survive cache exclusions and sharding without reshuffling the remaining paths.
         encoded = json.dumps([ALGORITHM, seed, path(item), identity(item) if identity else ""], ensure_ascii=True)
         return hashlib.sha256(encoded.encode()).digest()
 

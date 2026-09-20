@@ -10,6 +10,8 @@ from attrs import define, field
 
 from hypothesis_helm.compiler.asts.lexing import block_spacing, lex
 
+__all__ = ("Action", "TOKEN", "parse")
+
 
 @define
 class Action:

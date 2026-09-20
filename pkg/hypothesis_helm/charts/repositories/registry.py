@@ -26,6 +26,9 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence, text
 
+__all__ = ("CHART_NAME", "HelmTransport", "prepare_helm_source", "unpack_chart")
+
+
 LOGGER = logging.getLogger(__name__)
 CHART_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 

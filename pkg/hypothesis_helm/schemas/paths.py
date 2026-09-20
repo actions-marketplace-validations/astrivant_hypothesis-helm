@@ -12,6 +12,9 @@ from attrs import define
 
 from hypothesis_helm.schemas.contracts import mapping, sequence, text
 
+__all__ = ("ValuePath", "dereference", "enumerate_paths")
+
+
 LOGGER = logging.getLogger(__name__)
 
 

@@ -10,6 +10,9 @@ import sys
 from collections import Counter, deque
 from pathlib import Path
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 output = root / "outputs/chart-topologies"
 rows = json.loads((output / "results.json").read_text())["charts"]

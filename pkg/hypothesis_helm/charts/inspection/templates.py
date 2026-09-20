@@ -26,6 +26,8 @@ from hypothesis_helm.compiler.passes.discovery_functions import result as functi
 from hypothesis_helm.compiler.passes.discovery_sources import DiscoverySources
 from hypothesis_helm.compiler.passes.discovery_tpl import sources as tpl_sources
 
+__all__ = ("Action", "Diagnostic", "Reference", "discover", "parse")
+
 
 @define(frozen=True)
 class Reference:

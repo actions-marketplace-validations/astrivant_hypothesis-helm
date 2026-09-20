@@ -15,6 +15,9 @@ from uuid import uuid4
 
 import pytest
 
+__all__ = ("fingerprint", "merge_outcomes", "pytest_collection_modifyitems", "pytest_runtest_logreport", "read_outcomes", "seed_key")
+
+
 LOGGER = logging.getLogger(__name__)
 OUTCOMES: dict[str, str] = {}
 CALLED: set[str] = set()

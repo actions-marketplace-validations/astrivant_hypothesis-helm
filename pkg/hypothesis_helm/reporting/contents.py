@@ -9,6 +9,9 @@ from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
 
+__all__ = ("END", "START", "heading_inventory", "main", "with_contents")
+
+
 START = "<!-- toc:start -->"
 END = "<!-- toc:end -->"
 

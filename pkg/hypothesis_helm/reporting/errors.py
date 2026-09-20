@@ -19,6 +19,9 @@ from hypothesis_helm.findings.severity import attributes
 from hypothesis_helm.reporting.reproductions import failing_input
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = ("TEMPLATE_FRAME", "chart_errors", "deduplicate_errors", "template_source")
+
+
 TEMPLATE_FRAME = re.compile(r"(?:template: |execution error at \()(?P<path>[^\s\"():]+/templates/[^\s\"():]+):\d+(?::\d+)?")
 
 

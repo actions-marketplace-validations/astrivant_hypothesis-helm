@@ -16,6 +16,9 @@ from typing import TypeVar
 
 from attrs import asdict, define
 
+__all__ = ("Frame", "PROFILE_DIRECTORY", "StackProfiler", "capture", "profile_settings")
+
+
 PROFILE_DIRECTORY = "HYPOTHESIS_HELM_BENCHMARK_PROFILE_DIR"
 _PROCESS_ID = uuid.uuid4().hex
 T = TypeVar("T")

@@ -16,6 +16,9 @@ from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.paths import dereference
 from hypothesis_helm.schemas.policy import inherited_policy, intersect
 
+__all__ = ("cached_catalog", "catalog_domain", "collection_domain", "destination", "library", "resource_schemas", "validate_custom")
+
+
 SUITE_RESOURCE_SCHEMAS: ContextVar[dict[str, object] | None] = ContextVar("suite_resource_schemas", default=None)
 
 
@@ -189,6 +192,7 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
                     result = intersect(result, mapping(record["schema"]))
                     source += f"+catalog:{record_id}"
         return (result, source) if result else None
+    # A missing field in the selected schema must not silently borrow a rule from the bundled version.
     if live or identity in custom:
         return None
     record_id = mapping(mapping(catalog["resources"]).get(identity, {})).get("/".join(path))

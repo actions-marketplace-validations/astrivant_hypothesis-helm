@@ -16,6 +16,8 @@ from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
 from hypothesis_helm_benchmarking.reporting.labels import current_labels
 from hypothesis_helm_benchmarking.studies.symbolic_surface import score
 
+__all__ = ("main",)
+
 
 def main(argv: list[str] | None = None, *, workspace: FixtureWorkspace | None = None) -> int:
     """

@@ -10,6 +10,8 @@ from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path, record_change
 
+__all__ = ("nest_inputs",)
+
 
 def nest_inputs(logical: Path, *, workspace: FixtureWorkspace | None = None) -> dict[str, list[str]]:
     """

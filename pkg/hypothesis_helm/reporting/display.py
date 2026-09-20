@@ -15,6 +15,8 @@ from rich.progress import (
 
 from hypothesis_helm.execution.environment import in_ci
 
+__all__ = ("start_progress",)
+
 
 def start_progress(total: int, workers: int, *, force: bool = False) -> tuple[Progress, TaskID]:
     """

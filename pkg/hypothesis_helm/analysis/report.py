@@ -8,6 +8,8 @@ from pathlib import Path
 from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = ("plot", "write_report")
+
 
 def write_report(output: Path, document: dict[str, object], *, plots: bool = False) -> None:
     """

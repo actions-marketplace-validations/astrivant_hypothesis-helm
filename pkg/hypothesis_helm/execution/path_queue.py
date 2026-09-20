@@ -29,6 +29,8 @@ from hypothesis_helm.reporting.progress import format_path
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.paths import ValuePath
 
+__all__ = ("execute", "main")
+
 
 def execute(context: dict[str, object], directory: Path, workers: int) -> list[dict[str, object]]:
     """
@@ -217,10 +219,12 @@ def main(argv: list[str] | None = None) -> int:
                     "worker_pid": os.getpid(),
                     "queue_index": index,
                 }
+                # Record ownership before advancing the locked cursor, so interrupted claims remain visible in the report.
                 save(directory / f"started-{index:08}.json", phase)
                 cursor.seek(0)
                 cursor.write(str(index + 1))
                 cursor.truncate()
+            # The cursor lock is released before rendering; other workers can now claim different paths.
             logging.info("Testing path %s (%d/%d)", phase["phase"], index + 1, len(paths))
             result = check_chart(
                 chart,

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from attrs import define, field, frozen
 
+__all__ = ("Input", "LocalMap", "Operation", "Piece", "output")
+
 
 @frozen
 class Input:

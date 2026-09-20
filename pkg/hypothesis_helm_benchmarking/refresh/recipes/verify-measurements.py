@@ -18,6 +18,9 @@ from hypothesis_helm_benchmarking.studies.matrix import STRATEGIES
 from hypothesis_helm_benchmarking.studies.ordering import verify as verify_ordering
 from hypothesis_helm_benchmarking.studies.structural_sparsity import verify as verify_structural_sparsity
 
+__all__ = ()
+
+
 root = Path(sys.argv[1])
 expected = json.loads((root / "provenance.json").read_text())["code_sha256"]
 summary = {}

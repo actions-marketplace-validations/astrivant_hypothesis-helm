@@ -33,6 +33,8 @@ from hypothesis_helm.schemas.finite import enumerate_values
 from hypothesis_helm.schemas.model import ValuesModel
 from hypothesis_helm.schemas.replay import select
 
+__all__ = ("Component", "OutputCase", "bound", "main", "measure")
+
 
 @frozen
 class OutputCase:
@@ -326,6 +328,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
                 result["template_evaluations"] = int(str(result["template_evaluations"])) + 1
             components.append(Component(factors, tuple(cases)))
         use_counts = [sum(index in component.factors for component in components) for index in range(len(sizes))]
+        # Resolve widely shared inputs first so each choice can tighten several output bounds at once.
         order = sorted(range(len(sizes)), key=lambda index: (-use_counts[index], -control_uses[index], space.paths[index]))
         result["factor_order"] = [list(space.paths[index]) for index in order]
         result["unused_factors"] = [list(space.paths[index]) for index, count in enumerate(use_counts) if not count]
@@ -336,6 +339,7 @@ def measure(chart: Chart, *, max_cases: int | None = None, time_limit: float | N
             assigned, upper = pending.pop()
             result["search_nodes"] = int(str(result["search_nodes"])) + 1
             if upper < 0 or (best is not None and upper <= best["score"]):
+                # Every completion below this partial assignment is impossible or cannot improve the best valid result.
                 result["pruned_configurations"] = (
                     int(str(result["pruned_configurations"]))
                     + math.prod(sizes[index] for index in order[len(assigned) :])

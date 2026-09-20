@@ -14,6 +14,9 @@ import matplotlib
 from hypothesis_helm.reporting.contents import with_contents
 from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
+__all__ = ()
+
+
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 

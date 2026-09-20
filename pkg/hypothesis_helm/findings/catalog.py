@@ -6,6 +6,9 @@ from typing import Literal
 
 from attrs import frozen
 
+__all__ = ("CATALOG", "CATEGORY_RANGES", "DEFINITIONS", "Rule", "Severity")
+
+
 type Severity = Literal["info", "warning", "error"]
 
 CATEGORY_RANGES = {"unclassified": (1000, 1099), "manifest": (1100, 1199), "execution": (1200, 1299)}

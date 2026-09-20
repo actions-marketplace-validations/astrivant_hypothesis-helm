@@ -9,6 +9,8 @@ from pathlib import Path
 
 from hypothesis_helm_benchmarking.charts.structures import STRUCTURES, write_structure
 
+__all__ = ("normalized_weights", "write_mixture")
+
 
 def normalized_weights(weights: dict[str, float] | None) -> dict[str, float]:
     """

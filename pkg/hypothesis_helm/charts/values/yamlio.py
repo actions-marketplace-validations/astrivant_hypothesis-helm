@@ -11,14 +11,17 @@ from ruamel.yaml.constructor import RoundTripConstructor
 from ruamel.yaml.nodes import ScalarNode
 from ruamel.yaml.representer import BaseRepresenter
 
+__all__ = ("dump", "json_for_helm", "load", "load_all", "yaml")
+
 
 def yaml() -> YAML:
     """
     Create a round-trip reader with Helm-compatible handling of bare equals signs.
 
     Returns:
-        YAML: Result of the documented operation.
+        YAML: Independent reader/writer preserving quotes and rejecting duplicate keys.
     """
+    # Reader state and custom representers must not leak between charts or concurrent render jobs.
     instance = YAML(typ="rt")
     instance.preserve_quotes = True
     instance.allow_duplicate_keys = False
@@ -33,27 +36,27 @@ def yaml() -> YAML:
 
 def load(text: str) -> object:
     """
-    Check load.
+    Parse one values document while retaining YAML anchors and round-trip scalar information.
 
     Args:
         text (str): YAML or template text to process.
 
     Returns:
-        object: Parsed or generated value at the requested boundary.
+        object: Parsed YAML tree, or None for an empty document.
     """
     return yaml().load(text)
 
 
 def dump(value: object, *, explicit_null: bool = False) -> str:
     """
-    Check dump.
+    Serialize values without losing round-trip YAML information.
 
     Args:
         value (object): Candidate value supplied by the property strategy.
         explicit_null (bool): Write legitimate null values explicitly instead of bare keys.
 
     Returns:
-        str: Serialized output or resolved strategy expression.
+        str: YAML document suitable for a values file or saved reproduction.
     """
 
     def null_scalar(representer: BaseRepresenter, unused: None) -> ScalarNode:
@@ -82,13 +85,13 @@ def dump(value: object, *, explicit_null: bool = False) -> str:
 
 def load_all(text: str) -> list[object]:
     """
-    Check load all.
+    Parse every document in a rendered manifest stream.
 
     Args:
         text (str): YAML or template text to process.
 
     Returns:
-        list[object]: Result of the documented operation.
+        list[object]: Parsed documents in their original order, including empty documents.
     """
     return list(yaml().load_all(text))
 

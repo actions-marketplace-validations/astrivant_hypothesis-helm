@@ -11,6 +11,8 @@ from hypothesis_helm.charts.model import merge_values
 from hypothesis_helm.schemas.contracts import configuration_key
 from hypothesis_helm.schemas.replay import select
 
+__all__ = ("SensitivityOrder", "mutations", "validate_order")
+
 
 def validate_order(strategy: str, order: int | None, permutations: int | None) -> int | None:
     """

@@ -16,6 +16,9 @@ from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_catalog import toolchain
 
+__all__ = ("LIBRARY", "LOCK", "acquire", "main", "rebuild", "unpack")
+
+
 LOCK = Path(__file__).with_name("data") / "builtin-sources.json"
 LIBRARY = Path(__file__).parents[1] / "hypothesis_helm/compiler/builtin_inventory.json"
 

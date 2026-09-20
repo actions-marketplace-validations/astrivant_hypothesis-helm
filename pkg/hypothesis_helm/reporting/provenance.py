@@ -6,6 +6,10 @@ from datetime import UTC, datetime
 
 from hypothesis_helm.reporting.changes import digest
 
+__all__ = ("IDENTITY_FIELDS", "finish_epoch", "trace_run")
+
+
+# Report titles and layout are excluded so republishing the same run preserves its identity.
 IDENTITY_FIELDS = (
     "run_id",
     "directory",

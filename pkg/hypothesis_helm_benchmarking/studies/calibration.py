@@ -37,6 +37,8 @@ from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 from hypothesis_helm_benchmarking.reporting.variation import bands
 
+__all__ = ("main", "plot", "study", "verify_sweep")
+
 
 def verify_sweep(document: dict[str, object]) -> None:
     """

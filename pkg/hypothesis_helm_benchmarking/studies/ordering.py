@@ -31,6 +31,8 @@ from hypothesis_helm_benchmarking.execution.ordering import Observation, methods
 from hypothesis_helm_benchmarking.execution.provenance import code_digest
 from hypothesis_helm_benchmarking.reporting.progress import BenchmarkProgress
 
+__all__ = ("choose_faults", "main", "verify")
+
 
 def choose_faults(chart: Chart, strength: int, count: int, seed: int) -> list[Fault]:
     """

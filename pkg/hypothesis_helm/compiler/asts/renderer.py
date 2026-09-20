@@ -21,6 +21,18 @@ from hypothesis_helm.exceptions.compiler import Unavailable
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
+__all__ = (
+    "APIVersions",
+    "ContextReference",
+    "FileSet",
+    "FixedFields",
+    "RendererContext",
+    "archive_files",
+    "chart_files",
+    "chart_members",
+    "probe",
+)
+
 
 def archive_files(stream: io.BytesIO, *, limits: dict[str, int] | None = None) -> dict[str, bytes]:
     """

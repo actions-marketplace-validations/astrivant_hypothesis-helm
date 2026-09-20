@@ -12,6 +12,9 @@ from urllib.parse import unquote, urlsplit
 
 from hypothesis_helm.reporting.links import link_matches
 
+__all__ = ("FINAL_SUFFIXES", "STUDIES", "WORK_DIRECTORIES", "document_links", "final_files", "publish_study")
+
+
 STUDIES = Path("studies")
 FINAL_SUFFIXES = frozenset({".md", ".pdf", ".png", ".svg"})
 WORK_DIRECTORIES = frozenset({"runs", "cases", "reports", "logs", "helm", "frozen-source", "__pycache__"})
@@ -120,6 +123,7 @@ def publish_study(source: Path, destination: Path) -> dict[str, str]:
         raise ValueError(f"No final documents or plots to publish in {source}")
     if source.resolve() == destination.resolve() or source.resolve().is_relative_to(destination.resolve()):
         raise ValueError("Study measurements must be outside the final publication directory")
+    # Only final documents and figures cross this boundary; raw data and worker state remain in the cache.
     expected = {path.relative_to(source) for path in sources}
     checksums = {}
     for path in sources:

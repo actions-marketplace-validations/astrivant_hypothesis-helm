@@ -20,6 +20,9 @@ from hypothesis_helm.schemas.contracts import sequence
 from hypothesis_helm.schemas.policy import path_parts
 from hypothesis_helm.schemas.selectors import matching_rules
 
+__all__ = ("RuleScope", "candidate_paths", "chart_rules", "resolve_codes")
+
+
 if TYPE_CHECKING:
     from hypothesis_helm.charts.model import Chart
 
@@ -69,6 +72,7 @@ def resolve_codes(rules: list[dict[str, object]], paths: tuple[tuple[str | int, 
             else:
                 disabled.add(code)
         decisions.append(disabled)
+    # A multi-field failure is suppressed only when every affected path permits suppressing its code.
     return frozenset.intersection(*(frozenset(decision) for decision in decisions))
 
 
@@ -85,6 +89,7 @@ def candidate_paths(chart: Chart, values: dict[str, object]) -> tuple[tuple[str 
     """
     from hypothesis_helm.charts.model import merge_values
 
+    # Compare effective values, so required context carried along with a mutation is not blamed as a change.
     before = json.loads(yamlio.json_for_helm(chart.defaults))
     after = json.loads(yamlio.json_for_helm(merge_values(chart.defaults, values)))
     diff = DeepDiff(before, after, view="tree", threshold_to_diff_deeper=0, zip_ordered_iterables=True)

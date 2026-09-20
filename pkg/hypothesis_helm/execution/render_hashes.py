@@ -13,6 +13,18 @@ from uuid import uuid4
 
 from attrs import define, field
 
+__all__ = (
+    "ALGORITHM",
+    "RenderHashes",
+    "STATISTICS_DIRECTORY",
+    "process_hashes",
+    "render_digest",
+    "reset_process_hashes",
+    "save_process_statistics",
+    "summarize_process_statistics",
+)
+
+
 LOGGER = logging.getLogger(__name__)
 STATISTICS_DIRECTORY = "HYPOTHESIS_HELM_RENDER_HASH_STATISTICS"
 ALGORITHM = "sha256-canonical-json-v1"
@@ -66,6 +78,7 @@ class RenderHashes:
             None: Validation passes or the original failure propagates uncached.
         """
         digest = render_digest(resources)
+        # Identical output under a different schema or validation policy needs its own validation result.
         validation_key = hashlib.sha256(ALGORITHM.encode() + b"\0" + digest + b"\0" + context.encode()).digest()
         with self.lock:
             self.observed += 1
@@ -73,6 +86,7 @@ class RenderHashes:
             if validation_key in self.validated:
                 self.cache_hits += 1
                 return
+            # Commit only successful validation; failures must remain observable on subsequent attempts.
             validate()
             self.validated.add(validation_key)
 

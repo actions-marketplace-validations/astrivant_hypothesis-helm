@@ -18,6 +18,9 @@ from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequen
 from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.variation import repeated_line
 
+__all__ = ("METRIC", "RADII", "evaluate", "plot")
+
+
 METRIC = "maximum-relative-coordinate-change-v1"
 RADII = (0.1, 0.2, 0.35, 0.5)
 

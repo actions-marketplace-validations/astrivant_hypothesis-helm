@@ -11,6 +11,8 @@ from hypothesis_helm.charts.repositories.scan import discover_charts
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
 
+__all__ = ("export_repository",)
+
 
 def export_repository(
     source: Path,

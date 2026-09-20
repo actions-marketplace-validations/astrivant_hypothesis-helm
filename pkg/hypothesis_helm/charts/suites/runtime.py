@@ -34,6 +34,8 @@ from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strate
 from hypothesis_helm.schemas.resources import SUITE_RESOURCE_SCHEMAS
 from hypothesis_helm.schemas.selectors import SourceScope, source_identity
 
+__all__ = ("RenderOptions", "check_path", "path_values", "prepared_chart")
+
 
 @frozen
 class RenderOptions:

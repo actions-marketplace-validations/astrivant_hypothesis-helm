@@ -15,6 +15,8 @@ from pipeline import Operation, OperationQueue
 
 from hypothesis_helm_benchmarking.refresh.plan import STUDIES, Refresh, source_path
 
+__all__ = ("merge_statuses", "phase_operations", "run_phase")
+
 
 def phase_operations(root: Path, phase: str, study: str | None = None) -> tuple[Operation, ...]:
     """

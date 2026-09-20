@@ -21,6 +21,9 @@ from hypothesis_helm.compiler.builtins import BUILTINS
 from hypothesis_helm.compiler.passes.discovery_flow import truth
 from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
+__all__ = ("CERTIFICATES", "SCALARS", "result")
+
+
 CERTIFICATES = frozenset(
     {"genCA", "genCAWithKey", "genSelfSignedCert", "genSelfSignedCertWithKey", "genSignedCert", "genSignedCertWithKey"}
 )
