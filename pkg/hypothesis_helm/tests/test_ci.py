@@ -318,7 +318,7 @@ def test_action_preserves_arguments_outputs_and_status(
     else:
         assert "--match" not in command
     assert command[command.index("--cache-dir") + 1] == str(tmp_path / "cache")
-    assert command[command.index("--rerun") + 1] == ("all" if security else "failed")
+    assert command[command.index("--rerun") + 1] == "failed"
     assert "--disable-schema-caching" in command
     assert "--no-cache" in command
     assert ("--validate-schemas" in command) is (not security)
@@ -332,6 +332,83 @@ def test_action_preserves_arguments_outputs_and_status(
     assert "shard<<" in values
     assert "\n2/3\n" in values
     assert "report-dir<<" in values
+
+
+@pytest.mark.parametrize(
+    ("comparison_status", "changed", "requested", "expected"),
+    [
+        ("resolved", False, "auto", "failed"),
+        ("resolved", True, "auto", "all"),
+        ("unavailable", False, "auto", "all"),
+        ("resolved", False, "all", "all"),
+    ],
+)
+def test_action_incremental_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, comparison_status: str, changed: bool, requested: str, expected: str
+) -> None:
+    """
+    Use Git comparisons for incremental CI while respecting forced release runs.
+
+    Args:
+        tmp_path (Path): Local checkout and artifact destination.
+        monkeypatch (pytest.MonkeyPatch): Replace the comparison and Helm process boundary.
+        comparison_status (str): Available comparison or missing history.
+        changed (bool): Whether this chart has modified files.
+        requested (str): Explicit action rerun policy.
+        expected (str): Effective policy passed to the shell integration.
+
+    Returns:
+        None: Only unchanged charts with usable history request cached success reuse.
+    """
+    monkeypatch.setenv("HH_CHART", str(tmp_path / "chart"))
+    monkeypatch.setenv("HH_ARTIFACT_DIR", str(tmp_path / "results"))
+    monkeypatch.setenv("HH_INCREMENTAL", "true")
+    monkeypatch.setenv("HH_BASE_REF", "origin/release")
+    monkeypatch.setenv("HYPOTHESIS_HELM_BASE_REF", "origin/main")
+    monkeypatch.setenv("HH_RERUN", requested)
+
+    def compare(root: Path, base_ref: str | None, **kwargs: object) -> dict[str, object]:
+        """
+        Return a resolved file inventory or an unavailable comparison.
+
+        Args:
+            root (Path): Chart path whose Git history is inspected.
+            base_ref (str | None): User-provided comparison override.
+            **kwargs (object): Explicit provider environment passed by the shared policy.
+
+        Returns:
+            dict[str, object]: Comparison metadata in the normal Git resolver format.
+        """
+        assert root == tmp_path / "chart"
+        assert base_ref == "origin/release"
+        return {
+            "status": comparison_status,
+            "repository": str(tmp_path),
+            "base_ref": base_ref,
+            "changed_files": ["chart/values.yaml"] if changed else ["README.md"],
+        }
+
+    def execute(self: Processes, command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        """
+        Assert the selected policy without invoking external tools.
+
+        Args:
+            self (Processes): Replaced subprocess owner.
+            command (list[str]): Action shell command.
+            **kwargs (object): Environment and redirected output.
+
+        Returns:
+            subprocess.CompletedProcess[str]: Successful child result.
+        """
+        assert mapping(kwargs["env"])["HH_RERUN"] == expected
+        assert "HYPOTHESIS_HELM_BASE_REF" not in mapping(kwargs["env"])
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("hypothesis_helm.integrations.incremental.comparison", compare)
+    monkeypatch.setattr(Processes, "run", execute)
+    assert github_action.main() == 0
+    report = json.loads((tmp_path / "results/git-comparison.json").read_text())
+    assert report["base_ref"] == "origin/release"
 
 
 @pytest.mark.parametrize(("provider", "defer_failure"), [("gitlab", False), ("circleci", False), ("circleci", True)])
@@ -366,6 +443,15 @@ def test_remote_ci_commands(tmp_path: Path, provider: str, defer_failure: bool, 
     plugins = tmp_path / "plugin root"
     scanner = plugins / "hypothesis/.plugin-venv/bin/hypothesis-helm-kubesec"
     scanner.parent.mkdir(parents=True)
+    policy = scanner.with_name("hypothesis-helm-ci-policy")
+    policy.write_text(
+        dedent(f"""
+        #!{sys.executable}
+        from hypothesis_helm.integrations.incremental import main
+        raise SystemExit(main())
+        """).lstrip()
+    )
+    policy.chmod(0o755)
     binary = tmp_path / "helm"
     stub = dedent(
         f"""
@@ -421,6 +507,7 @@ def test_remote_ci_commands(tmp_path: Path, provider: str, defer_failure: bool, 
         "CIRCLE_WORKFLOW_ID": "workflow-123",
         "HH_REPORT_GROUP": "chart",
         "HH_DEFER_FAILURE": str(defer_failure).lower(),
+        "HH_CACHE_DIR": "cache with spaces",
     }
     result = subprocess.run(
         ["bash", "-euo", "pipefail", "-c", script],
@@ -443,6 +530,8 @@ def test_remote_ci_commands(tmp_path: Path, provider: str, defer_failure: bool, 
     assert "--schema-offline" in command
     assert command[command.index("--shard") + 1] == "2/3"
     assert command[command.index("--run-id") + 1] == ("123-1.35.0" if provider == "gitlab" else "workflow-123-chart")
+    assert command[command.index("--rerun") + 1] == "all"  # Missing Git history must never suppress tests.
+    assert command[command.index("--cache-dir") + 1] == "cache with spaces"
     assert len(calls) == (2 if security else 1)
     if security:
         assert "--pre-sharded" in calls[1] and "--validate-rest" in calls[1]

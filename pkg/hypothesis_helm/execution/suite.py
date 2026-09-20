@@ -24,6 +24,7 @@ from hypothesis_helm.execution.cache import (
     seed_key,
 )
 from hypothesis_helm.execution.environment import in_ci
+from hypothesis_helm.execution.manifests import ManifestStore
 from hypothesis_helm.execution.parallel import run_parallel, worker_limit
 from hypothesis_helm.execution.processes import Processes
 from hypothesis_helm.execution.render_hashes import (
@@ -165,6 +166,9 @@ def run_suite(
         (results / "sampling.json").unlink(missing_ok=True)
         environment.pop("HYPOTHESIS_HELM_CACHE_READ", None)
         environment.pop("HYPOTHESIS_HELM_CACHE_RESULTS", None)
+        environment.pop("HYPOTHESIS_HELM_MANIFEST_CAPTURE", None)
+        environment.pop("HYPOTHESIS_HELM_MANIFEST_STORE", None)
+        environment.pop("HYPOTHESIS_HELM_MANIFEST_REQUIRED", None)
         cache_workspace = TemporaryDirectory(prefix="path-results-", dir=results)
         cache_results = Path(cache_workspace.name)
         hash_statistics = cache_results / "render-hashes"
@@ -172,6 +176,7 @@ def run_suite(
         cache_file = None
         marker = None
         cached: dict[str, str] = {}
+        manifests = None
         retry = rerun == "failed" or (rerun == "auto" and not in_ci(environment))
         if cache and not collect_only:
             cache_root = (cache_dir or results / "cache").resolve()
@@ -200,6 +205,7 @@ def run_suite(
             )
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             cached = read_outcomes(cache_file)
+            manifests = ManifestStore(cache_file.with_suffix(".manifests"))
             environment["HYPOTHESIS_HELM_CACHE_RESULTS"] = str(cache_results)
             if retry and cached:
                 snapshot = cache_results / "prior.json"
@@ -229,6 +235,10 @@ def run_suite(
         if descriptor is not None:
             environment["HYPOTHESIS_HELM_MANIFEST_FD"] = str(descriptor)
             environment["HYPOTHESIS_HELM_MANIFEST_FORMAT"] = manifest_format()
+            # Collection workers do not inherit stdout, but must still verify replay data.
+            environment["HYPOTHESIS_HELM_MANIFEST_REQUIRED"] = "1"
+            if manifests is not None:
+                environment["HYPOTHESIS_HELM_MANIFEST_STORE"] = str(manifests.root)
         try:
             if workers > 1 and not collect_only:
                 status, workers = run_parallel(
@@ -267,6 +277,13 @@ def run_suite(
             merge_outcomes(cache_file, cached, updates)
         if marker is not None and not disable_schema_caching and status in (0, 1, 130):
             marker.save()
+        reused = sorted({node for file in cache_results.glob("reused-*.json") for node in json.loads(file.read_text())})
+        replayed = 0
+        if descriptor is not None and manifests is not None and status != 130:
+            for node in reused:
+                replayed += manifests.replay(node)
+            if reused:
+                logging.getLogger(__name__).info("Replayed %s cached manifests from %s successful properties", replayed, len(reused))
         render_statistics = summarize_process_statistics(hash_statistics)
         cache_workspace.cleanup()
         assignment = None
@@ -282,8 +299,6 @@ def run_suite(
             (results / "junit.xml").write_text(
                 '<testsuites><testsuite name="hypothesis-helm" tests="0" failures="0" errors="0" skipped="0"/></testsuites>'
             )
-        selected = set(assignment["tests"]) if assignment is not None else set()
-        reused = sorted(node for node in selected if retry and cached.get(node) == "passed")
         findings = junit_findings((results / "junit.xml").read_text()) if (results / "junit.xml").is_file() else []
         report = {
             "run_id": run_id,
@@ -291,6 +306,7 @@ def run_suite(
             "elapsed_seconds": time.monotonic() - tick,
             "suite_fingerprint": suite_identity,
             "reused_properties": reused,
+            "replayed_manifests": replayed,
             "status": "interrupted"
             if status == 130
             else "collected"

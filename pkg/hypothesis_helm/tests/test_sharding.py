@@ -218,7 +218,9 @@ def test_property(index):
             if child.poll() is None:
                 child.kill()
             child.wait()
-    assert repeated == ["case-7"]
+    assert len(repeated) == 12
+    assert set(repeated) == {f"case-{index}" for index in range(12)}
+    assert sum(json.loads(path.read_text())["replayed_manifests"] for path in warm.glob("shards/*/report.json")) == 11
     assert main(["aggregate", str(warm), "--shards", "3", "--run-id", "warm", "--output-dir", str(warm / "final")]) == 1
     retried = json.loads((warm / "final/report.json").read_text())
     assert retried["properties"]["selected"] == 12

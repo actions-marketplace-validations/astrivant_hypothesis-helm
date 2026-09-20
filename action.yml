@@ -66,7 +66,7 @@ inputs:
     description: Enable strict API validation when Kubesec routing is disabled.
     default: 'true'
   kubesec:
-    description: Route workloads to Kubesec and other resources to native schema validation; rerun all selected tests.
+    description: Route fresh and verified cached manifests to Kubesec and other resources to native schema validation.
     default: 'false'
   kubesec-version:
     description: Kubesec release to install.
@@ -105,8 +105,14 @@ inputs:
     description: Compare against restored values structure markers without overwriting them.
     default: 'false'
   rerun:
-    description: 'auto runs all paths in CI; failed retries cached failures; all forces a full run.'
+    description: 'auto runs all paths unless incremental is enabled; failed retries failures and uncached paths; all forces a full run.'
     default: auto
+  incremental:
+    description: 'With rerun auto, reuse successful properties of Git-unchanged charts; requires restored outcomes and comparison history.'
+    default: 'false'
+  base-ref:
+    description: 'Override the incremental comparison reference; otherwise use the PR target or previous trunk commit.'
+    default: ''
   artifact-dir:
     description: Artifact root; sharded runs append shards/INDEX-of-TOTAL.
     default: .cache/hypothesis-helm/runs
@@ -334,6 +340,8 @@ runs:
         HH_CACHE: ${{ inputs.cache }}
         HH_DISABLE_SCHEMA_CACHING: ${{ inputs.disable-schema-caching }}
         HH_RERUN: ${{ inputs.rerun }}
+        HH_INCREMENTAL: ${{ inputs.incremental }}
+        HH_BASE_REF: ${{ inputs.base-ref }}
         HH_ARTIFACT_DIR: ${{ inputs.artifact-dir }}
       run: '"$ACTION_PATH/.plugin-venv/bin/hypothesis-helm-github-action"'
     - name: Export minimal example values

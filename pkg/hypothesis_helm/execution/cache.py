@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import os
+import shutil
 import sys
 from collections.abc import Iterator
 from importlib.metadata import version
@@ -15,7 +16,17 @@ from uuid import uuid4
 
 import pytest
 
-__all__ = ("fingerprint", "merge_outcomes", "pytest_collection_modifyitems", "pytest_runtest_logreport", "read_outcomes", "seed_key")
+from hypothesis_helm.execution.manifests import ManifestStore
+
+__all__ = (
+    "fingerprint",
+    "merge_outcomes",
+    "pytest_collection_modifyitems",
+    "pytest_runtest_logreport",
+    "pytest_runtest_protocol",
+    "read_outcomes",
+    "seed_key",
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -84,7 +95,10 @@ def fingerprint(
         digest.update(f"{package}={version(package)}".encode())
     source = directory / "chart-source.json"
     if source.exists():
-        chart = ((suite_location or directory) / json.loads(source.read_text())["chart"]).resolve()
+        metadata = json.loads(source.read_text())
+        chart = ((suite_location or directory) / metadata["chart"]).resolve()
+        binary = shutil.which(metadata.get("helm", "helm"))
+        digest.update(hashlib.sha256(Path(binary).read_bytes()).digest() if binary else b"helm-unavailable")
         # Include dependency archives and files read with Helm's .Files as well as templates.
         for file in sorted(chart.rglob("*")):
             if file.is_file() and not any(root in file.parents for root in (directory, *excluded)):
@@ -164,14 +178,61 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if not source:
         return
     outcomes = read_outcomes(Path(source))
-    excluded = [item for item in items if outcomes.get(item.nodeid) == "passed"]
-    items[:] = [item for item in items if outcomes.get(item.nodeid) != "passed"]
+    store = os.environ.get("HYPOTHESIS_HELM_MANIFEST_STORE")
+    required = os.environ.get("HYPOTHESIS_HELM_MANIFEST_REQUIRED") == "1"
+    excluded = [
+        item
+        for item in items
+        if outcomes.get(item.nodeid) == "passed"
+        and (not required or store is not None and ManifestStore(Path(store)).verified(item.nodeid) is not None)
+    ]
+    skipped = {item.nodeid for item in excluded}
+    items[:] = [item for item in items if item.nodeid not in skipped]
     config.hook.pytest_deselected(items=excluded)
     if excluded:
         destination = os.environ.get("HYPOTHESIS_HELM_CACHE_RESULTS")
         if destination:
             (Path(destination) / "deselected").touch()
+            (Path(destination) / f"reused-{os.getpid()}.json").write_text(json.dumps(sorted(skipped)))
         LOGGER.info("Reusing %s successful paths from cache", len(excluded))
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_protocol(item: pytest.Item, nextitem: pytest.Item | None) -> Iterator[None]:
+    """
+    Capture each property's manifests through teardown before publishing a reusable stream.
+
+    Args:
+        item (pytest.Item): Property about to execute.
+        nextitem (pytest.Item | None): Next property, as supplied by pytest.
+
+    Yields:
+        None: Pytest executes the property's fixtures, examples and teardown.
+
+    """
+    root = os.environ.get("HYPOTHESIS_HELM_MANIFEST_STORE")
+    workspace = os.environ.get("HYPOTHESIS_HELM_CACHE_RESULTS")
+    if root is None or workspace is None:
+        yield
+        return
+    capture = Path(workspace) / f"{uuid4().hex}.jsonl"
+    capture.touch()
+    previous = os.environ.get("HYPOTHESIS_HELM_MANIFEST_CAPTURE")
+    os.environ["HYPOTHESIS_HELM_MANIFEST_CAPTURE"] = str(capture)
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("HYPOTHESIS_HELM_MANIFEST_CAPTURE", None)
+        else:
+            os.environ["HYPOTHESIS_HELM_MANIFEST_CAPTURE"] = previous
+        try:
+            if OUTCOMES.get(item.nodeid) == "passed":
+                ManifestStore(Path(root)).publish(item.nodeid, capture)
+        except OSError as exc:
+            LOGGER.warning("Could not cache manifests for %s: %s", item.nodeid, exc)
+        finally:
+            capture.unlink(missing_ok=True)
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:

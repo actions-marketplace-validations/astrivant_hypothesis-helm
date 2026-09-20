@@ -8,6 +8,7 @@ import uuid
 from pathlib import Path
 
 from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.integrations.incremental import select_rerun
 from hypothesis_helm.integrations.kubesec import scan
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.schemas.conformity import prepare
@@ -60,16 +61,29 @@ def main() -> int:
         score_minimum = int(os.environ.get("HH_KUBESEC_SCORE_MINIMUM", "0")) if security else 0
         if score_minimum < 0:
             raise ValueError("Kubesec score minimum must be nonnegative")
+        incremental = os.environ.get("HH_INCREMENTAL", "false").lower() == "true"
+        rerun = select_rerun(
+            Path(os.environ.get("HH_CHART", ".")),
+            incremental=incremental,
+            rerun=os.environ.get("HH_RERUN", "auto"),
+            base_ref=os.environ.get("HH_BASE_REF") or None,
+            report=results / "git-comparison.json",
+        )
+        environment = dict(os.environ)
+        if incremental:
+            # The comparison has already been resolved here. Forwarding this setting would
+            # select recursive CLI execution, which cannot own a generated-suite shard.
+            environment.pop("HYPOTHESIS_HELM_BASE_REF", None)
         with manifests.open("w") as stream:
             # Give the Helm parent time to stop its own pytest process groups.
             result = Processes(interrupt_grace=10.0).run(
                 ["bash", str(Path(__file__).with_suffix(".sh"))],
                 cwd=Path.cwd(),
                 env={
-                    **os.environ,
+                    **environment,
                     **{
                         key: value.lower()
-                        for key, value in os.environ.items()
+                        for key, value in environment.items()
                         if key
                         in {
                             "HH_KUBESEC",
@@ -82,6 +96,7 @@ def main() -> int:
                     "HH_ARTIFACT_DIR": str(root),
                     "HH_RESULT_DIR": str(results),
                     "HH_RESOLVED_SHARD": outputs["shard"],
+                    "HH_RERUN": rerun,
                 },
                 stdout=stream,
             )

@@ -6,6 +6,11 @@ variables:
   HYPOTHESIS_HELM_REF: main
   KUBESEC_ENABLED: 'false' # opt in to security scanning
   KUBESEC_SCORE_MINIMUM: "0"
+  GIT_DEPTH: "0"
+  HH_INCREMENTAL: 'true'
+  HH_RERUN: auto
+  HH_CACHE: 'true'
+  HH_CACHE_DIR: .cache/hypothesis-helm/outcomes
 helm-properties:
   image: python:3.13-slim
   stage: test
@@ -21,6 +26,11 @@ helm-properties:
     HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: "" # Optional: /dev/shm/helm-schemas
     SCHEMA_CACHE_DIR: schemas
   cache:
+    - key: "helm-outcomes-v2-linux-amd64-${CI_JOB_NAME_SLUG}-${K8S_VERSION}-${SHARD_INDEX}-of-${SHARD_TOTAL}"
+      paths:
+        - ${HH_CACHE_DIR}/
+      policy: pull-push
+      when: always
     - key: "hh-binary-v1-linux-amd64-helm-${HELM_VERSION}-exact"
       paths:
         - .cache/hypothesis-helm/binaries/helm-${HELM_VERSION}-linux-amd64/
@@ -74,11 +84,20 @@ helm-properties:
     - export HH_ARTIFACT_DIR=".cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}"
     - mkdir -p "$HH_ARTIFACT_DIR"
     - |
+      policy_cli="$(helm env HELM_PLUGINS)/hypothesis/.plugin-venv/bin/hypothesis-helm-ci-policy"
+      rerun="$("$policy_cli" "$HELM_CHART" \
+          --incremental "${HH_INCREMENTAL:-true}" --rerun "${HH_RERUN:-auto}" \
+          ${HH_BASE_REF:+--base-ref "$HH_BASE_REF"} --report "$HH_ARTIFACT_DIR/git-comparison.json")"
+      # The policy has resolved this ref; do not switch the sharded CLI to recursive execution.
+      unset HYPOTHESIS_HELM_BASE_REF
+      disable_cache=
+      if [ "${HH_CACHE:-true}" = "false" ]; then disable_cache=1; fi
       test_status=0
       if [ "$KUBESEC_ENABLED" = "true" ]; then
           helm hypothesis test "$HELM_CHART" \
               --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
-              --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun all \
+              --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun "$rerun" \
+              --cache-dir "${HH_CACHE_DIR:-.cache/hypothesis-helm/outcomes}" ${disable_cache:+--no-cache} \
               --sample-random "$SAMPLE_RANDOM" --sample-min-cases "$SAMPLE_MIN_CASES" \
               --schema-version "$K8S_VERSION" \
               --schema-cache-dir "$SCHEMA_CACHE_DIR" --schema-offline \
@@ -87,7 +106,8 @@ helm-properties:
       else
           helm hypothesis test "$HELM_CHART" \
               --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
-              --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun all \
+              --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun "$rerun" \
+              --cache-dir "${HH_CACHE_DIR:-.cache/hypothesis-helm/outcomes}" ${disable_cache:+--no-cache} \
               --sample-random "$SAMPLE_RANDOM" --sample-min-cases "$SAMPLE_MIN_CASES" \
               --validate-schemas --schema-version "$K8S_VERSION" \
               --schema-cache-dir "$SCHEMA_CACHE_DIR" --schema-offline \

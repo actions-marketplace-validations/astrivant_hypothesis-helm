@@ -11,10 +11,6 @@ if [[ ${HH_SCHEMA_OFFLINE:-false} == true ]]; then schema_offline=1; fi
 if [[ ${HH_DISABLE_SCHEMA_CACHING:-false} == true ]]; then disable_schema_caching=1; fi
 if [[ ${HH_CACHE:-true} == false ]]; then disable_cache=1; fi
 
-if [[ ${HH_KUBESEC:-false} == true ]]; then
-    HH_RERUN=all
-fi
-
 exec helm hypothesis test "${HH_CHART:-.}" \
     --shard "$HH_RESOLVED_SHARD" \
     --jobs "${HH_JOBS:-auto}" \

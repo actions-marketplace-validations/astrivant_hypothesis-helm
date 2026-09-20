@@ -4,6 +4,22 @@ commands:
   test:
     description: Test chart values with an installed Helm plugin and automatic CI sharding.
     parameters:
+      incremental:
+        type: boolean
+        default: true
+      base-ref:
+        type: string
+        default: ""
+      rerun:
+        type: enum
+        enum: [auto, failed, all]
+        default: auto
+      cache:
+        type: boolean
+        default: true
+      cache-dir:
+        type: string
+        default: .cache/hypothesis-helm/outcomes
       chart:
         type: string
         default: ./chart
@@ -53,6 +69,11 @@ commands:
       - run:
           name: Test Helm chart values
           environment:
+            HH_INCREMENTAL: "<< parameters.incremental >>"
+            HH_BASE_REF: << parameters.base-ref >>
+            HH_RERUN: << parameters.rerun >>
+            HH_CACHE: "<< parameters.cache >>"
+            HH_CACHE_DIR: << parameters.cache-dir >>
             HH_KUBESEC: "<< parameters.kubesec >>"
             HH_KUBESEC_JOBS: << parameters.kubesec-jobs >>
             HH_KUBESEC_SCORE_MINIMUM: << parameters.kubesec-score-minimum >>
@@ -70,13 +91,21 @@ commands:
             HH_DEFER_FAILURE: "<< parameters.defer-failure >>"
           command: |
             mkdir -p "$HH_ARTIFACT_DIR"
+            policy_cli="$(helm env HELM_PLUGINS)/hypothesis/.plugin-venv/bin/hypothesis-helm-ci-policy"
+            rerun="$("$policy_cli" "$HH_CHART" \
+                --incremental "${HH_INCREMENTAL:-true}" --rerun "${HH_RERUN:-auto}" \
+                ${HH_BASE_REF:+--base-ref "$HH_BASE_REF"} --report "$HH_ARTIFACT_DIR/git-comparison-${CIRCLE_NODE_INDEX:-0}.json")"
+            unset HYPOTHESIS_HELM_BASE_REF
+            disable_cache=
+            if [[ "${HH_CACHE:-true}" == "false" ]]; then disable_cache=1; fi
             test_status=0
             if [[ "$HH_KUBESEC" == "true" ]]; then
                 helm hypothesis test "$HH_CHART" \
                     --jobs "$HH_JOBS" --max-examples "$HH_MAX_EXAMPLES" --seed "$HH_SEED" \
                     --sample-random "$HH_SAMPLE_RANDOM" --sample-min-cases "$HH_SAMPLE_MIN_CASES" \
                     --schema-version "$HH_SCHEMA_VERSION" --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
-                    --schema-offline --shard "$((${CIRCLE_NODE_INDEX:-0} + 1))/${CIRCLE_NODE_TOTAL:-1}" --rerun all \
+                    --schema-offline --shard "$((${CIRCLE_NODE_INDEX:-0} + 1))/${CIRCLE_NODE_TOTAL:-1}" --rerun "$rerun" \
+                    --cache-dir "${HH_CACHE_DIR:-.cache/hypothesis-helm/outcomes}" ${disable_cache:+--no-cache} \
                     --run-id "${CIRCLE_WORKFLOW_ID}-${HH_REPORT_GROUP}" \
                     --artifact-dir "$HH_ARTIFACT_DIR" --output json \
                     >"$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl" || test_status=$?
@@ -96,7 +125,8 @@ commands:
                     --jobs "$HH_JOBS" --max-examples "$HH_MAX_EXAMPLES" --seed "$HH_SEED" \
                     --sample-random "$HH_SAMPLE_RANDOM" --sample-min-cases "$HH_SAMPLE_MIN_CASES" \
                     --schema-version "$HH_SCHEMA_VERSION" --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
-                    --validate-schemas --schema-offline --shard "$((${CIRCLE_NODE_INDEX:-0} + 1))/${CIRCLE_NODE_TOTAL:-1}" --rerun all \
+                    --validate-schemas --schema-offline --shard "$((${CIRCLE_NODE_INDEX:-0} + 1))/${CIRCLE_NODE_TOTAL:-1}" --rerun "$rerun" \
+                    --cache-dir "${HH_CACHE_DIR:-.cache/hypothesis-helm/outcomes}" ${disable_cache:+--no-cache} \
                     --run-id "${CIRCLE_WORKFLOW_ID}-${HH_REPORT_GROUP}" \
                     --artifact-dir "$HH_ARTIFACT_DIR" --output json \
                     >"$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl" || test_status=$?
@@ -109,6 +139,22 @@ jobs:
   test-chart:
     description: Install Hypothesis Helm and test a chart with automatic sharding.
     parameters:
+      incremental:
+        type: boolean
+        default: true
+      base-ref:
+        type: string
+        default: ""
+      rerun:
+        type: enum
+        enum: [auto, failed, all]
+        default: auto
+      cache:
+        type: boolean
+        default: true
+      cache-dir:
+        type: string
+        default: .cache/hypothesis-helm/outcomes
       binary-cache:
         type: boolean
         default: true
@@ -176,6 +222,23 @@ jobs:
       caches: 15d
     steps:
       - checkout
+      - run:
+          name: Fetch comparison history
+          command: |
+            if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+                if ! git fetch --unshallow origin; then
+                    printf '%s\n' 'Could not fetch full history; missing comparisons will run fresh tests.' >&2
+                fi
+            fi
+            if ! git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'; then
+                printf '%s\n' 'Could not refresh branch references; unavailable comparisons will run fresh tests.' >&2
+            fi
+      - when:
+          condition: << parameters.cache >>
+          steps:
+            - restore_cache:
+                keys:
+                  - helm-outcomes-v2-{{ arch }}-<< parameters.report-group >>-<< parameters.schema-version >>-{{ .Environment.CIRCLE_NODE_INDEX }}-of-<< parameters.parallelism >>-
       - restore_cache:
           keys:
             - helm-schemas-v2-{{ arch }}-<< parameters.schema-version >>-
@@ -268,6 +331,11 @@ jobs:
             - << parameters.schema-cache-dir >>
       - test:
           defer-failure: true
+          incremental: << parameters.incremental >>
+          base-ref: << parameters.base-ref >>
+          rerun: << parameters.rerun >>
+          cache: << parameters.cache >>
+          cache-dir: << parameters.cache-dir >>
           report-group: << parameters.report-group >>
           kubesec: << parameters.kubesec >>
           kubesec-jobs: << parameters.kubesec-jobs >>
@@ -282,6 +350,13 @@ jobs:
           sample-random: << parameters.sample-random >>
           sample-min-cases: << parameters.sample-min-cases >>
           artifact-dir: << parameters.artifact-dir >>
+      - when:
+          condition: << parameters.cache >>
+          steps:
+            - save_cache:
+                key: helm-outcomes-v2-{{ arch }}-<< parameters.report-group >>-<< parameters.schema-version >>-{{ .Environment.CIRCLE_NODE_INDEX }}-of-<< parameters.parallelism >>-{{ .Environment.CIRCLE_WORKFLOW_ID }}-{{ .Environment.CIRCLE_BUILD_NUM }}
+                paths:
+                  - << parameters.cache-dir >>
       - run:
           name: Stage this shard for aggregation
           environment:

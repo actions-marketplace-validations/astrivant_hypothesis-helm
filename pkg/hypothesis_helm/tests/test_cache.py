@@ -124,6 +124,32 @@ def test_cache_invalidation(tmp_path: Path) -> None:
     assert read_outcomes(tmp_path / "missing") == {}
 
 
+def test_renderer_binary_invalidates_saved_successes(tmp_path: Path) -> None:
+    """
+    Prevent a renderer upgrade from reusing successes produced by another Helm binary.
+
+    Args:
+        tmp_path (Path): Generated suite, original chart and fake executable.
+
+    Returns:
+        None: Binary replacement and removal both change the suite fingerprint.
+    """
+    suite = tmp_path / "suite"
+    chart = tmp_path / "chart"
+    suite.mkdir()
+    chart.mkdir()
+    binary = tmp_path / "helm"
+    binary.write_text("first renderer")
+    binary.chmod(0o755)
+    (suite / "chart-source.json").write_text(json.dumps({"chart": "../chart", "helm": str(binary)}))
+    first = fingerprint(suite, 0, None, "None")
+    binary.write_text("second renderer")
+    second = fingerprint(suite, 0, None, "None")
+    assert first != second
+    binary.unlink()
+    assert fingerprint(suite, 0, None, "None") not in {first, second}
+
+
 def test_collect_only_and_teardown_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Collection preserves results and teardown failures remain eligible for retry.

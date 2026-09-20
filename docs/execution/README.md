@@ -342,6 +342,12 @@ A shared filesystem must support process locks and atomic renames. CI cache rest
 on separate machines provide independent snapshots. Upload shard
 artifacts for aggregation; do not rely on concurrent CI cache uploads to merge data.
 Cached successes appear as reused properties, separately from executed JUnit cases.
+When manifest output is requested, reused properties replay their complete saved resources
+through `-o json` or `-o yaml`. Every stream is checked against its SHA-256 hash before a
+property is skipped. Missing or corrupt streams cause fresh execution. Downstream validators
+therefore receive both fresh and cached manifests, and run their current checks on both.
+Streams are published only after the property and its teardown pass; reports record
+`replayed_manifests` separately from newly rendered output.
 An idle shard exits successfully with zero test workers and still publishes its report,
 whether it owns no properties or all its properties have cached successes. Include that
 report in aggregation, even when every shard is idle. For two pending properties across

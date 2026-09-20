@@ -7,6 +7,7 @@ import json
 import os
 from contextlib import ExitStack
 from contextvars import ContextVar
+from pathlib import Path
 
 from hypothesis_helm.charts.values import yamlio
 
@@ -37,6 +38,11 @@ def emit_manifest(resource: object) -> None:
     Returns:
         None: One complete resource is written immediately when output is enabled.
     """
+    # Capture independently of stdout: a later cached run may request a manifest stream.
+    capture = os.environ.get("HYPOTHESIS_HELM_MANIFEST_CAPTURE")
+    if capture is not None:
+        with Path(capture).open("a") as stream:
+            stream.write(json.dumps(resource, ensure_ascii=True, allow_nan=False) + "\n")
     descriptor = MANIFEST_FD.get()
     if descriptor is None:
         inherited = os.environ.get("HYPOTHESIS_HELM_MANIFEST_FD")

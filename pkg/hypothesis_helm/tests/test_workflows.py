@@ -91,3 +91,29 @@ def test_release_requires_all_verification_and_matching_artifacts() -> None:
     catalog = next(step for step in build_steps if "hypothesis-helm-catalog --check" in str(step.get("run", "")))
     assert catalog["if"] == "startsWith(github.ref, 'refs/tags/')"
     assert documents["benchmark-refresh.yml"]["on"] == {"workflow_dispatch": None}
+
+
+def test_chart_workflow_restores_shard_caches_and_comparison_history() -> None:
+    """
+    Keep incremental CI, fresh security validation and tag release coverage wired together.
+
+    Returns:
+        None: Independent caches persist complete evidence and tags force new property tests.
+    """
+    job = mapping(mapping(workflows()["chart-validation.yml"]["jobs"])["sharded-chart"])
+    steps = [mapping(step) for step in sequence(job["steps"])]
+    checkout = next(step for step in steps if str(step.get("uses", "")).startswith("actions/checkout@"))
+    assert mapping(checkout["with"])["fetch-depth"] == 0
+    restore = next(step for step in steps if step.get("id") == "outcomes")
+    settings = mapping(restore["with"])
+    for coordinate in ("matrix.kubernetes", "matrix.shard", "runner.os", "runner.arch"):
+        assert coordinate in str(settings["key"])
+        assert coordinate in str(settings["restore-keys"])
+    test = next(step for step in steps if step.get("id") == "hypothesis")
+    options = mapping(test["with"])
+    assert options["incremental"] == options["kubesec"] == "true"
+    assert options["cache-dir"] == settings["path"]
+    assert "refs/tags/" in str(options["rerun"]) and "'all'" in str(options["rerun"])
+    save = next(step for step in steps if str(step.get("uses", "")).startswith("actions/cache/save@"))
+    assert "always()" in str(save["if"])
+    assert mapping(save["with"])["path"] == settings["path"]

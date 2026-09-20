@@ -23,6 +23,12 @@ Use the remote definitions below and change `./chart` to your chart directory.
 The examples track `main`; replace it with a published commit or tag to pin a version.
 The new GitLab and CircleCI URLs become available when these files are published.
 
+All three reference configurations support incremental runs: unchanged charts reuse matching
+successful properties, while changed charts or unavailable comparison history run fresh tests.
+The outcome cache also retains verified manifest streams, so Kubesec checks every selected
+property's output on each invocation. Release tags always force fresh tests. This is chart-level
+invalidation; it does not limit a changed chart to only its edited fields.
+
 For filtering modes, worker counts and release coverage requirements, see
 [Choosing test coverage](../coverage.md).
 
@@ -80,9 +86,9 @@ variables:
 
 helm-properties:
   rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-      when: manual
-      allow_failure: false
   variables:
     HELM_CHART: ./chart
   parallel:
@@ -92,6 +98,10 @@ helm-properties:
 
 helm-report:
   rules:
+    - if: '$CI_COMMIT_TAG'
+      when: always
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: always
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
       when: always
 ```
@@ -99,6 +109,12 @@ helm-report:
 The [shared job](../../ci/gitlab.yml) installs Helm, the plugin and validators;
 restores Kubernetes schemas; runs each version across three shards; and saves
 reports even on failure. If changing the shard matrix, set the global `SHARD_TOTAL` variable to match.
+It sets `GIT_DEPTH: "0"` and caches outcomes and manifests separately for each version and shard.
+`HH_INCREMENTAL: 'false'` disables automatic reuse; `HH_RERUN: all` forces fresh tests;
+`HH_CACHE: 'false'` bypasses outcome reads and writes. Set `HH_BASE_REF` or
+`HYPOTHESIS_HELM_BASE_REF` to override the comparison, and `HH_CACHE_DIR` to relocate its data.
+GitLab still transfers its configured cache when outcome reuse is disabled; override the job's
+`cache` list to disable those transfers.<sup>[1](https://docs.gitlab.com/ci/caching/)</sup>
 `HYPOTHESIS_HELM_REF` pins the plugin separately and defaults to `main`.
 The included `helm-report` job downloads every shard's artifacts and runs
 `hypothesis-helm aggregate`, producing one final bundle per Kubernetes version.
@@ -121,16 +137,10 @@ orbs:
 workflows:
   chart-properties:
     jobs:
-      - approve-release-check:
-          type: approval
-          filters:
-            branches:
-              only: main
       - hypothesis-helm/test-chart:
-          requires: [approve-release-check]
           filters:
-            branches:
-              only: main
+            tags:
+              only: /^v.*/
           chart: ./chart
           kubesec: true
           kubesec-score-minimum: 0
@@ -140,8 +150,8 @@ workflows:
           requires:
             - hypothesis-helm/test-chart: [success, failed, canceled]
           filters:
-            branches:
-              only: main
+            tags:
+              only: /^v.*/
           shards: 3
           schema-version: '1.35.0'
           kubesec: true
@@ -153,6 +163,13 @@ organization's [URL-orb allow list](https://circleci.com/docs/orbs/use/managing-
 The [shared orb](../../ci/circleci.yml) installs the plugin remotely by default.
 Its `test` command can also run inside an existing job after installing the tools
 and preparing schemas with `helm hypothesis schemas`.
+The job fetches comparison history and persists outcome caches separately for each report group,
+Kubernetes version and shard. Set `incremental: false` or `rerun: all` to run fresh tests,
+`cache: false` to disable outcome caching, or `cache-dir` to change its directory.
+Use `base-ref` when a feature branch targets something other than the repository's default branch.
+The standalone `test` command uses these same parameters, but its caller must restore/save the
+cache and fetch Git history. CircleCI cache keys include the node index to prevent shards from
+competing for an immutable cache key.<sup>[1](https://circleci.com/docs/reference/configuration-reference/#save_cache)</sup>
 `test-chart` persists each shard's report before returning its test or validator
 failure. The `aggregate` job consumes the workspace and runs `hypothesis-helm aggregate`.
 Its workflow dependency accepts failed jobs using CircleCI's
@@ -163,96 +180,23 @@ matching `report-group`. Set `aggregate.package` to the same plugin revision use
 
 ## GitHub Actions
 
-Copy into `.github/workflows/helm.yml`:
+Our [chart validation workflow](../../.github/workflows/chart-validation.yml) uses incremental
+testing on PRs and `main`. It fetches full Git history and restores outcomes and manifest
+streams separately for each shard and Kubernetes version. Set the action's `incremental: 'true'`
+to use the same behavior: unchanged charts reuse matching successful properties; changed charts,
+missing history and cache misses run fresh tests. `base-ref` overrides the automatic PR target
+or previous trunk commit.<sup>[1](../scanning/README.md#incremental-repository-tests)</sup>
 
-```yaml
-name: Helm release check
-on: workflow_dispatch
-permissions:
-  contents: read
-jobs:
-  chart:
-    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/cache/restore@v5
-        id: outcomes
-        with:
-          path: .cache/hypothesis-helm/outcomes
-          key: helm-outcomes-v1-${{ runner.os }}-${{ runner.arch }}-1.35.0-${{ matrix.shard }}-of-3-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            helm-outcomes-v1-${{ runner.os }}-${{ runner.arch }}-1.35.0-${{ matrix.shard }}-of-3-
-      - uses: astrivant/hypothesis-helm@main
-        with:
-          chart: ./chart
-          shard: ${{ matrix.shard }}/3
-          jobs: '2'
-          run-id: ${{ github.run_id }}-${{ github.run_attempt }}
-          schema-version: '1.35.0'
-          kubesec: 'true'
-          kubesec-score-minimum: '0'
-          rerun: all
-          cache-dir: .cache/hypothesis-helm/outcomes
-      - uses: actions/cache/save@v5
-        if: ${{ always() && steps.outcomes.outputs.cache-primary-key != '' }}
-        with:
-          path: .cache/hypothesis-helm/outcomes
-          key: ${{ steps.outcomes.outputs.cache-primary-key }}
-      - uses: actions/upload-artifact@v7
-        if: ${{ always() }}
-        with:
-          name: helm-cache-${{ matrix.shard }}-of-3
-          path: .cache/hypothesis-helm/
-          include-hidden-files: true
-          retention-days: 30
-          if-no-files-found: warn
-  report:
-    needs: chart
-    if: ${{ always() && needs.chart.result != 'skipped' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.13'
-      - run: pip install 'git+https://github.com/astrivant/hypothesis-helm.git@main'
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: hypothesis-helm-chart-*
-          path: downloaded
-      - uses: actions/download-artifact@v8
-        if: ${{ always() }}
-        with:
-          pattern: hypothesis-helm-kubesec-chart-*
-          path: downloaded-security
-      - name: Write final report
-        if: ${{ always() }}
-        env:
-          HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          test_status=0
-          cat downloaded/*/report.json | hypothesis-helm aggregate \
-              --shards 3 --run-id "$HH_RUN_ID" --output-dir results/final || test_status=$?
-          security_status=0
-          hypothesis-helm-kubesec downloaded-security --aggregate --shards 3 \
-              --run-id "$HH_RUN_ID" --schema-version 1.35.0 --score-minimum 0 \
-              --output results/final/kubesec || security_status=$?
-          if ((test_status != 0)); then
-              exit "$test_status"
-          fi
-          exit "$security_status"
-      - uses: actions/upload-artifact@v7
-        if: ${{ always() }}
-        with:
-          name: hypothesis-helm-final
-          path: results/final/
-          if-no-files-found: error
-          retention-days: 30
-```
+Kubesec still runs on every invocation, checking fresh output and verified cached manifests
+with the current schema version and score threshold. Tag builds use `rerun: all`. This is
+chart-level invalidation: changing a chart's values or templates retests its selected properties,
+including interacting paths. It does not restrict testing to the individually edited fields.
+
+Copy [ci/github.yml](../../ci/github.yml) to `.github/workflows/helm.yml` and change
+`chart: ./chart`. It runs on PRs, `main`, version tags and manual dispatch, restores
+each shard's outcomes and manifests, and aggregates test and security reports even
+after failures. Change the branch and tag patterns to match your release process.
+
 
 The [action](../../action.yml) installs the tools and uploads per-shard reports.
 See [action inputs and outputs](../ci.md#github-action) for worker, cache and artifact settings.

@@ -14,6 +14,8 @@ import pytest
 from hypothesis_helm.charts.repositories.cache import RETENTION_SECONDS, ChartCache
 from hypothesis_helm.charts.repositories.changes import MINIMAL_TRAILER, chart_changed, comparison, git
 from hypothesis_helm.cli import main
+from hypothesis_helm.integrations.incremental import main as ci_policy
+from hypothesis_helm.integrations.incremental import select_rerun
 
 
 def commit(root: Path, filename: str, content: str, message: str = "Source update") -> str:
@@ -93,6 +95,52 @@ def test_trunk_skips_generated_tip_only(repository: Path) -> None:
     assert comparison(repository, environment={"HYPOTHESIS_HELM_BASE_REF": "HEAD~3"})["base_ref"] == "HEAD~3"
     commit(repository, "README.md", "Another change")
     assert comparison(repository, environment={})["base_ref"] == "HEAD^"
+
+
+def test_ci_policy_reports_git_selection(repository: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """
+    Exercise the shared shell entry point against real unchanged and modified chart files.
+
+    Args:
+        repository (Path): Two-chart Git fixture on trunk.
+        tmp_path (Path): Destination for comparison evidence.
+        capsys (pytest.CaptureFixture[str]): Inspect clean policy stdout separately from diagnostics.
+
+    Returns:
+        None: Unchanged charts reuse successes, changes and unavailable references test afresh.
+    """
+    report = tmp_path / "comparison.json"
+    arguments = [str(repository / "a"), "--report", str(report)]
+    assert ci_policy(arguments) == 0
+    output = capsys.readouterr()
+    assert output.out == "failed\n" and "status=resolved" in output.err
+    assert json.loads(report.read_text())["rerun"] == "failed"
+    commit(repository, "a/values.yaml", "enabled: false\n")
+    assert ci_policy(arguments) == 0
+    assert capsys.readouterr().out == "all\n"
+    assert ci_policy([*arguments, "--base-ref", "missing-ref"]) == 0
+    assert capsys.readouterr().out == "all\n"
+    assert json.loads(report.read_text())["status"] == "unavailable"
+    assert ci_policy([*arguments, "--incremental", "false", "--rerun", "all"]) == 0
+    assert capsys.readouterr().out == "all\n"
+
+
+@pytest.mark.parametrize("incremental", [False, True])
+@pytest.mark.parametrize("tag", ["CI_COMMIT_TAG", "CIRCLE_TAG", "GITHUB_REF", "GITHUB_REF_TYPE"])
+def test_ci_release_tags_force_new_tests(repository: Path, incremental: bool, tag: str) -> None:
+    """
+    Keep tag runs fresh even when a caller explicitly requests cached failure retries.
+
+    Args:
+        repository (Path): Unchanged chart checkout.
+        incremental (bool): Whether Git-based automatic selection is enabled.
+        tag (str): Provider variable indicating a release tag.
+
+    Returns:
+        None: GitHub, GitLab and CircleCI tags all select a full run.
+    """
+    value = "refs/tags/v1.3.0-rc.1" if tag == "GITHUB_REF" else "tag" if tag == "GITHUB_REF_TYPE" else "v1.3.0-rc.1"
+    assert select_rerun(repository / "a", incremental=incremental, rerun="failed", environment={tag: value}) == "all"
 
 
 @pytest.mark.parametrize("provider", ["github", "gitlab", "circle"])

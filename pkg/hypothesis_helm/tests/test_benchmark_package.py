@@ -54,6 +54,7 @@ def test_benchmark_wheel(tmp_path: Path) -> None:
             "hypothesis-helm-complexity=hypothesis_helm.compiler.passes.complexity:main",
             "hypothesis-helm-kubesec=hypothesis_helm.integrations.kubesec:main",
             "hypothesis-helm-github-action=hypothesis_helm.integrations.github_action:main",
+            "hypothesis-helm-ci-policy=hypothesis_helm.integrations.incremental:main",
         ):
             assert declaration in entry_points.replace(" ", "")
         metadata = Parser().parsestr(archive.read(metadata_name).decode())

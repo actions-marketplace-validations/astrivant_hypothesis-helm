@@ -31,10 +31,22 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - name: Restore chart outcomes and manifests
+        id: outcomes
+        uses: actions/cache/restore@v5
+        with:
+          path: .cache/hypothesis-helm/outcomes
+          key: chart-outcomes-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.kubernetes }}-${{ matrix.shard }}-of-3-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            chart-outcomes-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.kubernetes }}-${{ matrix.shard }}-of-3-
       - uses: ./
         id: hypothesis
         with:
           chart: examples/workload
+          incremental: 'true'
+          cache-dir: .cache/hypothesis-helm/outcomes
+          rerun: ${{ startsWith(github.ref, 'refs/tags/') && 'all' || 'auto' }}
           max-examples: '5'
           schema-validation: 'true'
           schema-version: ${{ matrix.kubernetes }}
@@ -46,6 +58,12 @@ jobs:
           job-index: ${{ matrix.shard }}
           job-total: '3'
           run-id: ${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.kubernetes }}
+      - name: Save chart outcomes and manifests
+        if: ${{ always() && steps.outcomes.outputs.cache-primary-key != '' }}
+        uses: actions/cache/save@v5
+        with:
+          path: .cache/hypothesis-helm/outcomes
+          key: ${{ steps.outcomes.outputs.cache-primary-key }}
       - name: Check shard outputs
         shell: bash
         env:

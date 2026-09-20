@@ -498,7 +498,9 @@ def generate_tests(
     }
     (output / "paths.json").write_text(json.dumps(inventory, indent=2) + "\n")
     relative = os.path.relpath(chart.path, suite_location or output)
-    (output / "chart-source.json").write_text(json.dumps({"chart": relative, "source": source_identity(chart.path)}) + "\n")
+    (output / "chart-source.json").write_text(
+        json.dumps({"chart": relative, "source": source_identity(chart.path), "helm": (options or RenderOptions()).helm}) + "\n"
+    )
     lines = [
         '"""\nVerify generated chart value paths against their inferred contracts.\n"""',
         "from collections.abc import Iterator",

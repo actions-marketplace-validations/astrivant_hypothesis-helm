@@ -207,7 +207,7 @@ def test_binary_cache_keys_are_release_specific(provider: str) -> None:
         return
     if provider == "gitlab":
         caches = [mapping(cache) for cache in sequence(mapping(document["helm-properties"])["cache"])]
-        assert len(caches) == 3  # Helm, optional Kubesec, and the schema cache.
+        assert len(caches) == 4  # Helm, optional Kubesec, schemas, and property outcomes/manifests.
         for tool in ("helm", "kubesec"):
             cache = next(cache for cache in caches if f"-{tool}-" in str(cache["key"]))
             version = "${" + tool.upper() + "_VERSION}"
@@ -216,7 +216,11 @@ def test_binary_cache_keys_are_release_specific(provider: str) -> None:
         return
     job = mapping(mapping(document["jobs"])["test-chart"])
     assert mapping(mapping(job["parameters"])["binary-cache"])["default"] is True
-    conditions = [mapping(mapping(step)["when"]) for step in sequence(job["steps"]) if isinstance(step, dict) and "when" in step]
+    conditions = [
+        mapping(mapping(step)["when"])
+        for step in sequence(job["steps"])
+        if isinstance(step, dict) and "when" in step and mapping(step["when"])["condition"] == "<< parameters.binary-cache >>"
+    ]
     assert len(conditions) == 2 and all(condition["condition"] == "<< parameters.binary-cache >>" for condition in conditions)
     restores = [mapping(mapping(step)["restore_cache"]) for step in sequence(conditions[0]["steps"])]
     saves: list[dict[str, object]] = []
