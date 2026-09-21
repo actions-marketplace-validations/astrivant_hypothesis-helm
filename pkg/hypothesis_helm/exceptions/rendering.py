@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-__all__ = ("ManifestParseError", "RandomInputUnavailable", "RenderFailure")
+__all__ = ("ManifestParseError", "RandomInputUnavailable", "RendererUnavailable", "RenderFailure")
 
 
 if TYPE_CHECKING:
@@ -22,6 +22,12 @@ class ManifestParseError(ValueError):
 class RandomInputUnavailable(ValueError):
     """
     Report unsupported instrumentation or invalid replay without accusing the chart of a defect.
+    """
+
+
+class RendererUnavailable(RandomInputUnavailable):
+    """
+    Identify missing replay support eligible for automatic native fallback, never a malformed tape.
     """
 
 

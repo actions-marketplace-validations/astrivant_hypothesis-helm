@@ -8,7 +8,6 @@
 - [Scan summary](#scan-summary)
 - [Status counts](#status-counts)
 - [Settings](#settings)
-- [Errors](#errors)
 - [Charts](#charts)
   - [bitnami/airflow](#bitnamiairflow)
   - [bitnami/apache](#bitnamiapache)
@@ -126,11 +125,7 @@
   - [bitnami/zipkin](#bitnamizipkin)
   - [bitnami/zookeeper](#bitnamizookeeper)
 - [Appendix: finding codes](#appendix-finding-codes)
-  - [HH1101 - Invalid YAML in rendered output](#hh1101---invalid-yaml-in-rendered-output)
   - [HH2001 - Undocumented values path](#hh2001---undocumented-values-path)
-  - [HH2002 - Unspecified values type](#hh2002---unspecified-values-type)
-  - [HH2003 - Missing values description](#hh2003---missing-values-description)
-  - [HH2004 - No supplied default for a values path](#hh2004---no-supplied-default-for-a-values-path)
   - [HH2006 - Opaque object schema](#hh2006---opaque-object-schema)
 
 </details>
@@ -149,24 +144,24 @@ findings means none in the completed sample, not exhaustive coverage. Testing ti
 Git comparison unavailable; no charts skipped using previous test results.
 
 Directory: /Users/emmadoyle/projects/personal/hypothesis-helm/third_party/bitnami-charts
-Started (Unix epoch): 1789959424
-Started (UTC): 2026-09-21T02:57:04.000+00:00
-Finished (UTC): 2026-09-21T03:53:35.253+00:00
-Run fingerprint (SHA-256): `f4ff5b809c922f7de0763582ba899a95883c56c2b5d6850ed1f435f7cf2dd927`
-Elapsed (wall clock): 3390.34 seconds
-Chart testing: 3302.63 seconds
-Dependency preparation: 85.70 seconds (excluded from testing budgets)
+Started (Unix epoch): 1789968549
+Started (UTC): 2026-09-21T05:29:09.000+00:00
+Finished (UTC): 2026-09-21T05:34:17.633+00:00
+Run fingerprint (SHA-256): `3a94b8c3a4c3548dee7ba8361b6095fe86608d8075b0a9e6a7920b0aff2eeefb`
+Elapsed (wall clock): 308.46 seconds
+Chart testing: 299.98 seconds
+Dependency preparation: 7.69 seconds (excluded from testing budgets)
 Charts discovered: 115
 Scan status: interrupted
 Discovery complete: True
-Unstarted charts: 104
+Unstarted charts: 114
 
 Results record outcomes for the tested sample and selected checks.
 Baseline-only, skipped, blocked, and incomplete charts retain their respective statuses.
 
 ## Status counts
 
-8 time-limit; 2 failed; 1 interrupted; 104 pending.
+1 interrupted; 114 pending.
 
 ## Settings
 
@@ -179,21 +174,13 @@ supplied defaults are tested unchanged. The JSON report records constraints and 
 
 Disabled checks: [HH2006](#hh2006---opaque-object-schema)
 
-## Errors
-
-14 distinct diagnostics across 14 occurrences; 0 repeats grouped.
-Diagnostics and their triggering inputs are grouped under each chart below.
-Up to two examples per diagnostic and six fields per example are shown. Long values and diagnostics are shortened.
-Full inputs, diagnostics, and remaining cases are retained in local run data.
-Selected fields identify the inputs varied by the test. Causal attribution requires further investigation.
-
 ## Charts
 
 ### [bitnami/airflow](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/airflow>)
 
 Overview cell: 01
 
-Status: time-limit | Attempts: 41
+Status: interrupted | Attempts: 1
 
 Audit findings: 1190. Full paths and template references are retained in the JSON report.
 
@@ -205,442 +192,67 @@ Audit findings: 1190. Full paths and template references are retained in the JSO
 - [HH2001](#hh2001---undocumented-values-path) at `$.auth.secretKey`: Undocumented values path (warning)
 - 1184 additional audit findings in JSON.
 
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0000>)
+[Chart artifacts](<bitnami-runs/bitnami-charts_1789968549/0000>)
 
 ### [bitnami/apache](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apache>)
 
 Overview cell: 02
 
-Status: failed | Attempts: 45
-
-Audit findings: 245. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.automountServiceAccountToken`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.enabled`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.maxReplicas`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.minReplicas`: Undocumented values path (warning)
-- 239 additional audit findings in JSON.
-
-#### E001 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ity': None, 'podAntiAffinity': {'preferredDuringSchedulingIgnoredDuringExecution':
-[{'podAffinityTerm': {'labelSelector': {'matchLabels': {'app.kubernetes.io/instance': 'hypothesis', 'app.kubernetes.io/name': 'apache'}},
-'topologyKey': 'kubernetes.io/hostname'}, 'weight': 1}]}, 'nodeAffinity': None}") in "<unicode string>", line 268, column 7: affinity: ^
-(line: 268) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[*].preference | Status: failed
-
-Changed overrides (used together):
-- `$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.__hypothesis_key__.preference = {}`
-Absent from overrides: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution["*"].preference. Defaults may
-still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/f9f902f5f6531d89a05d/report.json>)
-
-#### E002 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... bash\n\n. /opt/bitnami/scripts/libfs.sh\n# We copy the logs folder because it has
-symlinks to stdout and stderr\nif ! is_dir_empty /opt/bitnami/apache/logs; then\n cp -r /opt/bitnami/apache/logs
-/emptydir/app-logs-dir\nfi\n'], 'volumeMounts': [{'name': 'empty-dir', 'mountPath': '/emptydir'}]}]") in "<unicode string>", line 268,
-column 7: initContainers: ^ (line: 268) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.extraPodSpec.initContainers[*].envFrom[*].configMapRef.name | Status: failed
-
-Changed overrides (used together):
-- `$.extraPodSpec.initContainers.__hypothesis_key__.envFrom.__hypothesis_key__.configMapRef.name = null`
-Absent from overrides: $.extraPodSpec.initContainers["*"].envFrom["*"].configMapRef.name. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/841e430e1fc6dd3d3813/report.json>)
-
-#### E003 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... bash\n\n. /opt/bitnami/scripts/libfs.sh\n# We copy the logs folder because it has
-symlinks to stdout and stderr\nif ! is_dir_empty /opt/bitnami/apache/logs; then\n cp -r /opt/bitnami/apache/logs
-/emptydir/app-logs-dir\nfi\n'], 'volumeMounts': [{'name': 'empty-dir', 'mountPath': '/emptydir'}]}]") in "<unicode string>", line 268,
-column 7: initContainers: ^ (line: 268) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.extraPodSpec.initContainers[*].lifecycle.preStop.httpGet.host | Status: failed
-
-Changed overrides (used together):
-- `$.extraPodSpec.initContainers.__hypothesis_key__.lifecycle.preStop.httpGet.host = null`
-Absent from overrides: $.extraPodSpec.initContainers["*"].lifecycle.preStop.httpGet.host. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/2dd9691d68a24b9508d7/report.json>)
-
-#### E004 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... g in "<unicode string>", line 127, column 7: automountServiceAccountToken: false ^ (line:
-127) found duplicate key "volumes" with value "{'__hypothesis_key__': {'projected': {'sources': {'__hypothesis_key__': {'configMap':
-{'name': None}}}}}}" (original value: "[{'name': 'empty-dir', 'emptyDir': {}}]") in "<unicode string>", line 268, column 7: volumes: ^
-(line: 268) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.extraPodSpec.volumes[*].projected.sources[*].configMap.name | Status: failed
-
-Changed overrides (used together):
-- `$.extraPodSpec.volumes.__hypothesis_key__.projected.sources.__hypothesis_key__.configMap.name = null`
-Absent from overrides: $.extraPodSpec.volumes["*"].projected.sources["*"].configMap.name. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/4b92694ee19913118205/report.json>)
-
-#### E006
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ing'}, '$defs': {'type': 'object', 'additionalProperties': {'$dynamicRef': '#meta'}}},
-'$defs': {'anchorString': {'type': 'string', 'pattern': '^[A-Za-z_][-A-Za-z0-9._]*$'}, 'uriString': {'type': 'string', 'format': 'uri'},
-'uriReferenceString': {'type': 'string', 'format': 'uri-reference'}}} On schema['allOf'][87]['properties']['extraVolumes']['items']:
-[{'properties': {'configMap': {'const': None}}, 'required': ['configMap'], 'type': 'object'}]
-```
-
-Phase: $.extraVolumes[*].configMap | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.extraVolumes["*"].configMap. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/cc5529fbbf92a7fdaf55/report.json>)
-
-#### E007
-
-```text
-[Diagnostic shortened; full text in artifacts] ... [87]['properties']['initContainers']['items']: [{'properties': {'env': {'properties':
-{'__hypothesis_key__': {'properties': {'valueFrom': {'properties': {'fieldRef': {'properties': {'apiVersion': {'const': None}}, 'required':
-['apiVersion'], 'type': 'object'}}, 'required': ['fieldRef'], 'type': 'object'}}, 'required': ['valueFrom'], 'type': 'object'}}, 'required':
-['__hypothesis_key__'], 'type': 'object'}}, 'required': ['env'], 'type': 'object'}]
-```
-
-Phase: $.initContainers[*].env[*].valueFrom.fieldRef.apiVersion | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.initContainers["*"].env["*"].valueFrom.fieldRef.apiVersion. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/195c3729323762c13f6e/report.json>)
-
-#### E008
-
-```text
-[Diagnostic shortened; full text in artifacts] ... g': {'type': 'string', 'format': 'uri-reference'}}} On
-schema['allOf'][87]['properties']['initContainers']['items']: [{'properties': {'env': {'properties': {'__hypothesis_key__': {'properties':
-{'valueFrom': {'properties': {'secretKeyRef': {'const': None}}, 'required': ['secretKeyRef'], 'type': 'object'}}, 'required': ['valueFrom'],
-'type': 'object'}}, 'required': ['__hypothesis_key__'], 'type': 'object'}}, 'required': ['env'], 'type': 'object'}]
-```
-
-Phase: $.initContainers[*].env[*].valueFrom.secretKeyRef | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.initContainers["*"].env["*"].valueFrom.secretKeyRef. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/b637fcd9a4553ad4343e/report.json>)
-
-#### E009
-
-```text
-[Diagnostic shortened; full text in artifacts] ... es']['items']: [{'properties': {'ephemeral': {'properties': {'volumeClaimTemplate':
-{'properties': {'metadata': {'properties': {'finalizers': {'properties': {'__hypothesis_key__': {'const': None}}, 'required':
-['__hypothesis_key__'], 'type': 'object'}}, 'required': ['finalizers'], 'type': 'object'}}, 'required': ['metadata'], 'type': 'object'}},
-'required': ['volumeClaimTemplate'], 'type': 'object'}}, 'required': ['ephemeral'], 'type': 'object'}]
-```
-
-Phase: $.extraVolumes[*].ephemeral.volumeClaimTemplate.metadata.finalizers[*] | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.extraVolumes["*"].ephemeral.volumeClaimTemplate.metadata.finalizers["*"]. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/84b7cbef4727fbe2b5ed/report.json>)
-
-#### E010
-
-```text
-[Diagnostic shortened; full text in artifacts] ... : {'type': 'object', 'additionalProperties': {'$dynamicRef': '#meta'}}}, '$defs':
-{'anchorString': {'type': 'string', 'pattern': '^[A-Za-z_][-A-Za-z0-9._]*$'}, 'uriString': {'type': 'string', 'format': 'uri'},
-'uriReferenceString': {'type': 'string', 'format': 'uri-reference'}}} On schema['allOf'][87]['properties']['initContainers']['items']:
-[{'properties': {'imagePullPolicy': {'const': None}}, 'required': ['imagePullPolicy'], 'type': 'object'}]
-```
-
-Phase: $.initContainers[*].imagePullPolicy | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.initContainers["*"].imagePullPolicy. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/fb2ffabaed483f0be9db/report.json>)
-
-#### E011
-
-```text
-[Diagnostic shortened; full text in artifacts] ... tring': {'type': 'string', 'format': 'uri-reference'}}} On
-schema['allOf'][87]['properties']['initContainers']['items']: [{'properties': {'resources': {'properties': {'claims': {'properties':
-{'__hypothesis_key__': {'properties': {'request': {'const': None}}, 'required': ['request'], 'type': 'object'}}, 'required':
-['__hypothesis_key__'], 'type': 'object'}}, 'required': ['claims'], 'type': 'object'}}, 'required': ['resources'], 'type': 'object'}]
-```
-
-Phase: $.initContainers[*].resources.claims[*].request | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.initContainers["*"].resources.claims["*"].request. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/5e0d1ac851d13111f0bc/report.json>)
-
-#### E012
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ring': {'type': 'string', 'format': 'uri'}, 'uriReferenceString': {'type': 'string',
-'format': 'uri-reference'}}} On schema['allOf'][87]['properties']['initContainers']['items']: [{'properties': {'securityContext':
-{'properties': {'windowsOptions': {'properties': {'hostProcess': {'const': None}}, 'required': ['hostProcess'], 'type': 'object'}},
-'required': ['windowsOptions'], 'type': 'object'}}, 'required': ['securityContext'], 'type': 'object'}]
-```
-
-Phase: $.initContainers[*].securityContext.windowsOptions.hostProcess | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.initContainers["*"].securityContext.windowsOptions.hostProcess. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/459a1fa1201a37f10093/report.json>)
-
-#### E013
-
-```text
-[Diagnostic shortened; full text in artifacts] ... $defs': {'anchorString': {'type': 'string', 'pattern': '^[A-Za-z_][-A-Za-z0-9._]*$'},
-'uriString': {'type': 'string', 'format': 'uri'}, 'uriReferenceString': {'type': 'string', 'format': 'uri-reference'}}} On
-schema['allOf'][87]['properties']['extraEnvVars']['items']: [{'properties': {'valueFrom': {'properties': {'configMapKeyRef': {'const':
-None}}, 'required': ['configMapKeyRef'], 'type': 'object'}}, 'required': ['valueFrom'], 'type': 'object'}]
-```
-
-Phase: $.extraEnvVars[*].valueFrom.configMapKeyRef | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.extraEnvVars["*"].valueFrom.configMapKeyRef. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/50595b7a670999624853/report.json>)
-
-#### E014
-
-```text
-[Diagnostic shortened; full text in artifacts] ... '}, 'uriString': {'type': 'string', 'format': 'uri'}, 'uriReferenceString': {'type':
-'string', 'format': 'uri-reference'}}} On schema['allOf'][87]['properties']['sidecars']['items']: [{'properties': {'volumeMounts':
-{'properties': {'__hypothesis_key__': {'properties': {'readOnly': {'const': None}}, 'required': ['readOnly'], 'type': 'object'}},
-'required': ['__hypothesis_key__'], 'type': 'object'}}, 'required': ['volumeMounts'], 'type': 'object'}]
-```
-
-Phase: $.sidecars[*].volumeMounts[*].readOnly | Status: generation-error
-
-Changed overrides (used together):
-- No changed overrides.
-Absent from overrides: $.sidecars["*"].volumeMounts["*"].readOnly. Defaults may still apply.
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0001/paths/4228d4239dad6ef1fafa/report.json>)
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0001>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/apisix](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apisix>)
 
 Overview cell: 03
 
-Status: time-limit | Attempts: 11
-
-Audit findings: 344. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.apiVersions`: Undocumented values path (warning)
-- [HH2002](#hh2002---unspecified-values-type) at `$.controlPlane.args[*]`: Unspecified values type (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.controlPlane.automountServiceAccountToken`: Undocumented values path (warning)
-- [HH2003](#hh2003---missing-values-description) at `$.controlPlane.autoscaling`: Missing values description (info)
-- [HH2003](#hh2003---missing-values-description) at `$.controlPlane.autoscaling.hpa`: Missing values description (info)
-- [HH2003](#hh2003---missing-values-description) at `$.controlPlane.autoscaling.vpa`: Missing values description (info)
-- 338 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0002>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/appsmith](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/appsmith>)
 
 Overview cell: 04
 
-Status: time-limit | Attempts: 24
-
-Audit findings: 543. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.backend.adminEmail`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.backend.adminPassword`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.backend.adminUser`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.backend.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.backend.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.backend.automountServiceAccountToken`: Undocumented values path (warning)
-- 537 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0003>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/argo-cd](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/argo-cd>)
 
 Overview cell: 05
 
-Status: time-limit | Attempts: 21
-
-Audit findings: 1251. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.applicationSet.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.applicationSet.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.applicationSet.clusterAdminAccess`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.applicationSet.clusterRoleRules`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.applicationSet.command`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.applicationSet.containerPorts`: Undocumented values path (warning)
-- 1245 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0004>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/argo-workflows](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/argo-workflows>)
 
 Overview cell: 06
 
-Status: failed | Attempts: 68
-
-Audit findings: 452. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.clusterDomain`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.commonAnnotations`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.commonLabels`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.controller.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.controller.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.controller.automountServiceAccountToken`: Undocumented values path (warning)
-- 446 additional audit findings in JSON.
-
-#### E005 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ...  a mapping in "<unicode string>", line 1511, column 7: securityContext: ^ (line: 1511)
-found duplicate key "securityContext" with value "{'fsGroup': 1001, 'fsGroupChangePolicy': 'Always', 'supplementalGroups': [], 'sysctls':
-[]}" (original value: "{'windowsOptions': {'runAsUserName': None}}") in "<unicode string>", line 1531, column 7: securityContext: ^ (line:
-1531) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName | Status: failed
-
-Changed overrides (used together):
-- `$.mysql.enabled = true (was false)`
-- `$.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName = null`
-
-[Full input and diagnostic](<bitnami-runs/bitnami-charts_1789959424/0005/paths/a11d0d0528bfd4989a4c/report.json>)
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0005>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/aspnet-core](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/aspnet-core>)
 
 Overview cell: 07
 
-Status: time-limit | Attempts: 13
-
-Audit findings: 224. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.appFromExistingPVC.enabled`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.appFromExistingPVC.existingClaim`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.appFromExistingPVC`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.appFromExternalRepo.clone`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.appFromExternalRepo.clone.depth`: Undocumented values path (warning)
-- 218 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0006>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/cadvisor](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cadvisor>)
 
 Overview cell: 08
 
-Status: time-limit | Attempts: 21
-
-Audit findings: 192. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.automountServiceAccountToken`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.clusterDomain`: Undocumented values path (warning)
-- [HH2004](#hh2004---no-supplied-default-for-a-values-path) at `$.clusterDomain`: No supplied default for a values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.command`: Undocumented values path (warning)
-- 186 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0007>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/cassandra](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cassandra>)
 
 Overview cell: 09
 
-Status: time-limit | Attempts: 13
-
-Audit findings: 309. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.automountServiceAccountToken`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cluster.clientEncryption`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cluster.datacenter`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cluster.enableUDF`: Undocumented values path (warning)
-- 303 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0008>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/cert-manager](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cert-manager>)
 
 Overview cell: 10
 
-Status: time-limit | Attempts: 1
-
-Audit findings: 404. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.cainjector.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cainjector.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cainjector.automountServiceAccountToken`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cainjector.command`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cainjector.containerSecurityContext`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cainjector.containerSecurityContext.allowPrivilegeEscalation`: Undocumented values path
-  (warning)
-- 398 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0009>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/chainloop](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/chainloop>)
 
 Overview cell: 11
 
-Status: interrupted | Attempts: 1
-
-Audit findings: 643. Full paths and template references are retained in the JSON report.
-
-- [HH2001](#hh2001---undocumented-values-path) at `$.apiVersions`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cas.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cas.automountServiceAccountToken`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cas.autoscaling`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cas.autoscaling.hpa`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.cas.autoscaling.hpa.enabled`: Undocumented values path (warning)
-- 637 additional audit findings in JSON.
-
-[Chart artifacts](<bitnami-runs/bitnami-charts_1789959424/0010>)
+Status: pending | Attempts: N/A
 
 ### [bitnami/cilium](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/cilium>)
 
@@ -1271,14 +883,6 @@ Status: pending | Attempts: N/A
 HH codes identify finding categories. E001-style numbers identify individual diagnostics within this report.
 Severities below are defaults; configured overrides are shown with the findings above.
 
-### HH1101 - Invalid YAML in rendered output
-
-Default severity: **error** | Category: manifest | Evidence type: violation
-
-The YAML parser rejects rendered output, or Helm reports a YAML parse error.
-
-Suggested action: Inspect the failing YAML and template interpolation, including quoting and indentation.
-
 ### HH2001 - Undocumented values path
 
 Default severity: **warning** | Category: values | Evidence type: warning
@@ -1286,31 +890,6 @@ Default severity: **warning** | Category: values | Evidence type: warning
 The audit finds a values path with no matching schema declaration.
 
 Suggested action: Document the path in values.schema.json, including its accepted values.
-
-### HH2002 - Unspecified values type
-
-Default severity: **warning** | Category: values | Evidence type: warning
-
-A schema path declares no type, enum or const.
-
-Suggested action: Declare the accepted type or a finite set of values.
-
-### HH2003 - Missing values description
-
-Default severity: **info** | Category: values | Evidence type: warning
-
-A typed schema path has no description.
-
-Suggested action: Describe the field's behavior and any requirements shared with other fields.
-
-### HH2004 - No supplied default for a values path
-
-Default severity: **warning** | Category: values | Evidence type: warning
-
-A discovered path is absent from the original values file.
-
-Suggested action: Supply a default or document when users must provide the field. Render the relevant configurations to check its
-requirements.
 
 ### HH2006 - Opaque object schema
 

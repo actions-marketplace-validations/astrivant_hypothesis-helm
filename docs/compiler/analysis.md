@@ -307,7 +307,7 @@ dependency schemas remain authoritative, and all predictions involving forwarded
 require native Helm verification, even after earlier candidates were confirmed.
 
 Clock, randomness and cluster lookups keep their normal Helm behavior by default. The optional
-[`--random-inputs` mode](functions.md#testing-random-outputs) tests replayable `randAlphaNum` outputs with the pinned Helm SDK.
+[`--renderer-policy` modes](functions.md#testing-random-outputs) tests replayable `randAlphaNum` outputs with the pinned Helm SDK.
 It does not inject a clock or simulate a Kubernetes cluster.
 An attached offline renderer context allows `lookup` to return its native empty map;
 disabled DNS similarly allows an empty `getHostByName` result. These are fixed

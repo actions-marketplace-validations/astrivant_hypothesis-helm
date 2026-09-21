@@ -12,7 +12,17 @@ from attrs import frozen
 
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
-__all__ = ("BUILTINS", "Builtin", "EFFECTS", "MUTATIONS", "NATIVE_STATE", "UNRESOLVED_EFFECTS", "inventory", "reference")
+__all__ = (
+    "BUILTINS",
+    "Builtin",
+    "EFFECTS",
+    "MUTATIONS",
+    "NATIVE_STATE",
+    "UNRESOLVED_EFFECTS",
+    "inventory",
+    "reference",
+    "runtime_dependency",
+)
 
 
 @frozen
@@ -85,6 +95,37 @@ EFFECTS = {
 UNRESOLVED_EFFECTS = frozenset(name for name, spec in BUILTINS.items() if spec.unresolved)
 MUTATIONS = EFFECTS["mutation"]
 NATIVE_STATE = frozenset.union(*(members for effect, members in EFFECTS.items() if effect not in {"mutation", "rejection", "dynamic-code"}))
+
+
+def runtime_dependency(name: str) -> str | None:
+    """
+    Explain recognized runtime effects separately from missing function implementations.
+
+    Args:
+        name (str): Function whose result the static evaluator cannot establish.
+
+    Returns:
+        str | None: Source-derived explanation, or None when no runtime dependency was identified.
+    """
+    spec = BUILTINS.get(name)
+    if spec is None:
+        return None
+    labels = {
+        "randomness": "randomness",
+        "clock-or-timezone": "the clock or timezone",
+        "external-state": "external state",
+    }
+    effects = [label for effect, label in labels.items() if effect in spec.effects]
+    if not effects:
+        return None
+    # Sampling supplies concrete execution inputs, never a universal fact for a
+    # rejection guard. Keep this distinction even while a replay tape is active.
+    if name == "randAlphaNum":
+        return (
+            "randAlphaNum produces a runtime random string; --renderer-policy auto or strict supports sampling and replay, "
+            "but sampled strings cannot prove a static rejection"
+        )
+    return f"{name} may depend on {', '.join(effects)}; its result requires native rendering"
 
 
 def reference() -> str:

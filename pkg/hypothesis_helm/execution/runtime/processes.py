@@ -7,6 +7,7 @@ import signal
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
 
@@ -75,6 +76,7 @@ class Processes:
         stderr: TextIO | None = None,
         input: str | None = None,
         timeout: float | None = None,
+        exchange: Callable[[subprocess.Popen[str]], tuple[str, str]] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         """
         Run a child in a new session and retain ownership until it has exited.
@@ -91,6 +93,7 @@ class Processes:
             stderr (TextIO | None): Destination for uncaptured child stderr.
             input (str | None): Text written to the child's standard input.
             timeout (float | None): Communication deadline in seconds, excluding cleanup.
+            exchange (Callable[[subprocess.Popen[str]], tuple[str, str]] | None): Interactive protocol sharing normal child ownership.
 
         Returns:
             subprocess.CompletedProcess[str]: Collected process result.
@@ -107,14 +110,20 @@ class Processes:
                             cwd=cwd,
                             env=dict(process_env) if env is None else env,
                             text=text,
-                            stdin=subprocess.PIPE if input is not None else None,
-                            stdout=subprocess.PIPE if capture_output else stdout,
-                            stderr=subprocess.PIPE if capture_output else stderr,
+                            stdin=subprocess.PIPE if input is not None or exchange is not None else None,
+                            stdout=subprocess.PIPE if capture_output or exchange is not None else stdout,
+                            stderr=subprocess.PIPE if capture_output or exchange is not None else stderr,
                             pass_fds=pass_fds,
                             start_new_session=True,
                         )
                         self._children.add(child)
-                output, errors = child.communicate(input=input, timeout=timeout)
+                if exchange is None:
+                    output, errors = child.communicate(input=input, timeout=timeout)
+                else:
+                    started = time.monotonic()
+                    output, errors = exchange(child)
+                    remaining = None if timeout is None else max(0, timeout - (time.monotonic() - started))
+                    child.wait(timeout=remaining)
                 with self._shutdown_lock:
                     # A completed parent can leave descendants in its owned session.
                     # Ownership ends only after the complete group has been stopped.

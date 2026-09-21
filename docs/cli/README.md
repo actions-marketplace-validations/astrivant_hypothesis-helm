@@ -202,7 +202,7 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
-                            [--random-inputs]
+                            [--renderer-policy {auto,native,strict}]
                             [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
                             SOURCE
@@ -300,8 +300,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
-  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
-                        the pinned Helm SDK
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -326,7 +327,7 @@ usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMP
                                 [--export-minimal-values [FILENAME]]
                                 [--log-color [{auto,always,never}]] [--log-file PATH]
                                 [--config CONFIG] [--character-sets {ascii,unicode}]
-                                [--random-inputs]
+                                [--renderer-policy {auto,native,strict}]
                                 [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                                 [--ignore CODE] [--disable-codes CODE[,CODE...]]
                                 chart
@@ -364,8 +365,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
-  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
-                        the pinned Helm SDK
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -390,7 +392,7 @@ usage: helm hypothesis audit [-h] [--fail [{info,warning,error}]]
                              [--export-minimal-values [FILENAME]]
                              [--log-color [{auto,always,never}]] [--log-file PATH]
                              [--config CONFIG] [--character-sets {ascii,unicode}]
-                             [--random-inputs]
+                             [--renderer-policy {auto,native,strict}]
                              [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                              [--ignore CODE] [--disable-codes CODE[,CODE...]]
                              chart
@@ -431,8 +433,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
-  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
-                        the pinned Helm SDK
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -463,7 +466,7 @@ usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
                            [--export-suppressions] [--fail [{info,warning,error}]]
                            [--log-color [{auto,always,never}]] [--log-file PATH]
                            [--config CONFIG] [--character-sets {ascii,unicode}]
-                           [--random-inputs]
+                           [--renderer-policy {auto,native,strict}]
                            [--yaml-parser {ruamel,ruamel-safe,pyyaml}] [--ignore CODE]
                            [--disable-codes CODE[,CODE...]]
                            suite
@@ -530,8 +533,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
-  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
-                        the pinned Helm SDK
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -583,7 +587,7 @@ usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
-                            [--random-inputs]
+                            [--renderer-policy {auto,native,strict}]
                             [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
                             [chart]
@@ -712,8 +716,9 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
-  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
-                        the pinned Helm SDK
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser

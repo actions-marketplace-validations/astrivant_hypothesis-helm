@@ -42,6 +42,8 @@ class Chart:
         dependency_model (Dependencies | None): Shared dependency snapshot for discovery, generation and child-default coalescing.
         domains (InputDomains | None): Lazily resolved generation policy, independent of the source schema.
         generated_schema (dict[str, object] | None): Cached default generation contract for this chart instance.
+        renderer_effects (bool | None): Cached potential runtime effects in this prepared source snapshot.
+        renderer_statistics (dict[str, object]): Observed execution modes and native fallback reasons for this chart job.
     """
 
     path: Path
@@ -50,6 +52,8 @@ class Chart:
     dependency_model: Dependencies | None = None
     domains: InputDomains | None = field(default=None, init=False)
     generated_schema: dict[str, object] | None = field(default=None, init=False)
+    renderer_effects: bool | None = field(default=None, init=False)
+    renderer_statistics: dict[str, object] = field(factory=dict, init=False)
 
     def require_source(self) -> None:
         """

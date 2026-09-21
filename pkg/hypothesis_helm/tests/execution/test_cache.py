@@ -317,3 +317,25 @@ def test_concurrent_cache_publication(tmp_path: Path) -> None:
     merge_outcomes(target, read_outcomes(target), {"conflict": "passed"})
     assert read_outcomes(target)["conflict"] == "passed"
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_preparing_renderer_invalidates_native_fallback_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Retest automatic-mode cases when controlled execution becomes available after a build.
+
+    Args:
+        tmp_path (Path): Isolated working directory and suite.
+        monkeypatch (pytest.MonkeyPatch): Keep the renderer identity fixed while publishing its executable.
+
+    Returns:
+        None: Cached native-mode success cannot replace newly available controlled testing.
+    """
+    from hypothesis_helm.compiler.randomness import toolchain
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(toolchain, "identity", lambda: "same-reviewed-sources")
+    before = fingerprint(tmp_path, 0, None, "none")
+    renderer = tmp_path / ".cache/random-renderer/same-reviewed-sources/renderer"
+    renderer.parent.mkdir(parents=True)
+    renderer.touch()
+    assert fingerprint(tmp_path, 0, None, "none") != before

@@ -36,6 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--go", default="go", help="Go executable used for the optional renderer build")
     parser.add_argument("--values", type=Path, help="saved values.json overrides")
     parser.add_argument("--random-inputs", type=Path, help="saved random-inputs.json tape")
+    parser.add_argument("--helm", default="helm", help="Helm executable whose version must match the controlled SDK")
     parser.add_argument("--timeout", type=float, default=30)
     parser.add_argument("--release", default="hypothesis")
     parser.add_argument("--namespace", default="default")
@@ -56,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
                     chart,
                     mapping(json.loads(args.values.read_text())),
                     timeout=args.timeout,
+                    helm=args.helm,
                     release=args.release,
                     namespace=args.namespace,
                     kube_version=args.kube_version,

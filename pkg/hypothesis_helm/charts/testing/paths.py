@@ -138,11 +138,11 @@ def check_paths(
         dict[str, object]: Visited, completed, incomplete, and remaining path evidence.
     """
     traversal_strategy = validate_strategy(traversal_strategy)
+    from hypothesis_helm.compiler.randomness.policy import prepare as prepare_random_renderer
     from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
-    from hypothesis_helm.compiler.randomness.toolchain import build as prepare_random_renderer
 
     if random_enabled(chart):
-        prepare_random_renderer()
+        prepare_random_renderer(chart, helm)
     if not math.isfinite(budget) or budget <= 0 or max_examples < 1 or timeout <= 0 or jobs < 1:
         raise ValueError("budget, max_examples, and timeout must be positive")
     from hypothesis_helm.schemas.opaque import warn_opaque
@@ -190,6 +190,7 @@ def check_paths(
             {
                 "sampling": sampling_report,
                 "seed": seed,
+                "renderer_observations": chart.renderer_statistics,
                 "traversal_strategy": traversal_strategy,
                 "traversal_algorithm": ALGORITHM,
                 "eligible_paths": eligible_paths,
@@ -407,6 +408,7 @@ def check_paths(
         "workers": min(jobs, len(ordered)),
         "worker_model": "shared chart path queue",
         "seed": seed,
+        "renderer_observations": chart.renderer_statistics,
         "traversal_strategy": traversal_strategy,
         "traversal_algorithm": ALGORITHM,
         "traversal": {

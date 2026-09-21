@@ -176,7 +176,9 @@ def input_summary(evidence: dict[str, object]) -> list[str]:
     if isinstance(absent, list) and absent:
         lines.append("Absent from overrides: " + ", ".join(str(path) for path in absent[:6]) + ". Defaults may still apply.")
     randomness = evidence.get("random_inputs")
-    if isinstance(randomness, dict) and isinstance(randomness.get("draws"), list):
+    if isinstance(randomness, dict) and randomness.get("replayable") is False:
+        lines.extend(["", "Native renderer fallback; exact random replay unavailable: " + str(randomness.get("fallback_reason", ""))])
+    elif isinstance(randomness, dict) and isinstance(randomness.get("draws"), list):
         draws = randomness["draws"]
         lines.extend(["", "Renderer random inputs (replay tape in artifacts):"])
         for draw in draws[:6]:

@@ -35,8 +35,10 @@ from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs, RandomOutput
+from hypothesis_helm.compiler.randomness.policy import observed as renderer_observed
+from hypothesis_helm.compiler.randomness.policy import policy as renderer_policy
+from hypothesis_helm.compiler.randomness.policy import prepare as prepare_random_renderer
 from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
-from hypothesis_helm.compiler.randomness.toolchain import build as prepare_random_renderer
 from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RandomInputUnavailable, RenderFailure
@@ -169,7 +171,7 @@ def check_chart(
         chart = Chart.load(chart)
     test_random_inputs = random_enabled(chart)
     if test_random_inputs and not dry_run:
-        prepare_random_renderer()
+        prepare_random_renderer(chart, helm)
     if max_examples < 1 or timeout <= 0:
         raise ValueError("max_examples and timeout must be positive")
     if sampling.percent < 100 and permutations is None and not exhaustive:
@@ -279,6 +281,9 @@ def check_chart(
         coverage["renderer_randomness"] = {
             "renderer": "helm-4.3.0",
             "function": "randAlphaNum",
+            "policy": renderer_policy(chart),
+            "native_fallback_possible": renderer_policy(chart) == "auto",
+            "observed": chart.renderer_statistics,
             "mode": "sampled" if finite_values is None else "fixed representative per values configuration",
             "random_space_exhaustive": False,
         }
@@ -329,6 +334,9 @@ def check_chart(
                 if random_case is not None and isinstance(output, RandomOutput):
                     random_case.records = [mapping(row) for row in sequence(output.random_inputs["draws"])]
                     random_case.context = mapping(output.random_inputs["context"])
+                    reason = output.random_inputs.get("fallback_reason")
+                    random_case.fallback_reason = str(reason) if reason is not None else None
+                    renderer_observed(chart, output.random_inputs)
             except TimeoutError as exc:
                 raise TimeLimitReached() from exc
         if record_hashes:

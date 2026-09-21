@@ -45,6 +45,41 @@ def test_inventory_covers_every_upstream_entry() -> None:
     assert result("aFutureUnreviewedFunction", [Literal("example")]) is None
 
 
+@pytest.mark.parametrize(
+    ("expression", "reason"),
+    [
+        ("randAlphaNum 8", "--renderer-policy auto or strict supports sampling and replay"),
+        ("randAlpha 8", "randomness"),
+        ("now", "clock or timezone"),
+    ],
+)
+def test_runtime_effects_explain_static_analysis_limits(tmp_path: Path, expression: str, reason: str) -> None:
+    """
+    Identify supported native effects without assigning a sampled result to a rejection guard.
+
+    Args:
+        tmp_path (Path): Template-only chart containing a runtime-dependent condition.
+        expression (str): Call or zero-argument builtin controlling rejection.
+        reason (str): Explanation expected from the pinned effect inventory.
+
+    Returns:
+        None: Analysis retains the candidate, deduplicates its warning and explains the runtime dependency.
+    """
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "templates/runtime.yaml").write_text("{{ if " + expression + ' }}{{ fail "runtime-dependent failure" }}{{ end }}')
+    contracts = Contracts.build(tmp_path)
+    assert contracts.predict({}) is None
+    assert contracts.predict({}) is None
+    assert len(contracts.fallbacks) == 1
+    diagnostic = contracts.fallbacks[0]
+    assert diagnostic["code"] == "HH2007"
+    assert reason in str(diagnostic["reason"])
+    assert "unsupported function" not in str(diagnostic["reason"])
+    assert "unsupported expression" not in str(diagnostic["reason"])
+    assert builtins.runtime_dependency("unregisteredFunction") is None
+    assert builtins.runtime_dependency("upper") is None
+
+
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
 def test_pinned_functions_are_recognized_by_native_helm(tmp_path: Path) -> None:
     """

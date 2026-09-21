@@ -14,6 +14,7 @@ from hypothesis.strategies import DataObject
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.testing.runner import check_chart
+from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs, domain
 from hypothesis_helm.compiler.randomness.rendering import enabled
 from hypothesis_helm.compiler.randomness.toolchain import build
@@ -78,7 +79,7 @@ def template(chart: Chart, expression: str) -> None:
     )
 
 
-def configure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str = "hypothesis:\n  random_inputs: true\n") -> None:
+def configure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str = "hypothesis:\n  renderer_policy: strict\n") -> None:
     """
     Install an explicit generation policy for one integration test.
 
@@ -266,6 +267,35 @@ def test_seeded_shrinkable_draws(random_chart: Chart) -> None:
     assert all(len(value) == 3 for value in results[0])
 
 
+@pytest.mark.parametrize("value", ["0", "A"])
+def test_random_guard_remains_unknown_until_rendered(random_chart: Chart, value: str) -> None:
+    """
+    Keep static analysis independent of synthetic draws even while their renderer context is active.
+
+    Args:
+        random_chart (Chart): Chart using the native random-input renderer.
+        value (str): Controlled random string selecting the successful or failing branch.
+
+    Returns:
+        None: Analysis draws nothing and predicts no rejection; rendering still visits either branch.
+    """
+    template(
+        random_chart,
+        '{{ $token := randAlphaNum 1 }}{{ if eq $token "0" }}{{ fail "zero token" }}{{ end }}{{ $token | quote }}',
+    )
+    contracts = Contracts.build(random_chart.path)
+    with RandomInputs(lambda strategy, label: value) as case:
+        assert contracts.predict({"count": 1}) is None
+        assert not case.records
+        assert "sampled strings cannot prove a static rejection" in str(contracts.fallbacks)
+        if value == "0":
+            with pytest.raises(RenderFailure, match="zero token"):
+                render(random_chart, {"count": 1}, stream=False)
+        else:
+            assert render(random_chart, {"count": 1}, stream=False)[0]["data"] == {"token": "A"}
+        assert case.records[0]["value"] == value
+
+
 def test_scan_failures_save_synthetic_replay(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Find and shrink a chart defect driven only by random output and preserve replay data beside values.
@@ -282,7 +312,7 @@ def test_scan_failures_save_synthetic_replay(random_chart: Chart, tmp_path: Path
         random_chart, '{{ $token := randAlphaNum 1 }}{{ if ne $token "0" }}{{ fail "random branch defect" }}{{ end }}{{ $token | quote }}'
     )
     config = tmp_path / "policy.yaml"
-    config.write_text("hypothesis:\n  random_inputs: true\n")
+    config.write_text("hypothesis:\n  renderer_policy: strict\n")
     monkeypatch.setenv(ENVIRONMENT, json.dumps(load_policy(config)))
     refresh_env()
     result = check_chart(random_chart, max_examples=12, random_seed=4, artifact_dir=tmp_path / "artifacts")
@@ -430,7 +460,7 @@ def test_unsupported_effects_and_budgets_are_not_chart_defects(
     from hypothesis_helm.charts.testing.paths import check_paths
 
     template(random_chart, expression)
-    configure(tmp_path, monkeypatch, "hypothesis:\n  random_inputs: true\ncompiler:\n  max_string_chars: 4\n")
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: strict\ncompiler:\n  max_string_chars: 4\n")
     result = check_chart(random_chart, max_examples=2)
     assert result["status"] == "unavailable", result
     assert "error" not in result
@@ -475,18 +505,18 @@ def test_chart_scoped_configuration(random_chart: Chart, tmp_path: Path, monkeyp
         monkeypatch,
         dedent("""
         hypothesis:
-          random_inputs: true
+          renderer_policy: strict
         input_constraints:
           - charts: [random-test]
             path: $
             hypothesis:
-              random_inputs: false
+              renderer_policy: native
         """),
     )
     assert not enabled(random_chart)
     for invalid in (
-        "hypothesis:\n  random_inputs: 1\n",
-        "input_constraints:\n  - path: $.count\n    hypothesis:\n      random_inputs: true\n",
+        "hypothesis:\n  renderer_policy: 1\n",
+        "input_constraints:\n  - path: $.count\n    hypothesis:\n      renderer_policy: strict\n",
     ):
         with pytest.raises(ValueError):
             configure(tmp_path, monkeypatch, invalid)
@@ -574,3 +604,393 @@ def test_dependency_loading_order_does_not_change_replay(random_chart: Chart) ->
     for _ in range(8):
         with RandomInputs.from_document(case.document()):
             assert render(random_chart, {}, stream=False) == expected
+
+
+def test_auto_mixed_effect_fallback_is_visible_and_not_replayable(
+    random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """
+    Drop an aborted draw tape before rerendering mixed random and clock effects natively.
+
+    Args:
+        random_chart (Chart): Native chart fixture.
+        tmp_path (Path): Configuration location.
+        monkeypatch (pytest.MonkeyPatch): Configure automatic execution.
+        caplog (pytest.LogCaptureFixture): Observed fallback diagnostics.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.compiler.randomness.model import RandomOutput
+
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
+    template(random_chart, '{{ printf "%s:%s" (randAlphaNum 3) (now | date "2006") | quote }}')
+    case = RandomInputs(lambda strategy, label: "AAA")
+    with case:
+        output = render_output(random_chart, {}, timeout=10)
+    assert isinstance(output, RandomOutput)
+    assert output.random_inputs["replayable"] is False
+    assert output.random_inputs["draws"] == []
+    assert case.records == []
+    assert "native effect: now" in caplog.text
+    assert "using native Helm" in caplog.text
+    assert random_chart.renderer_statistics["native_renders"] == 1
+    with pytest.raises(RandomInputUnavailable, match="no exact random replay"):
+        RandomInputs.from_document(output.random_inputs)
+
+
+def test_auto_default_detects_random_calls(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Activate controlled inputs without an explicit opt-in while leaving ordinary charts native.
+
+    Args:
+        random_chart (Chart): Native fixture.
+        tmp_path (Path): Empty configuration location.
+        monkeypatch (pytest.MonkeyPatch): Install the empty policy.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.compiler.randomness.model import RandomOutput
+
+    configure(tmp_path, monkeypatch, "{}\n")
+    template(random_chart, "{{ randAlphaNum 3 | quote }}")
+    assert enabled(random_chart)
+    output = render_output(random_chart, {}, timeout=10)
+    assert isinstance(output, RandomOutput)
+    assert output.random_inputs["replayable"] is True
+    assert len(sequence(output.random_inputs["draws"])) == 1
+    template(random_chart, '"constant"')
+    plain = Chart.load(random_chart.path)
+    assert not enabled(plain)
+    assert not isinstance(render_output(plain, {}, timeout=10), RandomOutput)
+
+
+def test_auto_fallback_does_not_hide_native_chart_failure(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Preserve real chart errors and explicitly mark their native output as uncontrolled.
+
+    Args:
+        random_chart (Chart): Native fixture.
+        tmp_path (Path): Policy location.
+        monkeypatch (pytest.MonkeyPatch): Set automatic execution.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
+    template(random_chart, '{{ now }}{{ fail "real chart defect" }}')
+    with pytest.raises(RenderFailure, match="real chart defect") as caught:
+        render(random_chart, {}, timeout=10, stream=False)
+    assert mapping(caught.value.random_inputs)["replayable"] is False
+
+
+def test_strict_replay_never_falls_back_on_effects(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Require complete control for imported tapes even when chart policy allows automatic fallback.
+
+    Args:
+        random_chart (Chart): Native fixture.
+        tmp_path (Path): Policy location.
+        monkeypatch (pytest.MonkeyPatch): Set automatic execution.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
+    template(random_chart, "{{ now | quote }}")
+    with RandomInputs(replay=[]), pytest.raises(RandomInputUnavailable, match="native effect: now"):
+        render(random_chart, {}, timeout=10, stream=False)
+    assert not random_chart.renderer_statistics
+
+
+@pytest.mark.parametrize("mode", ["auto", "strict"])
+def test_version_mismatch_policy(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    """
+    Fall back only in automatic mode when the selected Helm differs from the reviewed SDK.
+
+    Args:
+        random_chart (Chart): Native fixture.
+        tmp_path (Path): Policy location.
+        monkeypatch (pytest.MonkeyPatch): Simulate a different selected Helm version.
+        mode (str): Requested execution policy.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.compiler.randomness.model import RandomOutput
+
+    configure(tmp_path, monkeypatch, f"hypothesis:\n  renderer_policy: {mode}\n")
+    template(random_chart, "{{ randAlphaNum 3 | quote }}")
+    monkeypatch.setattr("hypothesis_helm.compiler.randomness.policy._version", lambda *args: "4.2.0")
+    if mode == "strict":
+        with pytest.raises(RandomInputUnavailable, match="differs"):
+            render_output(random_chart, {}, timeout=10)
+    else:
+        output = render_output(random_chart, {}, timeout=10)
+        assert isinstance(output, RandomOutput)
+        assert output.random_inputs["replayable"] is False
+        assert "4.2.0" in str(output.random_inputs["fallback_reason"])
+
+
+def test_auto_missing_helper_uses_native_without_building(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Avoid unbounded toolchain installation during an automatically selected chart render.
+
+    Args:
+        random_chart (Chart): Native fixture.
+        tmp_path (Path): Policy location.
+        monkeypatch (pytest.MonkeyPatch): Hide the prepared helper.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.compiler.randomness.model import RandomOutput
+
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
+    template(random_chart, "{{ randAlphaNum 3 | quote }}")
+    monkeypatch.setattr("hypothesis_helm.compiler.randomness.rendering.identity", lambda: "missing-helper")
+    output = render_output(random_chart, {}, timeout=10)
+    assert isinstance(output, RandomOutput)
+    assert output.random_inputs["replayable"] is False
+    assert "not prepared" in str(output.random_inputs["fallback_reason"])
+
+
+def test_native_policy_skips_controlled_execution(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Leave ordinary Helm in charge without probing or building a controlled renderer.
+
+    Args:
+        random_chart (Chart): Native fixture.
+        tmp_path (Path): Policy location.
+        monkeypatch (pytest.MonkeyPatch): Set native execution.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    from unittest.mock import Mock
+
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.compiler.randomness.model import RandomOutput
+
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: native\n")
+    template(random_chart, "{{ randAlphaNum 3 | quote }}")
+    controlled = Mock(side_effect=AssertionError("Native mode must not invoke the SDK"))
+    monkeypatch.setattr("hypothesis_helm.compiler.randomness.rendering.render", controlled)
+    assert not isinstance(render_output(random_chart, {}, timeout=10), RandomOutput)
+    controlled.assert_not_called()
+
+
+def test_streamed_draws_use_one_owned_render(random_chart: Chart) -> None:
+    """
+    Request many independent values without rendering every preceding prefix again.
+
+    Args:
+        random_chart (Chart): Native fixture.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    from unittest.mock import patch
+
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.execution.runtime.processes import Processes
+
+    template(random_chart, "{{ range until 24 }}{{ randAlphaNum 3 }}{{ end }}")
+    owner = Processes()
+    with patch.object(Processes, "run", autospec=True, wraps=None, side_effect=Processes.run) as calls:
+        with RandomInputs(lambda strategy, label: "ABC") as case:
+            output = render_output(random_chart, {}, timeout=10, processes=owner)
+    assert "ABC" * 24 in output
+    assert len(case.records) == 24
+    renders = [call for call in calls.call_args_list if "exchange" in call.kwargs]
+    assert len(renders) == 1
+    assert not owner._children
+
+
+def test_interrupt_joins_streaming_renderer(random_chart: Chart) -> None:
+    """
+    Keep ownership until a renderer blocked on a draw is joined after user interruption.
+
+    Args:
+        random_chart (Chart): Native fixture.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    from hypothesis.strategies import SearchStrategy
+
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.execution.runtime.processes import Processes
+
+    def interrupt(strategy: SearchStrategy[str], label: str) -> str:
+        """
+        Simulate cancellation while Hypothesis is being asked for another value.
+
+        Args:
+            strategy (SearchStrategy[str]): Requested string domain.
+            label (str): Native source identity.
+
+        Returns:
+            str: Never returned because the draw is interrupted.
+        """
+        raise KeyboardInterrupt
+
+    template(random_chart, "{{ randAlphaNum 3 }}")
+    owner = Processes()
+    with RandomInputs(interrupt), pytest.raises(KeyboardInterrupt):
+        render_output(random_chart, {}, timeout=10, processes=owner)
+    assert not owner._children
+
+
+def test_unreached_native_effect_does_not_prevent_replay(random_chart: Chart) -> None:
+    """
+    Permit guarded clocks when the executed branch only consumes controlled random values.
+
+    Args:
+        random_chart (Chart): Native fixture.
+
+    Returns:
+        None: Assertions establish the execution-policy contract.
+    """
+    template(random_chart, "{{ if false }}{{ now }}{{ end }}{{ randAlphaNum 3 | quote }}")
+    with RandomInputs() as case:
+        output = render(random_chart, {}, timeout=10, stream=False)
+    assert case.document()["replayable"] is True
+    with RandomInputs.from_document(case.document()):
+        assert render(random_chart, {}, timeout=10, stream=False) == output
+
+
+def test_stream_timeout_joins_child_group(tmp_path: Path) -> None:
+    """
+    Stop a renderer that stalls after requesting a draw and join its descendants.
+
+    Args:
+        tmp_path (Path): Child script and process identity location.
+
+    Returns:
+        None: The deadline is bounded and no process ownership remains.
+    """
+    import subprocess
+    import sys
+    import time
+
+    from hypothesis_helm.compiler.randomness.protocol import exchange
+    from hypothesis_helm.execution.runtime.processes import Processes
+
+    helper = tmp_path / "stalled.py"
+    helper.write_text(
+        dedent(
+            """
+            import json
+            import subprocess
+            import sys
+            import time
+            json.loads(sys.stdin.readline())
+            child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])
+            print(json.dumps({'request': {'path': 'draw', 'length': 1}}), flush=True)
+            json.loads(sys.stdin.readline())
+            time.sleep(60)
+            """
+        )
+    )
+    owner = Processes()
+    started = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        owner.run(
+            [sys.executable, str(helper)],
+            exchange=lambda child: exchange(child, {}, lambda response: {"value": "A"}, started + 0.5),
+            timeout=0.5,
+        )
+    assert time.monotonic() - started < 5
+    assert not owner._children
+
+
+def test_fallback_uses_remaining_budget(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Deduct the controlled attempt before a native fallback starts.
+
+    Args:
+        random_chart (Chart): Native fixture.
+        tmp_path (Path): Policy location.
+        monkeypatch (pytest.MonkeyPatch): Replace only the controlled attempt and observe native timeout.
+
+    Returns:
+        None: Native rendering receives only the unused portion of the case budget.
+    """
+    import time
+    from unittest.mock import patch
+
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.exceptions.rendering import RendererUnavailable
+    from hypothesis_helm.execution.runtime.processes import Processes
+
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
+    template(random_chart, "{{ randAlphaNum 3 | quote }}")
+
+    def unavailable(*args: object, **kwargs: object) -> str:
+        """
+        Simulate a controlled attempt that consumes some time before finding an unsupported effect.
+
+        Args:
+            *args (object): Renderer arguments.
+            **kwargs (object): Renderer options.
+
+        Returns:
+            str: Never returned because this effect is unavailable.
+        """
+        time.sleep(0.05)
+        raise RendererUnavailable("unsupported effect")
+
+    monkeypatch.setattr("hypothesis_helm.compiler.randomness.rendering.render", unavailable)
+    with patch.object(Processes, "run", autospec=True, side_effect=Processes.run) as calls:
+        render_output(random_chart, {}, timeout=10)
+    assert 0 < calls.call_args.kwargs["timeout"] < 9.98
+
+
+def test_truncated_stream_is_not_native_fallback(tmp_path: Path) -> None:
+    """
+    Refuse a partial protocol rather than silently treating a broken renderer as an unsupported effect.
+
+    Args:
+        tmp_path (Path): Temporary command workspace.
+
+    Returns:
+        None: EOF is a protocol error and all owned children are joined.
+    """
+    import sys
+    import time
+
+    from hypothesis_helm.compiler.randomness.protocol import exchange
+    from hypothesis_helm.execution.runtime.processes import Processes
+
+    owner = Processes()
+    with pytest.raises(RandomInputUnavailable, match="without a complete result"):
+        owner.run(
+            [sys.executable, "-c", "import sys; sys.stdin.readline()"],
+            exchange=lambda child: exchange(child, {}, lambda response: None, time.monotonic() + 5),
+            timeout=5,
+        )
+    assert not owner._children
+
+
+def test_samples_cannot_enable_equivalence_pruning(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Keep finite random representatives out of proofs covering all possible renderer draws.
+
+    Args:
+        random_chart (Chart): Finite values fixture.
+        tmp_path (Path): Automatic policy location.
+        monkeypatch (pytest.MonkeyPatch): Set chart policy.
+
+    Returns:
+        None: Pruning reports a disabled proof instead of treating a repeated sample as constant.
+    """
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
+    template(random_chart, "{{ randAlphaNum 3 | quote }}")
+    result = check_chart(random_chart, permutations=1, prune_equivalent=True, dry_run=True)
+    assert "synthetic random samples" in str(result["pruning"])

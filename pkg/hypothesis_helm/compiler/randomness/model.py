@@ -41,6 +41,7 @@ class RandomInputs:
         records (list[dict[str, object]]): Actual call identities, lengths and values from the latest render.
         context (dict[str, object]): Source, overrides and renderer identities for portable replay verification.
         expected_context (dict[str, object] | None): Frozen context required by an imported replay artifact.
+        fallback_reason (str | None): Why native output cannot be replayed from controlled draws.
     """
 
     draw: Callable[[SearchStrategy[str], str], str] | None
@@ -48,6 +49,7 @@ class RandomInputs:
     records: list[dict[str, object]]
     context: dict[str, object]
     expected_context: dict[str, object] | None
+    fallback_reason: str | None
 
     def __init__(
         self, draw: Callable[[SearchStrategy[str], str], str] | None = None, *, replay: list[dict[str, object]] | None = None
@@ -64,6 +66,7 @@ class RandomInputs:
         self.records: list[dict[str, object]] = []
         self.context: dict[str, object] = {}
         self.expected_context: dict[str, object] | None = None
+        self.fallback_reason = None
         self._token: Token[RandomInputs | None] | None = None
 
     def __enter__(self) -> "RandomInputs":
@@ -90,7 +93,7 @@ class RandomInputs:
         """
         from hypothesis_helm.exceptions.rendering import RenderFailure
 
-        if isinstance(exc, RenderFailure) and (self.records or exc.random_inputs is None):
+        if isinstance(exc, RenderFailure) and (self.records or self.fallback_reason or exc.random_inputs is None):
             exc.random_inputs = self.document()
         if self._token is not None:
             CURRENT.reset(self._token)
@@ -139,6 +142,10 @@ class RandomInputs:
             RandomInputs: Strict replay owner.
         """
         data = mapping(document)
+        if data.get("replayable") is False:
+            raise RandomInputUnavailable(
+                "Native fallback has no exact random replay: " + str(data.get("fallback_reason", "uncontrolled effects"))
+            )
         if data.get("format") != "helm-random-inputs-v1" or data.get("renderer") != "helm-4.3.0":
             raise ValueError("Unsupported random-input replay format or renderer version")
         case = cls(replay=[mapping(record) for record in sequence(data["draws"])])
@@ -152,7 +159,22 @@ class RandomInputs:
         Returns:
             dict[str, object]: JSON-compatible replay document with the renderer contract version.
         """
-        return {"format": "helm-random-inputs-v1", "renderer": "helm-4.3.0", "context": dict(self.context), "draws": list(self.records)}
+        if self.fallback_reason is not None:
+            return {
+                "format": "helm-random-inputs-v1",
+                "renderer": "native",
+                "replayable": False,
+                "fallback_reason": self.fallback_reason,
+                "context": dict(self.context),
+                "draws": [],
+            }
+        return {
+            "format": "helm-random-inputs-v1",
+            "renderer": "helm-4.3.0",
+            "replayable": True,
+            "context": dict(self.context),
+            "draws": list(self.records),
+        }
 
 
 class RandomOutput(str):

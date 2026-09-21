@@ -21,27 +21,43 @@ between otherwise identical renders.
 
 ## Testing random outputs
 
-`--random-inputs` lets Hypothesis generate and shrink the results of `randAlphaNum`, separately from the chart's values.
-For example, `randAlphaNum 8` becomes a synthetic input with exactly eight ASCII letters or digits. Its domain includes
-uppercase and digit-only strings even when those strings reveal a defect in their destination field.
+`--renderer-policy auto` is the default. For charts with possible runtime effects, it lets Hypothesis generate and shrink
+supported random outputs separately from the chart's values. For example, `randAlphaNum 8` becomes an input with exactly
+eight ASCII letters or digits, including uppercase and digit-only strings.
 
-Build the optional renderer once, then enable it for a local test or remote scan:
+| Policy | Execution | When control is unavailable |
+| --- | --- | --- |
+| `auto` (default) | Use the prepared, compatible renderer for potential runtime effects; ordinary charts use Helm. | Log the reason and rerender the whole case with native Helm. |
+| `native` | Always use the configured Helm executable during testing. | Random outputs remain native and cannot be replayed from a draw tape. |
+| `strict` | Require the pinned renderer and control every effect reached during that render. | Stop with an unavailable result, not a chart-defect finding. |
+
+Prepare the controlled renderer once, then test or scan normally:
 
 ```sh
 hypothesis-helm-renderer --build
-helm hypothesis test ./chart --random-inputs --filter --max-examples 10
+helm hypothesis test ./chart --filter --max-examples 10
+helm hypothesis test ./chart --renderer-policy strict
+helm hypothesis test ./chart --renderer-policy native
 ```
 
-The build requires Go, downloads the pinned Go 1.26 toolchain and Helm 4.3.0 SDK when needed, and caches the executable under
-`.cache/random-renderer/`. `--go /path/to/go` selects the build tool. Chart testing prepares this renderer before its execution
-budget starts. Ordinary tests continue using the configured Helm executable; this optional mode uses the pinned SDK.
+The build requires Go and downloads the pinned Go 1.26 toolchain and Helm 4.3.0 SDK when needed. Its source-addressed executable
+lives under `.cache/random-renderer/`; `--go /path/to/go` selects the compiler. Repository refresh builds it automatically.
+Automatic testing does not download or compile tools inside a chart's execution budget. An absent build causes a visible native
+fallback. Strict chart testing prepares its required build before the test budget starts.
 
-The same setting is available globally or for a chart selected by an `input_constraints` entry with `path: $`:
+The selected Helm executable must report version 4.3.0, matching the reviewed SDK. A different version, including a prerelease,
+causes automatic fallback or strict rejection. This checks version compatibility; it does not certify custom Helm builds.
+Version probes are cached per executable identity. Changing source, values, release settings or the renderer invalidates replay.
+
+Configure the policy globally or for a chart selected by an `input_constraints` entry with `path: $`:
 
 ```yaml
 hypothesis:
-  random_inputs: true
+  renderer_policy: auto
 ```
+
+This replaces the earlier `--random-inputs` testing switch and `hypothesis.random_inputs` Boolean. The replay command below
+still uses `--random-inputs FILE` to select its saved tape.
 
 The native Go parser assigns identities to random calls in a loaded, in-memory chart. Helm's function hook supplies the test
 values; chart files and `values.yaml` remain unchanged. Each executed call receives an independent draw, including loop and
@@ -49,10 +65,24 @@ helper invocations. Reusing a variable reuses its value. Calls inside dynamicall
 explicit dynamic-call identity. Helm still checks argument types, coalesces dependencies, validates the values schema, and
 executes the templates.
 
+Each case starts **one renderer process**. A JSON stream requests a draw when execution reaches a random call, and Hypothesis
+replies while that same Helm render waits. Previous prefixes are not rendered again. The process exits after that case; it is
+not a persistent service shared between tests. Stdout and stderr are drained together, and timeouts or interruptions stop and
+join the owned process group.
+
 Hypothesis owns the draws during sampled tests, so the existing seed and shrinking settings apply. Defaults and finite plans
-use a fixed all-zero alphanumeric representative; their coverage counts cover values configurations, not every possible random
-string. Synthetic samples never justify exact-equivalence pruning. Other executed random or clock-dependent functions stop
-this optional mode with an unavailable result until they have a replay model; they are not reported as chart defects.
+use a fixed all-zero alphanumeric representative. Their counts cover values configurations, not every possible random string.
+**Sampled outputs never justify rejection or exact-equivalence pruning.** Static analysis can still report `HH2007` at a random
+call because a sampled value is not a proven constant.
+
+An executed clock, lookup, or unsupported random function makes that case unavailable for controlled replay. Automatic mode
+discards its partial draw tape and rerenders the original input entirely with native Helm, using the remaining execution budget.
+The output and any resulting finding carry `replayable: false` and the fallback reason. Reports show the limitation, and run
+coverage records observed controlled renders and native fallback reasons. Native failures remain findings. Unreached unsupported
+branches do not prevent replay of the executed path.
+
+Malformed tapes, changed replay context, actual chart failures and expired execution budgets never trigger automatic fallback.
+Explicit replay always requires full control, regardless of the chart's automatic policy.
 
 Path scans and saved suites include a root property for renderer inputs, so charts with an empty values file still exercise
 random outputs. Reports show the synthetic call paths and strings alongside ordinary changed values.
@@ -65,10 +95,10 @@ function's domain:
 hypothesis-helm-renderer ./chart --values artifacts/values.json --random-inputs artifacts/random-inputs.json
 ```
 
-Supply the same release, namespace and Kubernetes version when those options were used originally. The original chart must
+Supply the same Helm executable (`--helm`), release, namespace and Kubernetes version when those options were used originally. The original chart must
 still have its dependencies prepared. Replays restore the renderer inputs; custom Python assertions still require the original
 test. `compiler.max_string_chars`, `compiler.max_steps`, and the render timeout bound generated lengths, call counts and the
-total time spent completing a draw tape. Completing a tape can require several renders, so those invocations share one timeout.
+total time spent completing a draw tape. One streamed render completes a tape. An automatic native fallback shares that same timeout.
 
 ## Coverage and limits
 

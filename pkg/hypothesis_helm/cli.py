@@ -656,9 +656,9 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             "--character-sets", choices=("ascii", "unicode"), help="generated text alphabet; overrides config; default: ascii"
         )
         command.add_argument(
-            "--random-inputs",
-            action="store_true",
-            help="test randAlphaNum results as replayable synthetic inputs using the pinned Helm SDK",
+            "--renderer-policy",
+            choices=("auto", "native", "strict"),
+            help="auto controls supported random inputs with visible native fallback (default); native uses Helm; strict requires replay",
         )
         command.add_argument(
             "--yaml-parser",
@@ -827,8 +827,11 @@ def main(argv: list[str] | None = None) -> int:
                 yaml_parser=args.yaml_parser,
                 max_examples=args.max_examples if getattr(args, "max_examples_explicit", False) else None,
             )
-            if args.random_inputs:
-                args.input_policy["hypothesis"] = {**mapping(args.input_policy.get("hypothesis", {})), "random_inputs": True}
+            if args.renderer_policy is not None:
+                args.input_policy["hypothesis"] = {
+                    **mapping(args.input_policy.get("hypothesis", {})),
+                    "renderer_policy": args.renderer_policy,
+                }
             if hasattr(args, "max_examples"):
                 args.max_examples = int(str(mapping(args.input_policy.get("hypothesis", {})).get("max_examples", args.max_examples)))
             finding_policy = mapping(args.input_policy["findings"])

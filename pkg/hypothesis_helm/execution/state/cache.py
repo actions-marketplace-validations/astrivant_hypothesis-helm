@@ -78,6 +78,8 @@ def fingerprint(
 
     # Go assets can change native execution even when every Python file is unchanged.
     digest.update(renderer_identity().encode())
+    # Auto mode can change from native fallback to controlled draws after a local build.
+    digest.update(str((Path(".cache/random-renderer") / renderer_identity() / "renderer").is_file()).encode())
     from hypothesis_helm_catalog.builder import DATA
 
     for catalog in sorted(DATA.glob("*.json")):

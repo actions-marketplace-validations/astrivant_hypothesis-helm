@@ -64,13 +64,13 @@ def validate_settings(raw: dict[str, object]) -> dict[str, object]:
             raise ValueError("control_characters.allow must list individual C0/C1 control characters")
     if "hypothesis" in result:
         parameters = mapping(result["hypothesis"])
-        if set(parameters) - {"max_examples", "deadline_ms", "phases", "suppress_health_check", "random_inputs"}:
+        if set(parameters) - {"max_examples", "deadline_ms", "phases", "suppress_health_check", "renderer_policy"}:
             raise ValueError(
                 "hypothesis accepts character_sets, control_characters, exclude_characters, "
-                "max_examples, deadline_ms, phases, suppress_health_check and random_inputs"
+                "max_examples, deadline_ms, phases, suppress_health_check and renderer_policy"
             )
-        if "random_inputs" in parameters and type(parameters["random_inputs"]) is not bool:
-            raise ValueError("hypothesis.random_inputs must be a Boolean")
+        if "renderer_policy" in parameters and parameters["renderer_policy"] not in ("auto", "native", "strict"):
+            raise ValueError("hypothesis.renderer_policy must be auto, native or strict")
         examples = parameters.get("max_examples")
         if "max_examples" in parameters and (type(examples) is not int or int(str(examples)) < 1):
             raise ValueError("hypothesis.max_examples must be a positive integer")

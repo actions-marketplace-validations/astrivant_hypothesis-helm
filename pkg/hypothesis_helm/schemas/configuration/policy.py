@@ -179,7 +179,7 @@ def load_policy(
         if not isinstance(path, str):
             raise ValueError("Each input constraint requires a string 'path'")
         path_parts(path)
-        if "random_inputs" in mapping(generation.get("hypothesis", {})) and path != "$":
+        if "renderer_policy" in mapping(generation.get("hypothesis", {})) and path != "$":
             raise ValueError("Random renderer overrides require path: $; native calls are not ordinary values paths")
         compiler: dict[str, object] = {}
         if "compiler" in rule:

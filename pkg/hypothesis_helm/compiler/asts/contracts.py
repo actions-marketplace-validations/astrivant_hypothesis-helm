@@ -34,7 +34,7 @@ from hypothesis_helm.compiler.asts.contract_values import (
 from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext
 from hypothesis_helm.compiler.asts.templates import Node, lower, structure, walk
 from hypothesis_helm.compiler.asts.transformations import TransformedDomain, calculate, inputs
-from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE
+from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE, runtime_dependency
 from hypothesis_helm.compiler.constants import INTEGER_RESULTS, MERGES, NATIVE_OPERATIONS, TEMPLATE_CALLS, TRANSFORMATIONS
 from hypothesis_helm.compiler.limits import active_limits, call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
@@ -907,7 +907,7 @@ class Evaluation:
             return self._collection(function, evaluated)
         if function in {"join", "printf"}:
             return self._format(function, evaluated)
-        raise Unknown(f"unsupported function: {function}")
+        raise Unknown(runtime_dependency(str(function)) or f"unsupported function: {function}")
 
     def _atom(self, expr: str, variables: Scope) -> object:
         """
@@ -939,7 +939,7 @@ class Evaluation:
             return self.local_maps.register(ConstantMap({}))
         if expr == "nil":
             return None
-        raise Unknown(f"unsupported expression: {expr}")
+        raise Unknown(runtime_dependency(expr) or f"unsupported expression: {expr}")
 
     def _helper(self, function: str, arguments: list[object], source: str, line: int, variables: Scope, *, output_required: bool) -> object:
         """

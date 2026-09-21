@@ -8,6 +8,7 @@ import json
 import logging
 import subprocess
 import tempfile
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -15,7 +16,7 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.values import parsers as manifest_parsers
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.environment import env
-from hypothesis_helm.exceptions.rendering import ManifestParseError, RenderFailure
+from hypothesis_helm.exceptions.rendering import ManifestParseError, RendererUnavailable, RenderFailure
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.state.render_hashes import RenderHashes, process_hashes
 from hypothesis_helm.findings.generator import FindingGenerator
@@ -112,21 +113,47 @@ def render_output(
     """
     chart.require_source()
     from hypothesis_helm.compiler.randomness import rendering as random_rendering
-    from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs
+    from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs, RandomOutput
+    from hypothesis_helm.compiler.randomness.policy import observed, policy
 
     random_case = CURRENT.get()
-    if random_case is not None or random_rendering.enabled(chart):
+    started = time.monotonic()
+    if policy(chart) == "native" and random_case is not None and random_case.replay is None:
+        random_case.records.clear()
+        random_case.context.clear()
+        random_case.fallback_reason = "Native renderer policy selected; runtime effects are uncontrolled"
+    if (random_case is not None and random_case.replay is not None) or (
+        policy(chart) != "native" and (random_case is not None or random_rendering.enabled(chart))
+    ):
+        random_case = random_case if random_case is not None else RandomInputs()
         try:
             return random_rendering.render(
                 chart,
                 values,
-                random_case if random_case is not None else RandomInputs(),
+                random_case,
                 timeout=timeout,
                 release=release,
                 namespace=namespace,
                 kube_version=kube_version,
                 processes=processes,
+                helm=helm,
             )
+        except RendererUnavailable as exc:
+            if random_case.replay is not None or policy(chart) != "auto":
+                raise
+            # Discard the aborted stream. Mixing native values into its tape would promise false replayability.
+            random_case.records.clear()
+            random_case.context.clear()
+            random_case.fallback_reason = str(exc)
+            LOGGER.warning(
+                "Renderer fallback: chart=%s; %s; using native Helm; exact random replay unavailable",
+                chart.path,
+                exc,
+                extra={"diagnostic_key": json.dumps(["renderer-fallback", str(chart.path), str(exc)])},
+            )
+            timeout -= time.monotonic() - started
+            if timeout <= 0:
+                raise RenderFailure("renderer budget exhausted before native fallback", "HH1201") from exc
         except subprocess.TimeoutExpired as exc:
             raise RenderFailure(f"random-input renderer exceeded {timeout}s", "HH1201") from exc
     with tempfile.TemporaryDirectory(prefix="hypothesis-helm-") as directory:
@@ -148,13 +175,18 @@ def render_output(
             process = (processes if processes is not None else Processes()).run(command, capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             raise RenderFailure(f"helm exceeded {timeout}s", "HH1201") from exc
+        if random_case is not None:
+            observed(chart, random_case.document())
         if process.returncode:
             # The source can disappear after dispatch. Do not classify that race
             # as a template defect or feed it back into Hypothesis shrinking.
             chart.require_source()
             finding = FindingGenerator.helm(process.stderr.strip() or f"helm exited {process.returncode}")
-            raise RenderFailure(finding.evidence, finding.rule.code)
-        return process.stdout
+            failure = RenderFailure(finding.evidence, finding.rule.code)
+            if random_case is not None:
+                failure.random_inputs = random_case.document()
+            raise failure
+        return RandomOutput(process.stdout, random_case.document()) if random_case is not None else process.stdout
 
 
 def _render(

@@ -87,7 +87,7 @@ ignored:
 #     exclude: true  # Exclude U+0000-U+001F and U+007F-U+009F, including tabs and DEL.
 #     allow: ["\n", "\r"]  # Exceptions; [] excludes every control character.
 #   exclude_characters: ""  # Additional literal characters to exclude, e.g. ">|".
-#   random_inputs: false  # Opt in to replayable randAlphaNum testing with the pinned Helm renderer.
+#   renderer_policy: auto  # auto: controlled draws with native fallback; native: Helm only; strict: require replay.
 #   max_examples: 10  # Per path property, not a shared budget for a branch.
 #   deadline_ms: null  # No Hypothesis per-example deadline; chart/render timeouts still apply.
 #   phases: [generate, shrink]  # Use [generate] to omit shrinking.

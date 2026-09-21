@@ -31,14 +31,13 @@ type Draw struct {
 	Value  string `json:"value"`
 }
 
-// Request supplies a chart, renderer context, and an exact prefix of random draws.
+// Request supplies a chart, renderer context, and a stream of random draws.
 type Request struct {
 	Chart       string          `json:"chart"`
 	Values      json.RawMessage `json:"values"`
 	Release     string          `json:"release"`
 	Namespace   string          `json:"namespace"`
 	KubeVersion string          `json:"kube_version"`
-	Draws       []Draw          `json:"draws"`
 	MaxChars    int             `json:"max_chars"`
 	MaxCalls    int             `json:"max_calls"`
 	Unsupported []string        `json:"unsupported"`
@@ -51,16 +50,19 @@ type Response struct {
 	Error       string `json:"error,omitempty"`
 	Invalid     string `json:"invalid,omitempty"`
 	Request     *Draw  `json:"request,omitempty"`
+	Unavailable string `json:"unavailable,omitempty"`
+	Ready       bool   `json:"ready,omitempty"`
 }
 
 // Tape consumes values in execution order while retaining independent call-site identities.
 type Tape struct {
-	request   Request
-	position  int
-	counts    map[string]int
-	next      *Draw
-	invalid   string
-	functions template.FuncMap
+	request     Request
+	position    int
+	counts      map[string]int
+	exchange    func(Draw) (Draw, error)
+	unavailable string
+	invalid     string
+	functions   template.FuncMap
 }
 
 // function creates an override for one source call or an uninstrumented dynamic tpl call.
@@ -79,17 +81,17 @@ func (t *Tape) function(site string) func(int) (string, error) {
 			return "", nil
 		}
 		if count > t.request.MaxChars || t.position >= t.request.MaxCalls {
-			t.invalid = "random input exceeds configured character or invocation budget"
-			return "", fmt.Errorf("%s", t.invalid)
+			t.unavailable = "random input exceeds configured character or invocation budget"
+			return "", fmt.Errorf("%s", t.unavailable)
 		}
 		occurrence := t.counts[site]
 		t.counts[site]++
 		path := fmt.Sprintf("$render.random[%q][%d]", site, occurrence)
-		if t.position == len(t.request.Draws) {
-			t.next = &Draw{Path: path, Length: count}
-			return "", fmt.Errorf("synthetic random input requested")
+		draw, err := t.exchange(Draw{Path: path, Length: count})
+		if err != nil {
+			t.invalid = "random input stream failed: " + err.Error()
+			return "", err
 		}
-		draw := t.request.Draws[t.position]
 		t.position++
 		valid := draw.Path == path && draw.Length == count && len(draw.Value) == count
 		for _, character := range draw.Value {
@@ -207,16 +209,18 @@ func (t *Tape) instrument(c *chart.Chart) error {
 	return nil
 }
 
-// render evaluates one exact draw prefix with Helm's native loader, coalescer, schema checks and engine.
+// render evaluates one chart with interactive random draws with Helm's native loader, coalescer, schema checks and engine.
 //
 // Args:
 //
 //	request (Request): Chart inputs and configured analysis budgets.
+//	decoder (*json.Decoder): Replies from the draw owner.
+//	encoder (*json.Encoder): Requests and provenance sent to the draw owner.
 //
 // Returns:
 //
 //	Response: Complete manifests, the next synthetic draw, or an explicitly classified failure.
-func render(request Request) (response Response) {
+func render(request Request, decoder *json.Decoder, encoder *json.Encoder) (response Response) {
 	c, err := loader.Load(request.Chart)
 	if err != nil {
 		return Response{Error: err.Error()}
@@ -244,6 +248,10 @@ func render(request Request) (response Response) {
 	hashChart(c)
 	chartDigest := hex.EncodeToString(digest.Sum(nil))
 	defer func() { response.ChartDigest = chartDigest }()
+	// Publish source identity before asking for a draw, so a stale replay cannot execute.
+	if err := encoder.Encode(Response{ChartDigest: chartDigest, Ready: true}); err != nil {
+		return Response{Invalid: err.Error()}
+	}
 	values, err := loader.LoadValues(bytes.NewReader(request.Values))
 	if err != nil {
 		return Response{Error: err.Error()}
@@ -267,11 +275,19 @@ func render(request Request) (response Response) {
 		return Response{Error: err.Error()}
 	}
 	tape := &Tape{request: request, counts: map[string]int{}, functions: template.FuncMap{}}
+	tape.exchange = func(call Draw) (Draw, error) {
+		if err := encoder.Encode(Response{Request: &call}); err != nil {
+			return Draw{}, err
+		}
+		var reply Draw
+		err := decoder.Decode(&reply)
+		return reply, err
+	}
 	tape.functions["randAlphaNum"] = tape.function("dynamic:randAlphaNum")
 	for _, name := range request.Unsupported {
 		tape.functions[name] = func(...any) (any, error) {
-			tape.invalid = "synthetic random replay does not support native effect: " + name
-			return nil, fmt.Errorf("%s", tape.invalid)
+			tape.unavailable = "controlled renderer does not support native effect: " + name
+			return nil, fmt.Errorf("%s", tape.unavailable)
 		}
 	}
 	if err = tape.instrument(c); err != nil {
@@ -282,14 +298,11 @@ func render(request Request) (response Response) {
 	if tape.invalid != "" {
 		return Response{Invalid: tape.invalid}
 	}
-	if tape.next != nil {
-		return Response{Request: tape.next}
+	if tape.unavailable != "" {
+		return Response{Unavailable: tape.unavailable}
 	}
 	if err != nil {
 		return Response{Error: err.Error()}
-	}
-	if tape.position != len(request.Draws) {
-		return Response{Invalid: "random replay contains unused draws"}
 	}
 	for name := range output {
 		if strings.HasSuffix(name, "NOTES.txt") {
@@ -310,18 +323,20 @@ func render(request Request) (response Response) {
 	return Response{Output: result.String()}
 }
 
-// main reads one bounded render request and emits a single machine-readable response.
+// main keeps one native render alive while exchanging draws, then emits its terminal result.
 //
 // Returns:
 //
 //	No value. Malformed protocol input or output failures exit with status one.
 func main() {
+	decoder := json.NewDecoder(os.Stdin)
+	encoder := json.NewEncoder(os.Stdout)
 	var request Request
-	if err := json.NewDecoder(os.Stdin).Decode(&request); err != nil {
+	if err := decoder.Decode(&request); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := json.NewEncoder(os.Stdout).Encode(render(request)); err != nil {
+	if err := encoder.Encode(render(request, decoder, encoder)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
