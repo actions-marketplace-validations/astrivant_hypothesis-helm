@@ -2,7 +2,6 @@
 Resolve and report the generation-only domain for one chart.
 """
 
-import copy
 import hashlib
 import json
 
@@ -145,7 +144,12 @@ class InputDomains:
         Returns:
             dict[str, object]: Generation-only copy of the contract.
         """
-        result = copy.deepcopy(schema)
+        from hypothesis_helm.schemas.dialects import canonical
+        from hypothesis_helm.schemas.generation.compatibility import validation_view
+
+        # Generated guards use const and if/then. Upgrade older authored drafts
+        # before attaching them, so those guards cannot become ignored keywords.
+        result = validation_view(schema) if self.rules else canonical(schema)
         for rule in self.rules:
             path = tuple(str(part) for part in sequence(rule["path"]))
             restriction = mapping(rule["schema"])

@@ -25,6 +25,7 @@ from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.schemas.configuration.selectors import source_identity
 from hypothesis_helm.schemas.configuration.settings import custom_text, hypothesis_parameters, settings_at
 from hypothesis_helm.schemas.contracts import json_value, mapping, number, sequence
+from hypothesis_helm.schemas.dialects import active, fragment
 from hypothesis_helm.schemas.kubernetes.resources import resource_schemas
 from hypothesis_helm.schemas.paths import ValuePath as ValuePath
 from hypothesis_helm.schemas.paths import dereference as dereference
@@ -383,7 +384,11 @@ def strategy_source(schema: dict[str, object], *, generation: dict[str, object] 
     selected = str(settings_at(generation, path)["character_sets"]) if generation else character_sets()
     if generation and custom_text(generation):
         return f"from_schema({schema!r}, generation={generation!r}, path={path!r})"
-    node = {k: v for k, v in schema.items() if k not in ("description", "title", "default", "examples", "$schema", "$defs", "definitions")}
+    node = {
+        k: v
+        for k, v in active(schema).items()
+        if k not in ("description", "title", "default", "examples", "$schema", "$defs", "definitions")
+    }
     fallback = f"from_schema({schema!r}, character_sets={selected!r})"
     if set(node) == {"const"}:
         return f"st.just({node['const']!r})"
@@ -428,7 +433,7 @@ def strategy_source(schema: dict[str, object], *, generation: dict[str, object] 
             f"min_size={node.get('minLength', 0)!r}, max_size={node.get('maxLength')!r})"
         )
     if kind == "array" and isinstance(node.get("items"), dict) and set(node) <= {"type", "items", "minItems", "maxItems"}:
-        item = strategy_source(mapping(node["items"]), generation=generation, path=(*path, "*"))
+        item = strategy_source(fragment(mapping(node["items"]), schema), generation=generation, path=(*path, "*"))
         return f"st.lists({item}, min_size={node.get('minItems', 0)!r}, max_size={node.get('maxItems')!r})"
     # Regex, multipleOf, uniqueItems, object required/optional keys, unions and
     # references are delegated to the existing JSON Schema strategy library.

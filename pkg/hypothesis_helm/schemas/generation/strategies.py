@@ -12,6 +12,8 @@ from jsonschema import validators
 
 from hypothesis_helm.schemas.configuration.characters import declared_text, validate_character_sets
 from hypothesis_helm.schemas.contracts import Json, json_value, mapping, sequence
+from hypothesis_helm.schemas.dialects import canonical
+from hypothesis_helm.schemas.generation.compatibility import generation_view
 
 __all__ = ("CONTROL_CHARACTERS", "ordinary_generated_text", "schema_strategy", "supported_generated_text")
 
@@ -97,6 +99,7 @@ def schema_strategy(
     """
     from hypothesis_helm.schemas.configuration.settings import global_settings, normalize_text, settings_at
 
+    schema = canonical(schema)
     validator = validators.validator_for(schema)(schema)
     frozen: dict[str, object] = copy.deepcopy(generation) if generation else {"defaults": global_settings(), "rules": []}
     if character_sets is not None:
@@ -121,7 +124,7 @@ def schema_strategy(
         else:
             generating.pop("allOf")
     return (
-        from_schema(cast(dict[str, Json], generating), codec=codec)
+        from_schema(cast(dict[str, Json], generation_view(generating)), codec=codec)
         .map(lambda value: normalize_text(value, frozen, path, literals))
         .filter(lambda candidate: validator.is_valid(json_value(candidate)))
     )

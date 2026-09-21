@@ -14,6 +14,7 @@ from jsonschema import validators
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.suites.runtime import _constraint, path_values
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.dialects import canonical
 from hypothesis_helm.schemas.generation.domains import InputDomains
 from hypothesis_helm.schemas.generation.strategies import schema_strategy
 
@@ -39,7 +40,7 @@ def test_positional_constraint_preserves_other_indices(metaschema: str | None, v
     Returns:
         None: The schema is valid and requires only the requested indices and leaf.
     """
-    root: dict[str, object] = {"$schema": metaschema} if metaschema else {}
+    root: dict[str, object] = canonical({"$schema": metaschema}) if metaschema else {}
     dialect = validators.validator_for(root)
     keyword = "prefixItems" if "prefixItems" in dialect.VALIDATORS else "items"
     root.update(_constraint(("rows", 1, 2, "value"), value, positional_keyword=keyword))
@@ -113,7 +114,8 @@ def test_array_path_draws_valid_dependent_context(tmp_path: Path, metaschema: st
     original_schema, original_defaults = copy.deepcopy(chart.schema), copy.deepcopy(chart.defaults)
     tail = ("startupProbe", "periodSeconds") if field == "periodSeconds" else ("livenessProbe", "httpGet", "scheme")
     value = 2147483647 if field == "periodSeconds" else "HTTPS"
-    validator = validators.validator_for(chart.schema)(chart.schema)
+    validation_schema = canonical(chart.schema)
+    validator = validators.validator_for(validation_schema)(validation_schema)
 
     @settings(max_examples=8, deadline=None, derandomize=True)
     @given(st.data())

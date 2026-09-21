@@ -18,6 +18,7 @@ from cattrs import Converter
 from jsonschema import validators
 
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence, text
+from hypothesis_helm.schemas.dialects import active, dialect, fragment
 
 __all__ = ("MISSING", "Missing", "Relationship", "ValueNode", "ValueReference", "ValuesModel")
 
@@ -127,7 +128,7 @@ class ValuesModel:
         Returns:
             ValuesModel: Typed hierarchy with registered lossless conversion hooks.
         """
-        model = cls(ValueNode((), copy.deepcopy(schema), True))
+        model = cls(ValueNode((), active(copy.deepcopy(schema)), True))
         model.compile_node(model.root)
         model.collect_relationships(model.root.schema, (), "schema:#")
         return model
@@ -172,7 +173,7 @@ class ValuesModel:
             used.add(attribute)
             child = ValueNode(
                 (*node.path, name),
-                mapping(schema) if isinstance(schema, dict) else {},
+                fragment(active(schema, dialect(node.schema)), node.schema) if isinstance(schema, dict) else {},
                 name in required,
                 attribute,
             )
@@ -185,7 +186,7 @@ class ValuesModel:
         if items is None and any(arrays):
             items = {"enum": [item for values in arrays for item in values]}
         if isinstance(items, dict):
-            node.item = ValueNode((*node.path, "*"), mapping(items), True)
+            node.item = ValueNode((*node.path, "*"), fragment(active(items, dialect(node.schema)), node.schema), True)
             self.compile_node(node.item)
         if "object" in kinds or properties:
             attributes: dict[str, object] = {

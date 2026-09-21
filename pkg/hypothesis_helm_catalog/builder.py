@@ -11,6 +11,7 @@ from pathlib import Path
 from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.configuration.policy import intersect
 from hypothesis_helm.schemas.contracts import mapping, sequence
+from hypothesis_helm.schemas.dialects import active, dialect, fragment, numeric_bounds
 
 __all__ = ("DATA", "KEYWORDS", "LIBRARY", "REVISION", "build", "main", "scalar_domain")
 
@@ -49,7 +50,9 @@ def scalar_domain(node: dict[str, object]) -> dict[str, object]:
     Returns:
         dict[str, object]: Scalar bounds and supported composition; opaque compositions remain unrestricted.
     """
-    result = {key: value for key, value in node.items() if key in KEYWORDS}
+    version = dialect(node)
+    node = active(node)
+    result = numeric_bounds({key: value for key, value in node.items() if key in KEYWORDS}, version)
     compositions = {"allOf", "anyOf", "oneOf"}
     allowed = KEYWORDS | compositions | {"description", "title", "default", "examples", "format"}
 
@@ -71,7 +74,7 @@ def scalar_domain(node: dict[str, object]) -> dict[str, object]:
         alternatives = node.get(key)
         # Dropping an unsupported oneOf arm could reject inputs the original schema admits.
         if isinstance(alternatives, list) and all(supported(child) for child in alternatives):
-            result[key] = [scalar_domain(mapping(child)) for child in alternatives]
+            result[key] = [scalar_domain(fragment(mapping(child), {"$schema": version})) for child in alternatives]
     return result
 
 
@@ -105,7 +108,9 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
             continue
         paths: dict[str, str] = {}
 
-        def walk(node: dict[str, object], path: tuple[str, ...], target: dict[str, str] = paths) -> None:
+        def walk(
+            node: dict[str, object], path: tuple[str, ...], target: dict[str, str] = paths, parent: dict[str, object] = document
+        ) -> None:
             """
             Record only unconditional scalar constraints at exact schema destinations.
 
@@ -113,10 +118,12 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
                 node (dict[str, object]): Current schema node.
                 path (tuple[str, ...]): Manifest path, with * for array items.
                 target (dict[str, str]): Destination index for this resource.
+                parent (dict[str, object]): Enclosing schema supplying inherited dialect semantics.
 
             Returns:
                 None: Populate the shared deduplicated domain table and resource index.
             """
+            node = fragment(node, parent)
             schema = scalar_domain(node)
             origins = ["json-schema"]
             if node.get("format") in {"int32", "int64"}:
@@ -130,11 +137,11 @@ def build(directory: Path, version: str, *, upstream: dict[str, object] | None =
                 target["/".join(path)] = key
             for name, child in mapping(node.get("properties", {})).items():
                 if isinstance(child, dict):
-                    walk(mapping(child), (*path, name))
+                    walk(mapping(child), (*path, name), target, node)
             if isinstance(node.get("items"), dict):
-                walk(mapping(node["items"]), (*path, "*"))
+                walk(mapping(node["items"]), (*path, "*"), target, node)
             if isinstance(node.get("additionalProperties"), dict):
-                walk(mapping(node["additionalProperties"]), (*path, "*"))
+                walk(mapping(node["additionalProperties"]), (*path, "*"), target, node)
 
         walk(document, ())
         sources[file.name] = hashlib.sha256(contents).hexdigest()

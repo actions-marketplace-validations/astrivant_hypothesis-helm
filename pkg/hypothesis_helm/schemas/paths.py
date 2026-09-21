@@ -10,7 +10,8 @@ import logging
 
 from attrs import define
 
-from hypothesis_helm.schemas.contracts import mapping, sequence, text
+from hypothesis_helm.schemas.contracts import mapping, sequence
+from hypothesis_helm.schemas.dialects import fragment, map_children, resolve
 
 __all__ = ("ValuePath", "dereference", "enumerate_paths")
 
@@ -46,23 +47,7 @@ def dereference(schema: dict[str, object], root: dict[str, object], seen: tuple[
     Returns:
         dict[str, object]: Resulting schema, values mapping, or structured report.
     """
-    if not isinstance(schema, dict):
-        return schema
-    if "$ref" not in schema:
-        return schema
-    ref = text(schema["$ref"])
-    if ref in seen:
-        raise ValueError(f"recursive schema path cannot be enumerated: {ref}")
-    if not ref.startswith("#"):
-        raise ValueError("only local schema references are supported")
-    target = root
-    for segment in ref[2:].split("/") if ref != "#" else []:
-        target = mapping(target[segment.replace("~1", "/").replace("~0", "~")])
-    resolved = dereference(target, root, (*seen, ref))
-    siblings = {k: v for k, v in schema.items() if k != "$ref"}
-    if not siblings:
-        return resolved
-    return {"allOf": [resolved, siblings]}
+    return resolve(schema, root, seen)
 
 
 def enumerate_paths(schema: dict[str, object]) -> list[ValuePath]:
@@ -88,6 +73,8 @@ def enumerate_paths(schema: dict[str, object]) -> list[ValuePath]:
         path: tuple[str | int, ...],
         ancestors: tuple[int, ...] = (),
         unconditional: bool = True,
+        parent: dict[str, object] | None = None,
+        references: tuple[str, ...] = (),
     ) -> None:
         """
         Collect schema paths and their unconditional declarations.
@@ -98,6 +85,8 @@ def enumerate_paths(schema: dict[str, object]) -> list[ValuePath]:
             ancestors (tuple[int, ...]): Node identities already visited along this traversal.
             unconditional (bool): Whether the schema declaration applies outside conditional
                 branches.
+            parent (dict[str, object] | None): Enclosing schema carrying the effective dialect.
+            references (tuple[str, ...]): References already expanded along this path.
 
         Returns:
             None: None. The operation completes through its documented side effects.
@@ -109,31 +98,38 @@ def enumerate_paths(schema: dict[str, object]) -> list[ValuePath]:
         if id(node) in ancestors:
             raise ValueError(f"recursive schema at {path}")
         ancestors = (*ancestors, id(node))
-        node = dereference(node, root)
+        if "$ref" in node:
+            reference = str(node["$ref"])
+            if reference in references:
+                raise ValueError(f"recursive schema path cannot be enumerated: {reference}")
+            references = (*references, reference)
+        node = dereference(fragment(node, parent if parent is not None else root), root)
         if path:
             collected.setdefault(path, []).append(copy.deepcopy(node))
             if unconditional:
                 primary.setdefault(path, []).append(copy.deepcopy(node))
         for key, child in mapping(node.get("properties", {})).items():
-            walk(child, (*path, key), ancestors, unconditional)
+            walk(child, (*path, key), ancestors, unconditional, node, references)
         items = node.get("items")
         if isinstance(items, dict):
-            walk(items, (*path, "*"), ancestors, unconditional)
+            walk(items, (*path, "*"), ancestors, unconditional, node, references)
         elif isinstance(items, list):
             for index, child in enumerate(items):
-                walk(child, (*path, index), ancestors, unconditional)
+                walk(child, (*path, index), ancestors, unconditional, node, references)
+            if isinstance(node.get("additionalItems"), dict):
+                walk(node["additionalItems"], (*path, "*"), ancestors, unconditional, node, references)
         for index, child in enumerate(sequence(node.get("prefixItems", []))):
-            walk(child, (*path, index), ancestors, unconditional)
+            walk(child, (*path, index), ancestors, unconditional, node, references)
         if isinstance(node.get("additionalProperties"), dict):
-            walk(node["additionalProperties"], (*path, "*"), ancestors, unconditional)
+            walk(node["additionalProperties"], (*path, "*"), ancestors, unconditional, node, references)
         for child in mapping(node.get("patternProperties", {})).values():
-            walk(child, (*path, "*"), ancestors, unconditional)
+            walk(child, (*path, "*"), ancestors, unconditional, node, references)
         for keyword in ("allOf", "anyOf", "oneOf"):
             for branch in sequence(node.get(keyword, [])):
-                walk(branch, path, ancestors, False)
+                walk(branch, path, ancestors, False, node, references)
         for keyword in ("then", "else"):
             if keyword in node:
-                walk(node[keyword], path, ancestors, False)
+                walk(node[keyword], path, ancestors, False, node, references)
 
     walk(schema, ())
     result = []
@@ -144,29 +140,30 @@ def enumerate_paths(schema: dict[str, object]) -> list[ValuePath]:
         # fragment must not broaden a declared array into arbitrary JSON.
         branches = primary.get(path, branches)
         unique = {json.dumps(b, sort_keys=True): b for b in branches}
-        node = next(iter(unique.values())) if len(unique) == 1 else {"anyOf": list(unique.values())}
+        node: dict[str, object] = next(iter(unique.values())) if len(unique) == 1 else {"anyOf": list(unique.values())}
 
-        def expand(value: object, refs: tuple[str, ...] = ()) -> object:
+        def expand(value: object, refs: tuple[str, ...] = (), parent: dict[str, object] = node) -> object:
             """
             Inline local schema references for standalone path strategies.
 
             Args:
                 value (object): Candidate value supplied by the property strategy.
                 refs (tuple[str, ...]): Reference pointers already expanded on this path.
+                parent (dict[str, object]): Parent carrying inherited dialect semantics.
 
             Returns:
                 object: Parsed or generated value at the requested boundary.
             """
-            if isinstance(value, list):
-                return [expand(v, refs) for v in value]
             if not isinstance(value, dict):
                 return value
+            value = fragment(value, parent)
             if "$ref" in value:
-                ref = value["$ref"]
+                ref = str(value["$ref"])
                 if ref in refs:
                     raise ValueError(f"recursive schema path cannot be generated: {ref}")
                 return expand(dereference(value, root), (*refs, ref))
-            return {k: expand(v, refs) for k, v in value.items() if k not in ("$defs", "definitions")}
+            expanded = map_children(value, lambda child: expand(child, refs, value), definitions=False)
+            return {k: v for k, v in expanded.items() if k not in ("$defs", "definitions")}
 
         result.append(ValuePath(path, mapping(expand(node))))
     return result

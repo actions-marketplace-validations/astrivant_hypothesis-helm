@@ -22,6 +22,7 @@ from hypothesis_helm.schemas.configuration.characters import validate_character_
 from hypothesis_helm.schemas.configuration.selectors import selectors
 from hypothesis_helm.schemas.configuration.settings import SETTING_KEYS, validate_settings
 from hypothesis_helm.schemas.contracts import json_value, mapping, number, sequence
+from hypothesis_helm.schemas.dialects import canonical, walk
 
 __all__ = (
     "ENVIRONMENT",
@@ -100,31 +101,15 @@ def check_schema(schema: dict[str, object], *, inline: bool = False) -> None:
     Returns:
         None: Valid schema, or a configuration error before generation starts.
     """
-
-    def visit(node: object) -> None:
-        """
-        Reject external references at every schema depth.
-
-        Args:
-            node (object): Current schema subtree.
-
-        Returns:
-            None: References stay within the supplied document.
-        """
-        if isinstance(node, dict):
-            if inline and any(keyword in node for keyword in ("$ref", "$dynamicRef", "$recursiveRef", "$id")):
-                raise ValueError("Inline input constraints must be self-contained without references or schema identifiers")
-            for keyword in ("$ref", "$dynamicRef", "$recursiveRef"):
-                if keyword in node and (not isinstance(node[keyword], str) or not node[keyword].startswith("#")):
-                    raise ValueError("Input and resource schemas must use local references only")
-            for child in node.values():
-                visit(child)
-        elif isinstance(node, list):
-            for child in node:
-                visit(child)
-
-    visit(schema)
-    validators.validator_for(schema).check_schema(schema)
+    for node in walk(schema):
+        if inline and any(keyword in node for keyword in ("$ref", "$dynamicRef", "$recursiveRef", "$id")):
+            raise ValueError("Inline input constraints must be self-contained without references or schema identifiers")
+        for keyword in ("$ref", "$dynamicRef", "$recursiveRef"):
+            reference = node.get(keyword)
+            if keyword in node and (not isinstance(reference, str) or not reference.startswith("#")):
+                raise ValueError("Input and resource schemas must use local references only")
+    normalized = canonical(schema)
+    validators.validator_for(normalized).check_schema(normalized)
 
 
 def load_policy(
@@ -213,8 +198,13 @@ def load_policy(
                 raise ValueError(f"Unknown input profile {profile!r}; choose from {', '.join(PROFILES)}")
             schema = copy.deepcopy(PROFILES[profile])
         else:
-            schema = mapping(rule["schema"])
+            schema = canonical(mapping(rule["schema"]))
         check_schema(schema, inline=True)
+        from hypothesis_helm.schemas.generation.compatibility import validation_view
+
+        # Inline rules and compiler guards share the modern dialect, irrespective
+        # of the syntax the user chose when declaring an independent restriction.
+        schema = validation_view(schema)
         if type(rule.get("allow_empty", False)) is not bool:
             raise ValueError("allow_empty must be a Boolean")
         if rule.get("allow_empty"):
@@ -228,7 +218,7 @@ def load_policy(
             raise ValueError("Resource schema keys must be apiVersion/Kind, such as example.org/v1/Widget")
         if not isinstance(filename, str):
             raise ValueError(f"Resource schema {identity} must name a JSON schema file")
-        schema = mapping(json.loads((root / filename).read_text()))
+        schema = canonical(mapping(json.loads((root / filename).read_text())))
         check_schema(schema)
         supplied[identity] = schema
     return {
@@ -307,7 +297,7 @@ def restrict(schema: dict[str, object], path: tuple[str, ...], restriction: dict
 
     Args:
         schema (dict[str, object]): Generation schema to copy.
-        path (tuple[str, ...]): Exact object path, with * for homogeneous array items.
+        path (tuple[str, ...]): Exact object path, with * for collection members.
         restriction (dict[str, object]): Schema applied where that path exists.
 
     Returns:
@@ -320,11 +310,28 @@ def restrict(schema: dict[str, object], path: tuple[str, ...], restriction: dict
     result = copy.deepcopy(schema)
     head, *tail = path
     if head == "*":
-        result["items"] = restrict(mapping(result.get("items", {})), tuple(tail), restriction)
+        member = restrict({}, tuple(tail), restriction)
+        kind = result.get("type")
+        kinds = kind if isinstance(kind, list) else [kind]
+        if "object" in kinds:
+            # An independent applicator reaches every map value without changing
+            # which properties the authored schema allows or requires.
+            clause: dict[str, object] = {"additionalProperties": member}
+            if "array" in kinds:
+                clause["items"] = member
+            sequence(result.setdefault("allOf", [])).append(clause)
+        elif isinstance(result.get("items", {}), dict) and "prefixItems" not in result:
+            result["items"] = restrict(mapping(result.get("items", {})), tuple(tail), restriction)
+        else:
+            # Homogeneous items in a separate clause constrain both tuple prefixes
+            # and tails, without rewriting positional or Boolean item schemas.
+            sequence(result.setdefault("allOf", [])).append({"items": member})
     else:
         properties = mapping(result.setdefault("properties", {}))
-        if head not in properties and result.get("additionalProperties") is False:
+        if head not in properties and ("additionalProperties" in result or "patternProperties" in result):
             sequence(result.setdefault("allOf", [])).append(restrict({}, path, restriction))
             return result
-        properties[head] = restrict(mapping(properties.get(head, {})), tuple(tail), restriction)
+        existing = properties.get(head, {})
+        if existing is not False:
+            properties[head] = restrict({} if existing is True else mapping(existing), tuple(tail), restriction)
     return result

@@ -4,6 +4,7 @@
 **Table of contents**
 
 - [Input discovery and test generation](#input-discovery-and-test-generation)
+  - [Schema dialect handling](#schema-dialect-handling)
 - [Execution and validation](#execution-and-validation)
 - [Chart package layout](#chart-package-layout)
 - [Execution package layout](#execution-package-layout)
@@ -49,9 +50,35 @@ inputs are assembled into complete values documents and checked against the
 values schema.<sup>[\[2\]](../getting-started/README.md#quick-start)</sup>
 
 If changing one path requires other values to change, the generator builds a valid surrounding configuration while keeping
-the selected value at that path. Array constraints use the chart schema's dialect: `prefixItems` for Draft 2020-12 and
-positional `items` for older drafts. When needed, the generator receives a separate Draft 7 representation for its positional
-constraint; every resulting configuration is still checked against the original schema and the selected path constraint.
+the selected value at that path. Extracted fields retain the schema version that gives their constraints meaning.
+The generator receives a separate Draft 7 representation; each generated configuration must still pass the full validation
+contract and the selected path constraint. See [schema dialect handling](#schema-dialect-handling) for supported conversions.
+
+### Schema dialect handling
+
+The `$schema` declaration selects how to interpret keywords. We recognize Drafts 4, 6, 7, 2019-09 and 2020-12, including
+their HTTP/HTTPS aliases. An absent declaration or the unversioned `json-schema.org/schema#` alias uses 2020-12.
+Unknown explicit declarations are rejected. These are input-schema versions, independent of the Kubernetes version.
+[JSON Schema's declaration reference](https://json-schema.org/understanding-json-schema/reference/schema) explains this distinction.
+
+| Construct | Handling |
+| --- | --- |
+| Tuple arrays | Older positional `items` and `additionalItems` correspond to modern `prefixItems` and tail `items`. Path generation and finite enumeration preserve both regions. |
+| Exclusive numeric bounds | Draft 4's Boolean switches are converted to numeric bounds for generation. Extracted fields retain their original interpretation. |
+| `$ref` siblings | Sibling constraints are ignored through Draft 7 and enforced from 2019-09 onward. Local JSON Pointers support escaped names and array indices. |
+| Dependencies | `dependentRequired` and `dependentSchemas` become equivalent Draft 7 dependency constraints for generation. |
+| Compiler and configuration rules | Legacy contracts are upgraded equivalently before adding modern guards. Conversion fails explicitly if equivalence cannot be preserved. |
+| Literal data | Objects inside `const`, `enum`, `default` and `examples` are data; schema-looking keys inside them are not rewritten or resolved. |
+
+The generator cannot express every modern constraint. For `minContains`, `maxContains` and unevaluated-field rules, it may
+generate a broader candidate set and then reject candidates using the full validator. Negation, exclusive alternatives and
+conditional selectors also account for that broadening. This can cost extra attempts; the broader generation schema is
+never evidence for pruning or a claim of exhaustive coverage.
+
+Recursive references, dynamic references, named anchors and references requiring nested-resource resolution remain outside
+the generation contract and fail explicitly. Supporting a dialect does not mean every construct can be generated or
+enumerated. The official [array reference](https://json-schema.org/understanding-json-schema/reference/array) and
+[2020-12 migration notes](https://json-schema.org/draft/2020-12/release-notes) describe the relevant differences.
 
 ## Execution and validation
 

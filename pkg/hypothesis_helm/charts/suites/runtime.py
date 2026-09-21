@@ -35,6 +35,7 @@ from hypothesis_helm.rules import check, ignored
 from hypothesis_helm.schemas.configuration.characters import SUITE_CHARACTER_SETS, validate_character_sets
 from hypothesis_helm.schemas.configuration.selectors import SourceScope, source_identity
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.dialects import DRAFT2020, dialect
 from hypothesis_helm.schemas.generation.strategies import schema_strategy
 from hypothesis_helm.schemas.kubernetes.resources import SUITE_RESOURCE_SCHEMAS
 
@@ -173,10 +174,11 @@ def _replace(
         if data is not None and schema is not None:
             from hypothesis_helm.charts.model import _schema_nodes
 
-            symbolic = tuple("*" if isinstance(p, int) else p for p in prefix)
+            symbolic = tuple(str(p) for p in prefix)
             nodes = _schema_nodes(schema, symbolic, schema)
             if nodes:
                 fragment: dict[str, object] = {"allOf": nodes}
+                fragment["$schema"] = dialect(schema)
                 for key in ("$defs", "definitions"):
                     if key in schema:
                         fragment[key] = schema[key]
@@ -248,8 +250,19 @@ def _concrete_path(
         if segment == "*":
             nodes = _schema_nodes(schema, tuple(str(p) for p in concrete), schema)
             if isinstance(current, list) or any(n.get("type") == "array" for n in nodes):
+                # A wildcard beside tuple positions describes the tail, not the prefix.
+                start = max(
+                    (
+                        len(sequence(n.get("prefixItems", n.get("items", []))))
+                        for n in nodes
+                        if isinstance(n.get("prefixItems", n.get("items", [])), list)
+                    ),
+                    default=0,
+                )
                 segment = (
-                    data.draw(st.integers(min_value=0, max_value=max(0, len(current) - 1))) if isinstance(current, list) and current else 0
+                    data.draw(st.integers(min_value=start, max_value=max(start, len(current) - 1)))
+                    if isinstance(current, list) and current
+                    else start
                 )
             elif isinstance(current, dict) and current:
                 segment = data.draw(st.sampled_from(sorted(current)))
@@ -281,7 +294,8 @@ def _constraint(path: tuple[str | int, ...], value: object, *, positional_keywor
         dict[str, object]: Constraint that fixes only the selected array index and required parent fields.
     """
     if not path:
-        return {"const": value}
+        # enum expresses exact equality in every supported draft, including Draft 4.
+        return {"enum": [value]}
     head, *tail = path
     child = _constraint(tuple(tail), value, positional_keyword=positional_keyword)
     if isinstance(head, int):
@@ -346,22 +360,10 @@ def path_values(
         needs_context = True
     if needs_context or not validator.is_valid(json_value(effective(values))):
         constrained = copy.deepcopy(context_schema)
-        dialect = validators.validator_for(context_schema)
-        keyword = "prefixItems" if "prefixItems" in dialect.VALIDATORS else "items"
+        keyword = "prefixItems" if dialect(context_schema) == DRAFT2020 else "items"
         sequence(constrained.setdefault("allOf", [])).append(_constraint(path, value, positional_keyword=keyword))
-        # hypothesis-jsonschema generates Draft 7 tuples. Keep its private input
-        # separate from the full contract, which still validates every candidate.
-        generating: dict[str, object] | None = None
-        if keyword == "prefixItems" and any(isinstance(segment, int) for segment in path):
-            generating = copy.deepcopy(context_schema)
-            generating["$schema"] = "http://json-schema.org/draft-07/schema#"
-            sequence(generating.setdefault("allOf", [])).append(_constraint(path, value))
         # Retain definitions at the root so existing local references still resolve.
-        values = mapping(
-            data.draw(
-                schema_strategy(constrained, generation=domains.generation, generation_schema=generating), label="schema-valid context"
-            )
-        )
+        values = mapping(data.draw(schema_strategy(constrained, generation=domains.generation), label="schema-valid context"))
     assume(validator.is_valid(json_value(effective(values))))
     note(f"value path: {path!r}")
     note("values override:\n" + yamlio.dump(values))

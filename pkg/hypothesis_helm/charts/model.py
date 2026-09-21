@@ -24,7 +24,8 @@ __all__ = ("Chart", "merge_values")
 if TYPE_CHECKING:
     from hypothesis_helm.compiler.passes.dependencies import Dependencies
     from hypothesis_helm.schemas.generation.domains import InputDomains
-from hypothesis_helm.schemas.contracts import mapping
+from hypothesis_helm.schemas.contracts import mapping, sequence
+from hypothesis_helm.schemas.dialects import DRAFT4, DRAFT6, DRAFT7, DRAFT2020, active, canonical, dialect, pointer_target, walk
 from hypothesis_helm.schemas.generation.strategies import schema_strategy
 
 LOGGER = logging.getLogger(__name__)
@@ -90,28 +91,14 @@ class Chart:
         schema = json.loads((path / "values.schema.json").read_text())
         if not isinstance(schema, dict) or schema.get("type") != "object":
             raise ValueError("values.schema.json must declare type: object")
+        schema = canonical(schema)
 
         # Do not allow implicit network resolution or files outside the chart.
-        def refs(node: object) -> None:
-            """
-            Reject external schema references before strategy construction.
-
-            Args:
-                node (object): Current schema or template node.
-
-            Returns:
-                None: None. The operation completes through its documented side effects.
-            """
-            if isinstance(node, dict):
-                if "$ref" in node and not node["$ref"].startswith("#"):
+        for node in walk(schema):
+            for keyword in ("$ref", "$dynamicRef", "$recursiveRef"):
+                reference = node.get(keyword)
+                if keyword in node and (not isinstance(reference, str) or not reference.startswith("#")):
                     raise ValueError("only local JSON Pointer schema references are supported")
-                for value in node.values():
-                    refs(value)
-            elif isinstance(node, list):
-                for value in node:
-                    refs(value)
-
-        refs(schema)
         validators.validator_for(schema).check_schema(schema)
         defaults = yamlio.load((path / "values.yaml").read_text()) or {}
         if not isinstance(defaults, dict):
@@ -187,6 +174,7 @@ def _schema_nodes(
     path: tuple[str, ...],
     root: dict[str, object],
     seen: frozenset[tuple[int, tuple[str, ...]]] = frozenset(),
+    inherited: str | None = None,
 ) -> list[dict[str, object]]:
     """
     Check  schema nodes.
@@ -197,6 +185,7 @@ def _schema_nodes(
         root (dict[str, object]): Root schema used to resolve local references.
         seen (frozenset[tuple[int, tuple[str, ...]]]): References already visited while resolving
             this schema.
+        inherited (str | None): Dialect inherited through the selected schema path.
 
     Returns:
         list[dict[str, object]]: Result of the documented operation.
@@ -207,32 +196,37 @@ def _schema_nodes(
     if marker in seen:
         return []
     seen = seen | {marker}
+    version = dialect(schema, inherited or dialect(root))
+    node = active(schema, version)
     found = []
-    if "$ref" in schema:
-        target = root
-        for part in schema["$ref"].removeprefix("#/").split("/"):
-            if schema["$ref"] == "#":
-                break
-            target = mapping(target[part.replace("~1", "/").replace("~0", "~")])
-        found += _schema_nodes(target, path, root, seen)
+    if "$ref" in node:
+        target, target_version = pointer_target(root, node["$ref"])
+        found += _schema_nodes(target, path, root, seen, target_version)
+        if version in (DRAFT4, DRAFT6, DRAFT7):
+            return found
     for keyword in ("allOf", "anyOf", "oneOf"):
-        for branch in schema.get(keyword, []):
-            found += _schema_nodes(branch, path, root, seen)
+        for branch in sequence(node.get(keyword, [])):
+            found += _schema_nodes(branch, path, root, seen, version)
     if not path:
         return found + [schema]
     key, *rest = path
-    if key in schema.get("properties", {}):
-        found += _schema_nodes(schema["properties"][key], tuple(rest), root, seen)
-    if key == "*" and isinstance(schema.get("items"), dict):
-        found += _schema_nodes(schema["items"], tuple(rest), root, seen)
+    if key in mapping(node.get("properties", {})):
+        found += _schema_nodes(mapping(node["properties"])[key], tuple(rest), root, seen, version)
+    prefix = node.get("prefixItems", []) if version == DRAFT2020 else node.get("items", [])
+    prefix = prefix if isinstance(prefix, list) else []
+    tail = node.get("items") if version == DRAFT2020 or not prefix else node.get("additionalItems")
+    if key == "*" or key.isdecimal():
+        child = prefix[int(key)] if key != "*" and int(key) < len(prefix) else tail
+        if isinstance(child, dict):
+            found += _schema_nodes(child, tuple(rest), root, seen, version)
     # Explicitly typed map entries count as documentation; open maps do not.
-    if isinstance(schema.get("additionalProperties"), dict):
-        found += _schema_nodes(schema["additionalProperties"], tuple(rest), root, seen)
+    if isinstance(node.get("additionalProperties"), dict):
+        found += _schema_nodes(node["additionalProperties"], tuple(rest), root, seen, version)
     import re
 
-    for pattern, branch in schema.get("patternProperties", {}).items():
+    for pattern, branch in mapping(node.get("patternProperties", {})).items():
         if key == "*" or re.search(pattern, key):
-            found += _schema_nodes(branch, tuple(rest), root, seen)
+            found += _schema_nodes(branch, tuple(rest), root, seen, version)
     return found
 
 

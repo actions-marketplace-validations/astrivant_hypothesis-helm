@@ -12,7 +12,8 @@ from functools import partial
 from jsonschema import validators
 
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
-from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.contracts import json_value, mapping, number, sequence
+from hypothesis_helm.schemas.dialects import DRAFT2020, active, canonical, dialect
 from hypothesis_helm.schemas.generation.replay import Replay, concatenate, select, transform
 
 __all__ = ("enumerate_values", "product_at", "repeated_at")
@@ -34,7 +35,7 @@ def enumerate_values(schema: dict[str, object], limit: int = 1000) -> Sequence[d
     """
     if limit < 1:
         raise ValueError("exhaustive limit must be positive")
-    schema = copy.deepcopy(schema)
+    schema = canonical(schema)
     missing = object()
 
     def bounded(size: int) -> None:
@@ -50,22 +51,29 @@ def enumerate_values(schema: dict[str, object], limit: int = 1000) -> Sequence[d
         if size > limit:
             raise NonFiniteSchema(f"domain exceeds exhaustive limit {limit}")
 
-    def domain(node: object) -> Sequence[object]:
+    def domain(node: object, inherited: str = DRAFT2020) -> Sequence[object]:
         """
         Enumerate the candidate values of a supported finite schema.
 
         Args:
             node (object): Current schema or template node.
+            inherited (str): Dialect inherited from the parent schema.
 
         Returns:
             Sequence[object]: Bounded domain reconstructed one position at a time.
         """
+        if node is False:
+            return []
         if not isinstance(node, dict):
             raise NonFiniteSchema("boolean schemas require an explicit finite domain")
+        version = dialect(node, inherited)
+        node = active(node, inherited)
+        if any(keyword in node for keyword in ("$ref", "$dynamicRef", "$recursiveRef")):
+            raise NonFiniteSchema("references are not supported in exhaustive mode")
         if "const" in node:
             return Replay(1, lambda index: copy.deepcopy(node["const"]))
         if "enum" in node:
-            bounded(len(node["enum"]))
+            bounded(len(sequence(node["enum"])))
             return transform(sequence(node["enum"]), copy.deepcopy)
         if "$ref" in node or (not node.get("type") and any(k in node for k in ("allOf", "anyOf", "oneOf", "if", "not"))):
             raise NonFiniteSchema("compositions and references are not supported in exhaustive mode")
@@ -77,18 +85,18 @@ def enumerate_values(schema: dict[str, object], limit: int = 1000) -> Sequence[d
         if kind == "integer":
             if "minimum" not in node or "maximum" not in node:
                 raise NonFiniteSchema("integer domains need minimum and maximum")
-            low, high = math.ceil(node["minimum"]), math.floor(node["maximum"])
+            low, high = math.ceil(number(node["minimum"])), math.floor(number(node["maximum"]))
             bounded(max(0, high - low + 1))
             return range(low, high + 1)
         if kind == "object":
             if node.get("additionalProperties") is not False or node.get("patternProperties"):
                 raise NonFiniteSchema("objects need additionalProperties: false and no patterns")
-            props = node.get("properties", {})
+            props = mapping(node.get("properties", {}))
             choices: list[Sequence[object]] = []
             size = 1
             for name, child in props.items():
-                values = domain(child)
-                if name not in node.get("required", []):
+                values = domain(child, version)
+                if name not in sequence(node.get("required", [])):
                     values = concatenate([missing], values)
                 choices.append(values)
                 size *= len(values)
@@ -98,19 +106,26 @@ def enumerate_values(schema: dict[str, object], limit: int = 1000) -> Sequence[d
                 size, lambda index: dict((k, v) for k, v in zip(names, product_at(choices, index), strict=True) if v is not missing)
             )
         if kind == "array":
-            if "maxItems" not in node or not isinstance(node.get("items"), dict):
-                raise NonFiniteSchema("arrays need maxItems and a single finite items schema")
-            item_choices = domain(node["items"])
+            prefix = node.get("prefixItems", []) if version == DRAFT2020 else node.get("items", [])
+            prefix = prefix if isinstance(prefix, list) else []
+            tail = node.get("items", True) if version == DRAFT2020 or not prefix else node.get("additionalItems", True)
+            if "maxItems" not in node and tail is not False:
+                raise NonFiniteSchema("arrays need maxItems or a closed tuple")
             rows: list[Sequence[object]] = []
             total = 0
-            low, high = node.get("minItems", 0), node["maxItems"]
+            low, high = int(number(node.get("minItems", 0))), int(number(node.get("maxItems", len(prefix))))
+            if tail is False:
+                high = min(high, len(prefix))
             # Bound even empty/singleton item domains before looping.
             bounded(max(0, high - low + 1))
+            positional = [domain(child, version) for child in prefix[:high]]
+            item_choices = domain(tail, version) if high > len(prefix) else []
             for size in range(low, high + 1):
-                count = len(item_choices) ** size
+                choices = positional[:size] + [item_choices] * max(0, size - len(prefix))
+                count = math.prod(len(choice) for choice in choices)
                 total += count
                 bounded(total)
-                rows.append(Replay(count, partial(repeated_at, item_choices, size)))
+                rows.append(Replay(count, partial(product_at, choices)))
             return concatenate(*rows)
         raise NonFiniteSchema(f"no enumerable domain for type {kind!r}; use enum or sampling")
 
