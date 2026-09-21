@@ -15,8 +15,9 @@ from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, Scope
 from hypothesis_helm.compiler.asts.contracts import ASSIGNMENT, RANGE_ASSIGNMENT, Contracts, FieldAccess, context_effects, expression
 from hypothesis_helm.compiler.asts.projections import Collection, Input, LocalMap, Member, Operation, Piece, output
 from hypothesis_helm.compiler.asts.templates import Node, walk
-from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, calculate
+from hypothesis_helm.compiler.asts.transformations import calculate
 from hypothesis_helm.compiler.builtins import MUTATIONS
+from hypothesis_helm.compiler.constants import MERGES, TEMPLATE_CALLS, TRANSFORMATIONS
 from hypothesis_helm.compiler.passes.domain_collections import additions, members, truth
 from hypothesis_helm.exceptions.compiler import Unknown, UnsupportedTransformation
 
@@ -92,76 +93,119 @@ class Interpreter:
         if isinstance(expr, FieldAccess):
             return self.select(self.evaluate(expr.receiver, context, scope), expr.fields)
         if isinstance(expr, str):
-            if expr.startswith('"'):
-                return json.loads(expr)
-            if expr.startswith("`") and expr.endswith("`"):
-                return expr[1:-1]
-            if expr in {"true", "false", "nil"}:
-                return {"true": True, "false": False, "nil": None}[expr]
-            if expr.lstrip("-").isdigit():
-                return int(expr)
-            if expr == "dict":
-                return LocalMap()
-            if expr == "list":
-                return []
-            if expr in {".", "$"}:
-                return context if expr == "." else scope.lookup("$")
-            if expr.startswith((".", "$")):
-                head, *parts = expr.split(".")
-                return self.select(context if head == "" else scope.lookup(head), tuple(parts))
-            return Operation(expr)
+            return self._atom(expr, context, scope)
         if not isinstance(expr, tuple) or not expr:
             return Operation("unknown")
         name = str(expr[0])
         args = tuple(self.evaluate(arg, context, scope) for arg in expr[1:])
-        if name in {"include", "template"} and len(args) == 2:
-            helper, argument = args
-            if not isinstance(helper, str) or helper in self.stack:
-                self.mutated = True
-                self.notes.append({"reason": "helper is dynamic or recursive; shared-context effects unresolved"})
-                return Operation("unresolved", ("helper is dynamic or recursive",))
-            options = self.alternatives.get(helper, [])
-            if helper in self.contracts.helpers:
-                options = [self.contracts.helpers[helper]]
-            elif helper in self.contracts.templates:
-                options = [(helper, self.contracts.templates[helper])]
-            if not options:
-                self.mutated = True
-                self.notes.append({"reason": "helper is missing or ambiguous; shared-context effects unresolved"})
-                return Operation("unresolved", ("helper is missing or ambiguous",))
-            if len(self.stack) >= self.contracts.max_call_depth:
-                self.mutated = True
-                self.notes.append({"reason": f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}"})
-                return Operation("unresolved", (f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}",))
-            if len(options) > self.contracts.limits["max_symbolic_variants"]:
-                raise Unknown("helper alternatives exceed compiler.max_symbolic_variants")
-            self.stack = (*self.stack, helper)
-            try:
-                outputs = []
-                for source, nodes in options:
-                    local = copy.deepcopy(argument) if len(options) > 1 else argument
-                    outputs.append(output(self.visit(nodes, source, local, Scope({"$": local}))))
-                    if len(options) > 1 and local != argument:
-                        self.mutated = True
-                result = outputs[-1]
-                for choice in reversed(outputs[:-1]):
-                    if choice != result:
-                        result = Operation("choose", (Operation("unknown-helper-selection"), choice, result))
-                if isinstance(result, str):
+        if name in TEMPLATE_CALLS and len(args) == 2:
+            return self._helper(args)
+        # UNRESOLVED is a routing sentinel; None is a real Helm nil value.
+        collection = self._collection(name, args)
+        return self._scalar(name, args) if collection is UNRESOLVED else collection
+
+    def _atom(self, expr: str, context: object, scope: Scope) -> object:
+        """
+        Resolve one literal or scoped selector before interpreting function calls.
+
+        Args:
+            expr (str): Parsed literal or selector token.
+            context (object): Current dot context.
+            scope (Scope): Lexical variables and the invocation root.
+
+        Returns:
+            object: Literal, input origin or unresolved symbolic operation.
+        """
+        if expr.startswith('"'):
+            return json.loads(expr)
+        if expr.startswith("`") and expr.endswith("`"):
+            return expr[1:-1]
+        if expr in {"true", "false", "nil"}:
+            return {"true": True, "false": False, "nil": None}[expr]
+        if expr.lstrip("-").isdigit():
+            return int(expr)
+        if expr == "dict":
+            return LocalMap()
+        if expr == "list":
+            return []
+        if expr == "coalesce":
+            return None
+        if expr in {".", "$"}:
+            return context if expr == "." else scope.lookup("$")
+        if expr.startswith((".", "$")):
+            head, *parts = expr.split(".")
+            return self.select(context if head == "" else scope.lookup(head), tuple(parts))
+        return Operation(expr)
+
+    def _helper(self, args: tuple[object, ...]) -> object:
+        """
+        Expand helper alternatives with isolated roots and restore the caller stack.
+
+        Args:
+            args (tuple[object, ...]): Evaluated helper name and invocation context.
+
+        Returns:
+            object: Joined output text or an explicit unresolved helper result.
+        """
+        # Helper calls reset dollar-root scope; alternatives must not share local mutations.
+        helper, argument = args
+        if not isinstance(helper, str) or helper in self.stack:
+            self.mutated = True
+            self.notes.append({"reason": "helper is dynamic or recursive; shared-context effects unresolved"})
+            return Operation("unresolved", ("helper is dynamic or recursive",))
+        options = self.alternatives.get(helper, [])
+        if helper in self.contracts.helpers:
+            options = [self.contracts.helpers[helper]]
+        elif helper in self.contracts.templates:
+            options = [(helper, self.contracts.templates[helper])]
+        if not options:
+            self.mutated = True
+            self.notes.append({"reason": "helper is missing or ambiguous; shared-context effects unresolved"})
+            return Operation("unresolved", ("helper is missing or ambiguous",))
+        if len(self.stack) >= self.contracts.max_call_depth:
+            self.mutated = True
+            self.notes.append({"reason": f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}"})
+            return Operation("unresolved", (f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}",))
+        if len(options) > self.contracts.limits["max_symbolic_variants"]:
+            raise Unknown("helper alternatives exceed compiler.max_symbolic_variants")
+        self.stack = (*self.stack, helper)
+        try:
+            outputs = []
+            for source, nodes in options:
+                local = copy.deepcopy(argument) if len(options) > 1 else argument
+                outputs.append(output(self.visit(nodes, source, local, Scope({"$": local}))))
+                if len(options) > 1 and local != argument:
+                    self.mutated = True
+            result = outputs[-1]
+            for choice in reversed(outputs[:-1]):
+                if choice != result:
+                    result = Operation("choose", (Operation("unknown-helper-selection"), choice, result))
+            if isinstance(result, str):
+                return result
+            if type(result) in {bool, int, float}:
+                return json.dumps(result)
+            if isinstance(result, Input):
+                kinds = {
+                    node.get("type") for node in _schema_nodes(self.schema, result.path, self.schema) if isinstance(node.get("type"), str)
+                }
+                if kinds == {"string"}:
                     return result
-                if type(result) in {bool, int, float}:
-                    return json.dumps(result)
-                if isinstance(result, Input):
-                    kinds = {
-                        node.get("type")
-                        for node in _schema_nodes(self.schema, result.path, self.schema)
-                        if isinstance(node.get("type"), str)
-                    }
-                    if kinds == {"string"}:
-                        return result
-                return Operation("render-text", (result,))
-            finally:
-                self.stack = self.stack[:-1]
+            return Operation("render-text", (result,))
+        finally:
+            self.stack = self.stack[:-1]
+
+    def _collection(self, name: str, args: tuple[object, ...]) -> object:
+        """
+        Track collection construction and distinguish local from shared mutations.
+
+        Args:
+            name (str): Helm function name.
+            args (tuple[object, ...]): Evaluated symbolic operands.
+
+        Returns:
+            object: Collection result, mutation marker, or UNRESOLVED when this handler does not apply.
+        """
+        # Only fresh maps can be changed without invalidating shared-context analysis.
         if name == "dict":
             try:
                 return LocalMap(dictionary(tuple(args)))
@@ -177,7 +221,7 @@ class Interpreter:
             return Operation("not", (truth(args[0]),))
         if name in {"index", "get"} and len(args) == 2 and isinstance(args[1], str):
             return self.select(args[0], (args[1],))
-        if name in {"merge", "mustMerge", "mergeOverwrite", "mustMergeOverwrite"} and args:
+        if name in MERGES and args:
             target = args[0]
             if fresh(target):
                 target = LocalMap(sources=[target])
@@ -194,6 +238,20 @@ class Interpreter:
         if name in MUTATIONS:
             self.mutated = True
             return Operation("unknown-mutation")
+        return UNRESOLVED
+
+    def _scalar(self, name: str, args: tuple[object, ...]) -> object:
+        """
+        Follow type tests, branch selections and supported scalar transformations.
+
+        Args:
+            name (str): Helm function name.
+            args (tuple[object, ...]): Evaluated symbolic operands.
+
+        Returns:
+            object: Supported result or a symbolic call retained for downstream analysis.
+        """
+        # A schema can establish a type, but its defaults cannot establish branch truth.
         if name in {"kindIs", "typeIs"} and len(args) == 2 and isinstance(args[1], Operation):
             if args[1].name in {"toYaml", "toJson", "quote", "tpl", "render-text"} and args[0] in {"string", "map", "slice", "bool"}:
                 return args[0] == "string"
@@ -214,11 +272,14 @@ class Interpreter:
                     return True
                 if wanted not in kinds:
                     return False
-        if name in {"default", "coalesce"} and len(args) >= 2:
-            choices = args if name == "coalesce" else (args[1], args[0])
-            result = choices[-1]
-            for value in reversed(choices[:-1]):
-                result = Operation("choose", (Operation("truth", (value,)), value, result))
+        if name == "coalesce" or name == "default" and args:
+            # coalesce has no unconditional last operand: all empty means nil.
+            # default preserves its fallback, even when that fallback is empty.
+            choices = args if name == "coalesce" else args[1:2]
+            result = None if name == "coalesce" else args[0]
+            for value in reversed(choices):
+                condition = truth(value)
+                result = value if condition is True else result if condition is False else Operation("choose", (condition, value, result))
             return result
         if name == "ternary" and len(args) == 3:
             return args[0 if args[2] else 1] if type(args[2]) is bool else Operation("choose", (args[2], args[0], args[1]))
@@ -229,7 +290,7 @@ class Interpreter:
         if name in {"eq", "ne"} and len(args) == 2 and all(value is None or type(value) in {str, bool, int} for value in args):
             same = type(args[0]) is type(args[1]) and args[0] == args[1]
             return same if name == "eq" else not same
-        if name in FUNCTIONS and all(value is None or type(value) in {str, bool, int, float} for value in args):
+        if name in TRANSFORMATIONS and all(value is None or type(value) in {str, bool, int, float} for value in args):
             try:
                 return calculate(name, args, limits=self.contracts.limits)
             except UnsupportedTransformation:
@@ -342,48 +403,7 @@ class Interpreter:
                 continue
             try:
                 if node.kind == "if" or node.kind == "opaque" and node.text.startswith("with "):
-                    changed_dot = node.kind == "opaque"
-                    test = self.evaluate(expression(node.text[5:] if changed_dot else node.text), context, scope)
-                    nested = test if changed_dot else context
-                    if isinstance(test, Collection) or isinstance(test, Operation) and members(test) is not None:
-                        test = truth(test)
-                    if test is None or type(test) in {str, int, list, dict}:
-                        test = bool(test)
-                    elif isinstance(test, LocalMap) and not test.sources:
-                        test = bool(test.entries)
-                    if type(test) is bool:
-                        pieces.extend(
-                            self.visit(node.children if test else node.otherwise, source, nested if test else context, Scope(parent=scope))
-                        )
-                    else:
-                        if self.contracts.limits["max_symbolic_variants"] < 2:
-                            raise Unknown("branch join exceeds compiler.max_symbolic_variants=1")
-                        copies = [copy.deepcopy((scope, nested, context)) for _ in range(2)]
-                        branches = [item[0] for item in copies]
-                        yes = output(self.visit(node.children, source, copies[0][1], Scope(parent=branches[0])))
-                        no = output(self.visit(node.otherwise, source, copies[1][2], Scope(parent=branches[1])))
-                        if isinstance(context, LocalMap):
-                            left, right = copies[0][2], copies[1][2]
-                            if isinstance(left, LocalMap) and isinstance(right, LocalMap):
-                                if left.sources == right.sources:
-                                    context.entries = {
-                                        key: a if a == b else Operation("choose", (test, a, b))
-                                        for key in sorted(left.entries.keys() | right.entries.keys())
-                                        for a, b in [(left.entries.get(key), right.entries.get(key))]
-                                    }
-                                else:
-                                    context.entries = {}
-                                    context.sources = [Operation("choose", (test, left, right))]
-                        current: Scope | None = scope
-                        owners: list[Scope | None] = list(branches)
-                        while current is not None:
-                            for key in current.bindings:
-                                a, b = (owner.bindings.get(key, UNRESOLVED) if owner else UNRESOLVED for owner in owners)
-                                if a is not UNRESOLVED and b is not UNRESOLVED:
-                                    current.bindings[key] = a if a == b else Operation("choose", (test, a, b))
-                            current = current.parent
-                            owners = [owner.parent if owner else None for owner in owners]
-                        pieces.append(Piece(Operation("choose", (test, yes, no)), source, node.line))
+                    pieces.extend(self._branch(node, source, context, scope))
                     continue
                 if node.kind == "opaque" and node.text.startswith("range "):
                     body = node.text.removeprefix("range ")
@@ -432,6 +452,64 @@ class Interpreter:
                             scope.bind(binding[1], Operation("unknown"), assign=True)
                     if emits(node):
                         pieces.append(Piece(Operation("unknown"), source, node.line))
+        return pieces
+
+    def _branch(self, node: Node, source: str, context: object, scope: Scope) -> list[Piece]:
+        """
+        Evaluate known branches or join isolated alternatives without leaking assignments.
+
+        Args:
+            node (Node): If or with block from the template tree.
+            source (str): Template filename for emitted pieces.
+            context (object): Current dot context.
+            scope (Scope): Caller bindings receiving only joined branch facts.
+
+        Returns:
+            list[Piece]: Selected or conditional output from this block.
+        """
+        pieces: list[Piece] = []
+        changed_dot = node.kind == "opaque"
+        test = self.evaluate(expression(node.text[5:] if changed_dot else node.text), context, scope)
+        nested = test if changed_dot else context
+        if isinstance(test, Collection) or isinstance(test, Operation) and members(test) is not None:
+            test = truth(test)
+        if test is None or type(test) in {str, int, list, dict}:
+            test = bool(test)
+        elif isinstance(test, LocalMap) and not test.sources:
+            test = bool(test.entries)
+        if type(test) is bool:
+            pieces.extend(self.visit(node.children if test else node.otherwise, source, nested if test else context, Scope(parent=scope)))
+        else:
+            if self.contracts.limits["max_symbolic_variants"] < 2:
+                raise Unknown("branch join exceeds compiler.max_symbolic_variants=1")
+            # Copy the graph together to preserve aliases within each branch while isolating the two branches.
+            copies = [copy.deepcopy((scope, nested, context)) for _ in range(2)]
+            branches = [item[0] for item in copies]
+            yes = output(self.visit(node.children, source, copies[0][1], Scope(parent=branches[0])))
+            no = output(self.visit(node.otherwise, source, copies[1][2], Scope(parent=branches[1])))
+            if isinstance(context, LocalMap):
+                left, right = copies[0][2], copies[1][2]
+                if isinstance(left, LocalMap) and isinstance(right, LocalMap):
+                    if left.sources == right.sources:
+                        context.entries = {
+                            key: a if a == b else Operation("choose", (test, a, b))
+                            for key in sorted(left.entries.keys() | right.entries.keys())
+                            for a, b in [(left.entries.get(key), right.entries.get(key))]
+                        }
+                    else:
+                        context.entries = {}
+                        context.sources = [Operation("choose", (test, left, right))]
+            current: Scope | None = scope
+            # Only bindings owned by the caller escape; branch-local declarations stay local.
+            owners: list[Scope | None] = list(branches)
+            while current is not None:
+                for key in current.bindings:
+                    a, b = (owner.bindings.get(key, UNRESOLVED) if owner else UNRESOLVED for owner in owners)
+                    if a is not UNRESOLVED and b is not UNRESOLVED:
+                        current.bindings[key] = a if a == b else Operation("choose", (test, a, b))
+                current = current.parent
+                owners = [owner.parent if owner else None for owner in owners]
+            pieces.append(Piece(Operation("choose", (test, yes, no)), source, node.line))
         return pieces
 
 

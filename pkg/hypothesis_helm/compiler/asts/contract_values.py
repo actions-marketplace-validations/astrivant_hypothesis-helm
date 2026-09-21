@@ -136,6 +136,7 @@ class ContractText:
                 pattern.append(f"(?P<keys{len(groups)}>{segment})")
                 groups.append(part)
         match = re.fullmatch("".join(pattern).strip(), observed.strip())
+        # Compare key multiplicities after matching: regex alternatives alone would admit repeated keys.
         return match is not None and all(
             Counter(match[f"keys{index}"].split(group.separator) if group.values else []) == Counter(group.values)
             for index, group in enumerate(groups)
@@ -155,6 +156,7 @@ def native(value: object) -> object:
     if isinstance(value, BoundValue | DerivedValue):
         return native(value.value)
     if isinstance(value, ConstantMap):
+        # Keep nested wrappers intact so a later field lookup can still recover its input origin.
         return value.values
     if isinstance(value, ConstantList | UnorderedKeys):
         return list(value.values)

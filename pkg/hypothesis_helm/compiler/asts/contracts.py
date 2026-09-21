@@ -30,8 +30,9 @@ from hypothesis_helm.compiler.asts.contract_values import (
 )
 from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext
 from hypothesis_helm.compiler.asts.templates import Node, lower, structure, walk
-from hypothesis_helm.compiler.asts.transformations import FUNCTIONS, TransformedDomain, calculate, inputs
+from hypothesis_helm.compiler.asts.transformations import TransformedDomain, calculate, inputs
 from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE
+from hypothesis_helm.compiler.constants import INTEGER_RESULTS, TEMPLATE_CALLS, TRANSFORMATIONS
 from hypothesis_helm.compiler.limits import active_limits, call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.exceptions.compiler import LoopControl, Rejection, Unavailable, Unknown, UnsupportedTransformation
@@ -826,26 +827,7 @@ class Evaluation:
         if isinstance(expr, FieldAccess):
             return self.select(self.evaluate(expr.receiver, source, line, variables), expr.fields)
         if isinstance(expr, str):
-            if expr.startswith((".", "$")):
-                return self.resolve(expr, variables)
-            if expr.startswith('"'):
-                try:
-                    return json.loads(expr)
-                except ValueError as exc:
-                    raise Unknown("unsupported quoted literal") from exc
-            if expr.startswith("`") and expr.endswith("`"):
-                return expr[1:-1]
-            if expr in ("true", "false"):
-                return expr == "true"
-            if re.fullmatch(r"-?\d+", expr):
-                return int(expr)
-            if expr == "list":
-                return ConstantList(())
-            if expr == "dict":
-                return ConstantMap({})
-            if expr == "nil":
-                return None
-            raise Unknown(f"unsupported expression: {expr}")
+            return self._atom(expr, variables)
         if not isinstance(expr, tuple) or not expr:
             raise Unknown("invalid expression")
         function, *arguments = expr
@@ -858,49 +840,9 @@ class Evaluation:
             self.contextual = True
             self.evaluate(arguments[-1], source, line, variables, output_required=False)
             return ""
-        if function in {"include", "template"}:
-            if len(arguments) not in ({2} if function == "include" else {1, 2}):
-                raise Unknown("include requires a name and context")
-            name = native(self.evaluate(arguments[0], source, line, variables))
-            if isinstance(name, str) and name in self.contracts.ambiguous_helpers:
-                raise Unknown(f"conflicting helper definitions: {name}")
-            helper = self.contracts.helpers.get(name) if isinstance(name, str) else None
-            if helper is None and isinstance(name, str) and self.contracts.renderer is not None:
-                states = self.contracts.dependencies.states({}, self.values)
-                for template_source, body in self.contracts.templates.items():
-                    scope = self.contracts.scopes[template_source]
-                    if scope and states.get(scope) is not True:
-                        continue
-                    try:
-                        template = self.contracts.renderer.template_context(scope, template_source)
-                    except (Unavailable, OSError, ValueError, KeyError, subprocess.SubprocessError, tarfile.TarError) as exc:
-                        raise Unknown("native template filename is unavailable") from exc
-                    if template["Name"] == name:
-                        helper = (template_source, body)
-                        self.contextual = True
-                        break
-            if helper is None:
-                raise Unknown("unknown or ambiguous helper")
-            if self.depth >= self.contracts.max_call_depth:
-                raise Unknown(f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}")
-            helper_source, nodes = helper
-            context = self.evaluate(arguments[1], source, line, variables) if len(arguments) == 2 else None
-            previous_context = self.context
-            previous_loops = self.loops
-            previous_needed = self.needed
-            self.context = context
-            self.loops = 0
-            if not output_required:
-                self.needed = self.contracts.variables(nodes)
-                self.contextual = True
-            self.depth += 1
-            try:
-                return self.visit(nodes, helper_source, Scope({"$": context}), strict=output_required)
-            finally:
-                self.depth -= 1
-                self.context = previous_context
-                self.loops = previous_loops
-                self.needed = previous_needed
+        # Helper and Boolean calls control evaluation of their arguments.
+        if function in TEMPLATE_CALLS:
+            return self._helper(str(function), arguments, source, line, variables, output_required=output_required)
         if function in ("and", "or"):
             if not arguments:
                 raise Unknown("empty boolean call")
@@ -919,6 +861,136 @@ class Evaluation:
                 raise Unknown(str(exc)) from exc
             self.transformed = True
             return merged
+        if function in {"lookup", "getHostByName", "urlParse", "semverCompare"}:
+            return self._renderer_call(function, evaluated)
+        if isinstance(function, FieldAccess) or (isinstance(function, str) and function.startswith((".", "$")) and ("." in function)):
+            return self._context_method(function, evaluated, source, line, variables)
+        if function == "tpl" and len(args) == 2:
+            return self._template_string(evaluated, source, line)
+        if function in {"fail", "required"}:
+            return self._reject(function, evaluated, source, line)
+        if function in TRANSFORMATIONS:
+            try:
+                result = calculate(str(function), tuple(evaluated), limits=self.contracts.limits)
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
+            self.transformed = True
+            return DerivedValue(result, str(function), tuple(evaluated))
+        if function in {"not", "empty", "eq", "ne", "lt", "le", "gt", "ge", "int", "len"}:
+            return self._predicate(function, evaluated)
+        if function in {"list", "dict"}:
+            return self._construct(function, evaluated, arguments)
+        if function in {"hasKey", "has", "mustHas"}:
+            return self._membership(function, evaluated)
+        if function in {"omit", "keys", "sortAlpha", "index", "get", "append", "without"}:
+            return self._collection(function, evaluated)
+        if function in {"join", "printf"}:
+            return self._format(function, evaluated)
+        raise Unknown(f"unsupported function: {function}")
+
+    def _atom(self, expr: str, variables: Scope) -> object:
+        """
+        Read a literal or resolve its lexical context without invoking a function.
+
+        Args:
+            expr (str): Literal or selector token.
+            variables (Scope): Current lexical bindings.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        if expr.startswith((".", "$")):
+            return self.resolve(expr, variables)
+        if expr.startswith('"'):
+            try:
+                return json.loads(expr)
+            except ValueError as exc:
+                raise Unknown("unsupported quoted literal") from exc
+        if expr.startswith("`") and expr.endswith("`"):
+            return expr[1:-1]
+        if expr in ("true", "false"):
+            return expr == "true"
+        if re.fullmatch(r"-?\d+", expr):
+            return int(expr)
+        if expr == "list":
+            return ConstantList(())
+        if expr == "dict":
+            return ConstantMap({})
+        if expr == "nil":
+            return None
+        raise Unknown(f"unsupported expression: {expr}")
+
+    def _helper(self, function: str, arguments: list[object], source: str, line: int, variables: Scope, *, output_required: bool) -> object:
+        """
+        Enter a helper with its own root and restore all caller state afterward.
+
+        Args:
+            function (str): Helm helper invocation name.
+            arguments (list[object]): Unevaluated helper name and context expressions.
+            source (str): Caller source filename.
+            line (int): Caller line number.
+            variables (Scope): Current lexical bindings.
+            output_required (bool): Whether the caller consumes the helper output.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        # Helpers reset loop depth and dollar-root; finally restores them even after rejection.
+        if len(arguments) not in ({2} if function == "include" else {1, 2}):
+            raise Unknown("include requires a name and context")
+        name = native(self.evaluate(arguments[0], source, line, variables))
+        if isinstance(name, str) and name in self.contracts.ambiguous_helpers:
+            raise Unknown(f"conflicting helper definitions: {name}")
+        helper = self.contracts.helpers.get(name) if isinstance(name, str) else None
+        if helper is None and isinstance(name, str) and self.contracts.renderer is not None:
+            states = self.contracts.dependencies.states({}, self.values)
+            for template_source, body in self.contracts.templates.items():
+                scope = self.contracts.scopes[template_source]
+                if scope and states.get(scope) is not True:
+                    continue
+                try:
+                    template = self.contracts.renderer.template_context(scope, template_source)
+                except (Unavailable, OSError, ValueError, KeyError, subprocess.SubprocessError, tarfile.TarError) as exc:
+                    raise Unknown("native template filename is unavailable") from exc
+                if template["Name"] == name:
+                    helper = (template_source, body)
+                    self.contextual = True
+                    break
+        if helper is None:
+            raise Unknown("unknown or ambiguous helper")
+        if self.depth >= self.contracts.max_call_depth:
+            raise Unknown(f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}")
+        helper_source, nodes = helper
+        context = self.evaluate(arguments[1], source, line, variables) if len(arguments) == 2 else None
+        previous_context = self.context
+        previous_loops = self.loops
+        previous_needed = self.needed
+        self.context = context
+        self.loops = 0
+        if not output_required:
+            self.needed = self.contracts.variables(nodes)
+            self.contextual = True
+        self.depth += 1
+        try:
+            return self.visit(nodes, helper_source, Scope({"$": context}), strict=output_required)
+        finally:
+            self.depth -= 1
+            self.context = previous_context
+            self.loops = previous_loops
+            self.needed = previous_needed
+
+    def _renderer_call(self, function: object, evaluated: list[object]) -> object:
+        """
+        Evaluate only external operations fixed by the verified renderer context.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
         if function == "lookup" and len(args) == 4 and all(isinstance(value, str) for value in args):
             if self.contracts.renderer is not None and self.contracts.renderer.offline:
                 self.contextual = True
@@ -946,46 +1018,90 @@ class Evaluation:
                 return self.contracts.renderer.semver_compare(str(args[0]), str(args[1]))
             except (Unavailable, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, YAMLError) as exc:
                 raise Unknown(str(exc) if isinstance(exc, Unavailable) else "native version comparison unavailable") from exc
-        if isinstance(function, FieldAccess) or (isinstance(function, str) and function.startswith((".", "$")) and "." in function):
-            if isinstance(function, FieldAccess):
-                method = function.fields[-1]
-                target = self.select(self.evaluate(function.receiver, source, line, variables), function.fields[:-1])
-            else:
-                receiver, method = str(function).rsplit(".", 1)
-                target = self.resolve(receiver, variables)
-            if isinstance(target, APIVersions) and method == "Has" and len(args) == 1 and isinstance(args[0], str):
-                self.contextual = True
-                return args[0] in target.versions
-            if isinstance(target, FileSet) and method in {"Get", "Lines"} and len(args) == 1 and isinstance(args[0], str):
-                self.contextual = True
-                try:
-                    file_text = target.get(args[0])
-                except Unavailable as exc:
-                    raise Unknown(str(exc)) from exc
-                return file_text if method == "Get" else ConstantList(tuple(file_text.removesuffix("\n").split("\n")) if file_text else ())
-            raise Unknown(f"unsupported context method: {method}")
-        if function == "tpl" and len(args) == 2:
-            if not isinstance(args[0], str):
-                raise Unknown("tpl requires a concrete string")
-            if self.depth >= self.contracts.max_call_depth:
-                raise Unknown(f"tpl call depth exceeds compiler limit {self.contracts.max_call_depth}")
-            if len(args[0].encode("utf-8")) > self.contracts.limits["max_template_bytes"]:
-                raise Unknown(f"tpl source exceeds compiler.max_template_bytes={self.contracts.limits['max_template_bytes']}")
-            try:
-                nodes = tpl_nodes(args[0])
-            except (ValueError, RecursionError) as exc:
-                raise Unknown("tpl source cannot be parsed by the compiler") from exc
-            if any(node.kind == "opaque" and node.text.startswith(("define ", "block ")) for node in walk(nodes)):
-                raise Unknown("tpl-local template definitions require native Helm evaluation")
-            previous_context, previous_loops = self.context, self.loops
-            self.context, self.loops = evaluated[1], 0
-            self.depth += 1
+        raise Unknown(f"unsupported function: {function}")
+
+    def _context_method(self, function: object, evaluated: list[object], source: str, line: int, variables: Scope) -> object:
+        """
+        Resolve explicit capability and chart-file methods on their typed receivers.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+            source (str): Caller source filename.
+            line (int): Caller source line.
+            variables (Scope): Current lexical bindings.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if isinstance(function, FieldAccess):
+            method = function.fields[-1]
+            target = self.select(self.evaluate(function.receiver, source, line, variables), function.fields[:-1])
+        else:
+            receiver, method = str(function).rsplit(".", 1)
+            target = self.resolve(receiver, variables)
+        if isinstance(target, APIVersions) and method == "Has" and len(args) == 1 and isinstance(args[0], str):
+            self.contextual = True
+            return args[0] in target.versions
+        if isinstance(target, FileSet) and method in {"Get", "Lines"} and len(args) == 1 and isinstance(args[0], str):
             self.contextual = True
             try:
-                return self.visit(nodes, f"{source}:{line} (tpl)", Scope({"$": self.context}), strict=True)
-            finally:
-                self.context, self.loops = previous_context, previous_loops
-                self.depth -= 1
+                file_text = target.get(args[0])
+            except Unavailable as exc:
+                raise Unknown(str(exc)) from exc
+            return file_text if method == "Get" else ConstantList(tuple(file_text.removesuffix("\n").split("\n")) if file_text else ())
+        raise Unknown(f"unsupported context method: {method}")
+
+    def _template_string(self, evaluated: list[object], source: str, line: int) -> object:
+        """
+        Analyze bounded concrete tpl code using its own lexical root.
+
+        Args:
+            evaluated (list[object]): Concrete template text and its invocation context.
+            source (str): Caller source filename.
+            line (int): Caller source line.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if not isinstance(args[0], str):
+            raise Unknown("tpl requires a concrete string")
+        if self.depth >= self.contracts.max_call_depth:
+            raise Unknown(f"tpl call depth exceeds compiler limit {self.contracts.max_call_depth}")
+        if len(args[0].encode("utf-8")) > self.contracts.limits["max_template_bytes"]:
+            raise Unknown(f"tpl source exceeds compiler.max_template_bytes={self.contracts.limits['max_template_bytes']}")
+        try:
+            nodes = tpl_nodes(args[0])
+        except (ValueError, RecursionError) as exc:
+            raise Unknown("tpl source cannot be parsed by the compiler") from exc
+        if any(node.kind == "opaque" and node.text.startswith(("define ", "block ")) for node in walk(nodes)):
+            raise Unknown("tpl-local template definitions require native Helm evaluation")
+        previous_context, previous_loops = self.context, self.loops
+        self.context, self.loops = evaluated[1], 0
+        self.depth += 1
+        self.contextual = True
+        try:
+            return self.visit(nodes, f"{source}:{line} (tpl)", Scope({"$": self.context}), strict=True)
+        finally:
+            self.context, self.loops = previous_context, previous_loops
+            self.depth -= 1
+
+    def _reject(self, function: object, evaluated: list[object], source: str, line: int) -> object:
+        """
+        Record explicit fail and required contracts with the evidence accumulated so far.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+            source (str): Rejecting template filename.
+            line (int): Rejecting template line.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
         if function == "fail" and len(args) == 1 and isinstance(args[0], str):
             text = evaluated[0] if isinstance(evaluated[0], ContractText) else None
             raise Rejection(
@@ -1016,13 +1132,20 @@ class Evaluation:
                     contextual=self.contextual,
                 )
             return evaluated[1]
-        if function in FUNCTIONS:
-            try:
-                result = calculate(str(function), tuple(evaluated), limits=self.contracts.limits)
-            except UnsupportedTransformation as exc:
-                raise Unknown(str(exc)) from exc
-            self.transformed = True
-            return DerivedValue(result, str(function), tuple(evaluated))
+        raise Unknown(f"unsupported function: {function}")
+
+    def _predicate(self, function: object, evaluated: list[object]) -> object:
+        """
+        Evaluate scalar predicates without coercing incompatible Go types.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
         if function in ("not", "empty") and len(args) == 1:
             return not bool(args[0])
         if function in ("eq", "ne", "lt", "le", "gt", "ge") and len(args) == 2:
@@ -1037,6 +1160,21 @@ class Evaluation:
             return evaluated[0]
         if function == "len" and len(args) == 1 and isinstance(args[0], str | list | dict):
             return len(args[0].encode("utf-8")) if isinstance(args[0], str) else len(args[0])
+        raise Unknown(f"unsupported function: {function}")
+
+    def _construct(self, function: object, evaluated: list[object], arguments: list[object]) -> object:
+        """
+        Build lists and dictionaries while distinguishing constant keys from sampled keys.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+            arguments (list[object]): Original expressions used to recognize literal entries.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
         if function == "list":
             if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments):
                 return ConstantList(tuple(str(value) for value in args))
@@ -1049,6 +1187,51 @@ class Evaluation:
             if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments[::2]):
                 return ConstantMap(entries)
             return entries
+        raise Unknown(f"unsupported function: {function}")
+
+    def _membership(self, function: object, evaluated: list[object]) -> object:
+        """
+        Derive allowlists only from literal collections whose membership rejects an input.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        # A sampled collection cannot prove the chart accepts only these observed values.
+        if function == "hasKey" and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
+            present = args[1] in args[0]
+            if not present and isinstance(evaluated[0], ConstantMap) and isinstance(evaluated[1], BoundValue):
+                self.enums["$." + ".".join(evaluated[1].path)] = tuple(sorted(args[0]))
+            if not present and isinstance(evaluated[0], ConstantMap) and isinstance(evaluated[1], DerivedValue):
+                self.transformed_domains.append(TransformedDomain(evaluated[1], tuple(sorted(args[0]))))
+            return present
+        if function in ("has", "mustHas") and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], list):
+            if not all(isinstance(item, str) for item in args[1]):
+                raise Unknown("membership requires a string list")
+            present = args[0] in args[1]
+            if not present and isinstance(evaluated[0], BoundValue) and isinstance(evaluated[1], ConstantList):
+                self.enums["$." + ".".join(evaluated[0].path)] = tuple(sorted(set(evaluated[1].values)))
+            if not present and isinstance(evaluated[0], DerivedValue) and isinstance(evaluated[1], ConstantList):
+                self.transformed_domains.append(TransformedDomain(evaluated[0], tuple(sorted(set(evaluated[1].values)))))
+            return present
+        raise Unknown(f"unsupported function: {function}")
+
+    def _collection(self, function: object, evaluated: list[object]) -> object:
+        """
+        Keep source provenance through supported collection operations.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
         if function == "omit" and args and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[1:]):
             if not all(isinstance(key, str) for key in args[0]):
                 raise Unknown("omit requires string-key maps")
@@ -1067,22 +1250,6 @@ class Evaluation:
                 }
             self.transformed = True
             return kept
-        if function == "hasKey" and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
-            present = args[1] in args[0]
-            if not present and isinstance(evaluated[0], ConstantMap) and isinstance(evaluated[1], BoundValue):
-                self.enums["$." + ".".join(evaluated[1].path)] = tuple(sorted(args[0]))
-            if not present and isinstance(evaluated[0], ConstantMap) and isinstance(evaluated[1], DerivedValue):
-                self.transformed_domains.append(TransformedDomain(evaluated[1], tuple(sorted(args[0]))))
-            return present
-        if function in ("has", "mustHas") and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], list):
-            if not all(isinstance(item, str) for item in args[1]):
-                raise Unknown("membership requires a string list")
-            present = args[0] in args[1]
-            if not present and isinstance(evaluated[0], BoundValue) and isinstance(evaluated[1], ConstantList):
-                self.enums["$." + ".".join(evaluated[0].path)] = tuple(sorted(set(evaluated[1].values)))
-            if not present and isinstance(evaluated[0], DerivedValue) and isinstance(evaluated[1], ConstantList):
-                self.transformed_domains.append(TransformedDomain(evaluated[0], tuple(sorted(set(evaluated[1].values)))))
-            return present
         if function == "keys" and len(args) == 1 and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[0]):
             return UnorderedKeys(tuple(args[0]))
         if function == "sortAlpha" and len(args) == 1 and isinstance(args[0], list) and all(isinstance(item, str) for item in args[0]):
@@ -1102,11 +1269,7 @@ class Evaluation:
                 )
             return args[0].get(args[1], "" if function == "get" else None)
         if function == "index" and len(args) == 2 and isinstance(args[0], list) and type(args[1]) is int:
-            if not (
-                type(evaluated[1]) is int
-                or isinstance(evaluated[1], DerivedValue)
-                and evaluated[1].function in {"int", "int64", "atoi", "add", "add1", "sub", "mul", "min", "max"}
-            ):
+            if not (type(evaluated[1]) is int or isinstance(evaluated[1], DerivedValue) and evaluated[1].function in INTEGER_RESULTS):
                 raise Unknown("list index requires a literal or explicitly converted integer")
             position = args[1]
             if not 0 <= position < len(args[0]):
@@ -1126,6 +1289,20 @@ class Evaluation:
             return [*args[0], args[1]]
         if function == "without" and args and isinstance(args[0], list):
             return [item for item in args[0] if item not in args[1:]]
+        raise Unknown(f"unsupported function: {function}")
+
+    def _format(self, function: object, evaluated: list[object]) -> object:
+        """
+        Preserve unordered key evidence while formatting explicit rejection messages.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
         if function == "join" and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], list):
             if all(isinstance(item, str) for item in args[1]):
                 if isinstance(evaluated[1], UnorderedKeys):
@@ -1157,9 +1334,7 @@ class Evaluation:
                         raise Unknown("printf argument type does not match its format")
                     operand = evaluated[position]
                     if piece == "%d" and not (
-                        type(operand) is int
-                        or isinstance(operand, DerivedValue)
-                        and operand.function in {"int", "int64", "atoi", "add", "add1", "sub", "mul", "min", "max"}
+                        type(operand) is int or isinstance(operand, DerivedValue) and operand.function in INTEGER_RESULTS
                     ):
                         raise Unknown("printf integer formatting requires an explicit integer conversion or known integer result")
                     if isinstance(evaluated[position], ContractText):

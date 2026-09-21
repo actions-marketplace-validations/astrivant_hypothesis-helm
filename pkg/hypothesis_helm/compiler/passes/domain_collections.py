@@ -2,7 +2,7 @@
 Summarize element-preserving collection operations and append-only loop accumulators.
 """
 
-from hypothesis_helm.compiler.asts.projections import Collection, Member, Operation
+from hypothesis_helm.compiler.asts.projections import Collection, LocalMap, Member, Operation
 
 __all__ = ("additions", "members", "truth")
 
@@ -12,15 +12,18 @@ def truth(value: object) -> object:
     Preserve unknown collection cardinality when following a truth test.
 
     Args:
-        value (object): Concrete list or symbolic collection expression.
+        value (object): Concrete value or symbolic scalar, map or collection expression.
 
     Returns:
         object: Boolean or symbolic nonempty condition.
     """
     if isinstance(value, Collection):
         return value.nonempty
-    if isinstance(value, list):
+    if value is None or isinstance(value, str | bool | int | float | list | dict):
         return bool(value)
+    if isinstance(value, LocalMap) and not value.sources:
+        # A map with an empty value still has a key and therefore is nonempty.
+        return bool(value.entries)
     if isinstance(value, Operation):
         if value.name in {"append", "mustAppend"}:
             return True
@@ -45,6 +48,8 @@ def members(value: object) -> tuple[Member, ...] | None:
     """
     if isinstance(value, Collection):
         return value.members
+    if value is None:
+        return ()
     if isinstance(value, list):
         return tuple(Member(item) for item in value)
     if not isinstance(value, Operation):

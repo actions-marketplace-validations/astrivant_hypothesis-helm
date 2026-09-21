@@ -108,4 +108,5 @@ def output(pieces: list[Piece]) -> object:
         return selected[0].value
     if all(isinstance(piece.value, str) for piece in selected):
         return "".join(str(piece.value) for piece in selected)
+    # Mixed symbolic output keeps Piece locations for later destination mapping and diagnostics.
     return Operation("text", tuple(selected))

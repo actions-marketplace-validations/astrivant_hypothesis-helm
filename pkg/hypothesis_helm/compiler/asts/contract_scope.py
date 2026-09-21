@@ -9,6 +9,7 @@ from attrs import define, field
 __all__ = ("Scope", "UNRESOLVED")
 
 
+# Unknown bindings must remain distinct from a resolved Helm nil value (Python None).
 UNRESOLVED = object()
 
 
@@ -55,6 +56,7 @@ class Scope:
             KeyError: Assignment targets a variable that has not been declared.
         """
         if not assign or name in self.bindings:
+            # := declares in this block; = searches outward for the existing owner.
             self.bindings[name] = value
         elif self.parent is not None:
             self.parent.bind(name, value, assign=True)

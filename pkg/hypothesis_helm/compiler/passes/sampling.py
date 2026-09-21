@@ -95,6 +95,7 @@ def profile(chart: Chart, complexity: dict[str, object] | None = None) -> dict[s
             ),
         }
         if fingerprint(chart) != before:
+            # Calibration must describe one source snapshot, not features mixed across concurrent edits.
             raise ValueError("chart changed during sampling analysis")
         result["status"] = "supported"
     except (ValueError, OSError, RecursionError) as exc:

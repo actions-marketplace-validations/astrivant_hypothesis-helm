@@ -54,6 +54,7 @@ def archive_files(stream: io.BytesIO, *, limits: dict[str, int] | None = None) -
         for index, member in enumerate(bundle):
             name = PurePosixPath(member.name)
             total += member.size
+            # Bound expanded bytes before reading a member; compressed size alone is insufficient.
             if index >= limits["max_files"]:
                 raise Unavailable(f"chart files exceed compiler.max_files={limits['max_files']}")
             if total > limits["max_context_bytes"]:
@@ -340,6 +341,7 @@ class RendererContext:
             dict[str, bytes]: Exact package members admitted by Helm's loader.
         """
         if self.packed is None:
+            # Helm packaging applies its own ignore and loading rules before we inspect Files or Chart.
             with tempfile.TemporaryDirectory(prefix="helm-context-files-") as temporary:
                 result = Processes().run(
                     [self.helm, "package", str(self.chart), "--destination", temporary],

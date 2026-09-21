@@ -88,6 +88,7 @@ class FailureExpansion:
             list[int]: Newly scheduled indices; no outcomes are inferred from membership.
         """
         identity = self.membership.get(index)
+        # Expand scheduling only; sharing a region does not assign the observed failure to its neighbors.
         added = [member for member in self.groups.get(identity, []) if member not in self.scheduled] if identity is not None else []
         self.scheduled.update(added)
         self.added.extend(added)

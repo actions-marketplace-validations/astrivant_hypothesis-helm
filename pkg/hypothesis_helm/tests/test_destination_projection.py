@@ -2,6 +2,7 @@
 Verify source-derived destinations independently of chart names or template snapshots.
 """
 
+import itertools
 import json
 import shutil
 from pathlib import Path
@@ -13,7 +14,7 @@ from jsonschema import validators
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.projections import Input, Operation
-from hypothesis_helm.compiler.passes.domain_constraints import guard_bounds
+from hypothesis_helm.compiler.passes.domain_constraints import guard_bounds, predicate
 from hypothesis_helm.compiler.passes.domains import project
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
@@ -105,7 +106,7 @@ def test_literal_tpl_serialization_and_local_map_merge(tmp_path: Path, merge: st
         merge (str): Local map operation with either precedence.
 
     Returns:
-        None: Both maps receive string-value constraints without a chart-specific binding.
+        None: Both literal maps receive string-value constraints; dynamic template contents remain for Helm.
     """
     chart = fixture_chart(tmp_path)
     mapping(chart.schema["properties"]).update(first={"type": "object"}, second={"type": "object"})
@@ -142,13 +143,17 @@ def test_literal_tpl_serialization_and_local_map_merge(tmp_path: Path, merge: st
     assert validator.is_valid(json_value(chart.defaults))
     for path in ("first", "second"):
         assert not validator.is_valid(json_value({**chart.defaults, path: {"bad": []}}))
-        assert not validator.is_valid(json_value({**chart.defaults, path: {"bad": '{{ fail "code" }}'}}))
+        assert validator.is_valid(json_value({**chart.defaults, path: {"bad": '{{ fail "code" }}'}}))
+        assert validator.is_valid(json_value({**chart.defaults, path: {"good": '{{ "generated" }}'}}))
         assert validator.is_valid(json_value({**chart.defaults, path: {"good": "literal"}}))
     if shutil.which("helm"):
         assert render(chart, chart.defaults)
         with pytest.raises(RenderFailure) as failure:
             render(chart, {**chart.defaults, "first": {"bad": []}})
         assert failure.value.code == "HH1109"
+        assert render(chart, {**chart.defaults, "first": {"good": '{{ "generated" }}'}})
+        with pytest.raises(RenderFailure, match="code"):
+            render(chart, {**chart.defaults, "first": {"bad": '{{ fail "code" }}'}})
 
 
 def test_independent_conditions_do_not_multiply_whole_template_variants(tmp_path: Path) -> None:
@@ -390,6 +395,52 @@ def test_partial_guard_regions_are_sufficient_for_every_unknown_value(conjunctio
         outcomes = [(enabled and unknown) if conjunction else (enabled or unknown) for unknown in (False, True)]
         assert accepts.is_valid({"enabled": enabled}) == all(outcomes)
         assert rejects.is_valid({"enabled": enabled}) == (not any(outcomes))
+
+
+@pytest.mark.parametrize("known", list(itertools.product((False, True), repeat=3)))
+def test_conditional_guard_bounds_agree_with_every_unknown_completion(known: tuple[bool, bool, bool]) -> None:
+    """
+    Check conditional bounds against the complete Boolean truth table including unresolved operands.
+
+    Args:
+        known (tuple[bool, bool, bool]): Whether the selector and each arm have established input origins.
+
+    Returns:
+        None: Established regions agree with every possible completion; conflicting unknowns stay unresolved.
+    """
+    names = ("selector", "yes", "no")
+    expression = Operation(
+        "choose", tuple(Input((name,)) if resolved else Operation("renderer-context") for name, resolved in zip(names, known, strict=True))
+    )
+    bounds = guard_bounds(expression)
+    accepts, rejects = (validators.validator_for(bound)(bound) for bound in bounds)
+    exact = predicate(expression)
+    assert (exact is not None) == all(known)
+    for inputs in itertools.product((False, True), repeat=3):
+        candidate = dict(zip(names, inputs, strict=True))
+        possibilities = [(value,) if resolved else (False, True) for value, resolved in zip(inputs, known, strict=True)]
+        outcomes = [yes if condition else no for condition, yes, no in itertools.product(*possibilities)]
+        assert accepts.is_valid(candidate) == all(outcomes)
+        assert rejects.is_valid(candidate) == (not any(outcomes))
+        if exact is not None:
+            assert validators.validator_for(exact)(exact).is_valid(candidate) == outcomes[0]
+
+
+def test_conditional_item_guard_stays_relative_to_its_collection() -> None:
+    """
+    Express each element's choice locally without treating all elements as a single Boolean.
+
+    Returns:
+        None: Different array elements can select different predicate branches.
+    """
+    root = ("entries", "*")
+    expression = Operation("choose", tuple(Input((*root, name)) for name in ("selector", "yes", "no")))
+    assert predicate(expression) is None
+    local = predicate(expression, root=root)
+    assert local is not None
+    validator = validators.validator_for(local)(local)
+    for selector, yes, no in itertools.product((False, True), repeat=3):
+        assert validator.is_valid({"selector": selector, "yes": yes, "no": no}) == (yes if selector else no)
 
 
 def test_known_part_of_activation_guard_retains_the_supported_region(tmp_path: Path) -> None:

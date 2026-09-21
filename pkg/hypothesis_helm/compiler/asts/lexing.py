@@ -71,6 +71,7 @@ def lex(source: str) -> list[Token]:
         tokens.append(Token(False, literal, line))
         quote = ""
         comment = False
+        # Delimiters inside strings or comments do not close the surrounding template action.
         while cursor < len(source):
             if comment:
                 if source.startswith("*/", cursor):
@@ -96,6 +97,7 @@ def lex(source: str) -> list[Token]:
             raise ValueError("unterminated template action")
         action = source[start + 2 : cursor]
         trim = len(action) >= 2 and action[-1] == "-" and action[-2] in SPACE
+        # A trim marker affects neighboring literal output, not just the action token.
         if left:
             action = action[1:]
         if trim:

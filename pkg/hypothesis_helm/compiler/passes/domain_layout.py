@@ -137,6 +137,8 @@ class Layout:
             if not parent or isinstance(selected.value, Operation) and selected.value.name in {"unknown", "unresolved"}:
                 state.document.barriers.append(parent)
             else:
+                if not sequence:
+                    selected = Piece(Operation("yaml-fragment", (selected.value,)), selected.file, selected.line)
                 state.document.fields.append((parent, selected, state.conditions))
             return
         match = re.fullmatch(r"""((?:[A-Za-z_][A-Za-z_0-9./-]*|"[^"\\]*"|'[^']*')):\s*(.*)""", content)

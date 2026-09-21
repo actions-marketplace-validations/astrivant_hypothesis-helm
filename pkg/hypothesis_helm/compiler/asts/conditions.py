@@ -43,10 +43,12 @@ class Condition:
             return bool(self.literal)
         value = read(".Values." + ".".join(self.path))
         if self.operator in {"truth", "not"}:
+            # This proof language is narrower than Helm's general emptiness rules.
             if type(value) is not bool:
                 raise ValueError("only Boolean truth conditions have a control-flow proof")
             return bool(value) if self.operator == "truth" else not value
         if type(value) is not type(self.literal):
+            # Python considers True equal to 1; that cannot establish a Helm equality proof.
             raise ValueError("equality operands are outside the same-type string/Boolean contract")
         equal = value == self.literal
         return equal if self.operator == "eq" else not equal

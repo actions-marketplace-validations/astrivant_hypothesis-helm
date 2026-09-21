@@ -22,9 +22,9 @@ locations, missing declarations, unresolved access, and coverage counts.
 by the minimal-values pass. Missing-field information follows the values document
 after a YAML `---` separator.
 
-The shared defaults in
-[`constants.py`](../../pkg/hypothesis_helm/compiler/constants.py) fill missing
-typed values deterministically. A typed zero can still violate a template or a
+[`scaffolding.py`](../../pkg/hypothesis_helm/compiler/passes/scaffolding.py) fills missing
+typed values deterministically using the shared factories in
+[`constants.py`](../../pkg/hypothesis_helm/compiler/constants.py). A typed zero can still violate a template or a
 downstream Kubernetes constraint. The exporter records that result instead of
 searching for arbitrary replacement values.<sup>[\[1\]](../inputs/README.md)
 

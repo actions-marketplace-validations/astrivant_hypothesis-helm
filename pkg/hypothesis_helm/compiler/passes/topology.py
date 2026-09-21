@@ -79,6 +79,7 @@ def trim_topology(
                     memberships[configuration_key(overrides)] = identity
                 evidence[identity] = {"region": identity, "connections": connections}
                 continue
+        # An unsupported projection is protected from thinning rather than grouped under an unknown key.
         protected.append(index)
     selected = set(protected)
     regions: list[dict[str, object]] = []
@@ -87,6 +88,7 @@ def trim_topology(
         selected.update(members[position] for position in retained)
         regions.append({**evidence[identity], "candidates": len(members), "retained": len(retained)})
     if not compiler.unchanged():
+        # Discard the entire selection decision if its source assumptions changed during analysis.
         fallback = "chart changed during topology analysis"
         selected = set(range(len(values)))
         if memberships is not None:

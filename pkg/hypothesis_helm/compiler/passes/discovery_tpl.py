@@ -27,6 +27,7 @@ def values(origin: Origin, defaults: object) -> tuple[tuple[object, ...], bool]:
         results = [values(item, defaults) for item in origin.alternatives]
         return tuple(value for result, _ in results for value in result), any(unknown for _, unknown in results)
     if isinstance(origin, tuple) and origin[:1] == ("Values",):
+        # Defaults supply code to inspect, not evidence that other input values choose the same branch.
         value = defaults
         for key in origin[1:]:
             if not isinstance(value, dict) or key not in value:

@@ -11,8 +11,8 @@ import pytest
 
 from hypothesis_helm.charts.testing.runner import Chart
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.compiler.constants import fill_missing, zero_candidate
 from hypothesis_helm.compiler.passes.minimum import export_minimal
+from hypothesis_helm.compiler.passes.scaffolding import fill_missing, zero_candidate
 from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.schemas.contracts import mapping
 from hypothesis_helm.schemas.model import Missing, ValuesModel

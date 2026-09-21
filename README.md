@@ -9,8 +9,8 @@
   - [Quick start](#quick-start)
 - [Production validation](#production-validation)
 - [Guides](#guides)
-- [Test case: Bitnami charts](#test-case-bitnami-charts)
-- [Test case: Prometheus Community charts](#test-case-prometheus-community-charts)
+- [Case study: Bitnami charts](#case-study-bitnami-charts)
+- [Case study: Prometheus Community charts](#case-study-prometheus-community-charts)
 - [Development](#development)
 - [CLI help](#cli-help)
 - [License](#license)
@@ -192,7 +192,7 @@ Generate the same template with `helm hypothesis --generate-config > .hypothesis
 [All documentation](docs/README.md) includes detailed behavior and the
 [exact-equivalence pruning contract](docs/safe-pruning.md).
 
-## Test case: Bitnami charts
+## Case study: Bitnami charts
 
 <!-- refresh:bitnami:start -->
 We scanned **115 Bitnami charts**, recording **336,009 test attempts**
@@ -205,7 +205,7 @@ Read the [scan results](docs/reports/bitnami.md), download the
 The [chart topology catalog](<studies/chart-topologies/README.md>) includes
 directed dependency graphs and their mathematical measurements.
 
-## Test case: Prometheus Community charts
+## Case study: Prometheus Community charts
 
 <!-- refresh:prometheus:start -->
 We scanned **46 Prometheus Community charts**, recording **56,756 test attempts**
@@ -973,5 +973,4 @@ These are API schema shims, not chart-name exceptions. Each records its upstream
 rebuilds require review if that description changes. The Service enum shims also record the upstream defaulting
 reference and when they can be retired. Remove a shim once the upstream schema supplies the equivalent constraint.
 Other fields remain unconstrained where neither upstream data nor a reviewed supplement establishes their domain.
-See [catalog rebuilding](docs/input-domains/README.md#rebuilding-the-catalog-before-release) and the
-[Bitnami diagnostic review](docs/reports/bitnami-findings-review-1789870241.md) for remaining gaps.
+See [catalog rebuilding](docs/input-domains/README.md#rebuilding-the-catalog-before-release) for source verification and limits.

@@ -11,13 +11,19 @@ from functools import lru_cache
 from attrs import frozen
 
 from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
+from hypothesis_helm.compiler.constants import (
+    COLLECTION_TRANSFORMS,
+    FORMAT_TRANSFORMS,
+    INTEGER_RESULTS,
+    MAX_INTEGER,
+    MIN_INTEGER,
+    SELECTION_TRANSFORMS,
+    TEXT_TRANSFORMS,
+)
 from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
 __all__ = (
-    "FUNCTIONS",
-    "MAX_INTEGER",
-    "MIN_INTEGER",
     "TransformedDomain",
     "calculate",
     "describe",
@@ -26,50 +32,6 @@ __all__ = (
     "regular_expression",
     "replay",
 )
-
-
-FUNCTIONS = frozenset(
-    {
-        "default",
-        "coalesce",
-        "lower",
-        "upper",
-        "trim",
-        "trimAll",
-        "trimPrefix",
-        "trimSuffix",
-        "replace",
-        "contains",
-        "hasPrefix",
-        "hasSuffix",
-        "add",
-        "add1",
-        "sub",
-        "mul",
-        "min",
-        "max",
-        "atoi",
-        "toString",
-        "regexMatch",
-        "mustRegexMatch",
-        "trunc",
-        "splitList",
-        "split",
-        "kindIs",
-        "concat",
-        "regexFind",
-        "regexReplaceAll",
-        "ternary",
-        "print",
-        "int",
-        "int64",
-        "quote",
-        "indent",
-        "nindent",
-    }
-)
-MIN_INTEGER = -(2**63)
-MAX_INTEGER = 2**63 - 1
 
 
 @lru_cache(maxsize=1024)
@@ -156,6 +118,37 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
     args = tuple(native(value) for value in arguments)
     if any(isinstance(value, str) and len(value) > limits["max_string_chars"] for value in args):
         raise UnsupportedTransformation(f"transformation exceeds compiler.max_string_chars={limits['max_string_chars']}")
+    # Shared admission checks run once; each handler owns its operand and arity rules.
+    if function in FORMAT_TRANSFORMS:
+        return _format(function, args, limits, arguments=arguments)
+    if function in SELECTION_TRANSFORMS:
+        return _selection(function, args, limits)
+    if function in COLLECTION_TRANSFORMS:
+        return _collection(function, args, limits)
+    if function in TEXT_TRANSFORMS:
+        return _text(function, args, limits)
+    if function in INTEGER_RESULTS:
+        return _integer(function, args, limits)
+    raise UnsupportedTransformation(f"unsupported transformation operands: {function}")
+
+
+def _format(function: str, args: tuple[object, ...], limits: dict[str, int], *, arguments: tuple[object, ...]) -> object:
+    """
+    Format supported text without guessing Go coercions or allocating unbounded output.
+
+    Args:
+        function (str): Canonical operation name.
+        args (tuple[object, ...]): Concrete operands after unwrapping provenance.
+        limits (dict[str, int]): Captured compiler work and output bounds.
+        arguments (tuple[object, ...]): Original operands used to establish explicit integer conversions.
+
+    Returns:
+        object: Supported concrete result.
+
+    Raises:
+        UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
+    """
+    # Inspect original operand provenance before trusting integer formatting widths.
     if function == "quote" and all(value is None or isinstance(value, str | bool) for value in args):
         escaped = {"\a": r"\a", "\b": r"\b", "\f": r"\f", "\n": r"\n", "\r": r"\r", "\t": r"\t", "\v": r"\v", '"': r"\"", "\\": r"\\"}
         quoted: list[str] = []
@@ -174,28 +167,73 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
         return " ".join(quoted)
     if function in {"indent", "nindent"} and len(args) == 2 and type(args[0]) is int and isinstance(args[1], str):
         width, text = args[0], args[1]
-        if not (
-            type(arguments[0]) is int
-            or isinstance(arguments[0], DerivedValue)
-            and arguments[0].function in {"int", "int64", "atoi", "add", "add1", "sub", "mul", "min", "max"}
-        ):
+        if not (type(arguments[0]) is int or isinstance(arguments[0], DerivedValue) and arguments[0].function in INTEGER_RESULTS):
             raise UnsupportedTransformation("indentation width requires a literal or explicitly converted integer")
         size = len(text) + width * (text.count("\n") + 1) + int(function == "nindent")
         if width < 0 or size > limits["max_string_chars"]:
             raise UnsupportedTransformation(f"indentation exceeds compiler.max_string_chars={limits['max_string_chars']}")
         return ("\n" if function == "nindent" else "") + " " * width + text.replace("\n", "\n" + " " * width)
+    if function == "print" and all(isinstance(value, str) for value in args):
+        if sum(len(str(value)) for value in args) > limits["max_string_chars"]:
+            raise UnsupportedTransformation(f"transformation exceeds compiler.max_string_chars={limits['max_string_chars']}")
+        return "".join(str(value) for value in args)
+    if function == "toString" and len(args) == 1 and type(args[0]) in (str, int, bool):
+        return str(args[0]).lower() if type(args[0]) is bool else str(args[0])
+    raise UnsupportedTransformation(f"unsupported transformation operands: {function}")
+
+
+def _selection(function: str, args: tuple[object, ...], limits: dict[str, int]) -> object:
+    """
+    Apply emptiness and reflection rules separately from general Python truth and types.
+
+    Args:
+        function (str): Canonical operation name.
+        args (tuple[object, ...]): Concrete operands after unwrapping provenance.
+        limits (dict[str, int]): Captured compiler work and output bounds.
+
+    Returns:
+        object: Supported concrete result.
+
+    Raises:
+        UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
+    """
+    # Nonnumeric reflection kinds survive Helm decoding; numeric kinds may not.
     if function in {"default", "coalesce"}:
         if any(value is not None and not isinstance(value, (str, bool, int, float, list, dict)) for value in args):
             raise UnsupportedTransformation("unknown emptiness semantics")
-        if function == "default" and len(args) == 2:
-            return args[1] if args[1] else args[0]
+        if function == "default" and args:
+            return args[1] if len(args) > 1 and args[1] else args[0]
         if function == "coalesce":
             return next((value for value in args if value), None)
-    if function == "trunc" and len(args) == 2 and type(args[0]) is int and isinstance(args[1], str):
-        width, text = args[0], args[1]
-        if not text.isascii():
-            raise UnsupportedTransformation("byte truncation requires the supported ASCII subset")
-        return text[:width] if width >= 0 else text[max(0, len(text) + width) :]
+    if function == "kindIs" and len(args) == 2 and isinstance(args[0], str):
+        # Raw YAML numbers do not reliably identify the Go reflection kind.
+        # Nonnumeric kinds are stable across Helm's JSON coalescing boundary.
+        if args[0] in {"string", "map", "slice", "bool", "invalid"}:
+            kinds = {str: "string", dict: "map", list: "slice", bool: "bool", type(None): "invalid"}
+            kind = next((name for cls, name in kinds.items() if isinstance(args[1], cls)), None)
+            return kind == args[0]
+        raise UnsupportedTransformation("numeric and renderer-specific reflection kinds remain unresolved")
+    if function == "ternary" and len(args) == 3 and type(args[2]) is bool:
+        return args[0] if args[2] else args[1]
+    raise UnsupportedTransformation(f"unsupported transformation operands: {function}")
+
+
+def _collection(function: str, args: tuple[object, ...], limits: dict[str, int]) -> object:
+    """
+    Transform concrete collections while retaining strict size and index checks.
+
+    Args:
+        function (str): Canonical operation name.
+        args (tuple[object, ...]): Concrete operands after unwrapping provenance.
+        limits (dict[str, int]): Captured compiler work and output bounds.
+
+    Returns:
+        object: Supported concrete result.
+
+    Raises:
+        UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
+    """
+    # Check cardinality before building the output, including internal replay operations.
     if function in {"splitList", "split"} and len(args) == 2 and all(isinstance(value, str) for value in args):
         separator, text = str(args[0]), str(args[1])
         count = text.count(separator) + 1 if separator else len(text)
@@ -219,24 +257,30 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
         if sum(map(len, collections)) > limits["max_range_items"]:
             raise UnsupportedTransformation(f"concat exceeds compiler.max_range_items={limits['max_range_items']}")
         return [item for collection in collections for item in collection]
-    if function == "kindIs" and len(args) == 2 and isinstance(args[0], str):
-        # Raw YAML numbers do not reliably identify the Go reflection kind.
-        # Nonnumeric kinds are stable across Helm's JSON coalescing boundary.
-        if args[0] in {"string", "map", "slice", "bool", "invalid"}:
-            kinds = {str: "string", dict: "map", list: "slice", bool: "bool", type(None): "invalid"}
-            kind = next((name for cls, name in kinds.items() if isinstance(args[1], cls)), None)
-            return kind == args[0]
-        raise UnsupportedTransformation("numeric and renderer-specific reflection kinds remain unresolved")
-    if function == "ternary" and len(args) == 3 and type(args[2]) is bool:
-        return args[0] if args[2] else args[1]
-    if function == "print" and all(isinstance(value, str) for value in args):
-        if sum(len(str(value)) for value in args) > limits["max_string_chars"]:
-            raise UnsupportedTransformation(f"transformation exceeds compiler.max_string_chars={limits['max_string_chars']}")
-        return "".join(str(value) for value in args)
-    if function in {"int", "int64"} and len(args) == 1 and type(args[0]) is int:
-        if not MIN_INTEGER <= args[0] <= MAX_INTEGER:
-            raise UnsupportedTransformation("integer conversion exceeds the supported signed 64-bit range")
-        return args[0]
+    raise UnsupportedTransformation(f"unsupported transformation operands: {function}")
+
+
+def _text(function: str, args: tuple[object, ...], limits: dict[str, int]) -> object:
+    """
+    Apply the supported Go-compatible string and regular-expression subset.
+
+    Args:
+        function (str): Canonical operation name.
+        args (tuple[object, ...]): Concrete operands after unwrapping provenance.
+        limits (dict[str, int]): Captured compiler work and output bounds.
+
+    Returns:
+        object: Supported concrete result.
+
+    Raises:
+        UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
+    """
+    # Unsupported Unicode and regex syntax remain native Helm work.
+    if function == "trunc" and len(args) == 2 and type(args[0]) is int and isinstance(args[1], str):
+        width, text = args[0], args[1]
+        if not text.isascii():
+            raise UnsupportedTransformation("byte truncation requires the supported ASCII subset")
+        return text[:width] if width >= 0 else text[max(0, len(text) + width) :]
     if function in {"lower", "upper", "trim"} and len(args) == 1 and isinstance(args[0], str):
         if not args[0].isascii():
             raise UnsupportedTransformation("Unicode case and whitespace transformations remain unresolved")
@@ -282,8 +326,29 @@ def calculate(function: str, arguments: tuple[object, ...], *, limits: dict[str,
         if len(text) * max(1, len(replacement)) > limits["max_string_chars"]:
             raise UnsupportedTransformation(f"regex replacement exceeds compiler.max_string_chars={limits['max_string_chars']}")
         return compiled.sub(lambda _: replacement, text)
-    if function == "toString" and len(args) == 1 and type(args[0]) in (str, int, bool):
-        return str(args[0]).lower() if type(args[0]) is bool else str(args[0])
+    raise UnsupportedTransformation(f"unsupported transformation operands: {function}")
+
+
+def _integer(function: str, args: tuple[object, ...], limits: dict[str, int]) -> object:
+    """
+    Perform bounded integer conversions and arithmetic with overflow checks.
+
+    Args:
+        function (str): Canonical operation name.
+        args (tuple[object, ...]): Concrete operands after unwrapping provenance.
+        limits (dict[str, int]): Captured compiler work and output bounds.
+
+    Returns:
+        object: Supported concrete result.
+
+    Raises:
+        UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
+    """
+    # Intermediate overflow matters even if the final mathematical result would fit.
+    if function in {"int", "int64"} and len(args) == 1 and type(args[0]) is int:
+        if not MIN_INTEGER <= args[0] <= MAX_INTEGER:
+            raise UnsupportedTransformation("integer conversion exceeds the supported signed 64-bit range")
+        return args[0]
     if function == "atoi" and len(args) == 1 and isinstance(args[0], str):
         if not re.fullmatch(r"[+-]?[0-9]+", args[0]):
             return 0

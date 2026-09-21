@@ -104,6 +104,104 @@ def test_direct_pdb_mapping_constrains_arbitrary_input_names(tmp_path: Path, uni
 
 @pytest.mark.integration
 @pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+def test_mariadb_galera_coalesced_pdb_generation_and_native_render(tmp_path: Path) -> None:
+    """
+    Trace PDB fields through the map alias and verify the reported quote failure with Helm.
+
+    Args:
+        tmp_path (Path): Isolated chart and its locally available common dependency.
+
+    Returns:
+        None: Selected limits receive destination constraints while defaults and inactive inputs remain available.
+    """
+    source = Path(__file__).resolve().parents[3] / "third_party/bitnami-charts/bitnami"
+    if not all((source / name / "Chart.yaml").is_file() for name in ("mariadb-galera", "common")):
+        pytest.skip("requires the pinned Bitnami submodule")
+    target = tmp_path / "mariadb-galera"
+    shutil.copytree(source / "mariadb-galera", target, ignore=shutil.ignore_patterns("charts"))
+    shutil.copytree(source / "common", target / "charts/common")
+    chart = Chart(target, {"type": "object"}, mapping(yamlio.load((target / "values.yaml").read_text())))
+    with pytest.raises(RenderFailure) as error:
+        render(chart, {"pdb": {"maxUnavailable": "'"}})
+    assert error.value.code == "HH1101"
+    schema = chart.generation_schema()
+    validator = validators.validator_for(schema)(schema)
+    assert validator.is_valid(json_value(chart.defaults))
+    for field in ("minAvailable", "maxUnavailable"):
+        for value in ("", 0, 1, "50%", "100%", "'", "[", -1, "101%"):
+            candidate = copy.deepcopy(chart.defaults)
+            mapping(candidate["pdb"])[field] = value
+            assert validator.is_valid(json_value(candidate)) == (value in ("", 0, 1, "50%", "100%")), (field, value)
+            mapping(candidate["pdb"])["create"] = False
+            assert validator.is_valid(json_value(candidate)), (field, value)
+    valid_overrides: list[dict[str, object]] = [{}, {"pdb": {"maxUnavailable": "50%"}}, {"pdb": {"minAvailable": 1}}]
+    for overrides in valid_overrides:
+        assert render(chart, overrides)
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        "coalesce .Values.primary .Values.secondary .Values.fallback",
+        "default (default .Values.fallback .Values.secondary) .Values.primary",
+        "ternary .Values.primary (coalesce .Values.secondary .Values.fallback) (not (empty .Values.primary))",
+    ],
+)
+def test_pdb_map_selection_preserves_whole_map_precedence(tmp_path: Path, selection: str) -> None:
+    """
+    Follow nested map choices without incorrectly selecting fallback fields from an unused map.
+
+    Args:
+        tmp_path (Path): Generic chart with arbitrary input names.
+        selection (str): Equivalent map selection written using different Helm functions.
+
+    Returns:
+        None: Only emitted limits are constrained, including empty and missing fallback maps.
+    """
+    (tmp_path / "templates").mkdir()
+    (tmp_path / "Chart.yaml").write_text(yamlio.dump({"apiVersion": "v2", "name": "choices", "version": "1.0.0"}))
+    defaults: dict[str, object] = {"primary": {}, "secondary": {}, "fallback": {"active": True, "limit": ""}}
+    (tmp_path / "values.yaml").write_text(yamlio.dump(defaults))
+    (tmp_path / "templates/pdb.yaml").write_text(
+        "{{ $selected := "
+        + selection
+        + " }}\n"
+        + dedent("""
+            {{ if $selected.active }}
+            apiVersion: policy/v1
+            kind: PodDisruptionBudget
+            metadata:
+              name: choices
+            spec:
+              maxUnavailable: {{ $selected.limit | default 1 }}
+              selector:
+                matchLabels:
+                  app: choices
+            {{ end }}
+            """)
+    )
+    properties = {"active": {"type": "boolean"}, "limit": {"type": ["integer", "string"]}}
+    source_schema: dict[str, object] = {
+        "type": "object",
+        "properties": {name: {"type": "object", "properties": properties} for name in defaults},
+    }
+    chart = Chart(tmp_path, source_schema, defaults)
+    schema = chart.generation_schema()
+    validator = validators.validator_for(schema)(schema)
+    for selected in ("primary", "secondary", "fallback"):
+        for value in ("", 0, 1, "50%", "'", -1, "101%"):
+            candidate: dict[str, object] = {"fallback": {"active": True, "limit": "'"}}
+            candidate[selected] = {"active": True, "limit": value}
+            assert validator.is_valid(json_value(candidate)) == (value in ("", 0, 1, "50%")), (selected, value)
+            mapping(candidate[selected])["active"] = False
+            assert validator.is_valid(json_value(candidate)), (selected, value)
+    for primary in ({}, {"active": False}, {"limit": "'"}, {"active": True}):
+        candidate = {"primary": primary, "fallback": {"active": True, "limit": "'"}}
+        assert validator.is_valid(json_value(candidate)) == bool(primary), primary
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
 def test_airflow_pdb_generation_and_native_render(tmp_path: Path) -> None:
     """
     Reproduce the reported malformed YAML and keep generated PDB subtrees inside guarded field domains.

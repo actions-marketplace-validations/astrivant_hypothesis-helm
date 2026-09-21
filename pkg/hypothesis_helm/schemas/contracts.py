@@ -203,8 +203,23 @@ def schema_strategy(
     literals = declared_text(schema)
     unicode_branches = any(mapping(rule).get("character_sets") == "unicode" for rule in sequence(frozen.get("rules", [])))
     codec = "ascii" if selected == "ascii" and not unicode_branches and all(value.isascii() for value in literals) else "utf-8"
+    generating = copy.deepcopy(schema)
+    if isinstance(generating.get("allOf"), list):
+        # Keep bounded fragment proofs out of hypothesis-jsonschema's Boolean
+        # canonicalizer, where negating recursive container regions explodes.
+        # Removing a root conjunction admits a superset; the full validator
+        # below checks every generated and shrunk case before execution.
+        retained = [
+            clause
+            for clause in sequence(generating["allOf"])
+            if not (isinstance(clause, dict) and clause.get("x-hypothesis-helm-literal-fragment") is True)
+        ]
+        if retained:
+            generating["allOf"] = retained
+        else:
+            generating.pop("allOf")
     return (
-        from_schema(cast(dict[str, Json], schema), codec=codec)
+        from_schema(cast(dict[str, Json], generating), codec=codec)
         .map(lambda value: normalize_text(value, frozen, path, literals))
         .filter(lambda candidate: validator.is_valid(json_value(candidate)))
     )

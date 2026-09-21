@@ -106,7 +106,7 @@ library of chart names or template hashes that substitutes for this analysis.
 | `if`, `default`, `coalesce`, and `ternary` | Attach the condition selecting that input; keep unused fallback inputs available. |
 | `quote`, string identity formatting, `toYaml`, `toJson`, `indent`, and `nindent` | Follow supported conversions, checking the source type before applying a destination constraint. |
 | A bounded literal list of maps merged into a fresh local map | Constrain contributors to homogeneous destinations such as string-valued annotations. |
-| `tpl` on a traced value | Generate literal values without template delimiters where that establishes the destination; supplied defaults remain unchanged. |
+| `tpl` on a traced value | Constrain supported literal inputs; structured values containing template code remain for Helm. |
 | Prepared dependency, including an alias or archive | Analyze its parsed templates in the parent's values namespace, retaining dependency activation guards. |
 
 The analysis joins independent branches instead of enumerating every combination of those branches.
@@ -124,6 +124,32 @@ For example, a helper forwarding a ConfigMap reference receives the same naming 
 in Cilium or MongoDB. An empty fallback remains available when the helper selects another name for empty input.
 PDB limits receive their count-or-percentage constraints only when the source branch emits them. Numeric-looking
 strings such as `"0"` remain eligible when their destination permits them, so missing YAML quoting can still be detected.
+
+When `coalesce` or `default` selects a map, the compiler follows fields and conditions through that selection.
+The first nonempty map wins as a whole: a missing or empty field inside it does not select that field from the fallback map.
+Constraints apply to the selected input when its branch emits the field; unused fallbacks and disabled branches remain available.
+
+Helm treats `false`, zero, an empty string, an empty map, an empty list, and `nil` as empty for these functions.
+A map with a key or a list with an element is nonempty even if its contents are empty.
+`coalesce` returns `nil` when every argument is empty; `default` returns its fallback unchanged, including `false` or zero.
+Both evaluate their arguments before selecting a result, so an unused fallback expression can still fail or mutate a local map.
+The compiler checks these distinctions against native Helm in its fallback regression matrix.
+
+When part of a selection condition is unknown, a constraint applies only where the known part proves which input is selected.
+For comparisons such as `gt (int .Values.replicaCount) 0`, the compiler recognizes integer inputs within a safe conversion range.
+Numeric strings, fractional values, and possible overflows remain outside that analysis and continue to Helm.
+Helper conditions use the returned text: an empty result is false, but the text `"false"` is nonempty and therefore true.
+
+For a helper that serializes structured values with `toYaml` or `toJson`, the compiler can carry destination constraints back
+to those values. For example, a fragment inserted under NetworkPolicy `spec.ingress` must contribute an array of ingress rules,
+not an arbitrary map. Each contributed field or item receives its destination constraints; required siblings, total item counts,
+and position-dependent rules are checked on the assembled manifest because surrounding template text can supply them.
+
+When the helper can also execute `tpl`, these constraints apply only to structured inputs proven free of template delimiters.
+`compiler.max_fragment_depth` defaults to four nested containers and limits that inspection. Deeper structures, values containing
+`{{`, and raw YAML strings stay available for native rendering. These bounded fragment guards are checked after generation and
+shrinking, avoiding costly expansion inside the schema generator. This can require retries when many generated candidates are invalid.
+This does not establish support for every numeric conversion, helper result, or YAML fragment.
 The source schema and supplied defaults are not rewritten, and conflicting declared types are reported.
 
 Helper analysis defaults to 16 nested calls. Set `compiler.max_call_depth` in the configuration below to analyze
@@ -243,6 +269,7 @@ compiler:
   max_regex_subject_chars: 4096  # Characters in an analyzed ASCII regex subject.
   max_symbolic_variants: 64  # Alternatives at one destination-projection branch join.
   max_indent_width: 128  # Spaces in a projected indent/nindent operation.
+  max_fragment_depth: 4  # Nested input containers checked for literal serialized YAML fragment constraints.
   max_proof_bytes: 16777216  # Chart bytes retained for an exact-pruning proof snapshot.
   max_output_nodes: 100000  # Manifest nodes inspected per complexity measurement.
   max_complexity_cases: 4096  # Template assignments and witnesses in a complexity search.

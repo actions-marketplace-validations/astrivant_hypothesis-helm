@@ -19,9 +19,9 @@ from hypothesis_helm.compiler.asts.actions import Action as Action
 from hypothesis_helm.compiler.asts.actions import parse as parse
 from hypothesis_helm.compiler.asts.origins import Derived, Dictionary, Literal, Origin, identity, join, paths, select, unresolved
 from hypothesis_helm.compiler.builtins import BUILTINS, MUTATIONS, NATIVE_STATE
+from hypothesis_helm.compiler.constants import CERTIFICATES
 from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.discovery_flow import invalidate, iterations, key_guards, truth, widen
-from hypothesis_helm.compiler.passes.discovery_functions import CERTIFICATES
 from hypothesis_helm.compiler.passes.discovery_functions import result as function_result
 from hypothesis_helm.compiler.passes.discovery_sources import DiscoverySources
 from hypothesis_helm.compiler.passes.discovery_tpl import sources as tpl_sources

@@ -7,6 +7,10 @@ import json
 import re
 
 from hypothesis_helm.compiler.asts.projections import Input, LocalMap, Operation, Piece, output
+from hypothesis_helm.compiler.constants import COPIES
+from hypothesis_helm.compiler.limits import active_limits
+from hypothesis_helm.compiler.passes.domain_fragments import contribution, literal_region
+from hypothesis_helm.compiler.passes.domain_guards import integer_comparison, rendered_truth, type_condition
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.policy import intersect
 
@@ -78,9 +82,25 @@ def predicate(value: object, *, root: tuple[str, ...] = ()) -> dict[str, object]
     if not isinstance(value, Operation):
         return None
     name, args = value.name, value.arguments
+    if name == "render-text" and len(args) == 1:
+        return predicate(rendered_truth(args[0]), root=root)
+    if name in {"kindIs", "typeIs"}:
+        test = type_condition(value)
+        if test != value:
+            return predicate(test, root=root)
     if name in {"truth", "not", "empty"} and len(args) == 1:
         child = predicate(args[0], root=root)
         return child if name == "truth" else {"not": child} if child is not None else None
+    if name == "choose" and len(args) == 3:
+        condition, yes, no = (predicate(arg, root=root) for arg in args)
+        if condition is None or yes is None or no is None:
+            return None
+        # Test the selected value, retaining the condition on the original map.
+        # Coalescing a map does not independently coalesce each of its fields.
+        return combine(
+            [combine([condition, yes], conjunction=True), combine([{"not": condition}, no], conjunction=True)],
+            conjunction=False,
+        )
     if name in {"and", "or"}:
         children = [predicate(arg, root=root) for arg in args]
         if any(child is None for child in children):
@@ -127,9 +147,38 @@ def guard_bounds(value: object) -> tuple[dict[str, object], dict[str, object]]:
     """
     if isinstance(value, Operation):
         name, args = value.name, value.arguments
+        numeric = integer_comparison(value)
+        if numeric is not None:
+            path, yes, no = numeric
+            return (at(path, yes), at(path, no)) if "*" not in path else ({"not": {}}, {"not": {}})
+        if name == "render-text" and len(args) == 1:
+            return guard_bounds(rendered_truth(args[0]))
+        if name in {"kindIs", "typeIs"}:
+            test = type_condition(value)
+            if test != value:
+                return guard_bounds(test)
         if name in {"not", "empty", "truth"} and len(args) == 1:
             yes, no = guard_bounds(args[0])
             return (yes, no) if name == "truth" else (no, yes)
+        if name == "choose" and len(args) == 3:
+            exact = predicate(value)
+            if exact is not None:
+                return exact, {"not": exact}
+            condition, yes_bounds, no_bounds = (guard_bounds(arg) for arg in args)
+            regions = []
+            for outcome in (0, 1):
+                regions.append(
+                    combine(
+                        [
+                            combine([condition[0], yes_bounds[outcome]], conjunction=True),
+                            combine([condition[1], no_bounds[outcome]], conjunction=True),
+                            # An unresolved selector is harmless only where both arms agree.
+                            combine([yes_bounds[outcome], no_bounds[outcome]], conjunction=True),
+                        ],
+                        conjunction=False,
+                    )
+                )
+            return regions[0], regions[1]
         if name in {"and", "or"} and args:
             children = [guard_bounds(arg) for arg in args]
             return (
@@ -222,7 +271,7 @@ def normalize(value: object) -> object:
     if not isinstance(value, Operation):
         return value
     args = tuple(normalize(arg) for arg in value.arguments)
-    if value.name in {"deepCopy", "mustDeepCopy"} and len(args) == 1:
+    if value.name in COPIES and len(args) == 1:
         return args[0]
     if value.name == "text":
         pieces = [arg for arg in args if isinstance(arg, Piece)]
@@ -280,95 +329,231 @@ def constraints(
     """
     value = normalize(value)
     if isinstance(value, Input):
-        if "*" in value.path:
-            # Each item chooses its own branch. A predicate over the entire
-            # array would incorrectly accept mixed valid/invalid elements.
-            if quoted or value.path.count("*") != 1:
-                return []
-            index = value.path.index("*")
-            root = value.path[: index + 1]
-            local, global_guards = [], list(guards)
-            for condition in conditions:
-                origins = input_origins(condition)
-                if any("*" in path for path in origins):
-                    test = predicate(condition, root=root)
-                    if test is None:
-                        return []
-                    local.append(test)
-                else:
-                    test = guard_bounds(condition)[0]
-                    if test == {"not": {}}:
-                        return []
-                    global_guards.append(test)
-            item = at(value.path[index + 1 :], schema)
-            if local:
-                item = {"if": combine(local, conjunction=True), "then": item}
-            return [
-                {
-                    "path": list(value.path[:index]),
-                    "schema": {"type": "array", "items": item},
-                    "guards": global_guards,
-                    "quoted": False,
-                    "serialized": True,
-                    "element_path": list(value.path),
-                    "element_schema": schema,
-                }
-            ]
-        for condition in conditions:
-            test = guard_bounds(condition)[0]
-            if test == {"not": {}}:
-                return []
-            guards = (*guards, test)
-        return [{"path": list(value.path), "schema": schema, "guards": list(guards), "quoted": quoted, "serialized": serialized}]
+        return _input_constraints(value, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized)
     if isinstance(value, LocalMap):
-        if not serialized:
-            return []
-        result = []
-        # Validate contributors to homogeneous maps (annotations, labels), where
-        # scalar replacement preserves the output type regardless of precedence.
-        extra = schema.get("additionalProperties")
-        types = extra.get("type", []) if isinstance(extra, dict) else []
-        types = [types] if isinstance(types, str) else sequence(types)
-        homogeneous = bool(types) and set(types) <= {"string", "boolean", "integer", "number", "null"}
-        if value.sources and homogeneous and not schema.get("required") and not schema.get("properties"):
-            for source in value.sources:
-                result.extend(constraints(source, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized))
-        if not value.sources:
-            properties = mapping(schema.get("properties", {}))
-            for key, child in value.entries.items():
-                restriction = properties.get(key, extra)
-                if isinstance(restriction, dict):
-                    result.extend(constraints(child, restriction, guards=guards, conditions=conditions, serialized=serialized))
-        return result
+        return _map_constraints(value, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized)
     if not isinstance(value, Operation):
         return []
     name, args = value.name, value.arguments
+    if name == "yaml-fragment" and len(args) == 1:
+        # The surrounding template can supply required sibling fields or other
+        # sequence entries. Only each contributed field/item inherits its full
+        # contract; collection-wide requirements belong to the finished render.
+        return constraints(args[0], contribution(schema), guards=guards, conditions=conditions, quoted=quoted, serialized=serialized)
     if name in {"toYaml", "toJson", "quote", "tpl", "literal", "string-identity", "render-text"} and args:
-        target = literal_domain(schema) if name in {"tpl", "literal"} else schema
-        if target is None:
-            return []
-        return constraints(
-            args[0],
-            target,
-            guards=guards,
-            conditions=conditions,
-            quoted=quoted or name in {"quote", "string-identity"},
-            serialized=serialized or name in {"toYaml", "toJson"},
-        )
+        return _transformation_constraints(value, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized)
     if name == "choose" and len(args) == 3:
-        condition = predicate(args[0])
-        item_roots = {path[: path.index("*") + 1] for path in input_origins(args[0]) if "*" in path}
-        local_condition = len(item_roots) == 1 and predicate(args[0], root=next(iter(item_roots))) is not None
-        if condition is None and not local_condition:
-            # Only a restriction established in both unknown branches survives.
-            branches = [
-                constraints(arg, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized) for arg in args[1:]
-            ]
-            other = {json.dumps(rule, sort_keys=True) for rule in branches[1]}
-            return [rule for rule in branches[0] if json.dumps(rule, sort_keys=True) in other]
-        return [
-            rule
-            for branch, guard in ((args[1], args[0]), (args[2], Operation("not", (args[0],))))
-            for rule in constraints(branch, schema, guards=guards, conditions=(*conditions, guard), quoted=quoted, serialized=serialized)
-        ]
+        return _choice_constraints(value, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized)
     return []
+
+
+def _input_constraints(
+    value: Input,
+    schema: dict[str, object],
+    *,
+    guards: tuple[dict[str, object], ...] = (),
+    conditions: tuple[object, ...] = (),
+    quoted: bool = False,
+    serialized: bool = False,
+) -> list[dict[str, object]]:
+    """
+    Attach global and item-local guards to an original values path.
+
+    Args:
+        value (Input): Symbolic output expression.
+        schema (dict[str, object]): Required downstream shape.
+        guards (tuple[dict[str, object], ...]): Conditions selecting this output.
+        conditions (tuple[object, ...]): Symbolic conditions, including item-local branch predicates.
+        quoted (bool): The renderer converts this input into a quoted string.
+        serialized (bool): The renderer emits a structured YAML or JSON value.
+
+    Returns:
+        list[dict[str, object]]: Guarded input restrictions; unsupported preimages remain unconstrained.
+    """
+    if "*" in value.path:
+        # Each item chooses its own branch. A predicate over the entire
+        # array would incorrectly accept mixed valid/invalid elements.
+        if quoted or value.path.count("*") != 1:
+            return []
+        index = value.path.index("*")
+        root = value.path[: index + 1]
+        local, global_guards = [], list(guards)
+        for condition in conditions:
+            origins = input_origins(condition)
+            if any("*" in path for path in origins):
+                test = predicate(condition, root=root)
+                if test is None:
+                    return []
+                local.append(test)
+            else:
+                test = guard_bounds(condition)[0]
+                if test == {"not": {}}:
+                    return []
+                global_guards.append(test)
+        item = at(value.path[index + 1 :], schema)
+        if local:
+            item = {"if": combine(local, conjunction=True), "then": item}
+        return [
+            {
+                "path": list(value.path[:index]),
+                "schema": {"type": "array", "items": item},
+                "guards": global_guards,
+                "quoted": False,
+                "serialized": True,
+                "element_path": list(value.path),
+                "element_schema": schema,
+            }
+        ]
+    for condition in conditions:
+        test = guard_bounds(condition)[0]
+        if test == {"not": {}}:
+            return []
+        guards = (*guards, test)
+    return [{"path": list(value.path), "schema": schema, "guards": list(guards), "quoted": quoted, "serialized": serialized}]
+
+
+def _map_constraints(
+    value: LocalMap,
+    schema: dict[str, object],
+    *,
+    guards: tuple[dict[str, object], ...] = (),
+    conditions: tuple[object, ...] = (),
+    quoted: bool = False,
+    serialized: bool = False,
+) -> list[dict[str, object]]:
+    """
+    Trace independent map contributors while preserving overwrite uncertainty.
+
+    Args:
+        value (LocalMap): Symbolic output expression.
+        schema (dict[str, object]): Required downstream shape.
+        guards (tuple[dict[str, object], ...]): Conditions selecting this output.
+        conditions (tuple[object, ...]): Symbolic conditions, including item-local branch predicates.
+        quoted (bool): The renderer converts this input into a quoted string.
+        serialized (bool): The renderer emits a structured YAML or JSON value.
+
+    Returns:
+        list[dict[str, object]]: Guarded input restrictions; unsupported preimages remain unconstrained.
+    """
+    if not serialized:
+        return []
+    result = []
+    # Validate contributors to homogeneous maps (annotations, labels), where
+    # scalar replacement preserves the output type regardless of precedence.
+    extra = schema.get("additionalProperties")
+    types = extra.get("type", []) if isinstance(extra, dict) else []
+    types = [types] if isinstance(types, str) else sequence(types)
+    homogeneous = bool(types) and set(types) <= {"string", "boolean", "integer", "number", "null"}
+    if value.sources and homogeneous and not schema.get("required") and not schema.get("properties"):
+        for source in value.sources:
+            result.extend(constraints(source, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized))
+    if not value.sources:
+        properties = mapping(schema.get("properties", {}))
+        for key, child in value.entries.items():
+            restriction = properties.get(key, extra)
+            if isinstance(restriction, dict):
+                result.extend(constraints(child, restriction, guards=guards, conditions=conditions, serialized=serialized))
+    return result
+
+
+def _transformation_constraints(
+    value: Operation,
+    schema: dict[str, object],
+    *,
+    guards: tuple[dict[str, object], ...] = (),
+    conditions: tuple[object, ...] = (),
+    quoted: bool = False,
+    serialized: bool = False,
+) -> list[dict[str, object]]:
+    """
+    Carry destination constraints across supported serialization boundaries.
+
+    Args:
+        value (Operation): Symbolic output expression.
+        schema (dict[str, object]): Required downstream shape.
+        guards (tuple[dict[str, object], ...]): Conditions selecting this output.
+        conditions (tuple[object, ...]): Symbolic conditions, including item-local branch predicates.
+        quoted (bool): The renderer converts this input into a quoted string.
+        serialized (bool): The renderer emits a structured YAML or JSON value.
+
+    Returns:
+        list[dict[str, object]]: Guarded input restrictions; unsupported preimages remain unconstrained.
+    """
+    name, args = value.name, value.arguments
+    kinds = schema.get("type", [])
+    kinds = [kinds] if isinstance(kinds, str) else sequence(kinds)
+    structured = any(kind in kinds for kind in ("array", "object"))
+    target = (None if structured else literal_domain(schema)) if name in {"tpl", "literal"} else schema
+    if target is None:
+        # An open destination cannot prove every generated value literal.
+        # Instead, constrain only the bounded region proven free of tpl
+        # delimiters. Raw YAML strings keep their original input domain.
+        limits = active_limits()
+        region = literal_region(limits["max_fragment_depth"], limits["max_discovery_nodes"])
+        candidates = constraints(args[0], schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized)
+        return [
+            {
+                **rule,
+                "guards": [*sequence(rule["guards"]), at(tuple(str(part) for part in sequence(rule["path"])), region)],
+                "literal_fragment": True,
+            }
+            for rule in candidates
+            if rule["serialized"] and not rule["quoted"]
+        ]
+    return constraints(
+        args[0],
+        target,
+        guards=guards,
+        conditions=conditions,
+        quoted=quoted or name in {"quote", "string-identity"},
+        serialized=serialized or name in {"toYaml", "toJson"},
+    )
+
+
+def _choice_constraints(
+    value: Operation,
+    schema: dict[str, object],
+    *,
+    guards: tuple[dict[str, object], ...] = (),
+    conditions: tuple[object, ...] = (),
+    quoted: bool = False,
+    serialized: bool = False,
+) -> list[dict[str, object]]:
+    """
+    Constrain only the branches whose activation region can be established.
+
+    Args:
+        value (Operation): Symbolic output expression.
+        schema (dict[str, object]): Required downstream shape.
+        guards (tuple[dict[str, object], ...]): Conditions selecting this output.
+        conditions (tuple[object, ...]): Symbolic conditions, including item-local branch predicates.
+        quoted (bool): The renderer converts this input into a quoted string.
+        serialized (bool): The renderer emits a structured YAML or JSON value.
+
+    Returns:
+        list[dict[str, object]]: Guarded input restrictions; unsupported preimages remain unconstrained.
+    """
+    args = value.arguments
+    condition = predicate(args[0])
+    item_roots = {path[: path.index("*") + 1] for path in input_origins(args[0]) if "*" in path}
+    local_condition = len(item_roots) == 1 and predicate(args[0], root=next(iter(item_roots))) is not None
+    if condition is None and not local_condition:
+        # Shared restrictions hold everywhere. Other restrictions need a
+        # sufficient region proving which arm is selected, not an exact guard.
+        branches = [
+            constraints(arg, schema, guards=guards, conditions=conditions, quoted=quoted, serialized=serialized) for arg in args[1:]
+        ]
+        other = {json.dumps(rule, sort_keys=True) for rule in branches[1]}
+        shared = [rule for rule in branches[0] if json.dumps(rule, sort_keys=True) in other]
+        selected = [
+            {**rule, "guards": [*sequence(rule["guards"]), bound]}
+            for branch, bound in zip(branches, guard_bounds(args[0]), strict=True)
+            if bound != {"not": {}}
+            for rule in branch
+        ]
+        return [*shared, *selected]
+    return [
+        rule
+        for branch, guard in ((args[1], args[0]), (args[2], Operation("not", (args[0],))))
+        for rule in constraints(branch, schema, guards=guards, conditions=(*conditions, guard), quoted=quoted, serialized=serialized)
+    ]

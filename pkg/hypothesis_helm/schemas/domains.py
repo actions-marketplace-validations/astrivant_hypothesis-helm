@@ -107,7 +107,7 @@ class InputDomains:
             allowed = {"string", "integer", "number", "boolean"}
             if rule.get("serialized"):
                 allowed.update({"object", "array"})
-            if not kinds or not kinds <= allowed:
+            if (not kinds and not rule.get("serialized")) or not kinds <= allowed:
                 diagnostics.append({"path": list(path), "reason": "direct mapping has no unambiguous scalar input type"})
                 continue
             try:
@@ -151,7 +151,10 @@ class InputDomains:
             restriction = mapping(rule["schema"])
             guards = sequence(rule.get("guards", []))
             if guards:
-                sequence(result.setdefault("allOf", [])).append({"if": {"allOf": guards}, "then": restrict({}, path, restriction)})
+                conditional: dict[str, object] = {"if": {"allOf": guards}, "then": restrict({}, path, restriction)}
+                if rule.get("literal_fragment"):
+                    conditional["x-hypothesis-helm-literal-fragment"] = True
+                sequence(result.setdefault("allOf", [])).append(conditional)
             else:
                 try:
                     result = restrict(result, path, restriction)

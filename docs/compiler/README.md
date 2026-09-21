@@ -83,6 +83,11 @@ options and report fields.
 | --- | --- |
 | [`compiler/asts/`](../../pkg/hypothesis_helm/compiler/asts) | Tokens, template nodes, rejection expressions, and dependency records. |
 | [`compiler/passes/`](../../pkg/hypothesis_helm/compiler/passes) | Analyses, selection policies, and exports described in this guide. |
+| [`compiler/constants.py`](../../pkg/hypothesis_helm/compiler/constants.py) | Shared function families, aliases, numeric bounds, and typed zero factories. |
+| [`passes/discovery_functions/`](../../pkg/hypothesis_helm/compiler/passes/discovery_functions) | A small dispatcher with separate scalar, collection, and selection handlers. |
+| [`asts/transformations.py`](../../pkg/hypothesis_helm/compiler/asts/transformations.py) | Concrete operations, grouped into formatting, selection, collections, text, and integer handlers. |
+| [`passes/domain_interpreter.py`](../../pkg/hypothesis_helm/compiler/passes/domain_interpreter.py) | Symbolic evaluation with separate helpers for calls, mutations, and branch joins. |
+| [`passes/domain_constraints.py`](../../pkg/hypothesis_helm/compiler/passes/domain_constraints.py) | Backward constraint propagation for input paths, maps, transformations, and selected branches. |
 | [`schemas/model.py`](../../pkg/hypothesis_helm/schemas/model.py) | Shared schema-derived values tree and attrs/cattrs conversion. |
 | [`charts/inspection/templates.py`](../../pkg/hypothesis_helm/charts/inspection/templates.py) | Scope-aware reference discovery using the action tree. |
 | [`charts/testing/planning.py`](../../pkg/hypothesis_helm/charts/testing/planning.py) | Finite candidate planning and selection orchestration. |
@@ -90,6 +95,14 @@ options and report fields.
 
 These modules analyze Helm; they do not implement its full rendering language.
 Each result states its supported scope and any unresolved behavior.
+
+Function-family constants describe the operations these handlers support. The source-derived
+[`builtins.py`](../../pkg/hypothesis_helm/compiler/builtins.py) registry remains the source of upstream function effects
+and result shapes; knowing a result's shape does not prove its value or make it safe to prune.
+
+When changing a handler, keep lazy helper and Boolean calls ahead of eager argument evaluation. Preserve scope restoration
+after helper failures, and retain unknown results instead of substituting Python coercions. Inline comments mark these
+boundaries in the evaluators.
 
 ## Measured output sensitivity
 

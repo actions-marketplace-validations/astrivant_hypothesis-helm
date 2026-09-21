@@ -177,6 +177,7 @@ def join(*origins: Origin) -> Origin:
         Origin: Deterministic union, or its sole member when every path agrees.
     """
     unique: dict[tuple[object, ...], Origin] = {}
+    # Unknown is an alternative too; removing it would turn partial knowledge into a proof.
     for origin in origins:
         for item in origin.alternatives if isinstance(origin, Choice) else (origin,):
             unique[identity(item)] = item
@@ -260,6 +261,7 @@ def select(origin: Origin, parts: tuple[str, ...]) -> Origin:
         elif isinstance(origin, Record):
             origin = origin.fields.get(part)
         elif isinstance(origin, Derived) and origin.external:
+            # A field of an external result still has unknown contents and the same dependencies.
             continue
         else:
             return None

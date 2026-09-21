@@ -76,6 +76,7 @@ def inventory() -> dict[str, Builtin]:
     return result
 
 
+# These sets are derived from pinned upstream facts, unlike the implementation families in constants.py.
 BUILTINS = inventory()
 EFFECTS = {
     effect: frozenset(name for name, spec in BUILTINS.items() if effect in spec.effects)

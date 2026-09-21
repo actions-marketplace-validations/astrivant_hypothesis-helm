@@ -55,6 +55,7 @@ def output_profile(resources: Sequence[object], *, node_limit: int | None = None
             raise ValueError(f"manifest tree exceeds the complexity node limit: compiler.max_output_nodes={node_limit}")
         counts[depth] += 1
         if isinstance(value, (dict, list)):
+            # Track ancestors per path: repeated YAML aliases count again, but a cycle has no finite size.
             if id(value) in ancestors:
                 raise ValueError("cyclic YAML aliases have no finite expanded tree")
             children = value.values() if isinstance(value, dict) else value

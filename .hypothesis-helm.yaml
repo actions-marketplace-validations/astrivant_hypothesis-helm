@@ -66,6 +66,7 @@ ignored:
 #   max_regex_subject_chars: 4096  # Characters in an analyzed ASCII regex subject.
 #   max_symbolic_variants: 64  # Alternatives at one destination-projection branch join.
 #   max_indent_width: 128  # Spaces in a projected indent/nindent operation.
+#   max_fragment_depth: 4  # Nested input containers checked for literal serialized YAML fragment constraints.
 #   max_proof_bytes: 16777216  # Chart bytes retained for an exact-pruning proof snapshot.
 #   max_output_nodes: 100000  # Manifest nodes inspected per complexity measurement.
 #   max_complexity_cases: 4096  # Template assignments and witnesses in a complexity search.

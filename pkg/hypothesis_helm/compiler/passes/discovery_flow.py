@@ -44,6 +44,7 @@ def key_guards(
         return frozenset()
     arguments = tpl.arguments(tokens[1:])
     if tokens[0] == "hasKey" and len(arguments) == 2 and positive:
+        # The mutation epoch prevents a later map update from reusing a stale key fact.
         return frozenset({(identity(resolve(arguments[0])), identity(resolve(arguments[1])), epoch)})
     if tokens[0] == "not" and len(arguments) == 1:
         return key_guards(arguments[0], resolve, epoch, not positive)
@@ -73,6 +74,7 @@ def truth(origin: Origin) -> bool | None:
     if isinstance(origin, Projection) and not origin.uncertain and origin.include and not origin.keys:
         return False
     if isinstance(origin, Choice):
+        # One uncertain arm is enough to prevent a branch from being declared unreachable.
         alternatives = {truth(item) for item in origin.alternatives}
         return alternatives.pop() if len(alternatives) == 1 else None
     return None
@@ -93,6 +95,7 @@ def iterations(origin: Origin) -> tuple[tuple[Origin, Origin], ...] | None:
     if isinstance(origin, Sequence) and origin.exact:
         return tuple((Literal(index), value) for index, value in enumerate(origin.items))
     if isinstance(origin, Dictionary) and not origin.uncertain:
+        # Go templates visit ordered map keys; insertion order would predict the wrong output.
         return tuple((Literal(key), value) for key, value in sorted(origin.fields.items()))
     return None
 

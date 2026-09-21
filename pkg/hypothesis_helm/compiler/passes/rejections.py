@@ -118,6 +118,7 @@ class RejectionPolicy:
             bool: Whether native verification is still needed for this witness.
         """
         seen = self.witnesses.get(rejection.key, set())
+        # Transformations and renderer context need candidate-specific verification, even after earlier matches.
         return (
             bool(rejection.enums)
             or rejection.transformed

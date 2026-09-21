@@ -31,6 +31,7 @@ def dictionary(arguments: tuple[object, ...]) -> dict[str, object]:
                 f"dict key at argument {index + 1} is {type(key).__name__}; "
                 "Go key coercion is unresolved; check alternating key/value arguments"
             )
+        # Sprig accepts an unmatched final key and supplies an empty string for it.
         entries[key] = arguments[index + 1] if index + 1 < len(arguments) else ""
     return entries
 
@@ -77,6 +78,7 @@ def merge_flat_sources(sources: list[object], max_items: int) -> dict[str, objec
         if inspected > max_items:
             raise UnsupportedTransformation(f"fresh merge exceeds compiler.max_range_items={max_items}")
         for key, value in entries.items():
+            # Nested containers could alias the inputs; the flat-map proof deliberately excludes them.
             concrete = native(value)
             if not isinstance(key, str) or concrete is not None and not isinstance(concrete, str | bool | int | float):
                 raise UnsupportedTransformation("fresh merge requires scalar map entries; nested aliases remain unresolved")

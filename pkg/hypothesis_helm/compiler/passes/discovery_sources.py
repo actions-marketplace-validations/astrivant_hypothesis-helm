@@ -71,6 +71,7 @@ class DiscoverySources:
             self.diagnostics.append((source, 1, str(exc)))
             return
         if root and not Path(source).name.startswith("_"):
+            # A helper body is visited at its call site, where its dot context is known.
             self.roots[source] = nodes
         if root:
             self.templates[f"{self.base_path}/{source.removeprefix('templates/')}"] = (source, nodes)
@@ -92,6 +93,7 @@ class DiscoverySources:
                         name = token[1:-1] if token.startswith("`") else str(json.loads(token))
                         previous = self.helpers.get(name)
                         if previous is not None and signature(previous[1]) != signature(node.children):
+                            # Do not choose between conflicting dependency definitions by load order.
                             self.ambiguous.add(name)
                         self.helpers[name] = (source, node.children)
                 register(node.children)

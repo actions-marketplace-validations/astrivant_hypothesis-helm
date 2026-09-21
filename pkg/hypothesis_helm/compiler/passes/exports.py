@@ -73,6 +73,7 @@ def export_repository(
             record.update(status="failed", error=str(exc))
             failed = True
     if files_list is not None:
+        # NUL separation keeps spaces and newlines in chart paths safe for downstream Git commands.
         files_list.parent.mkdir(parents=True, exist_ok=True)
         files_list.write_bytes(b"".join(str(path).encode() + b"\0" for path in exported))
     print(json.dumps({"charts": records, "exported": exported_charts}, indent=2))
