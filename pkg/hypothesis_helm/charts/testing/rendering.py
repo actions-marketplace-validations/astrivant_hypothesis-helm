@@ -20,14 +20,14 @@ from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.state.render_hashes import RenderHashes, process_hashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import RuleScope
-from hypothesis_helm.reporting.output import emit_manifest
+from hypothesis_helm.reporting.console.output import emit_manifest
 from hypothesis_helm.rules import check, effective_ignored_codes, ignored
-from hypothesis_helm.schemas.conformity import ENVIRONMENT, validate
 from hypothesis_helm.schemas.contracts import (
     mapping,
     sequence,
 )
-from hypothesis_helm.schemas.resources import resource_schemas
+from hypothesis_helm.schemas.kubernetes.conformity import ENVIRONMENT, validate
+from hypothesis_helm.schemas.kubernetes.resources import resource_schemas
 
 __all__ = ("render", "render_output", "validate_resources")
 
@@ -75,7 +75,7 @@ def validate_resources(resources: Sequence[object]) -> None:
         if not ignored("HH1108"):
             from jsonschema.exceptions import ValidationError
 
-            from hypothesis_helm.schemas.resources import validate_custom
+            from hypothesis_helm.schemas.kubernetes.resources import validate_custom
 
             try:
                 validate_custom(resource)
@@ -111,6 +111,24 @@ def render_output(
         str: Unvalidated rendered YAML; nonzero Helm exits remain reproducible failures.
     """
     chart.require_source()
+    from hypothesis_helm.compiler.randomness import rendering as random_rendering
+    from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs
+
+    random_case = CURRENT.get()
+    if random_case is not None or random_rendering.enabled(chart):
+        try:
+            return random_rendering.render(
+                chart,
+                values,
+                random_case if random_case is not None else RandomInputs(),
+                timeout=timeout,
+                release=release,
+                namespace=namespace,
+                kube_version=kube_version,
+                processes=processes,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RenderFailure(f"random-input renderer exceeded {timeout}s", "HH1201") from exc
     with tempfile.TemporaryDirectory(prefix="hypothesis-helm-") as directory:
         value_file = Path(directory) / "values.json"
         value_file.write_text(yamlio.json_for_helm(values), encoding="utf-8")
@@ -139,7 +157,7 @@ def render_output(
         return process.stdout
 
 
-def render(
+def _render(
     chart: Chart,
     values: dict[str, object],
     *,
@@ -228,3 +246,55 @@ def render(
             failure.resources = resources
             raise failure from exc
         return [mapping(resource) for resource in resources if isinstance(resource, dict)]
+
+
+def render(
+    chart: Chart,
+    values: dict[str, object],
+    *,
+    helm: str = "helm",
+    timeout: float = 30.0,
+    release: str = "hypothesis",
+    namespace: str = "default",
+    kube_version: str | None = None,
+    hashes: RenderHashes | None = None,
+    stream: bool = True,
+    rendered_output: str | None = None,
+) -> list[dict[str, object]]:
+    """
+    Validate native output while retaining synthetic draws if any validation step fails.
+
+    Args:
+        chart (Chart): Source chart with prepared dependencies.
+        values (dict[str, object]): Ordinary values overrides.
+        helm (str): Native Helm executable outside synthetic-input mode.
+        timeout (float): Total render deadline.
+        release (str): Helm release name.
+        namespace (str): Helm release namespace.
+        kube_version (str | None): Kubernetes capability version.
+        hashes (RenderHashes | None): Run-local manifest validation cache.
+        stream (bool): Emit rendered resources to the requested output stream.
+        rendered_output (str | None): Already rendered output from a parallel worker.
+
+    Returns:
+        list[dict[str, object]]: Validated manifest bundle.
+    """
+    from contextlib import nullcontext
+
+    from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs
+    from hypothesis_helm.compiler.randomness.rendering import enabled
+
+    scope = RandomInputs() if CURRENT.get() is None and enabled(chart) else nullcontext()
+    with scope:
+        return _render(
+            chart,
+            values,
+            helm=helm,
+            timeout=timeout,
+            release=release,
+            namespace=namespace,
+            kube_version=kube_version,
+            hashes=hashes,
+            stream=stream,
+            rendered_output=rendered_output,
+        )

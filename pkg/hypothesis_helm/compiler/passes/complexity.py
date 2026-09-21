@@ -29,10 +29,10 @@ from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import ManifestParseError, RenderFailure
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
-from hypothesis_helm.schemas.factors import FactorSpace, factor_space
-from hypothesis_helm.schemas.finite import enumerate_values
+from hypothesis_helm.schemas.generation.factors import FactorSpace, factor_space
+from hypothesis_helm.schemas.generation.finite import enumerate_values
+from hypothesis_helm.schemas.generation.replay import select
 from hypothesis_helm.schemas.model import ValuesModel
-from hypothesis_helm.schemas.replay import select
 
 __all__ = ("Component", "OutputCase", "bound", "main", "measure")
 

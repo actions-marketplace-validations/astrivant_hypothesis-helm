@@ -9,8 +9,8 @@ import tempfile
 from pathlib import Path
 
 from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.schemas.configuration.policy import intersect
 from hypothesis_helm.schemas.contracts import mapping, sequence
-from hypothesis_helm.schemas.policy import intersect
 
 __all__ = ("DATA", "KEYWORDS", "LIBRARY", "REVISION", "build", "main", "scalar_domain")
 
@@ -203,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--check", action="store_true", help="compare without writing; fail if release data is stale")
     args = parser.parse_args(argv)
-    from hypothesis_helm.schemas.conformity import prepare
+    from hypothesis_helm.schemas.kubernetes.conformity import prepare
 
     from hypothesis_helm_catalog.sources import VERSION, checkout, rebuild
 

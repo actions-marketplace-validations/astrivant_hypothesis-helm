@@ -10,7 +10,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from hypothesis_helm.reporting.links import link_matches
+from hypothesis_helm.reporting.reports.links import link_matches
 
 __all__ = ("FINAL_SUFFIXES", "STUDIES", "WORK_DIRECTORIES", "document_links", "final_files", "publish_study")
 

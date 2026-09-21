@@ -8,8 +8,8 @@ import tempfile
 from pathlib import Path
 
 from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.schemas.configuration.policy import intersect
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
-from hypothesis_helm.schemas.policy import intersect
 from jsonschema import validators
 
 from hypothesis_helm_catalog import toolchain
@@ -54,7 +54,7 @@ def checkout(cache: Path, *, offline: bool) -> Path:
     """
     import fcntl
 
-    from hypothesis_helm.schemas.conformity import git
+    from hypothesis_helm.schemas.kubernetes.conformity import git
 
     cache.mkdir(parents=True, exist_ok=True)
     target = cache / "kubernetes" / REVISION

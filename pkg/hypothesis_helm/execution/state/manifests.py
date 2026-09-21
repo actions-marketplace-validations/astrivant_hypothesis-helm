@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from attrs import frozen
 
-from hypothesis_helm.reporting.output import emit_manifest
+from hypothesis_helm.reporting.console.output import emit_manifest
 
 __all__ = ("ManifestStore",)
 

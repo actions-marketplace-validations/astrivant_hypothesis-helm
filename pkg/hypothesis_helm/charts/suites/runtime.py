@@ -25,15 +25,18 @@ from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.charts.values.parsers import SUITE_YAML_PARSER, validate_backend
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
+from hypothesis_helm.compiler.randomness.model import RandomInputs
+from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.policy import RuleScope
 from hypothesis_helm.findings.severity import blocks, level
-from hypothesis_helm.reporting.logs import FindingLog, chart_name
+from hypothesis_helm.reporting.console.logs import FindingLog, chart_name
 from hypothesis_helm.rules import check, ignored
-from hypothesis_helm.schemas.characters import SUITE_CHARACTER_SETS, validate_character_sets
-from hypothesis_helm.schemas.contracts import json_value, mapping, schema_strategy, sequence
-from hypothesis_helm.schemas.resources import SUITE_RESOURCE_SCHEMAS
-from hypothesis_helm.schemas.selectors import SourceScope, source_identity
+from hypothesis_helm.schemas.configuration.characters import SUITE_CHARACTER_SETS, validate_character_sets
+from hypothesis_helm.schemas.configuration.selectors import SourceScope, source_identity
+from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
+from hypothesis_helm.schemas.generation.strategies import schema_strategy
+from hypothesis_helm.schemas.kubernetes.resources import SUITE_RESOURCE_SCHEMAS
 
 __all__ = ("RenderOptions", "check_path", "path_values", "prepared_chart")
 
@@ -88,7 +91,7 @@ def prepared_chart(source: Path, generated: Path) -> Iterator[Chart]:
         chart.dependency_model = Dependencies.build(target)
         snapshot = generated / "input-domains.json"
         if snapshot.is_file():
-            from hypothesis_helm.schemas.domains import InputDomains
+            from hypothesis_helm.schemas.generation.domains import InputDomains
 
             frozen = mapping(json.loads(snapshot.read_text()))
             parser_token = SUITE_YAML_PARSER.set(validate_backend(frozen.get("yaml_parser", "ruamel")))
@@ -144,6 +147,8 @@ def _replace(
     Returns:
         dict[str, object]: Resulting schema, values mapping, or structured report.
     """
+    if not path:
+        return copy.deepcopy(mapping(value))
     result = copy.deepcopy(values)
     current: object = result
 
@@ -387,7 +392,10 @@ def check_path(
         values = data.draw(st.sampled_from(contexts), label="dependency context")
         note("dependency-aware overrides:\n" + yamlio.dump(values))
     selected = options or RenderOptions(timeout=timeout, allow_empty=allow_empty)
-    with RuleScope.for_values(chart, values):
+    from contextlib import nullcontext
+
+    scope = RandomInputs(lambda strategy, label: data.draw(strategy, label=label)) if random_enabled(chart) else nullcontext()
+    with scope, RuleScope.for_values(chart, values):
         try:
             resources = render(
                 chart,

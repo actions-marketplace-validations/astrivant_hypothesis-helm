@@ -8,9 +8,9 @@ import json
 from pathlib import Path
 from statistics import mean
 
-from hypothesis_helm.reporting.contents import with_contents
-from hypothesis_helm.reporting.links import Publication
-from hypothesis_helm.reporting.repository import write_reports
+from hypothesis_helm.reporting.documentation.contents import with_contents
+from hypothesis_helm.reporting.reports.links import Publication
+from hypothesis_helm.reporting.reports.repository import write_reports
 
 __all__ = ()
 

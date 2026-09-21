@@ -21,14 +21,14 @@ from hypothesis_helm.charts.model import Chart, _default_paths, _schema_nodes
 from hypothesis_helm.charts.suites.runtime import RenderOptions
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
-from hypothesis_helm.reporting.progress import format_path
-from hypothesis_helm.schemas.contracts import mapping, number, sequence
+from hypothesis_helm.reporting.console.progress import format_path
+from hypothesis_helm.schemas.configuration.selectors import source_identity
+from hypothesis_helm.schemas.configuration.settings import custom_text, hypothesis_parameters, settings_at
+from hypothesis_helm.schemas.contracts import json_value, mapping, number, sequence
+from hypothesis_helm.schemas.kubernetes.resources import resource_schemas
 from hypothesis_helm.schemas.paths import ValuePath as ValuePath
 from hypothesis_helm.schemas.paths import dereference as dereference
 from hypothesis_helm.schemas.paths import enumerate_paths as enumerate_paths
-from hypothesis_helm.schemas.resources import resource_schemas
-from hypothesis_helm.schemas.selectors import source_identity
-from hypothesis_helm.schemas.settings import custom_text, hypothesis_parameters, settings_at
 
 __all__ = ("Model", "ValuePath", "coalesce", "dereference", "enumerate_paths", "generate_tests", "infer_schema", "strategy_source")
 
@@ -378,7 +378,7 @@ def strategy_source(schema: dict[str, object], *, generation: dict[str, object] 
     Returns:
         str: Serialized output or resolved strategy expression.
     """
-    from hypothesis_helm.schemas.characters import character_sets
+    from hypothesis_helm.schemas.configuration.characters import character_sets
 
     selected = str(settings_at(generation, path)["character_sets"]) if generation else character_sets()
     if generation and custom_text(generation):
@@ -470,6 +470,10 @@ def generate_tests(
     source_schema = model.schema
     model.schema = chart.generation_schema(model.schema)
     model.paths = enumerate_paths(model.schema)
+    from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
+
+    if random_enabled(chart):
+        model.paths.append(ValuePath((), {"const": json_value(chart.defaults)}, "renderer-randomness"))
     generation = chart.input_domains().generation
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -509,7 +513,7 @@ def generate_tests(
         "from hypothesis import HealthCheck, Phase, given, settings",
         "from hypothesis import strategies as st",
         "from hypothesis.strategies import DataObject",
-        "from hypothesis_helm.schemas.contracts import schema_strategy as from_schema, supported_generated_text",
+        "from hypothesis_helm.schemas.generation.strategies import schema_strategy as from_schema, supported_generated_text",
         "from hypothesis_helm import Chart",
         "from hypothesis_helm.charts.suites.runtime import RenderOptions, check_path, prepared_chart",
         "",

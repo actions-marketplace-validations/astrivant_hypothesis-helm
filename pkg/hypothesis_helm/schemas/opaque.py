@@ -5,7 +5,7 @@ Identify object domains whose schema supplies no field structure for generation.
 import logging
 from pathlib import Path
 
-from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.rules import ignored
 from hypothesis_helm.schemas.contracts import sequence
 from hypothesis_helm.schemas.paths import ValuePath, dereference, enumerate_paths

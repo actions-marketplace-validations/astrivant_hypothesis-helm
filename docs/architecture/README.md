@@ -7,6 +7,8 @@
 - [Execution and validation](#execution-and-validation)
 - [Chart package layout](#chart-package-layout)
 - [Execution package layout](#execution-package-layout)
+- [Schema package layout](#schema-package-layout)
+- [Reporting package layout](#reporting-package-layout)
 - [Shared exceptions](#shared-exceptions)
 - [Syntax trees and compiler passes](#syntax-trees-and-compiler-passes)
 - [Finite permutation planning](#finite-permutation-planning)
@@ -110,6 +112,45 @@ Its supporting modules are grouped by responsibility:
 
 The worker CLI and pytest cache plugin use these module paths. Reinstall the project after updating an editable checkout
 so its installed worker entry point follows the new layout. Helm commands and saved-suite runtime imports are unchanged.
+
+## Schema package layout
+
+[`schemas/`](../../pkg/hypothesis_helm/schemas) separates the rules supplied by users, the inputs generated for testing,
+and the Kubernetes schemas used to validate output:
+
+| Package | Responsibility |
+| --- | --- |
+| [`configuration/`](../../pkg/hypothesis_helm/schemas/configuration) | Load input constraints, select charts, and resolve inherited Hypothesis settings and character policies. |
+| [`generation/`](../../pkg/hypothesis_helm/schemas/generation) | Build input domains and Hypothesis strategies, prioritize known fields, and construct replayable finite permutation plans. |
+| [`kubernetes/`](../../pkg/hypothesis_helm/schemas/kubernetes) | Resolve built-in and custom resource schemas, manage the schema cache, and validate rendered manifests. |
+
+The shared `ValuesModel`, path traversal, opaque-object inspection, and JSON conversion remain in
+`model.py`, `paths.py`, `opaque.py`, and `contracts.py` at the package root. These describe values without choosing a testing
+policy. Hypothesis strategy construction lives in `generation/strategies.py`.
+
+CLI commands and configuration keys are unchanged. Existing saved suites that import `schema_strategy` or
+`supported_generated_text` from `schemas.contracts` should import them from
+`hypothesis_helm.schemas.generation.strategies`, or be regenerated if they contain no custom edits.
+
+## Reporting package layout
+
+[`reporting/`](../../pkg/hypothesis_helm/reporting) groups output code by what it produces:
+
+| Package | Responsibility |
+| --- | --- |
+| [`console/`](../../pkg/hypothesis_helm/reporting/console) | Live finding logs, pytest progress, terminal displays, and rendered manifest streams. |
+| [`reports/`](../../pkg/hypothesis_helm/reporting/reports) | Repository and shard summaries, Kubesec reports, Markdown/PDF layout, overview plots, links, and finding appendices. |
+| [`evidence/`](../../pkg/hypothesis_helm/reporting/evidence) | Failing inputs, diagnostic grouping, value changes, atomic checkpoints, and run provenance. |
+| [`coverage/`](../../pkg/hypothesis_helm/reporting/coverage) | Permutation statistics and progressive coverage estimates and plots. |
+| [`documentation/`](../../pkg/hypothesis_helm/reporting/documentation) | Generated CLI help and linked tables of contents. |
+
+Shared report images stay in `reporting/assets/`. Execution deadlines belong to
+[`execution/runtime/budget.py`](../../pkg/hypothesis_helm/execution/runtime/budget.py), alongside process and signal handling.
+
+Command names and report formats are unchanged. The documentation CLI now targets
+`hypothesis_helm.reporting.documentation.contents`, and the pytest progress plugin lives at
+`hypothesis_helm.reporting.console.progress`. Reinstall an editable checkout after this update so the documentation
+entry point uses its new location.
 
 ## Shared exceptions
 

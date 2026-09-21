@@ -9,7 +9,7 @@ import sys
 import tarfile
 from pathlib import Path
 
-from hypothesis_helm.reporting.contents import with_contents
+from hypothesis_helm.reporting.documentation.contents import with_contents
 
 __all__ = ()
 

@@ -16,7 +16,8 @@ from pathlib import Path
 from attrs import define, evolve, field, frozen
 from ruamel.yaml.error import YAMLError
 
-from hypothesis_helm.compiler.asts.contract_maps import dictionary, fresh_merge, merge_flat_sources
+from hypothesis_helm.compiler.asts import native_operations
+from hypothesis_helm.compiler.asts.contract_maps import LocalMaps, dictionary, fresh_merge, merge_flat_sources
 from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, Scope
 from hypothesis_helm.compiler.asts.contract_values import (
     BoundValue,
@@ -25,6 +26,8 @@ from hypothesis_helm.compiler.asts.contract_values import (
     ContractText,
     DerivedValue,
     KeyList,
+    NilMap,
+    NilSlice,
     UnorderedKeys,
     native,
 )
@@ -32,7 +35,7 @@ from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference
 from hypothesis_helm.compiler.asts.templates import Node, lower, structure, walk
 from hypothesis_helm.compiler.asts.transformations import TransformedDomain, calculate, inputs
 from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE
-from hypothesis_helm.compiler.constants import INTEGER_RESULTS, TEMPLATE_CALLS, TRANSFORMATIONS
+from hypothesis_helm.compiler.constants import INTEGER_RESULTS, MERGES, NATIVE_OPERATIONS, TEMPLATE_CALLS, TRANSFORMATIONS
 from hypothesis_helm.compiler.limits import active_limits, call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.exceptions.compiler import LoopControl, Rejection, Unavailable, Unknown, UnsupportedTransformation
@@ -646,6 +649,7 @@ class Evaluation:
         contextual (bool): Whether this prediction depends on native context or concrete tpl evaluation.
         incomplete (bool): An unrelated root output was left to Helm; later predictions require native verification.
         declared_globals (bool): A forwarded global read is constrained by an authored dependency schema.
+        local_maps (LocalMaps): Candidate-local map ownership and invalidated literal-key evidence.
     """
 
     contracts: Contracts
@@ -664,6 +668,7 @@ class Evaluation:
     contextual: bool = False
     incomplete: bool = False
     declared_globals: bool = False
+    local_maps: LocalMaps = field(factory=LocalMaps)
 
     def context_value(self, value: object) -> object:
         """
@@ -736,6 +741,11 @@ class Evaluation:
                 current = current.values[key]
                 continue
             container = native(current)
+            # Each parenthesized selector restarts Go's field-chain evaluation.
+            # A nil receiver at its start propagates nil; a missing intermediate
+            # receiver in an uninterrupted chain must still remain unresolved.
+            if container is None and index == 0:
+                return current
             if not isinstance(container, dict) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key):
                 raise Unknown("unsupported context lookup")
             if key not in container and index != len(parts) - 1:
@@ -860,7 +870,16 @@ class Evaluation:
             except UnsupportedTransformation as exc:
                 raise Unknown(str(exc)) from exc
             self.transformed = True
-            return merged
+            return self.local_maps.register(merged)
+        if function in MERGES | {"set", "unset"}:
+            try:
+                result = self.local_maps.apply(str(function), evaluated, self.contracts.limits["max_range_items"])
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
+            self.contextual = True
+            return result
+        if function in NATIVE_OPERATIONS and function != "quote" and self.contracts.renderer is not None:
+            return self._native_operation(str(function), evaluated)
         if function in {"lookup", "getHostByName", "urlParse", "semverCompare"}:
             return self._renderer_call(function, evaluated)
         if isinstance(function, FieldAccess) or (isinstance(function, str) and function.startswith((".", "$")) and ("." in function)):
@@ -873,16 +892,18 @@ class Evaluation:
             try:
                 result = calculate(str(function), tuple(evaluated), limits=self.contracts.limits)
             except UnsupportedTransformation as exc:
+                if function == "quote" and len(evaluated) == 1 and self.contracts.renderer is not None:
+                    return self._native_operation("quote", evaluated)
                 raise Unknown(str(exc)) from exc
             self.transformed = True
             return DerivedValue(result, str(function), tuple(evaluated))
-        if function in {"not", "empty", "eq", "ne", "lt", "le", "gt", "ge", "int", "len"}:
+        if function in {"not", "empty", "eq", "ne", "lt", "le", "gt", "ge", "int", "len", "typeIs"}:
             return self._predicate(function, evaluated)
         if function in {"list", "dict"}:
             return self._construct(function, evaluated, arguments)
         if function in {"hasKey", "has", "mustHas"}:
             return self._membership(function, evaluated)
-        if function in {"omit", "keys", "sortAlpha", "index", "get", "append", "without"}:
+        if function in {"omit", "pick", "keys", "sortAlpha", "index", "get", "append", "without", "first", "reverse"}:
             return self._collection(function, evaluated)
         if function in {"join", "printf"}:
             return self._format(function, evaluated)
@@ -915,7 +936,7 @@ class Evaluation:
         if expr == "list":
             return ConstantList(())
         if expr == "dict":
-            return ConstantMap({})
+            return self.local_maps.register(ConstantMap({}))
         if expr == "nil":
             return None
         raise Unknown(f"unsupported expression: {expr}")
@@ -1019,6 +1040,29 @@ class Evaluation:
             except (Unavailable, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, YAMLError) as exc:
                 raise Unknown(str(exc) if isinstance(exc, Unavailable) else "native version comparison unavailable") from exc
         raise Unknown(f"unsupported function: {function}")
+
+    def _native_operation(self, function: str, evaluated: list[object]) -> object:
+        """
+        Delegate concrete operations without turning observed output into a domain proof.
+
+        Args:
+            function (str): Admitted regex or serialization function.
+            evaluated (list[object]): Operands carrying their original input paths.
+
+        Returns:
+            object: Derived output; fresh parsed maps may be mutated locally.
+        """
+        renderer = self.contracts.renderer
+        assert renderer is not None
+        self.contextual = self.transformed = True
+        try:
+            result = native_operations.evaluate(
+                function, evaluated, helm=renderer.helm, timeout=renderer.timeout, limits=self.contracts.limits
+            )
+        except (Unavailable, OSError, ValueError, TypeError, subprocess.SubprocessError, YAMLError) as exc:
+            raise Unknown(str(exc) if isinstance(exc, Unavailable) else f"native {function} evaluation unavailable") from exc
+        derived = DerivedValue(result, function, tuple(evaluated))
+        return self.local_maps.register(derived) if function in {"fromYaml", "fromJson"} else derived
 
     def _context_method(self, function: object, evaluated: list[object], source: str, line: int, variables: Scope) -> object:
         """
@@ -1146,10 +1190,19 @@ class Evaluation:
             object: Supported result; unsupported calls raise Unknown.
         """
         args = [native(value) for value in evaluated]
+        if function == "typeIs" and len(args) == 2 and args[0] in ("string", "bool"):
+            # String/bool identity is stable across Helm values loaders. Numeric
+            # type names still require native reflection rather than Python types.
+            return isinstance(args[1], str if args[0] == "string" else bool)
         if function in ("not", "empty") and len(args) == 1:
             return not bool(args[0])
         if function in ("eq", "ne", "lt", "le", "gt", "ge") and len(args) == 2:
             first, second = args
+            if function in {"eq", "ne"} and (first is None or second is None):
+                other = second if first is None else first
+                if other is None or type(other) in (str, bool, int) or isinstance(other, NilMap | NilSlice):
+                    equal = other is None or isinstance(other, NilMap | NilSlice)
+                    return equal if function == "eq" else not equal
             if type(first) is not type(second) or type(first) not in (str, bool, int):
                 raise Unknown("unsupported comparison types")
             if type(first) is bool and function not in ("eq", "ne"):
@@ -1185,8 +1238,8 @@ class Evaluation:
             except UnsupportedTransformation as exc:
                 raise Unknown(str(exc)) from exc
             if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments[::2]):
-                return ConstantMap(entries)
-            return entries
+                return self.local_maps.register(ConstantMap(entries))
+            return self.local_maps.register(entries)
         raise Unknown(f"unsupported function: {function}")
 
     def _membership(self, function: object, evaluated: list[object]) -> object:
@@ -1204,15 +1257,17 @@ class Evaluation:
         # A sampled collection cannot prove the chart accepts only these observed values.
         if function == "hasKey" and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
             present = args[1] in args[0]
-            if not present and isinstance(evaluated[0], ConstantMap) and isinstance(evaluated[1], BoundValue):
+            literal = isinstance(evaluated[0], ConstantMap) and id(args[0]) not in self.local_maps.changed
+            if not present and literal and isinstance(evaluated[1], BoundValue):
                 self.enums["$." + ".".join(evaluated[1].path)] = tuple(sorted(args[0]))
-            if not present and isinstance(evaluated[0], ConstantMap) and isinstance(evaluated[1], DerivedValue):
+            if not present and literal and isinstance(evaluated[1], DerivedValue):
                 self.transformed_domains.append(TransformedDomain(evaluated[1], tuple(sorted(args[0]))))
             return present
         if function in ("has", "mustHas") and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], list):
-            if not all(isinstance(item, str) for item in args[1]):
+            members = [native(item) for item in args[1]]
+            if not all(isinstance(item, str) for item in members):
                 raise Unknown("membership requires a string list")
-            present = args[0] in args[1]
+            present = args[0] in members
             if not present and isinstance(evaluated[0], BoundValue) and isinstance(evaluated[1], ConstantList):
                 self.enums["$." + ".".join(evaluated[0].path)] = tuple(sorted(set(evaluated[1].values)))
             if not present and isinstance(evaluated[0], DerivedValue) and isinstance(evaluated[1], ConstantList):
@@ -1232,15 +1287,23 @@ class Evaluation:
             object: Supported result; unsupported calls raise Unknown.
         """
         args = [native(value) for value in evaluated]
-        if function == "omit" and args and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[1:]):
+        if function in {"first", "reverse"} and len(args) == 1 and isinstance(args[0], list):
+            if len(args[0]) > self.contracts.limits["max_range_items"]:
+                raise Unknown("list operation exceeds compiler.max_range_items")
+            if isinstance(evaluated[0], UnorderedKeys):
+                raise Unknown("list selection from unsorted map keys has nondeterministic order")
+            if function == "reverse":
+                return DerivedValue(list(reversed(args[0])), "reverse", tuple(evaluated))
+            return DerivedValue(args[0][0] if args[0] else None, "first", tuple(evaluated))
+        if function in {"omit", "pick"} and args and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[1:]):
             if not all(isinstance(key, str) for key in args[0]):
                 raise Unknown("omit requires string-key maps")
             if len(args[0]) > self.contracts.limits["max_range_items"]:
                 raise Unknown(f"omit exceeds compiler.max_range_items={self.contracts.limits['max_range_items']}")
             source_map = evaluated[0]
-            kept = {key: value for key, value in args[0].items() if key not in args[1:]}
-            if isinstance(source_map, ConstantMap):
-                return ConstantMap(kept)
+            kept = {key: value for key, value in args[0].items() if (key in args[1:]) == (function == "pick")}
+            if isinstance(source_map, ConstantMap) and id(args[0]) not in self.local_maps.changed:
+                return self.local_maps.register(ConstantMap(kept))
             if isinstance(source_map, BoundValue | DerivedValue):
                 kept = {
                     key: BoundValue(value, (*source_map.path, key))
@@ -1249,7 +1312,7 @@ class Evaluation:
                     for key, value in kept.items()
                 }
             self.transformed = True
-            return kept
+            return self.local_maps.register(kept)
         if function == "keys" and len(args) == 1 and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[0]):
             return UnorderedKeys(tuple(args[0]))
         if function == "sortAlpha" and len(args) == 1 and isinstance(args[0], list) and all(isinstance(item, str) for item in args[0]):
@@ -1320,18 +1383,20 @@ class Evaluation:
                     ContractText(tuple(parts)) if any(isinstance(part, KeyList) for part in parts) else "".join(str(part) for part in parts)
                 )
         if function == "printf" and args and isinstance(args[0], str):
-            pieces = re.split(r"(%s|%d|%%)", args[0])
+            pieces = re.split(r"(%s|%d|%v|%%)", args[0])
             rendered: list[str] = []
             position = 1
             for piece in pieces:
                 if piece == "%%":
                     rendered.append("%")
-                elif piece in {"%s", "%d"}:
+                elif piece in {"%s", "%d", "%v"}:
                     if position >= len(args):
                         raise Unknown("printf argument count does not match its format")
                     item = args[position]
                     if (piece == "%s" and not isinstance(item, str)) or (piece == "%d" and type(item) is not int):
                         raise Unknown("printf argument type does not match its format")
+                    if piece == "%v" and item is not None and type(item) not in (str, bool, int):
+                        raise Unknown("printf %v requires a supported scalar")
                     operand = evaluated[position]
                     if piece == "%d" and not (
                         type(operand) is int or isinstance(operand, DerivedValue) and operand.function in INTEGER_RESULTS
@@ -1339,7 +1404,7 @@ class Evaluation:
                         raise Unknown("printf integer formatting requires an explicit integer conversion or known integer result")
                     if isinstance(evaluated[position], ContractText):
                         raise Unknown("mixed printf formatting with unordered output requires native evaluation")
-                    rendered.append(str(item))
+                    rendered.append("<nil>" if item is None else str(item).lower() if type(item) is bool else str(item))
                     position += 1
                 elif "%" in piece:
                     raise Unknown("unsupported printf format")
@@ -1509,6 +1574,10 @@ class Evaluation:
                 if node.kind == "text":
                     output.append(node.text)
                     continue
+                # Definitions were registered while building Contracts. Including
+                # their file does not execute a declaration's body a second time.
+                if node.kind == "opaque" and node.text.startswith("define "):
+                    continue
                 try:
                     assignment = ASSIGNMENT.fullmatch(node.text)
                     if not strict and not self.contracts.interesting((node,)):
@@ -1528,8 +1597,8 @@ class Evaluation:
                     elif node.kind == "opaque" and node.text.startswith("block "):
                         output.append(self.named_template(node.text, source, node.line, variables))
                     elif node.kind == "emit":
-                        if context_effects((node,), inspect_fresh_merges=True):
-                            raise Unknown("template statement can mutate or dynamically evaluate its context")
+                        # Evaluation checks map ownership before each write. Unknown
+                        # effects still abort the root through the barrier below.
                         if assignment:
                             try:
                                 self.pipeline(node.text, source, node.line, variables)

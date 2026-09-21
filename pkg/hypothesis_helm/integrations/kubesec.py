@@ -14,9 +14,9 @@ from pathlib import Path
 from hypothesis_helm.environment import env, refresh_env
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations.sharding import Shard, parse_shard_option, resolve_shard
-from hypothesis_helm.reporting.security import aggregate, publish, read_result
-from hypothesis_helm.schemas.conformity import prepare, validate
+from hypothesis_helm.reporting.reports.security import aggregate, publish, read_result
 from hypothesis_helm.schemas.contracts import mapping
+from hypothesis_helm.schemas.kubernetes.conformity import prepare, validate
 
 __all__ = ("SUPPORTED", "main", "scan", "worker_count")
 

@@ -21,6 +21,9 @@
 This document is for contributors modifying the framework. End-user chart testing
 is entirely through [Helm commands](usage.md).
 
+For upstream upgrades, use the [dependency maintenance inventory](dependencies.md). It covers both Go modules, Python packages,
+generated compiler/schema data, CI tools and remote-worker dependencies, including the files that must change together.
+
 ## Environment
 
 The project follows Astrivant's Python 3.13, Poetry and package-local test layout.
@@ -129,7 +132,32 @@ After changing CLI arguments, regenerate the [CLI reference](cli/README.md):
 bash scripts/project-run.sh cog -r docs/cli/README.md
 ```
 
-Unit and integration tests live under `pkg/hypothesis_helm/tests`. Helm must be
+Unit and integration tests live under [`pkg/hypothesis_helm/tests`](../pkg/hypothesis_helm/tests), grouped by the behavior they verify:
+
+| Directory | What it tests |
+| --- | --- |
+| `compiler/` | Template parsing, value origins, helper contracts, destination constraints, and analysis limits. |
+| `generation/` | Typed values, field settings, finite domains, and interaction coverage. |
+| `filtering/` | Sampling, calibration, trimming, and input prioritization. |
+| `execution/` | Workers, traversal, caching, sharding, time limits, and shutdown. |
+| `charts/` | Chart discovery, repository scans, saved suites, and minimal-values exports. |
+| `findings/` | Finding codes, severity thresholds, suppressions, and fail-fast behavior. |
+| `reporting/` | Aggregation, diagnostics, links, provenance, and diagrams. |
+| `schemas/` | Source-derived catalogs, Kubernetes and CRD schemas, and YAML parsers. |
+| `integrations/` | CI workflows, Kubesec, installers, release tooling, and remote shards. |
+| `benchmarking/` | Synthetic fixtures, measurements, plots, and study publication. |
+| `refresh/` | Refresh orchestration, distributed runs, and resuming interrupted work. |
+| `pipeline/` | Work graphs, routing gates, scheduling, and process ownership. |
+| `package/` | Public exports, shared exceptions, and environment configuration. |
+
+Run one category by passing its directory to pytest:
+
+```sh
+bash scripts/project-run.sh pytest -n auto pkg/hypothesis_helm/tests/compiler
+```
+
+The full test command still discovers every category. Shared chart fixtures stay in `tests/fixtures/`,
+and `tests/conftest.py` applies the same environment isolation throughout the suite. Helm must be
 available for render tests; the neighboring Astrivant audit skips when absent.
 `ASTRIVANT_CHART=<path>` opts into the full whole-chart Astrivant integration gate.
 Fixture schemas deliberately containing documentation gaps are not processed by
@@ -271,9 +299,9 @@ The package root contains the CLI, lightweight environment helpers (`env`, `refr
 | Subpackage | Responsibility |
 | --- | --- |
 | `charts/` | Template discovery, YAML handling, property generation, and chart rendering. |
-| `schemas/` | Value contracts, finite schema enumeration, and Kubernetes API conformity. |
+| `schemas/` | Shared value models and paths, with [configuration, generation, and Kubernetes validation subpackages](architecture/README.md#schema-package-layout). |
 | `execution/` | Suite coordination, with `planning/`, `workers/`, `runtime/` and `state/` groups. See the [execution layout](architecture/README.md#execution-package-layout). |
-| `reporting/` | Progress display, path logging, and JSON manifest streaming. |
+| `reporting/` | [Console output, saved evidence, reports, coverage statistics, and documentation helpers](architecture/README.md#reporting-package-layout). |
 | `integrations/` | CI provider configuration, shard detection, and the GitHub Action adapter. |
 | `tests/` | Package-local unit and integration tests. |
 

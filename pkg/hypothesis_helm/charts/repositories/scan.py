@@ -34,21 +34,21 @@ from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReac
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.execution.planning.sensitivity import validate_order
+from hypothesis_helm.execution.runtime.budget import execution_timer
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.runtime.signals import Termination
 from hypothesis_helm.findings.severity import attributes, blocks, for_paths, level
 from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
-from hypothesis_helm.reporting.budget import execution_timer
-from hypothesis_helm.reporting.errors import chart_errors, deduplicate_errors
-from hypothesis_helm.reporting.links import web_url
-from hypothesis_helm.reporting.progress import format_path
-from hypothesis_helm.reporting.provenance import trace_run
-from hypothesis_helm.reporting.repository import write_reports
+from hypothesis_helm.reporting.console.progress import format_path
+from hypothesis_helm.reporting.evidence.errors import chart_errors, deduplicate_errors
+from hypothesis_helm.reporting.evidence.provenance import trace_run
+from hypothesis_helm.reporting.reports.links import web_url
+from hypothesis_helm.reporting.reports.repository import write_reports
 from hypothesis_helm.rules import ignored, ignored_codes, record_ignored
+from hypothesis_helm.schemas.configuration.selectors import SourceScope
 from hypothesis_helm.schemas.contracts import mapping, sequence
-from hypothesis_helm.schemas.factors import factor_space
-from hypothesis_helm.schemas.selectors import SourceScope
+from hypothesis_helm.schemas.generation.factors import factor_space
 
 __all__ = ("VERSION", "discover_charts", "exercise_chart", "scan", "scan_checkout")
 
@@ -133,7 +133,7 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
     except (ValueError, OSError) as exc:
         return {"status": "unsupported-schema", "error": str(exc), "coverage": "audit unavailable"}
     observed = [mapping(item) for item in [*sequence(findings["findings"]), *sequence(findings["unresolved"])]]
-    from hypothesis_helm.reporting.logs import chart_name
+    from hypothesis_helm.reporting.console.logs import chart_name
 
     name = chart_name(path)
     seen: set[tuple[str, str, str]] = set()
@@ -187,7 +187,7 @@ def _exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> di
     if baseline.returncode and ignored("HH1012", chart=path):
         record_ignored("HH1012", diagnostic)
     if baseline.returncode and not ignored("HH1012", chart=path):
-        from hypothesis_helm.reporting.logs import FindingLog, chart_name
+        from hypothesis_helm.reporting.console.logs import FindingLog, chart_name
 
         decision = attributes("HH1012", settings=for_paths(path))
         FindingLog(chart_name(path), {}, artifacts=artifacts).emit(

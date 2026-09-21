@@ -219,6 +219,8 @@ Its dependency graphs are also in the [topology catalog](<studies/chart-topologi
 
 ## Development
 
+See [dependency maintenance](docs/dependencies.md) for version pins, nested Go modules, source catalogs and upgrade checks.
+
 ```sh
 env -u VIRTUAL_ENV -u PYENV_VERSION -u PYENV_VIRTUAL_ENV poetry install
 bash scripts/check.sh
@@ -246,7 +248,7 @@ Logs remain plain by default. Rendered manifests streamed with `-o json` or `-o 
 
 <!-- [[[cog
 import cog
-from hypothesis_helm.reporting.cli_reference import help_markdown
+from hypothesis_helm.reporting.documentation.cli_reference import help_markdown
 cog.out(help_markdown(headings=False))
 ]]] -->
 <details>
@@ -411,6 +413,7 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
+                            [--random-inputs]
                             [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
                             SOURCE
@@ -508,6 +511,8 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
+                        the pinned Helm SDK
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -530,6 +535,7 @@ usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMP
                                 [--export-minimal-values [FILENAME]]
                                 [--log-color [{auto,always,never}]] [--log-file PATH]
                                 [--config CONFIG] [--character-sets {ascii,unicode}]
+                                [--random-inputs]
                                 [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                                 [--ignore CODE] [--disable-codes CODE[,CODE...]]
                                 chart
@@ -567,6 +573,8 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
+                        the pinned Helm SDK
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -589,6 +597,7 @@ usage: helm hypothesis audit [-h] [--fail [{info,warning,error}]]
                              [--export-minimal-values [FILENAME]]
                              [--log-color [{auto,always,never}]] [--log-file PATH]
                              [--config CONFIG] [--character-sets {ascii,unicode}]
+                             [--random-inputs]
                              [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                              [--ignore CODE] [--disable-codes CODE[,CODE...]]
                              chart
@@ -629,6 +638,8 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
+                        the pinned Helm SDK
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -657,6 +668,7 @@ usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
                            [--export-suppressions] [--fail [{info,warning,error}]]
                            [--log-color [{auto,always,never}]] [--log-file PATH]
                            [--config CONFIG] [--character-sets {ascii,unicode}]
+                           [--random-inputs]
                            [--yaml-parser {ruamel,ruamel-safe,pyyaml}] [--ignore CODE]
                            [--disable-codes CODE[,CODE...]]
                            suite
@@ -723,6 +735,8 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
+                        the pinned Helm SDK
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser
@@ -772,6 +786,7 @@ usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
                             [--export-minimal-values [FILENAME]]
                             [--log-color [{auto,always,never}]] [--log-file PATH]
                             [--config CONFIG] [--character-sets {ascii,unicode}]
+                            [--random-inputs]
                             [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
                             [chart]
@@ -900,6 +915,8 @@ options:
                         helm.yaml in the working directory
   --character-sets {ascii,unicode}
                         generated text alphabet; overrides config; default: ascii
+  --random-inputs       test randAlphaNum results as replayable synthetic inputs using
+                        the pinned Helm SDK
   --yaml-parser {ruamel,ruamel-safe,pyyaml}
                         manifest parser backend; overrides yaml_parser in config;
                         default: ruamel, or the saved suite's parser

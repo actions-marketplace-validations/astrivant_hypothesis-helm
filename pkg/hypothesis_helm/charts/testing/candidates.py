@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import subprocess
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 
 from attrs import define, field
 from jsonschema import validators
@@ -15,15 +16,17 @@ from hypothesis_helm.charts.model import Chart, merge_values
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_rejection
-from hypothesis_helm.exceptions.rendering import RenderFailure
+from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs
+from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
+from hypothesis_helm.exceptions.rendering import RandomInputUnavailable, RenderFailure
+from hypothesis_helm.execution.runtime.budget import execution_timer
 from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import ACTIVE_CODES, RuleScope
 from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, blocks
-from hypothesis_helm.reporting.budget import execution_timer
-from hypothesis_helm.reporting.logs import FindingLog
-from hypothesis_helm.reporting.output import emit_manifest
-from hypothesis_helm.reporting.permutations import PermutationStatistics
+from hypothesis_helm.reporting.console.logs import FindingLog
+from hypothesis_helm.reporting.console.output import emit_manifest
+from hypothesis_helm.reporting.coverage.permutations import PermutationStatistics
 from hypothesis_helm.rules import check as check_rule
 from hypothesis_helm.rules import ignored, record_ignored
 from hypothesis_helm.schemas.contracts import json_value
@@ -125,6 +128,12 @@ class CandidateChecks:
             "proof_of_totality": False,
             "minimization_complete": False,
         }
+        random_case = CURRENT.get()
+        random_document = getattr(error, "random_inputs", None)
+        if random_document is None and random_case is not None:
+            random_document = random_case.document()
+        if random_document is not None:
+            self.failure_record["random_inputs"] = random_document
         if self.failure_sink is not None:
             self.failure_sink(self.failure_record)
 
@@ -140,7 +149,8 @@ class CandidateChecks:
         Returns:
             bool: Whether this candidate reached manifest testing rather than configuration exclusion.
         """
-        with RuleScope.for_values(self.chart, values):
+        scope = RandomInputs() if CURRENT.get() is None and random_enabled(self.chart) else nullcontext()
+        with scope, RuleScope.for_values(self.chart, values):
             return self._check(values, force_render=force_render, baseline=baseline)
 
     def _check(self, values: dict[str, object], *, force_render: bool = False, baseline: bool = False) -> bool:
@@ -294,6 +304,9 @@ class CandidateChecks:
                         "values": copy.deepcopy(values),
                         "occurrences": 0,
                     }
+                    random_case = CURRENT.get()
+                    if random_case is not None:
+                        self.nonblocking_findings[exc.code]["random_inputs"] = random_case.document()
                 record = self.nonblocking_findings[exc.code]
                 record["occurrences"] = int(str(record["occurrences"])) + 1
                 if self.failure_sink is not None and self.failure_record is None:
@@ -305,6 +318,8 @@ class CandidateChecks:
             if not attempted:
                 self.count += 1
                 attempted = True
+            raise
+        except RandomInputUnavailable:
             raise
         except Exception as exc:
             if not attempted:

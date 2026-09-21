@@ -6,7 +6,7 @@ import math
 import statistics
 from pathlib import Path
 
-from hypothesis_helm.reporting.contents import with_contents
+from hypothesis_helm.reporting.documentation.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.reporting.plots import finish

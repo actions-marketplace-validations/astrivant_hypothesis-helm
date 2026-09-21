@@ -85,6 +85,7 @@ options and report fields.
 | [`compiler/passes/`](../../pkg/hypothesis_helm/compiler/passes) | Analyses, selection policies, and exports described in this guide. |
 | [`compiler/constants.py`](../../pkg/hypothesis_helm/compiler/constants.py) | Shared function families, aliases, numeric bounds, and typed zero factories. |
 | [`passes/discovery_functions/`](../../pkg/hypothesis_helm/compiler/passes/discovery_functions) | A small dispatcher with separate scalar, collection, and selection handlers. |
+| [`asts/native_operations.py`](../../pkg/hypothesis_helm/compiler/asts/native_operations.py) | Bounded, cached calls to the selected Helm binary for Go regexes and serialization. |
 | [`asts/transformations.py`](../../pkg/hypothesis_helm/compiler/asts/transformations.py) | Concrete operations, grouped into formatting, selection, collections, text, and integer handlers. |
 | [`passes/domain_interpreter.py`](../../pkg/hypothesis_helm/compiler/passes/domain_interpreter.py) | Symbolic evaluation with separate helpers for calls, mutations, and branch joins. |
 | [`passes/domain_constraints.py`](../../pkg/hypothesis_helm/compiler/passes/domain_constraints.py) | Backward constraint propagation for input paths, maps, transformations, and selected branches. |

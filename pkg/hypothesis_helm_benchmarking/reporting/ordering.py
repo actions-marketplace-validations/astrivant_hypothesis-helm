@@ -7,7 +7,7 @@ from statistics import mean, stdev
 from textwrap import dedent
 
 import matplotlib.pyplot as plt
-from hypothesis_helm.reporting.contents import with_contents
+from hypothesis_helm.reporting.documentation.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from matplotlib.colors import to_hex
 

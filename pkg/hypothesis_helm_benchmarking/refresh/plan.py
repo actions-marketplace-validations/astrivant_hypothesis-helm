@@ -80,12 +80,19 @@ class Refresh:
             """
             recipe = (
                 Path("pkg/hypothesis_helm_benchmarking/refresh/recipes/operations.sh")
-                if name in {"checks", "dependencies", "initialize"}
+                if name
+                in {"compiler-builtins", "schema-catalog", "native-renderer", "dependency-docs", "checks", "dependencies", "initialize"}
                 else self.root / "operations.sh"
             )
             operations.append(Operation(name, ("bash", str(recipe), name, str(self.root)), requires, exclusive, allow_failure))
 
-        stage("checks", exclusive=True)
+        # Prepare generated contracts and the optional renderer before tests can
+        # consume stale assets or skip native coverage on a fresh checkout.
+        stage("compiler-builtins", exclusive=True)
+        stage("schema-catalog", "compiler-builtins", exclusive=True)
+        stage("native-renderer", "schema-catalog", exclusive=True)
+        stage("dependency-docs", "native-renderer", exclusive=True)
+        stage("checks", "dependency-docs", exclusive=True)
         stage("dependencies", "checks", exclusive=True)
         stage("initialize", "dependencies", exclusive=True)
         stage("prepare-fixtures", "initialize")

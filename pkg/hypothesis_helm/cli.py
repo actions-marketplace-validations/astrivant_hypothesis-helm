@@ -30,27 +30,27 @@ from hypothesis_helm.execution.planning.estimate import estimate_suite
 from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.execution.planning.sensitivity import validate_order
 from hypothesis_helm.execution.planning.traversal import STRATEGIES, validate_strategy
+from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.execution.runtime.signals import Termination
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.severity import LEVELS, audit_blocks
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
-from hypothesis_helm.reporting.budget import parse_time_limit
-from hypothesis_helm.reporting.changes import replay_file
-from hypothesis_helm.reporting.logs import LogFormatter
-from hypothesis_helm.reporting.output import MANIFEST_FD, MANIFEST_FORMAT
-from hypothesis_helm.reporting.progressive import plot_progression
-from hypothesis_helm.reporting.shards import aggregate
+from hypothesis_helm.reporting.console.logs import LogFormatter
+from hypothesis_helm.reporting.console.output import MANIFEST_FD, MANIFEST_FORMAT
+from hypothesis_helm.reporting.coverage.progressive import plot_progression
+from hypothesis_helm.reporting.evidence.changes import replay_file
+from hypothesis_helm.reporting.reports.shards import aggregate
 from hypothesis_helm.rules import ENVIRONMENT as RULE_ENVIRONMENT
 from hypothesis_helm.rules import load_ignored, may_check
-from hypothesis_helm.schemas.conformity import ENVIRONMENT, prepare
+from hypothesis_helm.schemas.configuration.policy import ENVIRONMENT as INPUT_ENVIRONMENT
+from hypothesis_helm.schemas.configuration.policy import load_policy
+from hypothesis_helm.schemas.configuration.selectors import SourceScope, chart_identity, source_identity
 from hypothesis_helm.schemas.contracts import mapping, sequence
-from hypothesis_helm.schemas.factors import factor_space
-from hypothesis_helm.schemas.groups import parse_group
-from hypothesis_helm.schemas.policy import ENVIRONMENT as INPUT_ENVIRONMENT
-from hypothesis_helm.schemas.policy import load_policy
-from hypothesis_helm.schemas.selectors import SourceScope, chart_identity, source_identity
+from hypothesis_helm.schemas.generation.factors import factor_space
+from hypothesis_helm.schemas.generation.groups import parse_group
+from hypothesis_helm.schemas.kubernetes.conformity import ENVIRONMENT, prepare
 
 __all__ = ("ExamplesAction", "FailAction", "FilterAction", "argument_parser", "local_discovery", "main", "parse_code_list", "parse_jobs")
 
@@ -656,6 +656,11 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             "--character-sets", choices=("ascii", "unicode"), help="generated text alphabet; overrides config; default: ascii"
         )
         command.add_argument(
+            "--random-inputs",
+            action="store_true",
+            help="test randAlphaNum results as replayable synthetic inputs using the pinned Helm SDK",
+        )
+        command.add_argument(
             "--yaml-parser",
             choices=("ruamel", "ruamel-safe", "pyyaml"),
             help="manifest parser backend; overrides yaml_parser in config; default: ruamel, or the saved suite's parser",
@@ -822,6 +827,8 @@ def main(argv: list[str] | None = None) -> int:
                 yaml_parser=args.yaml_parser,
                 max_examples=args.max_examples if getattr(args, "max_examples_explicit", False) else None,
             )
+            if args.random_inputs:
+                args.input_policy["hypothesis"] = {**mapping(args.input_policy.get("hypothesis", {})), "random_inputs": True}
             if hasattr(args, "max_examples"):
                 args.max_examples = int(str(mapping(args.input_policy.get("hypothesis", {})).get("max_examples", args.max_examples)))
             finding_policy = mapping(args.input_policy["findings"])

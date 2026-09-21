@@ -29,6 +29,7 @@ __all__ = (
     "SEMVER_FIELDS",
     "CERTIFICATE_FIELDS",
     "CONTEXT_EFFECTS",
+    "NATIVE_OPERATIONS",
 )
 
 
@@ -81,11 +82,13 @@ CONTEXT_EFFECTS = frozenset({"mutation", "dynamic-code"})
 
 
 # Public operations and internal replay selectors use the same concrete handlers.
-FORMAT_TRANSFORMS = frozenset({"quote", "indent", "nindent", "print", "toString"})
+FORMAT_TRANSFORMS = frozenset({"quote", "squote", "indent", "nindent", "print", "toString"})
 SELECTION_TRANSFORMS = frozenset({"default", "coalesce", "kindIs", "ternary"})
 COLLECTION_TRANSFORMS = frozenset({"splitList", "split", "_field", "_get", "_index", "concat"})
 TEXT_TRANSFORMS = frozenset(
     {
+        "sha256sum",
+        "b64enc",
         "trunc",
         "lower",
         "upper",
@@ -105,4 +108,26 @@ TEXT_TRANSFORMS = frozenset(
 )
 TRANSFORMATIONS = (
     FORMAT_TRANSFORMS | SELECTION_TRANSFORMS | (COLLECTION_TRANSFORMS - {"_field", "_get", "_index"}) | TEXT_TRANSFORMS | INTEGER_RESULTS
+)
+
+
+# These are execution adapters, not purity declarations. The generated builtin
+# inventory remains the source of effect classifications.
+NATIVE_OPERATIONS: Mapping[str, int] = MappingProxyType(
+    {
+        "quote": 1,
+        "b64dec": 1,
+        "regexMatch": 2,
+        "mustRegexMatch": 2,
+        "regexFind": 2,
+        "mustRegexFind": 2,
+        "regexReplaceAll": 3,
+        "mustRegexReplaceAll": 3,
+        "regexReplaceAllLiteral": 3,
+        "mustRegexReplaceAllLiteral": 3,
+        "toYaml": 1,
+        "toJson": 1,
+        "fromYaml": 1,
+        "fromJson": 1,
+    }
 )

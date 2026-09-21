@@ -135,7 +135,7 @@ def selected() -> str:
     Returns:
         str: Validated backend inherited by this execution context.
     """
-    from hypothesis_helm.schemas.policy import inherited_policy
+    from hypothesis_helm.schemas.configuration.policy import inherited_policy
 
     return validate_backend(inherited_policy().get("yaml_parser", SUITE_YAML_PARSER.get()))
 

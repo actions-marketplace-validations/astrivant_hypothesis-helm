@@ -11,11 +11,13 @@ import math
 import time
 from collections.abc import Callable, Sequence
 from concurrent.futures import Future
+from contextlib import nullcontext
 from pathlib import Path
 
 from hypothesis import HealthCheck, Phase, assume, given, seed, settings
+from hypothesis import strategies as st
 from hypothesis.errors import Unsatisfiable
-from hypothesis.strategies import SearchStrategy
+from hypothesis.strategies import DataObject, SearchStrategy
 
 from hypothesis_helm.charts.inspection.audit import audit as audit
 from hypothesis_helm.charts.model import Chart as Chart
@@ -32,9 +34,12 @@ from hypothesis_helm.compiler.asts.contracts import Contracts
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.pruning import Pruner
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
+from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs, RandomOutput
+from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
+from hypothesis_helm.compiler.randomness.toolchain import build as prepare_random_renderer
 from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
-from hypothesis_helm.exceptions.rendering import RenderFailure
+from hypothesis_helm.exceptions.rendering import RandomInputUnavailable, RenderFailure
 from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.planning.sensitivity import SensitivityOrder, validate_order
 from hypothesis_helm.execution.planning.traversal import order_configurations, validate_strategy
@@ -42,20 +47,20 @@ from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.findings.policy import chart_rules
 from hypothesis_helm.findings.severity import attributes
 from hypothesis_helm.findings.severity import policy as finding_policy
-from hypothesis_helm.reporting.changes import compare
-from hypothesis_helm.reporting.checkpoints import save as save_checkpoint
-from hypothesis_helm.reporting.logs import FindingLog, chart_name, input_baseline
-from hypothesis_helm.reporting.reproductions import changed_values
+from hypothesis_helm.reporting.console.logs import FindingLog, chart_name, input_baseline
+from hypothesis_helm.reporting.evidence.changes import compare
+from hypothesis_helm.reporting.evidence.checkpoints import save as save_checkpoint
+from hypothesis_helm.reporting.evidence.reproductions import changed_values
 from hypothesis_helm.rules import effective_ignored_codes, ignored_codes
+from hypothesis_helm.schemas.configuration.settings import hypothesis_parameters
 from hypothesis_helm.schemas.contracts import (
     configuration_key,
     mapping,
     sequence,
 )
-from hypothesis_helm.schemas.groups import ExhaustiveGroup
+from hypothesis_helm.schemas.generation.groups import ExhaustiveGroup
+from hypothesis_helm.schemas.generation.replay import concatenate, select
 from hypothesis_helm.schemas.model import ValuesModel
-from hypothesis_helm.schemas.replay import concatenate, select
-from hypothesis_helm.schemas.settings import hypothesis_parameters
 
 __all__ = ("Chart", "audit", "check_chart", "merge_values", "render", "validate_resources")
 
@@ -162,6 +167,9 @@ def check_chart(
         raise ValueError("skipping defaults requires an explicit path input strategy")
     if not isinstance(chart, Chart):
         chart = Chart.load(chart)
+    test_random_inputs = random_enabled(chart)
+    if test_random_inputs and not dry_run:
+        prepare_random_renderer()
     if max_examples < 1 or timeout <= 0:
         raise ValueError("max_examples and timeout must be positive")
     if sampling.percent < 100 and permutations is None and not exhaustive:
@@ -214,6 +222,8 @@ def check_chart(
     hashes = RenderHashes(scope="run-local")
     model = ValuesModel.from_schema(chart.generation_schema()) if permutations is not None or prune_equivalent else None
     pruner = Pruner(chart.path, chart.defaults, model) if prune_equivalent and model is not None else None
+    if pruner is not None and test_random_inputs:
+        pruner.disabled = "synthetic random samples cannot establish equivalence across all random draws"
     if pruner is not None:
         pruner.fail_fast = fail_fast
     if pruner is not None and (not release or not namespace):
@@ -265,6 +275,13 @@ def check_chart(
     expansion_values = plan.expansion_values
     expansion_positions = plan.expansion_positions
     coverage = plan.coverage
+    if test_random_inputs:
+        coverage["renderer_randomness"] = {
+            "renderer": "helm-4.3.0",
+            "function": "randAlphaNum",
+            "mode": "sampled" if finite_values is None else "fixed representative per values configuration",
+            "random_space_exhaustive": False,
+        }
     statistics = plan.statistics
     sensitivity: SensitivityOrder | None = None
     expansion_failures: list[dict[str, object]] = []
@@ -308,6 +325,10 @@ def check_chart(
             consumed += 1
             try:
                 output = prefetched.result(timeout=remaining_time())
+                random_case = CURRENT.get()
+                if random_case is not None and isinstance(output, RandomOutput):
+                    random_case.records = [mapping(row) for row in sequence(output.random_inputs["draws"])]
+                    random_case.context = mapping(output.random_inputs["context"])
             except TimeoutError as exc:
                 raise TimeLimitReached() from exc
         if record_hashes:
@@ -386,6 +407,8 @@ def check_chart(
             None: Atomic evidence is available for coordinator recovery.
         """
         if artifact_dir is not None:
+            if record.get("random_inputs") is not None:
+                save_checkpoint(artifact_dir / "random-inputs.json", mapping(record["random_inputs"]))
             save_checkpoint(
                 artifact_dir / "observed-failure.json",
                 {
@@ -576,6 +599,17 @@ def check_chart(
         Returns:
             dict[str, object]: Resulting schema, values mapping, or structured report.
         """
+        if isinstance(exc, RandomInputUnavailable):
+            unavailable_random = {
+                **coverage,
+                "status": "unavailable",
+                "reason": str(exc),
+                "chart": str(chart.path),
+                "coverage_complete": False,
+            }
+            if artifact_dir is not None:
+                save_checkpoint(artifact_dir / "report.json", unavailable_random)
+            return unavailable_random
         if isinstance(exc, ChartUnavailable):
             unavailable: dict[str, object] = {
                 **coverage,
@@ -623,6 +657,8 @@ def check_chart(
             "render_hashes": hashes.snapshot(),
             **({"pruning": pruner.report()} if pruner is not None else {}),
         }
+        if checks.failure_record is not None and checks.failure_record.get("random_inputs") is not None:
+            result["random_inputs"] = checks.failure_record["random_inputs"]
         if statistics is not None:
             result.update(statistics.finish(str(result["status"]), message))
         expansion_report(result)
@@ -833,13 +869,14 @@ def check_chart(
         report_multiple_bugs=False,
         suppress_health_check=(*configured_health, HealthCheck.filter_too_much) if policy is not None else configured_health,
     )
-    @given(input_strategy if input_strategy is not None else chart.strategy())
-    def property_test(values: dict[str, object]) -> None:
+    @given(values=input_strategy if input_strategy is not None else chart.strategy(), data=st.data())
+    def property_test(values: dict[str, object], data: DataObject) -> None:
         """
         Exercise a schema-generated candidate through the render contract.
 
         Args:
             values (dict[str, object]): Values document used as the rendering baseline.
+            data (DataObject): Seeded, shrinkable native random draws for this example.
 
         Returns:
             None: None. The operation completes through its documented side effects.
@@ -852,7 +889,9 @@ def check_chart(
         ignored_before = sum(checks.ignored_failures.values())
         findings_before = sum(int(str(record["occurrences"])) for record in checks.nonblocking_findings.values())
         try:
-            accepted = check(values)
+            scope = RandomInputs(lambda strategy, label: data.draw(strategy, label=label)) if test_random_inputs else nullcontext()
+            with scope:
+                accepted = check(values)
         except Exception as exc:
             if mapping(getattr(exc, "controls", {})).get("fail_fast", fail_fast):
                 first_sample_failure = exc

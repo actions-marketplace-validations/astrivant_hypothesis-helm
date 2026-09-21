@@ -13,11 +13,11 @@ from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
-from hypothesis_helm.reporting.budget import execution_timer
-from hypothesis_helm.reporting.logs import input_baseline
+from hypothesis_helm.execution.runtime.budget import execution_timer
+from hypothesis_helm.reporting.console.logs import input_baseline
 from hypothesis_helm.rules import ignored_codes
-from hypothesis_helm.schemas.characters import generated_text_policy
-from hypothesis_helm.schemas.priority import PriorityInputs
+from hypothesis_helm.schemas.configuration.characters import generated_text_policy
+from hypothesis_helm.schemas.generation.priority import PriorityInputs
 
 __all__ = ("check_prioritized",)
 

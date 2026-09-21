@@ -39,6 +39,8 @@ packages = [
 include = [
     {path = "plugin.yaml", format = ["sdist"]},
     {path = "scripts", format = ["sdist"]},
+    {path = "pkg/hypothesis_helm/compiler/assets/*.json", format = ["sdist", "wheel"]},
+    {path = "pkg/hypothesis_helm/compiler/assets/renderer/*", format = ["sdist", "wheel"]},
     {path = "pkg/hypothesis_helm/compiler/lua/*.lua", format = ["sdist", "wheel"]},
 ]
 
@@ -79,9 +81,10 @@ pytest-xdist = ">=3.8,<4"
 setuptools = ">=77"
 
 [tool.poetry.scripts]
+hypothesis-helm-renderer = "hypothesis_helm.compiler.randomness.cli:main"
 hypothesis-helm-builtins = "hypothesis_helm_catalog.builtins:main"
 hypothesis-helm-catalog = "hypothesis_helm_catalog.builder:main"
-hypothesis-helm-docs = "hypothesis_helm.reporting.contents:main"
+hypothesis-helm-docs = "hypothesis_helm.reporting.documentation.contents:main"
 hypothesis-helm-sensitivity = "hypothesis_helm.analysis.cli:main"
 pipeline-example = "pipeline.example:main"
 hypothesis-helm-path-worker = "hypothesis_helm.execution.workers.path_queue:main"

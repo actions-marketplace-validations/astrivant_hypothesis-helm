@@ -74,6 +74,10 @@ def fingerprint(
     digest = hashlib.sha256(repr((seed, match, shard, sys.version)).encode())
     digest.update(env.get("HYPOTHESIS_HELM_IGNORED_RULES", "[]").encode())
     digest.update(env.get("HYPOTHESIS_HELM_INPUT_POLICY", "{}").encode())
+    from hypothesis_helm.compiler.randomness.toolchain import identity as renderer_identity
+
+    # Go assets can change native execution even when every Python file is unchanged.
+    digest.update(renderer_identity().encode())
     from hypothesis_helm_catalog.builder import DATA
 
     for catalog in sorted(DATA.glob("*.json")):

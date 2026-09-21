@@ -13,9 +13,9 @@ from pathlib import Path
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.execution.planning.sampling import Sampling
+from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.execution.runtime.processes import Processes
-from hypothesis_helm.reporting.budget import parse_time_limit
-from hypothesis_helm.reporting.contents import with_contents
+from hypothesis_helm.reporting.documentation.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.faults import Fault, write_faults

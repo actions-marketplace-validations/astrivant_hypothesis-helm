@@ -135,7 +135,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.dry_run:
             print(json.dumps({"workers": workers, "operations": [asdict(item) for item in operations]}, indent=2))
             return 0
-        for binary in ("python", "helm", "parallel", "git", "hypothesis-helm", "hypothesis-helm-benchmark"):
+        for binary in (
+            "python",
+            "helm",
+            "parallel",
+            "git",
+            "go",
+            "cog",
+            "hypothesis-helm",
+            "hypothesis-helm-benchmark",
+            "hypothesis-helm-builtins",
+            "hypothesis-helm-catalog",
+            "hypothesis-helm-renderer",
+            "hypothesis-helm-docs",
+        ):
             if shutil.which(binary) is None:
                 raise ValueError(f"Required executable not found: {binary}")
         root.parent.mkdir(parents=True, exist_ok=True)

@@ -55,13 +55,13 @@ Maximum output complexity alone cannot bound the probability of a rare defect.
 | A deadline cannot hide a cleanup failure | `test_deferred_deadline_preserves_cleanup_failure` | Failed join retained alongside the deferred deadline |
 | Publication rejects missing presets, duplicated runs and inconsistent timing phases | `test_refresh_requires_complete_stress_matrix` | Damaged structural, PCA, expansion, nesting, stress, calibration and load-test ledgers |
 
-Tests live in [test_aggressive.py](../../pkg/hypothesis_helm/tests/test_aggressive.py) and
-[test_calibration_matrix.py](../../pkg/hypothesis_helm/tests/test_calibration_matrix.py).
-Runtime checks are in [test_filtering_load.py](../../pkg/hypothesis_helm/tests/test_filtering_load.py), with publication checks in
-[test_refresh.py](../../pkg/hypothesis_helm/tests/test_refresh.py).
+Tests live in [test_aggressive.py](../../pkg/hypothesis_helm/tests/filtering/test_aggressive.py) and
+[test_calibration_matrix.py](../../pkg/hypothesis_helm/tests/filtering/test_calibration_matrix.py).
+Runtime checks are in [test_filtering_load.py](../../pkg/hypothesis_helm/tests/benchmarking/test_filtering_load.py), with publication checks in
+[test_refresh.py](../../pkg/hypothesis_helm/tests/refresh/test_refresh.py).
 
 ```sh
-pytest pkg/hypothesis_helm/tests/test_aggressive.py pkg/hypothesis_helm/tests/test_calibration_matrix.py
+pytest pkg/hypothesis_helm/tests/filtering/test_aggressive.py pkg/hypothesis_helm/tests/filtering/test_calibration_matrix.py
 ```
 
 ## Empirical matrix

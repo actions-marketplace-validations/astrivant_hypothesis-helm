@@ -17,7 +17,7 @@ from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.findings.policy import chart_rules, resolve_codes
 from hypothesis_helm.findings.severity import attributes, for_paths
 from hypothesis_helm.findings.severity import policy as finding_policy
-from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.rules import AUDIT_RULES, ignored_codes
 from hypothesis_helm.schemas.contracts import sequence
 from hypothesis_helm.schemas.opaque import MESSAGE, opaque_paths, warn_opaque

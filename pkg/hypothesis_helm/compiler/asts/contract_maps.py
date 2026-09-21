@@ -4,10 +4,134 @@ Evaluate fresh flat-map merges without modeling mutations of shared chart inputs
 
 import re
 
-from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
+from attrs import define, field
+
+from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, NilMap, native
 from hypothesis_helm.exceptions.compiler import UnsupportedTransformation
 
-__all__ = ("dictionary", "fresh_merge", "merge_flat_sources")
+__all__ = ("LocalMaps", "dictionary", "fresh_merge", "merge_flat_sources")
+
+
+@define
+class LocalMaps:
+    """
+    Prove mutation ownership separately from whether a dictionary's keys form an allowlist.
+
+    Attributes:
+        owned (dict[int, dict[str, object]]): Strong references prevent identity reuse within an evaluation.
+        changed (set[int]): Maps whose keys can no longer establish a literal allowlist.
+    """
+
+    owned: dict[int, dict[str, object]] = field(factory=dict)
+    changed: set[int] = field(factory=set)
+
+    def register(self, value: object) -> object:
+        """
+        Mark a newly allocated map as safe to mutate through any local alias.
+
+        Args:
+            value (object): New map, possibly wrapped as a constant-key map.
+
+        Returns:
+            object: Original wrapper without marking shared nested values as owned.
+        """
+        contents = native(value)
+        if isinstance(contents, dict):
+            self.owned[id(contents)] = contents
+        return value
+
+    def apply(self, function: str, arguments: list[object], max_items: int) -> object:
+        """
+        Apply bounded writes only to proved local destinations.
+
+        Args:
+            function (str): Set, unset, or a merge variant.
+            arguments (list[object]): Evaluated operands retaining provenance.
+            max_items (int): Maximum entries inspected or retained.
+
+        Returns:
+            object: Original destination, preserving alias identity.
+
+        Raises:
+            UnsupportedTransformation: Ownership, shape, arity or bounds cannot be established.
+        """
+        args = [native(value) for value in arguments]
+        if not args or not isinstance(args[0], dict) or id(args[0]) not in self.owned:
+            raise UnsupportedTransformation("map mutation requires a proven-local destination; shared context remains unresolved")
+        target = args[0]
+        if isinstance(target, NilMap):
+            raise UnsupportedTransformation("mutation of a nil map requires native allocation or raises a template error")
+        if function in {"set", "unset"}:
+            if len(args) != (3 if function == "set" else 2) or not isinstance(args[1], str):
+                raise UnsupportedTransformation("local map mutation has unsupported operands")
+            if function == "set":
+                self._set(target, args[1], arguments[2], max_items)
+            else:
+                target.pop(args[1], None)
+        else:
+            self._merge(function, target, arguments, max_items)
+        # A candidate-dependent write cannot create a new constant enum proof.
+        self.changed.add(id(target))
+        return arguments[0]
+
+    def _set(self, target: dict[str, object], key: str, value: object, max_items: int) -> None:
+        """
+        Check size and cycle safety before changing one local dictionary entry.
+
+        Args:
+            target (dict[str, object]): Owned destination map.
+            key (str): Entry being assigned.
+            value (object): Source value, retaining provenance and aliases.
+            max_items (int): Maximum nodes inspected and entries retained.
+
+        Returns:
+            None: Assignment succeeds without creating a cyclic analysis object.
+        """
+        if len(target) + (key not in target) > max_items:
+            raise UnsupportedTransformation("local map exceeds compiler.max_range_items")
+        pending = [value]
+        seen: set[int] = set()
+        inspected = 0
+        while pending:
+            item = native(pending.pop())
+            inspected += 1
+            if inspected > max_items:
+                raise UnsupportedTransformation("local map assignment exceeds compiler.max_range_items")
+            if item is target:
+                raise UnsupportedTransformation("local map assignment would create a cyclic value")
+            if isinstance(item, dict | list) and id(item) not in seen:
+                if inspected + len(item) > max_items:
+                    raise UnsupportedTransformation("local map assignment exceeds compiler.max_range_items")
+                seen.add(id(item))
+                pending.extend(item.values() if isinstance(item, dict) else item)
+        target[key] = value
+
+    def _merge(self, function: str, target: dict[str, object], arguments: list[object], max_items: int) -> None:
+        """
+        Apply Mergo's flat-map precedence after inspecting every source for shared aliases.
+
+        Args:
+            function (str): Ordinary or overwrite merge variant.
+            target (dict[str, object]): Owned destination, changed only after validation.
+            arguments (list[object]): Destination and sources with provenance intact.
+            max_items (int): Maximum total entries inspected.
+
+        Returns:
+            None: Winning source values replace destination entries in place.
+        """
+        if len(arguments) < 2:
+            raise UnsupportedTransformation("local merge needs at least one source")
+        # Mergo can mutate nested destination aliases. Restrict this adapter to
+        # flat maps until recursive alias ownership and precedence are modeled.
+        snapshots = [merge_flat_sources([item], max_items) for item in arguments]
+        if sum(len(item) for item in snapshots) > max_items:
+            raise UnsupportedTransformation("local merge exceeds compiler.max_range_items")
+        for source in snapshots[1:]:
+            for key, value in source.items():
+                # Ordinary merge ignores nil sources when a key already exists,
+                # even when the existing scalar is false, zero or an empty string.
+                if "Overwrite" in function or key not in target or (not native(target[key]) and native(value) is not None):
+                    target[key] = value
 
 
 def dictionary(arguments: tuple[object, ...]) -> dict[str, object]:

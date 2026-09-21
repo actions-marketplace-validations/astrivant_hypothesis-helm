@@ -21,11 +21,11 @@ from hypothesis_helm.compiler.passes.topology import trim_topology
 from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.planning.aggressive import CALIBRATION_VERSION, changed_fields, descriptor
 from hypothesis_helm.execution.planning.sampling import Sampling
+from hypothesis_helm.execution.runtime.budget import execution_timer, parse_time_limit
 from hypothesis_helm.execution.runtime.processes import Processes
-from hypothesis_helm.reporting.budget import execution_timer, parse_time_limit
-from hypothesis_helm.reporting.contents import with_contents
-from hypothesis_helm.schemas.combinations import plan_interactions, trim_values
+from hypothesis_helm.reporting.documentation.contents import with_contents
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
+from hypothesis_helm.schemas.generation.combinations import plan_interactions, trim_values
 from hypothesis_helm.schemas.model import ValuesModel
 
 from hypothesis_helm_benchmarking.charts.faults import Fault, write_faults

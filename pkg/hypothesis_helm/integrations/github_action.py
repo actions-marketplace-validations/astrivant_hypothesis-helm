@@ -11,7 +11,7 @@ from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations.incremental import select_rerun
 from hypothesis_helm.integrations.kubesec import scan
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
-from hypothesis_helm.schemas.conformity import prepare
+from hypothesis_helm.schemas.kubernetes.conformity import prepare
 
 __all__ = ("main", "write_outputs")
 

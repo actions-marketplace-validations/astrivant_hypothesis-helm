@@ -15,10 +15,10 @@ from deepdiff import DeepDiff
 
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.severity import ACTIVE_POLICY, for_paths
-from hypothesis_helm.reporting.reproductions import leaves
+from hypothesis_helm.reporting.evidence.reproductions import leaves
+from hypothesis_helm.schemas.configuration.policy import path_parts
+from hypothesis_helm.schemas.configuration.selectors import matching_rules
 from hypothesis_helm.schemas.contracts import sequence
-from hypothesis_helm.schemas.policy import path_parts
-from hypothesis_helm.schemas.selectors import matching_rules
 
 __all__ = ("RuleScope", "candidate_paths", "chart_rules", "resolve_codes")
 

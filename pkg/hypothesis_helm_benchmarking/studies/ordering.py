@@ -16,10 +16,10 @@ from attrs import asdict
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.execution.runtime.budget import execution_timer, parse_time_limit
 from hypothesis_helm.execution.runtime.processes import Processes
-from hypothesis_helm.reporting.budget import execution_timer, parse_time_limit
-from hypothesis_helm.schemas.combinations import plan_interactions
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
+from hypothesis_helm.schemas.generation.combinations import plan_interactions
 
 from hypothesis_helm_benchmarking.charts.faults import Fault, write_faults
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace

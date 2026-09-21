@@ -55,12 +55,16 @@ sources = [
     *(path for package in packages for path in package.rglob("*.py")),
     *Path("pkg/hypothesis_helm_catalog/data").glob("*.json"),
     *Path("pkg/hypothesis_helm_benchmarking/assets").rglob("*"),
-    Path("pkg/hypothesis_helm/compiler/builtin_inventory.json"),
+    *Path("pkg/hypothesis_helm/compiler/assets").rglob("*"),
+    *Path("pkg/hypothesis_helm/compiler/lua").glob("*.lua"),
+    *Path("pkg/hypothesis_helm_catalog/upstream").glob("*.go"),
+    Path("pkg/hypothesis_helm_catalog/upstream/go.mod"),
+    Path("pkg/hypothesis_helm_catalog/upstream/go.sum"),
     Path("pkg/hypothesis_helm/execution/planning/data/calibration.json"),
     Path("pkg/hypothesis_helm/reporting/assets/logo.png"),
 ]
 for path in sorted(sources):
-    if not path.is_file() or "tests" in path.parts:
+    if not path.is_file() or "tests" in path.parts or "__pycache__" in path.parts:
         continue
     package = next(package for package in packages if path.is_relative_to(package))
     # Freeze an importable layout independent of source checkout folder names.

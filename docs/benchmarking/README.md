@@ -289,8 +289,9 @@ Flame graphs come from a separate four-case scaling capture with one and two
 workers, after the uninstrumented measurements. Fresh process IDs replace earlier
 capture filenames; publication records which old profile artifacts were superseded.
 
-This runs lint, type checks, documentation checks, and the full pytest suite with the
-worker count selected from the runner's CPUs (`PYTEST_WORKERS` overrides it), then all fifteen synthetic studies,
+This first [rebuilds and verifies the pinned catalogs and native renderer](../dependencies.md#repository-refresh-integration),
+then runs lint, type checks, documentation checks, and the full pytest suite with the
+worker count selected from the runner's CPUs (`PYTEST_WORKERS` overrides it), followed by every declared synthetic study,
 their plots and tables, and the synthetic/Bitnami/Prometheus
 topology catalog. After these plots, tables and benchmark summaries are published, it tests
 Bitnami, then Prometheus, with six path workers per chart,

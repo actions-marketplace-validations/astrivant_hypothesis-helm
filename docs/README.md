@@ -25,6 +25,7 @@ Run repository command examples from the checkout root unless stated otherwise.
 - [Check codes](rules/README.md): built-in checks and per-project opt-outs.
 - [CLI reference](cli/README.md): generated command help.
 - [Development](development.md): environment, checks, and repository layout.
+- [Dependency maintenance](dependencies.md): Python and Go dependencies, upstream source locks, tool pins, and upgrade checks.
 
 ## Detailed reference
 

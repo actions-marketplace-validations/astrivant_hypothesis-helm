@@ -18,7 +18,7 @@ from attrs import define, field
 from hypothesis_helm.charts.repositories.changes import optional_git
 from hypothesis_helm.environment import env
 from hypothesis_helm.execution.runtime.processes import Processes
-from hypothesis_helm.reporting.links import repository_url
+from hypothesis_helm.reporting.reports.links import repository_url
 
 __all__ = ("RepositorySource", "local_provenance", "remote_name", "run_git")
 

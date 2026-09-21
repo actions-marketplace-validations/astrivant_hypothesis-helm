@@ -5,7 +5,7 @@ Publish concise sensitivity evidence and optional diagnostic plots.
 import json
 from pathlib import Path
 
-from hypothesis_helm.reporting.contents import with_contents
+from hypothesis_helm.reporting.documentation.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 __all__ = ("plot", "write_report")

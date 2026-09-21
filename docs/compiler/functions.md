@@ -3,6 +3,7 @@
 <!-- toc:start -->
 **Table of contents**
 
+- [Testing random outputs](#testing-random-outputs)
 - [Coverage and limits](#coverage-and-limits)
 - [Effects and compiler decisions](#effects-and-compiler-decisions)
 - [Findings addressed](#findings-addressed)
@@ -18,13 +19,64 @@ analyze the result. For example, `upper` changes text, `set` changes a dictionar
 that other variables may also reference, and `randAlphaNum` can change output
 between otherwise identical renders.
 
+## Testing random outputs
+
+`--random-inputs` lets Hypothesis generate and shrink the results of `randAlphaNum`, separately from the chart's values.
+For example, `randAlphaNum 8` becomes a synthetic input with exactly eight ASCII letters or digits. Its domain includes
+uppercase and digit-only strings even when those strings reveal a defect in their destination field.
+
+Build the optional renderer once, then enable it for a local test or remote scan:
+
+```sh
+hypothesis-helm-renderer --build
+helm hypothesis test ./chart --random-inputs --filter --max-examples 10
+```
+
+The build requires Go, downloads the pinned Go 1.26 toolchain and Helm 4.3.0 SDK when needed, and caches the executable under
+`.cache/random-renderer/`. `--go /path/to/go` selects the build tool. Chart testing prepares this renderer before its execution
+budget starts. Ordinary tests continue using the configured Helm executable; this optional mode uses the pinned SDK.
+
+The same setting is available globally or for a chart selected by an `input_constraints` entry with `path: $`:
+
+```yaml
+hypothesis:
+  random_inputs: true
+```
+
+The native Go parser assigns identities to random calls in a loaded, in-memory chart. Helm's function hook supplies the test
+values; chart files and `values.yaml` remain unchanged. Each executed call receives an independent draw, including loop and
+helper invocations. Reusing a variable reuses its value. Calls inside dynamically generated `tpl` code are recorded under an
+explicit dynamic-call identity. Helm still checks argument types, coalesces dependencies, validates the values schema, and
+executes the templates.
+
+Hypothesis owns the draws during sampled tests, so the existing seed and shrinking settings apply. Defaults and finite plans
+use a fixed all-zero alphanumeric representative; their coverage counts cover values configurations, not every possible random
+string. Synthetic samples never justify exact-equivalence pruning. Other executed random or clock-dependent functions stop
+this optional mode with an unavailable result until they have a replay model; they are not reported as chart defects.
+
+Path scans and saved suites include a root property for renderer inputs, so charts with an empty values file still exercise
+random outputs. Reports show the synthetic call paths and strings alongside ordinary changed values.
+
+Failure artifacts include `random-inputs.json` beside `values.json`. The tape retains call paths, lengths, exact strings, and
+hashes of the chart, values and renderer. Replay rejects changed inputs, missing or unused draws, and strings outside the
+function's domain:
+
+```sh
+hypothesis-helm-renderer ./chart --values artifacts/values.json --random-inputs artifacts/random-inputs.json
+```
+
+Supply the same release, namespace and Kubernetes version when those options were used originally. The original chart must
+still have its dependencies prepared. Replays restore the renderer inputs; custom Python assertions still require the original
+test. `compiler.max_string_chars`, `compiler.max_steps`, and the render timeout bound generated lengths, call counts and the
+total time spent completing a draw tape. Completing a tape can require several renders, so those invocations share one timeout.
+
 ## Coverage and limits
 
 <!-- [[[cog
 import json
-from pathlib import Path
+from importlib.resources import files
 from hypothesis_helm.compiler import builtins
-snapshot = json.loads(Path(builtins.__file__).with_name("builtin_inventory.json").read_text())
+snapshot = json.loads(files("hypothesis_helm.compiler.assets").joinpath("builtin_inventory.json").read_text(encoding="utf-8"))
 versions = ", ".join(source["version"] for source in snapshot["sources"])
 cog.outl(f"The inventory covers **{len(builtins.BUILTINS)} functions** from {versions}.")
 ]]] -->
@@ -35,7 +87,7 @@ assignments. The compiler loads its generated JSON instead of maintaining a
 second list of function families.
 
 The [source lock](../../pkg/hypothesis_helm_catalog/data/builtin-sources.json)
-pins artifact checksums. The [generated inventory](../../pkg/hypothesis_helm/compiler/builtin_inventory.json)
+pins artifact checksums. The [generated inventory](../../pkg/hypothesis_helm/compiler/assets/builtin_inventory.json)
 records package file hashes, implementations, signatures, return shapes,
 call relationships, effect evidence and unresolved operations. No upstream Go
 function is executed during extraction. A changed registration syntax fails the
@@ -65,7 +117,7 @@ context objects with methods. Their analysis is described in the
 | Effect | Examples | Compiler response |
 | --- | --- | --- |
 | Argument-dependent output | `upper`, `add`, `sha256sum` | Preserve input origins. Evaluate only the supported subset; otherwise let Helm calculate the result. |
-| Map mutation | `set`, `unset`, both `merge` variants and their `must` aliases | Invalidate affected map facts, including aliases. Rejection analysis permits only [fresh flat-map overwrite merges](analysis.md#transformed-input-domains); other writes remain barriers. |
+| Map mutation | `set`, `unset`, both `merge` variants and their `must` aliases | Invalidate affected map facts, including aliases. Rejection analysis supports [owned local writes and flat-map merges](analysis.md#transformed-input-domains); shared writes and nested merges remain barriers. |
 | Dynamic code | `include`, `tpl`, `call` | Analyze a resolvable helper or available template source. Unresolved code cannot justify pruning. |
 | Randomness | `shuffle`, `randInt`, `encryptAES`, `bcrypt`, certificate generators | Preserve dependencies and report the native effect. Do not assign a repeatable concrete result. |
 | Clock or timezone | `now`, `ago`, date conversion, certificate validity periods | Keep the environment-dependent result unknown. Explicit fixed arguments may permit a future narrower model. |
@@ -374,6 +426,9 @@ cog.outl(reference())
 <!-- [[[end]]] -->
 
 ## Sources and upgrades
+
+Start with [dependency maintenance](../dependencies.md#helm-sprig-and-go) when upgrading these sources. It also identifies the
+separate native renderer module, replay metadata, CLI versions and CI pins that a Helm upgrade must account for.
 
 - [Helm function map and serialization helpers](https://github.com/helm/helm/blob/v4.3.0/pkg/engine/funcs.go).
 - [Helm renderer overrides, offline lookup and DNS behavior](https://github.com/helm/helm/blob/v4.3.0/pkg/engine/engine.go).

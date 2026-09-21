@@ -12,7 +12,7 @@ from statistics import NormalDist
 from hypothesis_helm.charts.model import Chart, merge_values
 from hypothesis_helm.integrations.sharding import Shard
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
-from hypothesis_helm.schemas.replay import Replay
+from hypothesis_helm.schemas.generation.replay import Replay
 
 __all__ = (
     "INPUTS",

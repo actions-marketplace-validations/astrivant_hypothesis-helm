@@ -19,15 +19,15 @@ from hypothesis_helm.environment import env
 from hypothesis_helm.execution.planning.aggressive import select as select_aggressive
 from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.planning.traversal import ALGORITHM, order_configurations
-from hypothesis_helm.reporting.permutations import PermutationStatistics
-from hypothesis_helm.reporting.progressive import estimate_progression
-from hypothesis_helm.schemas.combinations import plan_interactions, trim_values
-from hypothesis_helm.schemas.conformity import ENVIRONMENT
+from hypothesis_helm.reporting.coverage.permutations import PermutationStatistics
+from hypothesis_helm.reporting.coverage.progressive import estimate_progression
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping
-from hypothesis_helm.schemas.finite import enumerate_values
-from hypothesis_helm.schemas.groups import ExhaustiveGroup, infer_groups
+from hypothesis_helm.schemas.generation.combinations import plan_interactions, trim_values
+from hypothesis_helm.schemas.generation.finite import enumerate_values
+from hypothesis_helm.schemas.generation.groups import ExhaustiveGroup, infer_groups
+from hypothesis_helm.schemas.generation.replay import concatenate, select, transform
+from hypothesis_helm.schemas.kubernetes.conformity import ENVIRONMENT
 from hypothesis_helm.schemas.model import ValuesModel
-from hypothesis_helm.schemas.replay import concatenate, select, transform
 
 __all__ = ("PlannedRun", "PlanningOptions", "build_plan", "select_cases")
 

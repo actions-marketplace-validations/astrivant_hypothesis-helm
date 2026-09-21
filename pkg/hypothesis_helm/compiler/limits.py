@@ -26,8 +26,8 @@ LIMITS: dict[str, tuple[int, str]] = {
     "max_dependencies": (512, "Dependency instances inspected per chart."),
     "max_version_chars": (4096, "Combined characters in a semantic-version constraint and version."),
     "max_string_chars": (16384, "Characters in a transformation operand or replacement result."),
-    "max_regex_pattern_chars": (256, "Characters in an analyzed ASCII regex pattern."),
-    "max_regex_subject_chars": (4096, "Characters in an analyzed ASCII regex subject."),
+    "max_regex_pattern_chars": (256, "Characters in an analyzed Go regex pattern."),
+    "max_regex_subject_chars": (4096, "Characters in an analyzed Go regex subject."),
     "max_symbolic_variants": (64, "Alternatives at one destination-projection branch join."),
     "max_indent_width": (128, "Spaces in a projected indent/nindent operation."),
     "max_fragment_depth": (4, "Nested input containers checked for literal serialized YAML fragment constraints."),
@@ -85,8 +85,8 @@ def policy_limits(serialized: str, name: str | None = None, source: str | None =
     Returns:
         tuple[tuple[str, int], ...]: Immutable entries safe to reuse across analysis calls.
     """
+    from hypothesis_helm.schemas.configuration.selectors import select_rules
     from hypothesis_helm.schemas.contracts import mapping, sequence
-    from hypothesis_helm.schemas.selectors import select_rules
 
     policy = mapping(json.loads(serialized))
     resolved = compiler_limits(policy.get("compiler", {}))
@@ -117,8 +117,8 @@ def active_limits(chart: Path | None = None) -> dict[str, int]:
     Returns:
         dict[str, int]: Detached validated settings, also available in spawned workers.
     """
-    from hypothesis_helm.schemas.policy import ENVIRONMENT
-    from hypothesis_helm.schemas.selectors import chart_identity, source_identity
+    from hypothesis_helm.schemas.configuration.policy import ENVIRONMENT
+    from hypothesis_helm.schemas.configuration.selectors import chart_identity, source_identity
 
     serialized = env.get(ENVIRONMENT, "{}")
     return dict(

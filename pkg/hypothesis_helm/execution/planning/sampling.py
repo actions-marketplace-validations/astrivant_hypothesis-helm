@@ -9,7 +9,7 @@ from typing import TypeVar
 
 from attrs import frozen
 
-from hypothesis_helm.schemas.replay import select as select_indices
+from hypothesis_helm.schemas.generation.replay import select as select_indices
 
 __all__ = ("DEFAULT_SAMPLING", "ENVIRONMENT", "REPORT", "Sampling")
 

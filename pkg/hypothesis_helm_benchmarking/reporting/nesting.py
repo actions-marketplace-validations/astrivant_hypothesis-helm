@@ -12,7 +12,7 @@ from textwrap import dedent
 
 import numpy as np
 from hypothesis_helm.environment import env, set_env
-from hypothesis_helm.reporting.contents import with_contents
+from hypothesis_helm.reporting.documentation.contents import with_contents
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 
 from hypothesis_helm_benchmarking.analysis.selection import LABELS as PRESET_LABELS

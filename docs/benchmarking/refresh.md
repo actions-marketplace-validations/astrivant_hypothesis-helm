@@ -12,6 +12,11 @@
 These scripts prepare charts, run measurements, generate plots and publish reports.
 The operation inventory lives in `pkg/hypothesis_helm_benchmarking/refresh/plan.py`.
 
+Fresh runs first rebuild and verify the pinned compiler inventory and Kubernetes input catalog, run the Go extractor tests,
+build the optional renderer, and regenerate reference documentation. Project checks then exercise those prepared dependencies
+before initialization freezes the measured source. See [dependency preparation](../dependencies.md#repository-refresh-integration)
+for the individual operations, pins and caches. Go is required for a full refresh; upstream version upgrades remain explicit.
+
 Refresh workspaces and internal records live under `.cache/refresh/refresh-<epoch>/`.
 That includes logs, timestamps, process journals, verification results, source snapshots and checksum inventories.
 They are generated when needed and are not required in a fresh checkout.
@@ -55,7 +60,7 @@ original paths; use the latest completed journal when inspecting those archived 
 ## Parallel refresh on GitHub Actions
 
 Run the [**Benchmark and report refresh** workflow](../../.github/workflows/benchmark-refresh.yml) manually.
-It first runs the benchmark smoke tests. Preparation then checks the project and snapshots its inputs once.
+It first runs the benchmark smoke tests. Preparation then rebuilds the pinned dependencies, checks the project and snapshots its inputs once.
 GitHub runs each declared study on a separate runner, using the same source snapshot and parameters.
 The matrix comes from the Python study inventory, so adding a study also adds its CI job.
 There is no `max-parallel` setting: GitHub schedules as many jobs as the account's capacity and runner availability permit.

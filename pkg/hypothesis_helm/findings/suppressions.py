@@ -21,9 +21,9 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.environment import env, set_env
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.policy import candidate_paths, resolve_codes
-from hypothesis_helm.reporting.errors import chart_errors
+from hypothesis_helm.reporting.evidence.errors import chart_errors
+from hypothesis_helm.schemas.configuration.policy import path_parts
 from hypothesis_helm.schemas.contracts import mapping, sequence
-from hypothesis_helm.schemas.policy import path_parts
 
 __all__ = ("ENVIRONMENT", "SuppressionCapture", "constraint_path", "evidence", "observe", "observed_paths")
 

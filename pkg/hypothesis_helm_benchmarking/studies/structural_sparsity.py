@@ -12,8 +12,8 @@ from collections import Counter
 from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
+from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.execution.runtime.processes import Processes
-from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace, chart_path

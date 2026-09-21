@@ -23,10 +23,10 @@ from hypothesis_helm.environment import env, refresh_env
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
-from hypothesis_helm.reporting.checkpoints import save
-from hypothesis_helm.reporting.logs import WorkerLogFormatter, WorkerLogs
-from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format
-from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.reporting.console.logs import WorkerLogFormatter, WorkerLogs
+from hypothesis_helm.reporting.console.output import MANIFEST_FD, manifest_format
+from hypothesis_helm.reporting.console.progress import format_path
+from hypothesis_helm.reporting.evidence.checkpoints import save
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.schemas.paths import ValuePath
 
@@ -203,7 +203,7 @@ def _run_queue(directory: Path) -> int:
     chart = Chart(Path(str(context["chart"])), mapping(context["schema"]), mapping(context["defaults"]))
     chart.require_source()
     if "input_domains" in context:
-        from hypothesis_helm.schemas.domains import InputDomains
+        from hypothesis_helm.schemas.generation.domains import InputDomains
 
         domains = mapping(context["input_domains"])
         chart.domains = InputDomains(

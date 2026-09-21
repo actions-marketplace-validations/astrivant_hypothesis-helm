@@ -9,7 +9,7 @@ from itertools import combinations
 from hypothesis_helm.analysis.sensitivity import features
 from hypothesis_helm.charts.model import merge_values
 from hypothesis_helm.schemas.contracts import configuration_key
-from hypothesis_helm.schemas.replay import select
+from hypothesis_helm.schemas.generation.replay import select
 
 __all__ = ("SensitivityOrder", "mutations", "validate_order")
 

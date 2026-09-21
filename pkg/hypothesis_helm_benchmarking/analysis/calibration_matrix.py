@@ -11,9 +11,9 @@ from pathlib import Path
 
 from hypothesis_helm.execution.planning.aggressive import changed_fields, matching_profiles
 from hypothesis_helm.execution.planning.sampling import Sampling
-from hypothesis_helm.reporting.contents import with_contents
-from hypothesis_helm.schemas.combinations import trim_values
+from hypothesis_helm.reporting.documentation.contents import with_contents
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
+from hypothesis_helm.schemas.generation.combinations import trim_values
 
 from hypothesis_helm_benchmarking.reporting.plots import finish
 from hypothesis_helm_benchmarking.reporting.variation import repeated_line

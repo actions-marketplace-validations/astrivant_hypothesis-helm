@@ -25,19 +25,20 @@ from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.compiler.passes.sampling import profile as sampling_profile
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
-from hypothesis_helm.exceptions.rendering import RenderFailure
+from hypothesis_helm.exceptions.rendering import RandomInputUnavailable, RenderFailure
 from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.planning.traversal import ALGORITHM, SELECTION_ORDER, order_paths, validate_strategy
+from hypothesis_helm.execution.runtime.budget import execution_timer
 from hypothesis_helm.findings.policy import RuleScope, chart_rules
 from hypothesis_helm.findings.severity import policy as finding_policy
-from hypothesis_helm.reporting.budget import execution_timer
-from hypothesis_helm.reporting.logs import input_baseline
-from hypothesis_helm.reporting.progress import format_path
+from hypothesis_helm.reporting.console.logs import input_baseline
+from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.rules import check, ignored, ignored_codes
-from hypothesis_helm.schemas.characters import generated_text_policy
-from hypothesis_helm.schemas.contracts import json_value, schema_strategy
+from hypothesis_helm.schemas.configuration.characters import generated_text_policy
+from hypothesis_helm.schemas.contracts import json_value
+from hypothesis_helm.schemas.generation.priority import PriorityInputs
+from hypothesis_helm.schemas.generation.strategies import schema_strategy
 from hypothesis_helm.schemas.paths import ValuePath, enumerate_paths
-from hypothesis_helm.schemas.priority import PriorityInputs
 
 __all__ = ("GENERATION_ERRORS", "check_paths", "path_strategy")
 
@@ -137,6 +138,11 @@ def check_paths(
         dict[str, object]: Visited, completed, incomplete, and remaining path evidence.
     """
     traversal_strategy = validate_strategy(traversal_strategy)
+    from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
+    from hypothesis_helm.compiler.randomness.toolchain import build as prepare_random_renderer
+
+    if random_enabled(chart):
+        prepare_random_renderer()
     if not math.isfinite(budget) or budget <= 0 or max_examples < 1 or timeout <= 0 or jobs < 1:
         raise ValueError("budget, max_examples, and timeout must be positive")
     from hypothesis_helm.schemas.opaque import warn_opaque
@@ -159,6 +165,9 @@ def check_paths(
     model.schema = chart.generation_schema(model.schema)
     model.paths = enumerate_paths(model.schema)
     unique = {entry.path: entry for entry in model.paths}
+    if random_enabled(chart):
+        # A root property samples renderer inputs even when the chart has no configurable values.
+        unique[()] = ValuePath((), {"const": json_value(chart.defaults)}, "renderer-randomness")
     linear = list(dict.fromkeys([*map(tuple, _default_paths(chart.defaults)), *unique]))
     selected: Sequence[ValuePath] = [unique[path] for path in linear if path in unique]
     eligible_paths = [list(entry.path) for entry in selected]
@@ -211,11 +220,14 @@ def check_paths(
                         check(False, "HH1107", "chart rendered no resources")
                 baseline["status"] = "passed"
             except RenderFailure as exc:
+                if exc.random_inputs is not None:
+                    baseline.update(values={}, random_inputs=exc.random_inputs)
+                    (artifacts / "random-inputs.json").write_text(json.dumps(exc.random_inputs, indent=2) + "\n")
                 if exc.controls["blocking"] or ignored(exc.code, chart=chart.path):
                     raise
                 resources = []
                 baseline.update(status="findings", code=exc.code, error=str(exc), **exc.controls)
-                from hypothesis_helm.reporting.logs import FindingLog, chart_name
+                from hypothesis_helm.reporting.console.logs import FindingLog, chart_name
 
                 FindingLog(chart_name(chart.path), chart.defaults, artifacts=artifacts).emit(
                     "Baseline finding", exc.code, str(exc), {}, severity=str(exc.controls["severity"])
@@ -314,6 +326,8 @@ def check_paths(
             phases.append({"phase": format_path(active.path), "kind": "value-path", "path": list(active.path), "status": "time-limit"})
         elif baseline["status"] != "passed":
             baseline["status"] = "time-limit"
+    except RandomInputUnavailable as exc:
+        baseline.update(status="unavailable", reason=str(exc))
     except ChartUnavailable as exc:
         diagnostic = {"status": "error", "error_kind": "execution", "error": str(exc), "failure_type": type(exc).__name__}
         if active is not None:
@@ -330,7 +344,7 @@ def check_paths(
                 **getattr(exc, "controls", {}),
             )
             if baseline["status"] == "failed":
-                from hypothesis_helm.reporting.logs import FindingLog, chart_name
+                from hypothesis_helm.reporting.console.logs import FindingLog, chart_name
 
                 FindingLog(chart_name(chart.path), chart.defaults, artifacts=artifacts).emit(
                     "Baseline check failed",
@@ -364,6 +378,8 @@ def check_paths(
         if stopped
         else "generation-error"
         if generation_errors
+        else "unavailable"
+        if baseline["status"] == "unavailable" or any(phase["status"] == "unavailable" for phase in phases)
         else "ignored"
         if baseline["status"] == "ignored" or (phases and all(phase["status"] == "ignored" for phase in phases))
         else "configuration-rejected"

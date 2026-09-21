@@ -11,8 +11,8 @@ from hypothesis import strategies as st
 from hypothesis.strategies import DataObject
 from hypothesis_helm import Chart
 from hypothesis_helm.charts.suites.runtime import RenderOptions, check_path, prepared_chart
-from hypothesis_helm.schemas.contracts import schema_strategy as from_schema
-from hypothesis_helm.schemas.contracts import supported_generated_text
+from hypothesis_helm.schemas.generation.strategies import schema_strategy as from_schema
+from hypothesis_helm.schemas.generation.strategies import supported_generated_text
 
 HERE = Path(__file__).resolve().parent
 OPTIONS = RenderOptions(

@@ -4,13 +4,15 @@ Model a bounded Sprig subset and propose preimage witnesses for transformed allo
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import math
 import re
 from functools import lru_cache
 
 from attrs import frozen
 
-from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, native
+from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, NilSlice, native
 from hypothesis_helm.compiler.constants import (
     COLLECTION_TRANSFORMS,
     FORMAT_TRANSFORMS,
@@ -149,6 +151,12 @@ def _format(function: str, args: tuple[object, ...], limits: dict[str, int], *, 
         UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
     """
     # Inspect original operand provenance before trusting integer formatting widths.
+    if function == "squote" and all(value is None or isinstance(value, str | bool) for value in args):
+        texts = [str(value).lower() if isinstance(value, bool) else str(value) for value in args if value is not None]
+        if sum(len(value) + 3 for value in texts) - 1 > limits["max_string_chars"]:
+            raise UnsupportedTransformation(f"transformation exceeds compiler.max_string_chars={limits['max_string_chars']}")
+        # Sprig deliberately wraps single quotes without escaping embedded quotes.
+        return " ".join("'" + value + "'" for value in texts)
     if function == "quote" and all(value is None or isinstance(value, str | bool) for value in args):
         escaped = {"\a": r"\a", "\b": r"\b", "\f": r"\f", "\n": r"\n", "\r": r"\r", "\t": r"\t", "\v": r"\v", '"': r"\"", "\\": r"\\"}
         quoted: list[str] = []
@@ -256,7 +264,7 @@ def _collection(function: str, args: tuple[object, ...], limits: dict[str, int])
         collections = [value for value in args if isinstance(value, list)]
         if sum(map(len, collections)) > limits["max_range_items"]:
             raise UnsupportedTransformation(f"concat exceeds compiler.max_range_items={limits['max_range_items']}")
-        return [item for collection in collections for item in collection]
+        return [item for collection in collections for item in collection] if any(collections) else NilSlice()
     raise UnsupportedTransformation(f"unsupported transformation operands: {function}")
 
 
@@ -276,6 +284,12 @@ def _text(function: str, args: tuple[object, ...], limits: dict[str, int]) -> ob
         UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
     """
     # Unsupported Unicode and regex syntax remain native Helm work.
+    if function in {"sha256sum", "b64enc"} and len(args) == 1 and isinstance(args[0], str):
+        encoded = args[0].encode("utf-8")
+        size = 64 if function == "sha256sum" else 4 * ((len(encoded) + 2) // 3)
+        if size > limits["max_string_chars"]:
+            raise UnsupportedTransformation("encoded output exceeds compiler.max_string_chars")
+        return hashlib.sha256(encoded).hexdigest() if function == "sha256sum" else base64.b64encode(encoded).decode("ascii")
     if function == "trunc" and len(args) == 2 and type(args[0]) is int and isinstance(args[1], str):
         width, text = args[0], args[1]
         if not text.isascii():

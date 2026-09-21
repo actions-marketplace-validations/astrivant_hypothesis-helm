@@ -6,7 +6,7 @@ Unresolved source calls remain explicit. Concrete semantics belong to individual
 """
 
 import json
-from pathlib import Path
+from importlib.resources import files
 
 from attrs import frozen
 
@@ -55,7 +55,7 @@ def inventory() -> dict[str, Builtin]:
     Raises:
         ValueError: The source inventory format is unsupported or lacks provenance.
     """
-    snapshot = mapping(json.loads(Path(__file__).with_name("builtin_inventory.json").read_text()))
+    snapshot = mapping(json.loads(files("hypothesis_helm.compiler.assets").joinpath("builtin_inventory.json").read_text(encoding="utf-8")))
     if snapshot.get("format") != 2 or not snapshot.get("sources") or not snapshot.get("extractor_sha256"):
         raise ValueError("Rebuild the compiler inventory with hypothesis-helm-builtins")
     result: dict[str, Builtin] = {}

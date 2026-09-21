@@ -18,9 +18,9 @@ from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.environment import env
+from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
-from hypothesis_helm.reporting.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace

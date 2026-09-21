@@ -10,7 +10,34 @@ from collections import Counter
 from attrs import frozen
 from ruamel.yaml.scalarbool import ScalarBoolean
 
-__all__ = ("BoundValue", "ConstantList", "ConstantMap", "ContractText", "DerivedValue", "KeyList", "UnorderedKeys", "native")
+__all__ = (
+    "BoundValue",
+    "ConstantList",
+    "ConstantMap",
+    "ContractText",
+    "DerivedValue",
+    "KeyList",
+    "NilMap",
+    "NilSlice",
+    "UnorderedKeys",
+    "native",
+)
+
+
+class NilSlice(list[object]):
+    """
+    Preserve Go's nil slice: empty for iteration, still a slice, but JSON null.
+    """
+
+    __slots__ = ()
+
+
+class NilMap(dict[str, object]):
+    """
+    Preserve Go's nil map: readable as empty, JSON null, and unsafe for direct writes.
+    """
+
+    __slots__ = ()
 
 
 @frozen

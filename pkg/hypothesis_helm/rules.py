@@ -10,8 +10,8 @@ from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.catalog import CATALOG
 from hypothesis_helm.findings.policy import ACTIVE_CODES, chart_rules, resolve_codes
+from hypothesis_helm.schemas.configuration.policy import configuration, inherited_policy
 from hypothesis_helm.schemas.contracts import mapping, sequence
-from hypothesis_helm.schemas.policy import configuration, inherited_policy
 
 __all__ = (
     "AUDIT_RULES",

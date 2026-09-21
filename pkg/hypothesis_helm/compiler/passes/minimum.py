@@ -22,11 +22,11 @@ from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.scaffolding import fill_missing
 from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.execution.runtime.budget import execution_timer
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.state.render_hashes import RenderHashes
-from hypothesis_helm.reporting.budget import execution_timer
-from hypothesis_helm.schemas.conformity import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import configuration_key, json_value, mapping, sequence
+from hypothesis_helm.schemas.kubernetes.conformity import ENVIRONMENT
 from hypothesis_helm.schemas.model import ValuesModel
 
 __all__ = ("export_minimal", "remove_paths", "resource_count", "value_paths")

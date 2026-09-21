@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from hypothesis_helm.reporting.contents import with_contents
+from hypothesis_helm.reporting.documentation.contents import with_contents
 
 __all__ = ()
 

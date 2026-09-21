@@ -8,7 +8,7 @@ from collections.abc import Callable, Sequence
 from typing import TypeVar
 
 from hypothesis_helm.schemas.contracts import configuration_key
-from hypothesis_helm.schemas.replay import select
+from hypothesis_helm.schemas.generation.replay import select
 
 __all__ = ("ALGORITHM", "SELECTION_ORDER", "STRATEGIES", "order_configurations", "order_paths", "validate_strategy")
 

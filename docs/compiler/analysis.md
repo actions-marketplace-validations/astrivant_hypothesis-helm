@@ -163,7 +163,9 @@ retain the source, conditions, original inputs, and choices under
 | `trimAll`, `trimPrefix`, `trimSuffix`, `replace`, `contains`, `hasPrefix`, `hasSuffix` | Model literal string operations in their Helm argument order. |
 | `add`, `add1`, `sub`, `mul`, `min`, `max` | Model signed 64-bit integer operands when no intermediate result overflows. |
 | `atoi`, `toString` | Model decimal string conversion and string/integer/Boolean formatting; ambiguous conversions remain unresolved. |
-| `regexMatch`, `mustRegexMatch` | Evaluate the bounded ASCII regex subset described below. |
+| Regex matching, finding and replacement | Use the selected Helm binary's Go regex implementation with bounded operands and output. |
+| `squote`, `toYaml`, `toJson`, `fromYaml`, `fromJson` | Follow concrete formatting and serialization without treating sampled output as a schema or an enum. |
+| Local `set`, `unset`, `merge`, `mergeOverwrite` and their `must` variants | Permit writes only to newly constructed or parsed maps; merges require flat scalar maps. |
 
 Empty `dict` and `list` expressions are supported. `default` and `coalesce` accept the YAML loader's mapping and sequence types,
 including anchored values and resolved merge keys, without modifying them. When generating a changed path, aliases are treated as
@@ -245,9 +247,9 @@ Unknown expressions remain ordinary Helm tests. The remaining boundaries are:
 | Unsupported operations inside `tpl`, template-local definitions and recursive expansion beyond the call budget | The compiler cannot establish the generated program's behavior within its supported subset. |
 | `.Files.Glob`, `.Files.GetBytes`, binary files and file contexts exceeding the inspection budget | These file operations remain native Helm work. |
 | Integer/channel ranges; ranges over unsorted `keys` results | Iterator semantics or iteration order are outside the supported deterministic subset. |
-| `set`, `unset`, `merge` and shared or nested overwrite merges | Can change the context used by later conditions. Writes block prediction; fresh flat-map overwrite merges are supported as described below. |
+| Writes to shared maps and merges involving nested containers | These may mutate aliases visible to later conditions. The compiler requires ownership of the destination and currently supports only flat-map merges. |
 | Unicode case conversion, floating-point arithmetic, implicit numeric coercion, integer overflow | These operations need additional Go-specific semantics; Python's behavior is not assumed to match. |
-| Regex groups, alternation, flags, character-class shortcuts and multiple variable repetitions | These expressions exceed the deliberately restricted regex evaluator. |
+| Native operations without an attached renderer, or beyond analysis budgets | Broader Go regex syntax and serializers require the configured Helm executable. Failed probes retain the candidate for rendering. |
 | Candidate-supplied maps/lists | Their observed members do not prove a fixed enum. Membership can still establish a supported rejection. |
 | Ambiguous helper definitions, unresolved globals/imports | The compiler cannot reliably identify the input origin or execution context. |
 | Helper calls exceeding `compiler.max_call_depth` (default: 16) | The configured analysis budget has been exhausted; increase it to analyze deeper call chains. |
@@ -304,8 +306,9 @@ traced individually. Incompatible containers or absent origins remain unresolved
 dependency schemas remain authoritative, and all predictions involving forwarded globals
 require native Helm verification, even after earlier candidates were confirmed.
 
-Clock, randomness and cluster lookups keep their normal Helm behavior; this change does not
-inject a clock, seed Helm's random functions or simulate a Kubernetes cluster.
+Clock, randomness and cluster lookups keep their normal Helm behavior by default. The optional
+[`--random-inputs` mode](functions.md#testing-random-outputs) tests replayable `randAlphaNum` outputs with the pinned Helm SDK.
+It does not inject a clock or simulate a Kubernetes cluster.
 An attached offline renderer context allows `lookup` to return its native empty map;
 disabled DNS similarly allows an empty `getHostByName` result. These are fixed
 execution settings, not assumptions about a cluster. The complete
@@ -385,15 +388,21 @@ optional field is treated as nil. YAML anchors and scalar wrappers do not change
 that origin. Incompatible ancestor values still prevent a prediction.
 
 Formatting around a validator no longer prevents reaching its allowlist. The evaluator supports
-`quote` for ASCII strings, Booleans and null arguments, plus `indent` and `nindent` with literal or
+`quote` for ASCII strings, Booleans and null arguments, `squote` for strings and Booleans, plus `indent` and `nindent` with literal or
 explicitly converted integer widths. It follows [Sprig's formatting implementations](https://github.com/Masterminds/sprig/blob/v3.3.0/strings.go),
 including control-character escapes, trailing-line indentation and null omission. Output is bounded by `compiler.max_string_chars`.
 
-`mergeOverwrite (dict) ...` and `mustMergeOverwrite (dict) ...` accept flat maps with scalar values.
-The destination must be a literal empty dictionary; sources are bounded by `compiler.max_range_items`.
-Winning entries retain their original values paths, so a merged helper argument can still lead back to its input's enum.
-Shared destinations and nested maps remain unresolved: [Sprig's merges](https://github.com/Masterminds/sprig/blob/v3.3.0/dict.go)
-can mutate aliased containers. Treating every fresh destination as a deep copy would make later rejection predictions unsafe.
+New dictionaries, parsed YAML/JSON maps, and maps produced by `pick` or `omit` have local ownership.
+`set` and `unset` may modify those maps through local aliases. Flat-map `merge`, `mustMerge`,
+`mergeOverwrite` and `mustMergeOverwrite` preserve native precedence and are bounded by `compiler.max_range_items`.
+Writes to `.Values` maps, including aliases of those maps, remain unresolved. Nested merges remain unresolved too:
+[Sprig's merges](https://github.com/Masterminds/sprig/blob/v3.3.0/dict.go) can mutate shared nested containers.
+A mutated dictionary cannot establish a literal enum from its sampled keys.
+
+Membership unwraps list elements for comparison while retaining their input origins. A list assembled from a candidate
+still cannot prove an enum. Parenthesized lookups such as `(((.Values.global.postgresql).auth).existingSecret)` follow
+Helm's optional-parent behavior; an uninterrupted chain with a missing intermediate parent remains unresolved.
+Including a template file registers its `define` declarations without executing their bodies.
 
 `omit` retains the source paths of surviving map entries, and `concat` and `split`
 respect `compiler.max_range_items`. `kindIs` supports strings, maps, lists, Booleans
@@ -401,18 +410,24 @@ and nil; numeric reflection kinds remain unresolved because Helm can change thei
 representation when loading values. Selecting a field from a derived map retains
 its transformation history.
 
-Regex evaluation supports ASCII literals, dot, simple character classes, `^`/`$`
-anchors, ASCII `\d` and alternatives with at most one variable repetition per
-alternative, such as `[a-z0-9-]+`. Fixed counted repetitions are also supported.
-`regexFind` returns the first match, and `regexReplaceAll` supports literal
-replacement text when the pattern cannot match an empty string. Capture expansion
-remains unresolved. Patterns are limited to 256 characters, subjects
-to 4,096, and repeat counts to 1,000. The end anchor is translated to require the
-actual end of the string, including when the input ends in a newline. Other Go
-regex constructs remain ordinary Helm tests; Python-only regex features are never
-accepted as Helm semantics. See the [Go regex syntax](https://pkg.go.dev/regexp/syntax).
-Other string transformations have a 16,384-character analysis budget; preimage
-search visits at most 128 proposal nodes per observed allowlist.
+With a configured renderer, regex matching, finding and replacement use the **selected Helm binary's Go implementation**.
+Grouping, flags, POSIX classes, Unicode classes, capture replacements and empty matches therefore follow native semantics.
+The compiler passes operands as data to a fixed probe template; candidate strings never become executable template source.
+The same adapter handles `toYaml`, `toJson`, `fromYaml`, `fromJson`, Base64 decoding and scalar quoting beyond the local formatter.
+Parsed maps are copied out of the probe cache so different candidates cannot mutate each other's results.
+Typed nil maps and slices remain distinct from allocated empty containers: they are empty during traversal but encode as JSON `null`.
+
+Patterns default to 256 characters and subjects to 4,096 (`compiler.max_regex_pattern_chars` and
+`compiler.max_regex_subject_chars`). `compiler.max_string_chars` bounds operands and results; replacement calls also
+check a conservative expansion bound before execution. Structured operands use `max_range_items`, `max_call_depth`
+and `max_context_bytes`. Each probe has the configured Helm invocation timeout and uses the normal subprocess cleanup.
+Oversized inputs, failed probes and non-UTF-8 Base64 results remain unresolved.
+
+The first evaluation of an operation and operand set incurs a Helm subprocess. A bounded process-local cache reuses results,
+keyed by the selected executable, its modification time, operands, timeout and output budget.
+Without a renderer, literal folding and inverse-witness search retain the smaller Go/Python-compatible regex subset.
+They do not approximate unsupported Go patterns. See the [Go regex syntax](https://pkg.go.dev/regexp/syntax).
+Native forward evaluation does not establish an inverse input domain; proposed repairs still require Helm verification.
 
 This support belongs to rejection analysis. Projecting arbitrary transformed
 manifest fields back into destination schemas, or proving output equivalence

@@ -11,8 +11,8 @@ from hypothesis_helm.compiler.constants import COPIES
 from hypothesis_helm.compiler.limits import active_limits
 from hypothesis_helm.compiler.passes.domain_fragments import contribution, literal_region
 from hypothesis_helm.compiler.passes.domain_guards import integer_comparison, rendered_truth, type_condition
+from hypothesis_helm.schemas.configuration.policy import intersect
 from hypothesis_helm.schemas.contracts import mapping, sequence
-from hypothesis_helm.schemas.policy import intersect
 
 __all__ = ("at", "combine", "constraints", "guard_bounds", "input_origins", "literal_domain", "normalize", "predicate")
 

@@ -265,8 +265,8 @@ compiler:
   max_dependencies: 512  # Dependency instances inspected per chart.
   max_version_chars: 4096  # Combined characters in a semantic-version constraint and version.
   max_string_chars: 16384  # Characters in a transformation operand or replacement result.
-  max_regex_pattern_chars: 256  # Characters in an analyzed ASCII regex pattern.
-  max_regex_subject_chars: 4096  # Characters in an analyzed ASCII regex subject.
+  max_regex_pattern_chars: 256  # Characters in an analyzed Go regex pattern.
+  max_regex_subject_chars: 4096  # Characters in an analyzed Go regex subject.
   max_symbolic_variants: 64  # Alternatives at one destination-projection branch join.
   max_indent_width: 128  # Spaces in a projected indent/nindent operation.
   max_fragment_depth: 4  # Nested input containers checked for literal serialized YAML fragment constraints.
@@ -290,6 +290,7 @@ hypothesis:
     exclude: true  # Exclude U+0000-U+001F and U+007F-U+009F, including tabs and DEL.
     allow: ["\n", "\r"]  # Exceptions; [] excludes every control character.
   exclude_characters: ""  # Additional literal characters to exclude, e.g. ">|".
+  random_inputs: false  # Opt in to replayable randAlphaNum testing with the pinned Helm renderer.
   max_examples: 10  # Per path property, not a shared budget for a branch.
   deadline_ms: null  # No Hypothesis per-example deadline; chart/render timeouts still apply.
   phases: [generate, shrink]  # Use [generate] to omit shrinking.
@@ -470,14 +471,14 @@ Saved suites embed these schemas in `input-domains.json`, so `run` can validate 
 the original schema files are unavailable. An explicit current configuration overrides saved schemas for the same
 API version and kind. Changes to the effective schema invalidate cached manifest validation.
 
-The [CRD integration tests](../../pkg/hypothesis_helm/tests/test_custom_resources.py) use a
+The [CRD integration tests](../../pkg/hypothesis_helm/tests/schemas/test_custom_resources.py) use a
 [pinned Polyad Gate chart fixture](../../pkg/hypothesis_helm/tests/fixtures/polyad-gate/README.md).
 They run Helm's real helper and `tpl` rendering, check schema bounds and missing contracts, exercise generated
 values and failure reports, and verify saved-suite reuse. Mixed-resource routing tests check that built-ins still
 reach the Python schema validator against local fixture schemas. No cluster or neighboring checkout is required.
 
 ```sh
-bash scripts/project-run.sh pytest pkg/hypothesis_helm/tests/test_custom_resources.py
+bash scripts/project-run.sh pytest pkg/hypothesis_helm/tests/schemas/test_custom_resources.py
 ```
 
 ## Coverage and reproducibility

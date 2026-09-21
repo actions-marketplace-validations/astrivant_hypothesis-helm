@@ -19,7 +19,7 @@ from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 from hypothesis_helm.execution.workers.feedback import ThroughputController
 from hypothesis_helm.findings.severity import junit_stops
-from hypothesis_helm.reporting.display import start_progress
+from hypothesis_helm.reporting.console.display import start_progress
 
 __all__ = ("run_parallel", "worker_limit")
 

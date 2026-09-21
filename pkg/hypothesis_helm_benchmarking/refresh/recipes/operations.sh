@@ -10,6 +10,21 @@ if [[ -d "$root/frozen-source/pkg" ]]; then
     export MPLCONFIGDIR="$PWD/$root/matplotlib-$stage"
 fi
 case "$stage" in
+    compiler-builtins)
+        hypothesis-helm-builtins
+        hypothesis-helm-builtins --check
+        ;;
+    schema-catalog)
+        hypothesis-helm-catalog --output pkg/hypothesis_helm_catalog/data/input-domains.json
+        hypothesis-helm-catalog --check
+        GOCACHE="$PWD/schemas/go/build" GOMODCACHE="$PWD/schemas/go/modules" GOTOOLCHAIN=local GOWORK=off \
+            go -C pkg/hypothesis_helm_catalog/upstream test -mod=readonly ./...
+        ;;
+    native-renderer) hypothesis-helm-renderer --build ;;
+    dependency-docs)
+        cog -r README.md docs/cli/README.md docs/rules/README.md docs/input-domains/README.md docs/compiler/functions.md
+        hypothesis-helm-docs
+        ;;
     checks)
         if [[ "$(helm version --short)" != v4.* ]]; then
             echo 'Put Helm 4 on PATH before running the refresh.' >&2

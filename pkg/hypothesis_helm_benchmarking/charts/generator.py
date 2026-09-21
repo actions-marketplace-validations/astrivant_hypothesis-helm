@@ -350,8 +350,8 @@ def reproduce(source: Path, output: Path, *, force: bool = False, workspace: Fix
         dict[str, object]: Independent oracle metadata for the exported configuration.
     """
     from hypothesis_helm.charts.model import Chart
-    from hypothesis_helm.schemas.combinations import plan_interactions
     from hypothesis_helm.schemas.contracts import configuration_key
+    from hypothesis_helm.schemas.generation.combinations import plan_interactions
     from hypothesis_helm.schemas.model import ValuesModel
 
     from hypothesis_helm_benchmarking.analysis.pca import inject_errors

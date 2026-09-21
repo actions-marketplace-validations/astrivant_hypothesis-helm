@@ -135,7 +135,7 @@ def estimate_suite(
             "-p",
             "hypothesis.extra.pytestplugin",
             "-p",
-            "hypothesis_helm.reporting.progress",
+            "hypothesis_helm.reporting.console.progress",
             "--collect-only",
             "-q",
         ]

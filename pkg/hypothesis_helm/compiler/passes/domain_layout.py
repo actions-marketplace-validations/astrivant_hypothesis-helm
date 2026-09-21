@@ -12,7 +12,7 @@ from attrs import define, field
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.asts.projections import Input, LocalMap, Operation, Piece
 from hypothesis_helm.compiler.passes.domain_constraints import constraints, guard_bounds, input_origins, normalize, predicate
-from hypothesis_helm.schemas.resources import destination
+from hypothesis_helm.schemas.kubernetes.resources import destination
 
 __all__ = ("Document", "Layout", "Position", "literals", "scalar", "unresolved")
 

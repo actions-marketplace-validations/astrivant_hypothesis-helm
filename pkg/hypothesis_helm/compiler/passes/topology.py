@@ -9,10 +9,10 @@ from pathlib import Path
 
 from hypothesis_helm.compiler.asts.templates import specialize
 from hypothesis_helm.compiler.passes.pruning import Pruner, safe_values
-from hypothesis_helm.schemas.combinations import trim_indices
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
+from hypothesis_helm.schemas.generation.combinations import trim_indices
+from hypothesis_helm.schemas.generation.replay import select
 from hypothesis_helm.schemas.model import ValuesModel
-from hypothesis_helm.schemas.replay import select
 
 __all__ = ("trim_topology",)
 

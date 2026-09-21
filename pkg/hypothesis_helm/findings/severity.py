@@ -66,7 +66,7 @@ def global_policy() -> dict[str, object]:
     Returns:
         dict[str, object]: Global findings settings with a flag identifying explicit threshold control.
     """
-    from hypothesis_helm.schemas.policy import inherited_policy
+    from hypothesis_helm.schemas.configuration.policy import inherited_policy
 
     document = inherited_policy()
     result = dict(mapping(document.get("findings", {})))
@@ -94,8 +94,8 @@ def for_paths(
     Raises:
         ValueError: Equally specific rules disagree about the same setting.
     """
-    from hypothesis_helm.schemas.policy import path_parts
-    from hypothesis_helm.schemas.selectors import matching_rules
+    from hypothesis_helm.schemas.configuration.policy import path_parts
+    from hypothesis_helm.schemas.configuration.selectors import matching_rules
 
     base = global_policy()
     parsed = [

@@ -21,7 +21,7 @@ __all__ = ("LIBRARY", "LOCK", "acquire", "main", "rebuild", "unpack")
 
 
 LOCK = Path(__file__).with_name("data") / "builtin-sources.json"
-LIBRARY = Path(__file__).parents[1] / "hypothesis_helm/compiler/builtin_inventory.json"
+LIBRARY = Path(__file__).parents[1] / "hypothesis_helm/compiler/assets/builtin_inventory.json"
 
 
 def acquire(record: dict[str, object], cache: Path, *, offline: bool) -> bytes:

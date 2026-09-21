@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-__all__ = ("ManifestParseError", "RenderFailure")
+__all__ = ("ManifestParseError", "RandomInputUnavailable", "RenderFailure")
 
 
 if TYPE_CHECKING:
@@ -19,6 +19,12 @@ class ManifestParseError(ValueError):
     """
 
 
+class RandomInputUnavailable(ValueError):
+    """
+    Report unsupported instrumentation or invalid replay without accusing the chart of a defect.
+    """
+
+
 class RenderFailure(AssertionError):
     """
     Attach a stable check identifier to a reproducible render failure.
@@ -28,12 +34,14 @@ class RenderFailure(AssertionError):
         finding (Finding): Structured observation carried by this exception.
         controls (dict[str, object]): Frozen severity and failure decision from the detecting scope.
         resources (list[object] | None): Parsed output available before validation failed.
+        random_inputs (dict[str, object] | None): Synthetic random draws needed to replay an instrumented failure.
     """
 
     code: str
     finding: Finding
     controls: dict[str, object]
     resources: list[object] | None = None
+    random_inputs: dict[str, object] | None = None
 
     def __init__(self, message: str, code: str = "HH1001") -> None:
         """

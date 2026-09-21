@@ -40,9 +40,9 @@ from hypothesis_helm.findings.severity import junit_findings
 from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.integrations.sharding import Shard
-from hypothesis_helm.reporting.output import MANIFEST_FD, manifest_format
-from hypothesis_helm.reporting.provenance import trace_run
-from hypothesis_helm.schemas.selectors import chart_identity, source_identity
+from hypothesis_helm.reporting.console.output import MANIFEST_FD, manifest_format
+from hypothesis_helm.reporting.evidence.provenance import trace_run
+from hypothesis_helm.schemas.configuration.selectors import chart_identity, source_identity
 
 __all__ = ("run_suite",)
 
@@ -144,7 +144,7 @@ def run_suite(
             "-p",
             "hypothesis.extra.pytestplugin",
             "-p",
-            "hypothesis_helm.reporting.progress",
+            "hypothesis_helm.reporting.console.progress",
             "--log-cli-level=INFO",
             "--log-cli-format=[%(levelname)s] %(message)s",
             f"--hypothesis-seed={seed}",

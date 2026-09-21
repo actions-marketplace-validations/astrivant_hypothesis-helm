@@ -23,11 +23,9 @@ __all__ = ("Chart", "merge_values")
 
 if TYPE_CHECKING:
     from hypothesis_helm.compiler.passes.dependencies import Dependencies
-    from hypothesis_helm.schemas.domains import InputDomains
-from hypothesis_helm.schemas.contracts import (
-    mapping,
-    schema_strategy,
-)
+    from hypothesis_helm.schemas.generation.domains import InputDomains
+from hypothesis_helm.schemas.contracts import mapping
+from hypothesis_helm.schemas.generation.strategies import schema_strategy
 
 LOGGER = logging.getLogger(__name__)
 
@@ -132,7 +130,7 @@ class Chart:
         Returns:
             InputDomains: Policy shared across planning, generation and reports.
         """
-        from hypothesis_helm.schemas.domains import InputDomains
+        from hypothesis_helm.schemas.generation.domains import InputDomains
 
         if self.domains is None:
             self.domains = InputDomains.build(self)
