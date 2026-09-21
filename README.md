@@ -13,9 +13,9 @@
 - [Case study: Prometheus Community charts](#case-study-prometheus-community-charts)
 - [Development](#development)
 - [CLI help](#cli-help)
+- [Upstream schema shims](#upstream-schema-shims)
 - [License](#license)
 - [Citation](#citation)
-- [Upstream schema shims](#upstream-schema-shims)
 <!-- toc:end -->
 
 Test Helm charts with automatically generated `values.yaml` inputs. Built on Python's
@@ -959,19 +959,6 @@ options:
 </details>
 <!-- [[[end]]] -->
 
-## License
-
-[GNU General Public License v3.0 only](LICENSE).
-
-## Citation
-
-This project builds on [Hypothesis](https://github.com/HypothesisWorks/hypothesis/),
-the property-based testing framework for Python. Its authors recommend the following
-paper in their [citation guidance](https://github.com/HypothesisWorks/hypothesis/blob/master/CITATION.cff):
-
-MacIver et al. (2019). [Hypothesis: A new approach to property-based testing](https://doi.org/10.21105/joss.01891).
-*Journal of Open Source Software*, 4(43), 1891.
-
 ## Upstream schema shims
 
 Some Kubernetes rules are enforced by Go validators or described in prose but are missing from the published JSON schemas.
@@ -991,3 +978,16 @@ rebuilds require review if that description changes. The Service enum shims also
 reference and when they can be retired. Remove a shim once the upstream schema supplies the equivalent constraint.
 Other fields remain unconstrained where neither upstream data nor a reviewed supplement establishes their domain.
 See [catalog rebuilding](docs/input-domains/README.md#rebuilding-the-catalog-before-release) for source verification and limits.
+
+## License
+
+[GNU General Public License v3.0 only](LICENSE).
+
+## Citation
+
+This project builds on [Hypothesis](https://github.com/HypothesisWorks/hypothesis/),
+the property-based testing framework for Python. Its authors recommend the following
+paper in their [citation guidance](https://github.com/HypothesisWorks/hypothesis/blob/master/CITATION.cff):
+
+MacIver et al. (2019). [Hypothesis: A new approach to property-based testing](https://doi.org/10.21105/joss.01891).
+*Journal of Open Source Software*, 4(43), 1891.
