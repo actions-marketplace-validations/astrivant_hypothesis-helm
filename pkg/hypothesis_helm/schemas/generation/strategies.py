@@ -77,6 +77,7 @@ def ordinary_generated_text(value: object, *, ascii_only: bool = False, literals
 def schema_strategy(
     schema: dict[str, object],
     *,
+    generation_schema: dict[str, object] | None = None,
     character_sets: str | None = None,
     generation: dict[str, object] | None = None,
     path: tuple[str | int, ...] = (),
@@ -86,6 +87,7 @@ def schema_strategy(
 
     Args:
         schema (dict[str, object]): JSON Schema defining the accepted value domain.
+        generation_schema (dict[str, object] | None): Optional library-compatible generation view; schema still validates every result.
         character_sets (str | None): Saved character domain, or the active worker policy.
         generation (dict[str, object] | None): Chart-specific text settings and branch overrides.
         path (tuple[str | int, ...]): Root path of the schema fragment within chart values.
@@ -103,7 +105,7 @@ def schema_strategy(
     literals = declared_text(schema)
     unicode_branches = any(mapping(rule).get("character_sets") == "unicode" for rule in sequence(frozen.get("rules", [])))
     codec = "ascii" if selected == "ascii" and not unicode_branches and all(value.isascii() for value in literals) else "utf-8"
-    generating = copy.deepcopy(schema)
+    generating = copy.deepcopy(schema if generation_schema is None else generation_schema)
     if isinstance(generating.get("allOf"), list):
         # Keep bounded fragment proofs out of hypothesis-jsonschema's Boolean
         # canonicalizer, where negating recursive container regions explodes.

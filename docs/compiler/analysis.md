@@ -172,9 +172,15 @@ including anchored values and resolved merge keys, without modifying them. When 
 independent loaded values, matching Helm overrides; changing one occurrence does not change its siblings.
 
 Additional bounded operations include ASCII `trunc`, `splitList`, Boolean `ternary`, string-only `print`, and `int`/`int64` on
-supported integer operands. Mixed `printf` supports `%s`, `%d` and `%%`. Integer formatting requires an explicit conversion or a
-known integer-producing operation: a raw number loaded from values can have a different Go runtime type. Unsupported formats,
-conversions and oversized strings remain native Helm work.
+supported integer operands. Mixed `printf` supports `%s`, `%d`, `%v` and `%%`. It returns Go's diagnostic text for supported
+scalar type mismatches, missing or extra arguments, and a trailing `%`; these formatting mistakes do not throw template errors.
+For example, `printf "%s." nil` produces `%!s(<nil>).`. A surrounding `ternary` can then discard that string when an optional
+helper argument is absent. Both arguments are still evaluated, including any `fail` call or local mutation.
+See [Go's format-error rules](https://pkg.go.dev/fmt#hdr-Format_errors).
+
+Integer formatting and type-bearing diagnostics require a literal or known integer-producing operation: a raw number loaded
+from values can have a different Go runtime type. Unordered key evidence stays intact in `%s` substitutions. Unsupported formats,
+unknown types, conversions and oversized strings remain native Helm work.
 
 URL parsing uses a cached, bounded Helm probe with data passed through a values file. It makes no network request, but each new URL
 can require an additional local Helm invocation. The compiler does not infer a universal URL format or an enum from successful parses.

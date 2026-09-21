@@ -48,6 +48,11 @@ rules for generating values of its declared or inferred type. A generated
 inputs are assembled into complete values documents and checked against the
 values schema.<sup>[\[2\]](../getting-started/README.md#quick-start)</sup>
 
+If changing one path requires other values to change, the generator builds a valid surrounding configuration while keeping
+the selected value at that path. Array constraints use the chart schema's dialect: `prefixItems` for Draft 2020-12 and
+positional `items` for older drafts. When needed, the generator receives a separate Draft 7 representation for its positional
+constraint; every resulting configuration is still checked against the original schema and the selected path constraint.
+
 ## Execution and validation
 
 Each property tests generated values against an isolated copy of the chart. Helm

@@ -268,23 +268,24 @@ def _concrete_path(
     return tuple(concrete)
 
 
-def _constraint(path: tuple[str | int, ...], value: object) -> dict[str, object]:
+def _constraint(path: tuple[str | int, ...], value: object, *, positional_keyword: str = "items") -> dict[str, object]:
     """
-    Check  constraint.
+    Require a candidate value at one concrete path in the selected schema dialect.
 
     Args:
         path (tuple[str | int, ...]): Value path or chart location to inspect.
         value (object): Candidate value supplied by the property strategy.
+        positional_keyword (str): Tuple keyword supported by the validating dialect, items or prefixItems.
 
     Returns:
-        dict[str, object]: Resulting schema, values mapping, or structured report.
+        dict[str, object]: Constraint that fixes only the selected array index and required parent fields.
     """
     if not path:
         return {"const": value}
     head, *tail = path
-    child = _constraint(tuple(tail), value)
+    child = _constraint(tuple(tail), value, positional_keyword=positional_keyword)
     if isinstance(head, int):
-        return {"type": "array", "minItems": head + 1, "items": [{}] * head + [child]}
+        return {"type": "array", "minItems": head + 1, positional_keyword: [{} for _ in range(head)] + [child]}
     return {"type": "object", "required": [head], "properties": {head: child}}
 
 
@@ -345,9 +346,22 @@ def path_values(
         needs_context = True
     if needs_context or not validator.is_valid(json_value(effective(values))):
         constrained = copy.deepcopy(context_schema)
-        sequence(constrained.setdefault("allOf", [])).append(_constraint(path, value))
+        dialect = validators.validator_for(context_schema)
+        keyword = "prefixItems" if "prefixItems" in dialect.VALIDATORS else "items"
+        sequence(constrained.setdefault("allOf", [])).append(_constraint(path, value, positional_keyword=keyword))
+        # hypothesis-jsonschema generates Draft 7 tuples. Keep its private input
+        # separate from the full contract, which still validates every candidate.
+        generating: dict[str, object] | None = None
+        if keyword == "prefixItems" and any(isinstance(segment, int) for segment in path):
+            generating = copy.deepcopy(context_schema)
+            generating["$schema"] = "http://json-schema.org/draft-07/schema#"
+            sequence(generating.setdefault("allOf", [])).append(_constraint(path, value))
         # Retain definitions at the root so existing local references still resolve.
-        values = mapping(data.draw(schema_strategy(constrained, generation=domains.generation), label="schema-valid context"))
+        values = mapping(
+            data.draw(
+                schema_strategy(constrained, generation=domains.generation, generation_schema=generating), label="schema-valid context"
+            )
+        )
     assume(validator.is_valid(json_value(effective(values))))
     note(f"value path: {path!r}")
     note("values override:\n" + yamlio.dump(values))

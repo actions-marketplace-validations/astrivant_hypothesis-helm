@@ -31,6 +31,7 @@ from hypothesis_helm.compiler.asts.contract_values import (
     UnorderedKeys,
     native,
 )
+from hypothesis_helm.compiler.asts.formatting import printf
 from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext
 from hypothesis_helm.compiler.asts.templates import Node, lower, structure, walk
 from hypothesis_helm.compiler.asts.transformations import TransformedDomain, calculate, inputs
@@ -1371,49 +1372,10 @@ class Evaluation:
                 if isinstance(evaluated[1], UnorderedKeys):
                     return ContractText((KeyList(args[0], evaluated[1].values),))
                 return args[0].join(args[1])
-        if function == "printf" and args and isinstance(args[0], str) and all(isinstance(item, str) for item in args[1:]):
-            if args[0].count("%s") == len(args) - 1 and "%" not in args[0].replace("%s", ""):
-                parts: list[str | KeyList] = []
-                literals = args[0].split("%s")
-                for literal, value in zip(literals, evaluated[1:], strict=False):
-                    parts.append(literal)
-                    parts.extend(value.parts if isinstance(value, ContractText) else (str(native(value)),))
-                parts.append(literals[-1])
-                return (
-                    ContractText(tuple(parts)) if any(isinstance(part, KeyList) for part in parts) else "".join(str(part) for part in parts)
-                )
         if function == "printf" and args and isinstance(args[0], str):
-            pieces = re.split(r"(%s|%d|%v|%%)", args[0])
-            rendered: list[str] = []
-            position = 1
-            for piece in pieces:
-                if piece == "%%":
-                    rendered.append("%")
-                elif piece in {"%s", "%d", "%v"}:
-                    if position >= len(args):
-                        raise Unknown("printf argument count does not match its format")
-                    item = args[position]
-                    if (piece == "%s" and not isinstance(item, str)) or (piece == "%d" and type(item) is not int):
-                        raise Unknown("printf argument type does not match its format")
-                    if piece == "%v" and item is not None and type(item) not in (str, bool, int):
-                        raise Unknown("printf %v requires a supported scalar")
-                    operand = evaluated[position]
-                    if piece == "%d" and not (
-                        type(operand) is int or isinstance(operand, DerivedValue) and operand.function in INTEGER_RESULTS
-                    ):
-                        raise Unknown("printf integer formatting requires an explicit integer conversion or known integer result")
-                    if isinstance(evaluated[position], ContractText):
-                        raise Unknown("mixed printf formatting with unordered output requires native evaluation")
-                    rendered.append("<nil>" if item is None else str(item).lower() if type(item) is bool else str(item))
-                    position += 1
-                elif "%" in piece:
-                    raise Unknown("unsupported printf format")
-                else:
-                    rendered.append(piece)
-            if position != len(args) or sum(map(len, rendered)) > self.contracts.limits["max_string_chars"]:
-                raise Unknown("printf output or argument count exceeds supported limits")
+            result = printf(args[0], evaluated[1:], max_chars=self.contracts.limits["max_string_chars"])
             self.transformed = True
-            return "".join(rendered)
+            return result
         raise Unknown(f"unsupported function: {function}")
 
     def pipeline(self, text: str, source: str, line: int, variables: Scope) -> object:
