@@ -198,8 +198,9 @@ def write_pdf(
                 relative=0,
                 thickness=0,
             )
-            canvas.drawString(36, 24, "Back to contents")
-            canvas.linkRect("", contents_anchor, (36, 22, 106, 34), relative=0, thickness=0)
+            if canvas.getPageNumber() > 2:
+                canvas.drawString(36, 24, "Back to contents")
+                canvas.linkRect("", contents_anchor, (36, 22, 106, 34), relative=0, thickness=0)
         canvas.restoreState()
         return divider - 20
 

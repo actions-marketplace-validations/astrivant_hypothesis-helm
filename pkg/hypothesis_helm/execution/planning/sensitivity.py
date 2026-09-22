@@ -8,6 +8,7 @@ from itertools import combinations
 
 from hypothesis_helm.analysis.sensitivity import features
 from hypothesis_helm.charts.model import merge_values
+from hypothesis_helm.execution.planning import DEFAULT_PERMUTATIONS
 from hypothesis_helm.schemas.contracts import configuration_key
 from hypothesis_helm.schemas.generation.replay import select
 
@@ -21,7 +22,7 @@ def validate_order(strategy: str, order: int | None, permutations: int | None) -
     Args:
         strategy (str): Requested traversal.
         order (int | None): User's maximum measurement order, or the pairwise default.
-        permutations (int | None): Requested bug-testing interaction strength.
+        permutations (int | None): Requested bug-testing interaction strength; None uses the automatic pairwise default.
 
     Returns:
         int | None: Resolved sensitivity order, or None for another traversal.
@@ -30,10 +31,9 @@ def validate_order(strategy: str, order: int | None, permutations: int | None) -
         if order is not None:
             raise ValueError("--sensitivity-order requires --traversal-strategy sensitivity-first")
         return None
-    if permutations is None:
-        raise ValueError("sensitivity-first requires finite --permutations testing")
-    resolved = min(2, permutations) if order is None else order
-    if type(resolved) is not int or not 1 <= resolved <= permutations:
+    strength = DEFAULT_PERMUTATIONS if permutations is None else permutations
+    resolved = min(DEFAULT_PERMUTATIONS, strength) if order is None else order
+    if type(resolved) is not int or not 1 <= resolved <= strength:
         raise ValueError("--sensitivity-order must be between 1 and --permutations")
     return resolved
 

@@ -11,12 +11,15 @@ import tempfile
 import textwrap
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from pathlib import Path
 
 from jsonschema import validators
 
 from hypothesis_helm.analysis.sensitivity import Mutation, analyze
+from hypothesis_helm.charts.suites.runtime import RenderOptions
 from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
@@ -73,7 +76,18 @@ def mutations(values: dict[str, object], schema: dict[str, object], limit: int, 
     return selected
 
 
-def measure_chart(source: Path, *, helm: str, limit: int, seed: int, seconds: float, stopped: threading.Event) -> dict[str, object]:
+def measure_chart(
+    source: Path,
+    *,
+    helm: str,
+    limit: int,
+    seed: int,
+    seconds: float,
+    stopped: threading.Event,
+    values_filename: Path = Path("values.yaml"),
+    build_dependencies: bool = True,
+    render_options: RenderOptions | None = None,
+) -> dict[str, object]:
     """
     Prepare a private source copy and compare only outputs with a repeatable baseline.
 
@@ -84,11 +98,15 @@ def measure_chart(source: Path, *, helm: str, limit: int, seed: int, seconds: fl
         seed (int): Reproducible path-selection seed.
         seconds (float): Sensitivity budget excluding dependency preparation.
         stopped (threading.Event): Coordinator cancellation signal checked before each render.
+        values_filename (Path): Selected baseline, relative to the chart or an absolute filename.
+        build_dependencies (bool): Whether to prepare locked dependencies in the private copy.
+        render_options (RenderOptions | None): Scan renderer context and per-invocation timeout.
 
     Returns:
         dict[str, object]: Actual measurements or an explicit reason measurements were unavailable.
     """
     empty: dict[str, object] = {"status": "unavailable", "mutations": [], "interactions": [], "sequence": [], "renders": 0}
+    options = render_options or RenderOptions(helm=helm)
     try:
         with tempfile.TemporaryDirectory(prefix="hypothesis-helm-sensitivity-") as temporary:
             target = Path(temporary) / "chart"
@@ -98,8 +116,10 @@ def measure_chart(source: Path, *, helm: str, limit: int, seed: int, seconds: fl
                 return {**empty, "reason": "Library chart: no standalone rendered baseline."}
             if stopped.is_set():
                 return {**empty, "reason": "Analysis cancelled."}
-            if metadata.get("dependencies"):
-                prepared = Processes().run([helm, "dependency", "build", str(target)], capture_output=True, timeout=60)
+            selected_values = values_filename if values_filename.is_absolute() else source / values_filename
+            (target / "values.yaml").write_text(selected_values.read_text())
+            if metadata.get("dependencies") and build_dependencies:
+                prepared = Processes().run([helm, "dependency", "build", str(target)], capture_output=True, timeout=options.timeout)
                 if prepared.returncode:
                     return {**empty, "reason": "Dependency preparation failed.", "diagnostic": prepared.stderr}
             chart = load_input_chart(target)
@@ -123,7 +143,16 @@ def measure_chart(source: Path, *, helm: str, limit: int, seed: int, seconds: fl
                 if stopped.is_set() or remaining <= 0:
                     raise TimeoutError("Sensitivity measurement stopped")
                 with RandomInputs() as draws:
-                    output = render(chart, values, helm=helm, timeout=min(30, remaining), stream=False)
+                    output = render(
+                        chart,
+                        values,
+                        helm=helm,
+                        timeout=min(options.timeout, remaining),
+                        stream=False,
+                        release=options.release,
+                        namespace=options.namespace,
+                        kube_version=options.kube_version,
+                    )
                     if draws.fallback_reason:
                         raise ValueError("Uncontrolled renderer effects: " + draws.fallback_reason)
                     return output
@@ -225,7 +254,8 @@ def plot_panel(document: dict[str, object], destination: Path, title: str) -> No
     axis.yaxis.label.set_fontsize(16)
     axis.tick_params(labelsize=14)
     if rows:
-        ticks = range(1, len(rows) + 1)
+        # Larger samples retain every matrix cell and appendix path, with sparse tick labels to stay readable in the PDF.
+        ticks = sorted({*range(1, len(rows) + 1, max(1, math.ceil(len(rows) / 12))), len(rows)})
         axis.set_xticks(ticks)
         axis.set_yticks(ticks)
         axis.set(xlim=(0.5, len(rows) + 0.5), ylim=(0.5, len(rows) + 0.5))
@@ -264,6 +294,11 @@ def prepare_figures(
     seconds: float = 180,
     helm: str = "helm",
     repository: str | None = None,
+    verify_source: bool = True,
+    values_filename: Path = Path("values.yaml"),
+    build_dependencies: bool = True,
+    render_options: RenderOptions | None = None,
+    progress: Callable[[str], None] | None = None,
 ) -> None:
     """
     Measure chart jobs concurrently and publish figures serially to avoid Matplotlib thread races.
@@ -279,6 +314,11 @@ def prepare_figures(
         seconds (float): Per-chart measurement limit, excluding dependency preparation.
         helm (str): Helm executable.
         repository (str | None): Published study namespace, such as bitnami or prometheus.
+        verify_source (bool): Require a clean matching checkout when enriching a previously saved scan.
+        values_filename (Path): Selected values file for each chart, or one absolute baseline.
+        build_dependencies (bool): Prepare dependencies before measuring each private copy.
+        render_options (RenderOptions | None): Renderer settings inherited from an active scan.
+        progress (Callable[[str], None] | None): Progress sink; default prints standalone command updates.
 
     Returns:
         None: Each chart receives actual sensitivity evidence or an explicit unavailable panel.
@@ -288,7 +328,7 @@ def prepare_figures(
     if not math.isfinite(seconds) or seconds <= 0:
         raise ValueError("measurement time must be finite and positive")
     source = mapping(report.get("source", {}))
-    if source.get("kind") == "git" and source.get("revision"):
+    if verify_source and source.get("kind") == "git" and source.get("revision"):
         revision = Processes().run(["git", "-C", str(source_root), "rev-parse", "HEAD"], capture_output=True, check=True, timeout=10)
         if revision.stdout.strip() != source["revision"]:
             raise ValueError("Chart checkout differs from the scan revision; use the recorded source before measuring sensitivity")
@@ -306,7 +346,19 @@ def prepare_figures(
             if relative.is_absolute() or ".." in relative.parts:
                 raise ValueError(f"Unsafe chart path: {name}")
             futures[
-                pool.submit(measure_chart, source_root / relative, helm=helm, limit=limit, seed=seed, seconds=seconds, stopped=stopped)
+                pool.submit(
+                    copy_context().run,
+                    measure_chart,
+                    source_root / relative,
+                    helm=helm,
+                    limit=limit,
+                    seed=seed,
+                    seconds=seconds,
+                    stopped=stopped,
+                    values_filename=values_filename,
+                    build_dependencies=build_dependencies,
+                    render_options=render_options,
+                )
             ] = chart
         for index, future in enumerate(as_completed(futures), 1):
             chart = futures[future]
@@ -317,6 +369,7 @@ def prepare_figures(
                 "source": report.get("source"),
                 "seed": seed,
                 "maximum_mutations": limit,
+                "values": str(values_filename),
                 "seconds": seconds,
                 "measured_epoch": time.time(),
             }
@@ -330,11 +383,15 @@ def prepare_figures(
             study_path = Path(repository) / relative if repository else source_path
             destination = output / study_path / "sensitivity.png"
             plot_panel(document, destination, name)
-            chart["report_figures"] = {"sensitivity": str(destination.resolve())}
+            chart["report_figures"] = {**mapping(chart.get("report_figures", {})), "sensitivity": str(destination.resolve())}
             topology = output / study_path / "topology.png"
             if topology.is_file():
                 mapping(chart["report_figures"])["topology"] = str(topology.resolve())
-            print(f"[{index}/{len(charts)}] {name}: {document['status']}; {document.get('renders', 0)} renders", flush=True)
+            message = f"[{index}/{len(charts)}] {name}: {document['status']}; {document.get('renders', 0)} renders"
+            if progress is None:
+                print(message, flush=True)
+            else:
+                progress(message)
     except BaseException:
         stopped.set()
         raise

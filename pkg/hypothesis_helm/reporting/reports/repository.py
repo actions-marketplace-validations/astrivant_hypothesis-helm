@@ -8,7 +8,7 @@ import os
 import re
 import textwrap
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.reporting.documentation.contents import heading_inventory, with_contents
@@ -16,7 +16,7 @@ from hypothesis_helm.reporting.evidence.errors import deduplicate_errors, number
 from hypothesis_helm.reporting.evidence.provenance import trace_run
 from hypothesis_helm.reporting.evidence.reproductions import input_summary
 from hypothesis_helm.reporting.reports.figures import study_figures
-from hypothesis_helm.reporting.reports.links import Publication, chart_source_url, commit_url, publish_links, repository_url, web_url
+from hypothesis_helm.reporting.reports.links import LINK, Publication, chart_source_url, commit_url, publish_links, repository_url, web_url
 from hypothesis_helm.reporting.reports.overview import summarize, write_overview
 from hypothesis_helm.reporting.reports.pdf import write_pdf
 from hypothesis_helm.reporting.reports.plot_reference import with_plot_reference, with_sensitivity_reference
@@ -56,7 +56,48 @@ def artifact_link(label: str, destination: object, report: Path, *, prefer: tupl
     return f"[{label}](<{quote(target, safe='/._-')}>)"
 
 
-def chart_heading(chart: dict[str, object], source: dict[str, object], report: Path, *, artifact_links: bool = True) -> str:
+def _public_artifact(
+    label: str,
+    destination: object,
+    report: Path,
+    publication: Publication | None,
+    *,
+    prefer: tuple[str, ...] = (),
+) -> str | None:
+    """
+    Link explicitly hosted evidence or existing files assigned a public publication destination.
+
+    Args:
+        label (str): Visible link text.
+        destination (object): Recorded evidence URL or local path.
+        report (Path): Report path for resolving local artifacts.
+        publication (Publication | None): Explicit public artifact destination.
+        prefer (tuple[str, ...]): Evidence filenames to prefer over a containing directory.
+
+    Returns:
+        str | None: HTTPS Markdown link, or no link for unpublished or missing local evidence.
+    """
+    if not destination:
+        return None
+    link = artifact_link(label, destination, report, prefer=prefer)
+    if web_url(destination) is not None:
+        return link
+    match = LINK.fullmatch(link)
+    if publication is not None and match is not None:
+        target = match[2] or match[3]
+        if (report.parent / unquote(target)).exists():
+            return publish_links(link, report, publication)
+    return None
+
+
+def chart_heading(
+    chart: dict[str, object],
+    source: dict[str, object],
+    report: Path,
+    *,
+    artifact_links: bool = True,
+    publication: Publication | None = None,
+) -> str:
     """
     Make chart names open their source code, falling back to retained run artifacts.
 
@@ -65,6 +106,7 @@ def chart_heading(chart: dict[str, object], source: dict[str, object], report: P
         source (dict[str, object]): Stable repository provenance recorded by the scan.
         report (Path): Markdown report location for relative artifact links.
         artifact_links (bool): Whether the report publishes retained run artifacts.
+        publication (Publication | None): Explicit public destination for retained artifacts.
 
     Returns:
         str: Chart heading with an optional source or artifact link.
@@ -72,7 +114,7 @@ def chart_heading(chart: dict[str, object], source: dict[str, object], report: P
     title = str(chart["chart"]).replace("\n", " ")
     destination = chart_source_url(chart, source)
     if destination is None and artifact_links:
-        destination = str(chart.get("artifacts") or "") or None
+        return "### " + (_public_artifact(title, chart.get("artifacts"), report, publication) or title)
     return "### " + (artifact_link(title, destination, report) if destination else title)
 
 
@@ -326,7 +368,7 @@ def write_reports(
     assert isinstance(charts, list)
     for index, chart in enumerate(charts, 1):
         assert isinstance(chart, dict)
-        heading = chart_heading(chart, mapping(report.get("source", {})), markdown, artifact_links=artifact_links)
+        heading = chart_heading(chart, mapping(report.get("source", {})), markdown, artifact_links=artifact_links, publication=publication)
         lines.extend([heading, ""])
         if chart["chart"] in studies.charts:
             topology, sensitivity = studies.charts[str(chart["chart"])]
@@ -367,6 +409,14 @@ def write_reports(
         )
         if chart.get("error") and not numbered_diagnostic(chart):
             lines.extend(["Testing limitation: " + " ".join(display_error(chart["error"]).split()), ""])
+        fallback = mapping(chart.get("traversal_fallback", {}))
+        if fallback:
+            lines.extend(
+                [
+                    f"Traversal: `{fallback['effective']}` (requested `{fallback['requested']}`). {fallback['reason']}.",
+                    "",
+                ]
+            )
         audit = mapping(chart.get("audit", {}))
         findings = [mapping(item) for item in [*sequence(audit.get("findings", [])), *sequence(audit.get("unresolved", []))]]
         if findings:
@@ -455,26 +505,27 @@ def write_reports(
                 lines.extend(input_summary(mapping(occurrence["input"])))
                 lines.append("")
                 occurrence_artifacts = occurrence.get("artifacts")
-                if occurrence_artifacts and artifact_links:
-                    lines.extend(
-                        [
-                            artifact_link(
-                                "Full input and diagnostic",
-                                occurrence_artifacts,
-                                markdown,
-                                prefer=("report.json", "observed-failure.json"),
-                            ),
-                            "",
-                        ]
+                # Local file URLs are blocked by many PDF viewers and disappear when a report is shared.
+                if artifact_links:
+                    link = _public_artifact(
+                        "Full input and diagnostic",
+                        occurrence_artifacts,
+                        markdown,
+                        publication,
+                        prefer=("report.json", "observed-failure.json"),
                     )
+                    if link:
+                        lines.extend([link, ""])
             if len(occurrences) > 2:
                 lines.extend([f"{len(occurrences) - 2} additional occurrences are retained in the JSON report and chart artifacts.", ""])
         artifacts = chart.get("artifacts")
         suppressions = chart.get("suppression_export")
         if artifact_links and isinstance(suppressions, dict) and suppressions.get("yaml"):
             lines.extend([artifact_link("Review suggested suppressions (not applied)", suppressions["yaml"], markdown), ""])
-        if artifacts and artifact_links:
-            lines.extend([artifact_link("Chart artifacts", artifacts, markdown), ""])
+        if artifact_links:
+            link = _public_artifact("Chart artifacts", artifacts, markdown, publication)
+            if link:
+                lines.extend([link, ""])
     lines[2:2] = [*front_matter, "## Scan summary", ""]
     content, plot_targets = with_plot_reference(
         "\n".join(lines), {kind for kinds in caption_references.values() for kind in kinds} | set(caption_kinds.values())

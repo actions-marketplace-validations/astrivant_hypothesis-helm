@@ -42,6 +42,7 @@ from hypothesis_helm.compiler.randomness.rendering import enabled as random_enab
 from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RandomInputUnavailable, RenderFailure
+from hypothesis_helm.execution.planning import DEFAULT_PERMUTATIONS
 from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.planning.sensitivity import SensitivityOrder, validate_order
 from hypothesis_helm.execution.planning.traversal import order_configurations, validate_strategy
@@ -133,7 +134,7 @@ def check_chart(
         exhaustive (bool): Whether to enumerate the entire supported finite input domain.
         jobs (int): Concurrent Helm processes for exhaustive execution; all verification stays on the coordinator.
         max_cases (int): Maximum exhaustive domain or interaction suite and factor size.
-        permutations (int | None): Required finite interaction strength when supplied.
+        permutations (int | None): Required finite interaction strength; sensitivity-first defaults to pairs when omitted.
         trim (int): Seeded quarter-retention steps applied after finite permutation planning.
         trim_topology (int): Quarter-retention steps within symbolic topology regions.
         expand_failures (bool): Execute omitted members of failed regions within the same budget.
@@ -162,6 +163,8 @@ def check_chart(
         dict[str, object]: Resulting schema, values mapping, or structured report.
     """
     traversal_strategy = validate_strategy(traversal_strategy)
+    if traversal_strategy == "sensitivity-first" and permutations is None:
+        permutations = DEFAULT_PERMUTATIONS
     sensitivity_order = validate_order(traversal_strategy, sensitivity_order, permutations)
     if input_strategy is not None and (permutations is not None or exhaustive):
         raise ValueError("input_strategy applies to sampled testing only")

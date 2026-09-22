@@ -167,11 +167,15 @@ The [`--filter-adaptive` preset](../adaptive-filtering/README.md#recompute-befor
 recomputes complexity after preparing each usable chart, before selecting its property tests. Earlier audits and
 cached outcomes do not replace this per-visit calculation. Unsupported calibration keeps ordinary filtering.
 
-Use `--traversal-strategy random|linear|root-first|leaf-first` to choose execution order.
+Use `--traversal-strategy random|linear|root-first|leaf-first|sensitivity-first` to choose execution order.
 Random is the default and uses `--seed`; another seed changes the subset reached
 before timeout. Discovery lists all identified paths, but execution may stop before
 reaching the end of that list. Reports distinguish visited, completed, incomplete,
 and remaining paths.<sup>[\[2\]](../execution/README.md#value-path-traversal)</sup>
+
+`sensitivity-first` uses the default pairwise coverage when `--permutations` is omitted.
+For a chart whose domain cannot be finitely enumerated, automatic scans warn and fall back to seeded random path
+testing; the report records the requested and effective strategies. Explicit `--permutations N` still requires a finite domain.
 
 Discovery also reads dependency conditions and tags from chart metadata, including
 controls absent from `values.yaml`, and inspects installed child charts under their
@@ -283,9 +287,28 @@ Cell numbers match the chart sections; clicking either matrix's cells in the PDF
 Testing time excludes dependency preparation. Historical results without testing
 measurements show elapsed chart time instead; missing timings are marked unavailable.
 Zero recorded errors do not imply full coverage, especially for incomplete scans.
-PDF bookmarks link to every chart and diagnostic, and each page links back to contents.
+PDF bookmarks link to every chart and diagnostic. Pages from page 3 onward link back to contents.
 Markdown reports have linked contents and use the matching `<stem>-overview.png`;
 keep that image beside the Markdown file when sharing it. The PDF embeds the image.
+
+To measure new sensitivity plots during the same invocation, add `--max-mutations 48`
+with `--report` on either `test` or `scan`. This selects up to 48 distinct Boolean/integer
+fields and measures their 1,128 pairs when the schema and time budget permit. It is separate
+from the bug-testing traversal and does not change `--max-examples` or `--permutations`.
+
+```sh
+helm hypothesis test ./charts --filter --jobs 6 --chart-timeout 120s \
+    --max-mutations 48 --sensitivity-timeout 3m --report docs/reports/charts
+```
+
+Measurement runs after chart testing, using `--jobs`, `--seed`, `--values`, and the renderer
+settings from the scan. `--sensitivity-timeout` defaults to an additional three minutes per chart,
+excluding dependency preparation. A scan stopped by a deadline, interruption, or `--fail` skips
+this extra phase. Measurement failures and missing pairs remain marked as unavailable; they do
+not change the chart's test findings. Without `--max-mutations`, reporting reuses available plots.
+Generated panels go beside the report in `<stem>-figures/`; raw measurements remain in the run's
+artifact directory. `hypothesis-helm-report-figures` can also regenerate them from saved scan data.
+
 JSON statistics, lint/dependency logs, and failing values go under
 `.cache/hypothesis-helm/runs/` for local `test` and `.cache/hypothesis-helm/scans/` for remote `scan`;
 override that parent with `--artifact-dir`.
@@ -296,7 +319,10 @@ New runs show overrides that differ from the chart defaults, including dependent
 fields. Older path-based results show the selected fields and link to the full context.
 Long values and diagnostics are shortened explicitly. These previews do not establish
 an independent or minimal cause. Complete inputs, diagnostics, and additional cases
-remain in JSON and linked artifacts; the Markdown and PDF are brief summaries.
+remain in JSON and local artifacts; the Markdown and PDF are brief summaries.
+Links labeled "Full input and diagnostic" and "Chart artifacts" are included only when the run
+provides an HTTPS destination or explicitly publishes the existing artifacts to a public repository.
+Local-only run directories are not published as PDF hyperlinks.
 Missing reproducing values are reported explicitly.
 
 Use `--export-suppressions` to save a categorized, editable `suppressions.yaml` in each chart's artifact directory as soon as it finishes,

@@ -820,11 +820,13 @@ def test_scan_deadline_preserves_runner_statistics(
 
 
 @pytest.mark.parametrize("finite", [True, False])
+@pytest.mark.parametrize("traversal", ["random", "sensitivity-first"])
 def test_scan_filter_support(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     finite: bool,
+    traversal: str,
 ) -> None:
     """
     Apply finite filtering or known-input-first sampling according to the chart domain.
@@ -834,6 +836,7 @@ def test_scan_filter_support(
         monkeypatch (pytest.MonkeyPatch): Capture property runner settings.
         capsys (pytest.CaptureFixture[str]): Capture the final filtering report.
         finite (bool): Whether the chart input has a finite domain.
+        traversal (str): Requested random order or sensitivity with implicit finite coverage.
 
     Returns:
         None: Filtering uses the appropriate strategy without changing the chart contract.
@@ -879,6 +882,8 @@ def test_scan_filter_support(
                 "/usr/bin/true",
                 "--no-build-dependencies",
                 "--filter",
+                "--traversal-strategy",
+                traversal,
                 "--jobs",
                 "1",
                 "--artifact-dir",
@@ -894,3 +899,11 @@ def test_scan_filter_support(
     if not finite:
         assert report["charts"][0]["filtering"]["method"] == "known-path-generation"
         assert "input_strategy" in called
+        assert report["charts"][0]["traversal_strategy"] == "random"
+        if traversal == "sensitivity-first":
+            assert report["charts"][0]["traversal_fallback"]["requested"] == "sensitivity-first"
+            assert report["charts"][0]["traversal_fallback"]["effective"] == "random"
+            assert "Cannot enumerate" in report["charts"][0]["traversal_fallback"]["reason"]
+    else:
+        assert called["permutations"] == 2
+        assert called["traversal_strategy"] == traversal

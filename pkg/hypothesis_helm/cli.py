@@ -26,6 +26,7 @@ from hypothesis_helm.compiler.passes.minimum import export_minimal
 from hypothesis_helm.environment import env, refresh_env, set_env
 from hypothesis_helm.exceptions.execution import ChartUnavailable
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
+from hypothesis_helm.execution.planning import DEFAULT_PERMUTATIONS
 from hypothesis_helm.execution.planning.estimate import estimate_suite
 from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.execution.planning.sensitivity import validate_order
@@ -386,6 +387,19 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     test.add_argument(
         "--report", nargs="?", const="", metavar="PATH", help="write combined Markdown/PDF; default: docs/reports/<dir>_<epoch>_report"
     )
+    for command in (test, repository):
+        command.add_argument(
+            "--max-mutations",
+            type=int,
+            metavar="N",
+            help="with --report, measure sensitivity for up to N fields per chart and all their pairs (opt-in)",
+        )
+        command.add_argument(
+            "--sensitivity-timeout",
+            type=parse_time_limit,
+            default=180,
+            help="additional sensitivity measurement budget per chart with --max-mutations (default: 3m)",
+        )
     test.add_argument("--values", type=Path, default=Path("values.yaml"), help="baseline file relative to each chart, or an absolute path")
     test.add_argument("--chart-timeout", type=parse_time_limit, help="property-test budget per discovered chart (default: 3m)")
     test.add_argument(
@@ -521,7 +535,7 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
             type=validate_strategy,
             choices=STRATEGIES,
             default="random",
-            help="seeded random (default), linear, root-first, leaf-first, or sensitivity-first for finite --permutations tests",
+            help="seeded random (default), linear, root-first, leaf-first, or sensitivity-first (finite coverage defaults to pairs)",
         )
     test.add_argument("--timeout", type=float, default=30)
     test.add_argument("--helm", default="helm")
@@ -759,6 +773,11 @@ def main(argv: list[str] | None = None) -> int:
             arguments[index] = "--fail=info"
     args = parser.parse_args(arguments)
     args.invocation = invocation
+    if getattr(args, "max_mutations", None) is not None:
+        if args.max_mutations < 1:
+            parser.error("--max-mutations must be positive")
+        if args.report is None:
+            parser.error("--max-mutations requires --report")
     if args.generate_config:
         if args.command is not None:
             parser.error("--generate-config cannot be combined with a command")
@@ -770,6 +789,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--export-suppressions requires chart execution or an audit, not --dry-run or --collect-only")
     if hasattr(args, "traversal_strategy"):
         try:
+            if args.traversal_strategy == "sensitivity-first" and (
+                args.command == "run" or any(getattr(args, mode, False) for mode in ("paths", "whole_chart", "exhaustive"))
+            ):
+                raise ValueError(
+                    "sensitivity-first requires finite permutation testing, not saved suites, --paths, --whole-chart or --exhaustive"
+                )
             validate_order(args.traversal_strategy, getattr(args, "sensitivity_order", None), getattr(args, "permutations", None))
         except ValueError as error:
             parser.error(str(error))
@@ -961,6 +986,9 @@ def main(argv: list[str] | None = None) -> int:
                 timeout=getattr(args, "timeout", 30),
             )
         if args.command == "test":
+            # Recursive scans resolve automatic coverage per chart. This branch handles a single finite chart.
+            if args.traversal_strategy == "sensitivity-first" and args.permutations is None:
+                args.permutations = DEFAULT_PERMUTATIONS
             if args.filter:
                 args.trim_topology = 2
                 args.expand_failures = True
@@ -972,27 +1000,27 @@ def main(argv: list[str] | None = None) -> int:
                 if args.paths or args.whole_chart or args.exhaustive:
                     raise ValueError("--trim applies to finite --permutations planning only")
                 if args.permutations is None:
-                    args.permutations = 2
+                    args.permutations = DEFAULT_PERMUTATIONS
             if args.prune_equivalent:
                 if args.paths or args.match is not None or args.collect_only:
                     raise ValueError("--prune-equivalent applies to whole-chart testing only")
                 if not args.whole_chart and not args.exhaustive:
                     if args.permutations is None:
-                        args.permutations = 2
+                        args.permutations = DEFAULT_PERMUTATIONS
             if args.exhaustive_threshold < 0 or args.max_group_cases < 1:
                 raise ValueError("exhaustive threshold must be nonnegative and group limit positive")
             if args.exhaustive_group and (args.paths or args.whole_chart or args.exhaustive):
                 raise ValueError("--exhaustive-group requires automatic or permutation coverage")
             if not (args.paths or args.whole_chart or args.exhaustive or args.permutations is not None):
                 if args.exhaustive_group:
-                    args.permutations = 2
+                    args.permutations = DEFAULT_PERMUTATIONS
                 elif args.match is None and not args.collect_only and args.shard is None and args.jobs in ("auto", 1):
                     try:
                         factor_space(Chart.load(args.chart).generation_schema(), args.max_cases)
                     except NonFiniteSchema as exc:
                         logger.info("Using per-path testing: finite automatic coverage unavailable: %s", exc)
                     else:
-                        args.permutations = 2
+                        args.permutations = DEFAULT_PERMUTATIONS
                         logger.info(
                             "Automatic finite coverage: full enumeration below %d, otherwise pairs and groups",
                             args.exhaustive_threshold,

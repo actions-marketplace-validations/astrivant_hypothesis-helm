@@ -9,6 +9,7 @@
 - [Scan summary](#scan-summary)
 - [Status counts](#status-counts)
 - [Settings](#settings)
+- [Errors](#errors)
 - [Charts](#charts)
   - [bitnami/airflow](#bitnamiairflow)
   - [bitnami/apache](#bitnamiapache)
@@ -174,11 +175,17 @@
   - [bitnami/wildfly](#bitnamiwildfly-1)
   - [bitnami/zookeeper](#bitnamizookeeper-1)
 - [Appendix: finding codes](#appendix-finding-codes)
+  - [HH1101 - Invalid YAML in rendered output](#hh1101---invalid-yaml-in-rendered-output)
+  - [HH1105 - Missing resource name](#hh1105---missing-resource-name)
+  - [HH1107 - Empty resource bundle](#hh1107---empty-resource-bundle)
+  - [HH1108 - Kubernetes schema validation failed](#hh1108---kubernetes-schema-validation-failed)
+  - [HH1109 - Invalid manifest field type](#hh1109---invalid-manifest-field-type)
   - [HH2001 - Undocumented values path](#hh2001---undocumented-values-path)
   - [HH2002 - Unspecified values type](#hh2002---unspecified-values-type)
   - [HH2003 - Missing values description](#hh2003---missing-values-description)
   - [HH2004 - No supplied default for a values path](#hh2004---no-supplied-default-for-a-values-path)
   - [HH2006 - Opaque object schema](#hh2006---opaque-object-schema)
+  - [HH3001 - Template accesses a missing object](#hh3001---template-accesses-a-missing-object)
 
 </details>
 <!-- toc:end -->
@@ -206,14 +213,14 @@ Parallel edges count separately. These are structural measurements from the publ
 Git comparison unavailable; no charts skipped using previous test results.
 
 Directory: /Users/emmadoyle/projects/personal/hypothesis-helm/third_party/bitnami-charts
-Started (Unix epoch): 1790037170
-Started (UTC): 2026-09-22T00:32:50.000+00:00
-Finished (UTC): 2026-09-22T00:46:26.468+00:00
-Run fingerprint (SHA-256): `d19334a458e5424b4e203b58c368fc7a59479ac5feba370e58052811a56ae8a1`
+Started (Unix epoch): 1790039844
+Started (UTC): 2026-09-22T01:17:24.000+00:00
+Finished (UTC): 2026-09-22T03:55:21.600+00:00
+Run fingerprint (SHA-256): `b00a713d4f1271b6a08ecb68952fc23253daf7344f5ac0c4e4ed86ab175cca77`
 Versions: Hypothesis not recorded; hypothesis-helm not recorded
-Elapsed (wall clock): 816.19 seconds
-Chart testing: 93.57 seconds
-Dependency preparation: 712.19 seconds (excluded from testing budgets)
+Elapsed (wall clock): 9418.10 seconds
+Chart testing: 8615.48 seconds
+Dependency preparation: 790.53 seconds (excluded from testing budgets)
 Charts discovered: 115
 Scan status: completed
 Discovery complete: True
@@ -224,12 +231,12 @@ Baseline-only, skipped, blocked, and incomplete charts retain their respective s
 
 ## Status counts
 
-114 unsupported-schema; 1 skipped-library.
+93 time-limit; 18 failed; 1 skipped-library; 3 error.
 
 ## Settings
 
-Filtering: True | Seed: 0 | Traversal: sensitivity-first
-Chart timeout: 300.0 seconds | Workers: 6
+Filtering: True | Seed: 0 | Traversal: random
+Chart timeout: 60.0 seconds | Workers: 6
 Complete settings are retained in the JSON report.
 
 Scan command: Not recorded for this run
@@ -238,6 +245,14 @@ Generated values use the configured input domains and any supported destination 
 supplied defaults are tested unchanged. The JSON report records constraints and unresolved mappings.
 
 Disabled checks: [HH2006](#hh2006---opaque-object-schema)
+
+## Errors
+
+34 distinct diagnostics across 39 occurrences; 5 repeats grouped.
+Diagnostics and their triggering inputs are grouped under each chart below.
+Up to two examples per diagnostic and six fields per example are shown. Long values and diagnostics are shortened.
+Full inputs, diagnostics, and remaining cases are retained in local run data.
+Selected fields identify the inputs varied by the test. Causal attribution requires further investigation.
 
 ## Charts
 
@@ -249,9 +264,7 @@ Disabled checks: [HH2006](#hh2006---opaque-object-schema)
 
 Overview cell: 01
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 5
 
 Audit findings: 1190. Full paths and template references are retained in the JSON report.
 
@@ -273,9 +286,7 @@ Audit findings: 1190. Full paths and template references are retained in the JSO
 
 Overview cell: 02
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 24
 
 Audit findings: 245. Full paths and template references are retained in the JSON report.
 
@@ -287,6 +298,27 @@ Audit findings: 245. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.minReplicas`: Undocumented values path (warning)
 - 239 additional audit findings in JSON.
 
+#### E015 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ity': None, 'podAntiAffinity': {'preferredDuringSchedulingIgnoredDuringExecution':
+[{'podAffinityTerm': {'labelSelector': {'matchLabels': {'app.kubernetes.io/instance': 'hypothesis', 'app.kubernetes.io/name': 'apache'}},
+'topologyKey': 'kubernetes.io/hostname'}, 'weight': 1}]}, 'nodeAffinity': None}") in "<unicode string>", line 265, column 7: affinity: ^
+(line: 265) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[*].preference | Status: failed
+
+Changed overrides (used together):
+- `$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.__hypothesis_key__.preference = {}`
+Absent from overrides: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution["*"].preference. Defaults may
+still apply.
+
+Renderer random inputs (replay tape in artifacts):
+
 ### [bitnami/apisix](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apisix>)
 
 | Chart topology | Mutation sensitivity |
@@ -295,9 +327,7 @@ Audit findings: 245. Full paths and template references are retained in the JSON
 
 Overview cell: 03
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 5
 
 Audit findings: 344. Full paths and template references are retained in the JSON report.
 
@@ -317,9 +347,7 @@ Audit findings: 344. Full paths and template references are retained in the JSON
 
 Overview cell: 04
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 3
 
 Audit findings: 543. Full paths and template references are retained in the JSON report.
 
@@ -339,9 +367,7 @@ Audit findings: 543. Full paths and template references are retained in the JSON
 
 Overview cell: 05
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 2
 
 Audit findings: 1251. Full paths and template references are retained in the JSON report.
 
@@ -361,9 +387,7 @@ Audit findings: 1251. Full paths and template references are retained in the JSO
 
 Overview cell: 06
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 4
 
 Audit findings: 452. Full paths and template references are retained in the JSON report.
 
@@ -385,9 +409,7 @@ Audit findings: 452. Full paths and template references are retained in the JSON
 
 Overview cell: 07
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 224. Full paths and template references are retained in the JSON report.
 
@@ -409,9 +431,7 @@ Audit findings: 224. Full paths and template references are retained in the JSON
 
 Overview cell: 08
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 21
 
 Audit findings: 192. Full paths and template references are retained in the JSON report.
 
@@ -431,9 +451,7 @@ Audit findings: 192. Full paths and template references are retained in the JSON
 
 Overview cell: 09
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 309. Full paths and template references are retained in the JSON report.
 
@@ -455,9 +473,7 @@ Audit findings: 309. Full paths and template references are retained in the JSON
 
 Overview cell: 10
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 404. Full paths and template references are retained in the JSON report.
 
@@ -478,9 +494,7 @@ Audit findings: 404. Full paths and template references are retained in the JSON
 
 Overview cell: 11
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 7
 
 Audit findings: 643. Full paths and template references are retained in the JSON report.
 
@@ -500,9 +514,7 @@ Audit findings: 643. Full paths and template references are retained in the JSON
 
 Overview cell: 12
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 1163. Full paths and template references are retained in the JSON report.
 
@@ -522,9 +534,7 @@ Audit findings: 1163. Full paths and template references are retained in the JSO
 
 Overview cell: 13
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 5
 
 Audit findings: 507. Full paths and template references are retained in the JSON report.
 
@@ -544,9 +554,7 @@ Audit findings: 507. Full paths and template references are retained in the JSON
 
 Overview cell: 14
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 276. Full paths and template references are retained in the JSON report.
 
@@ -566,9 +574,7 @@ Audit findings: 276. Full paths and template references are retained in the JSON
 
 Overview cell: 15
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 43
 
 Audit findings: 423. Full paths and template references are retained in the JSON report.
 
@@ -598,9 +604,7 @@ Status: skipped-library | Attempts: N/A
 
 Overview cell: 17
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 470. Full paths and template references are retained in the JSON report.
 
@@ -622,9 +626,7 @@ Audit findings: 470. Full paths and template references are retained in the JSON
 
 Overview cell: 18
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 255. Full paths and template references are retained in the JSON report.
 
@@ -646,9 +648,7 @@ Audit findings: 255. Full paths and template references are retained in the JSON
 
 Overview cell: 19
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 21
 
 Audit findings: 591. Full paths and template references are retained in the JSON report.
 
@@ -668,9 +668,7 @@ Audit findings: 591. Full paths and template references are retained in the JSON
 
 Overview cell: 20
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 166. Full paths and template references are retained in the JSON report.
 
@@ -691,19 +689,18 @@ Audit findings: 166. Full paths and template references are retained in the JSON
 
 Overview cell: 21
 
-Status: unsupported-schema | Attempts: N/A
+Status: error | Attempts: N/A
 
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+#### E032
 
-Audit findings: 346. Full paths and template references are retained in the JSON report.
+```text
+Path worker exited with status 1; see
+/Users/emmadoyle/projects/personal/hypothesis-helm/docs/reports/bitnami-runs/bitnami-charts_1790039844/0020/path-workers-j061t2vq/queue
+```
 
-- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.auth.email`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.auth.existingSecret`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.auth.password`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.auth.username`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.auth`: Undocumented values path (warning)
-- 340 additional audit findings in JSON.
+Phase: chart | Status: error
+
+No triggering values were recorded for this diagnostic.
 
 ### [bitnami/dremio](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/dremio>)
 
@@ -713,21 +710,18 @@ Audit findings: 346. Full paths and template references are retained in the JSON
 
 Overview cell: 22
 
-Status: unsupported-schema | Attempts: N/A
+Status: error | Attempts: N/A
 
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+#### E033
 
-Audit findings: 1181. Full paths and template references are retained in the JSON report.
+```text
+Path worker exited with status 1; see
+/Users/emmadoyle/projects/personal/hypothesis-helm/docs/reports/bitnami-runs/bitnami-charts_1790039844/0021/path-workers-_7l15_nd/queue
+```
 
-- [HH2001](#hh2001---undocumented-values-path) at `$.apiVersions`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations["helm.sh/hook"]`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations["helm.sh/hook-delete-policy"]`: Undocumented values path
-  (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations["helm.sh/hook-weight"]`: Undocumented values path
-  (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.automountServiceAccountToken`: Undocumented values path (warning)
-- 1175 additional audit findings in JSON.
+Phase: chart | Status: error
+
+No triggering values were recorded for this diagnostic.
 
 ### [bitnami/drupal](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/drupal>)
 
@@ -737,19 +731,18 @@ Audit findings: 1181. Full paths and template references are retained in the JSO
 
 Overview cell: 23
 
-Status: unsupported-schema | Attempts: N/A
+Status: error | Attempts: N/A
 
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+#### E034
 
-Audit findings: 319. Full paths and template references are retained in the JSON report.
+```text
+Path worker exited with status 1; see
+/Users/emmadoyle/projects/personal/hypothesis-helm/docs/reports/bitnami-runs/bitnami-charts_1790039844/0022/path-workers-fuy59jh1/queue
+```
 
-- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.allowEmptyPassword`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.automountServiceAccountToken`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.certificates.args`: Undocumented values path (warning)
-- [HH2001](#hh2001---undocumented-values-path) at `$.certificates.command`: Undocumented values path (warning)
-- 313 additional audit findings in JSON.
+Phase: chart | Status: error
+
+No triggering values were recorded for this diagnostic.
 
 ### [bitnami/ejbca](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/ejbca>)
 
@@ -759,9 +752,7 @@ Audit findings: 319. Full paths and template references are retained in the JSON
 
 Overview cell: 24
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 21
 
 Audit findings: 224. Full paths and template references are retained in the JSON report.
 
@@ -783,9 +774,7 @@ Audit findings: 224. Full paths and template references are retained in the JSON
 
 Overview cell: 25
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 814. Full paths and template references are retained in the JSON report.
 
@@ -807,9 +796,7 @@ Audit findings: 814. Full paths and template references are retained in the JSON
 
 Overview cell: 26
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 33
 
 Audit findings: 325. Full paths and template references are retained in the JSON report.
 
@@ -821,6 +808,29 @@ Audit findings: 325. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.hpa.enabled`: Undocumented values path (warning)
 - 319 additional audit findings in JSON.
 
+#### E023 ([HH1105](#hh1105---missing-resource-name))
+
+**Missing resource name** (manifest / violation). Severity: **error**. Provide a name in each resource branch; ignore this check if your
+workflow intentionally uses generated names.
+
+```text
+[HH1105] resource has no metadata.name
+```
+
+Phase: $.certgen.serviceAccount.name | Status: failed
+
+Changed overrides (used together):
+- `$.certgen.serviceAccount.name = "0" (was "")`
+
+Renderer random inputs (replay tape in artifacts):
+
+Manifest changes from rendered defaults (document and list order preserved):
+- `$[11].spec.template.spec.serviceAccountName: "hypothesis-envoy-gateway-certgen" -> 0`
+- `$[2].metadata.name: "hypothesis-envoy-gateway-certgen" -> 0`
+- `$[5].subjects[0].name: "hypothesis-envoy-gateway-certgen" -> 0`
+- `$[8].subjects[0].name: "hypothesis-envoy-gateway-certgen" -> 0`
+- `$[9].subjects[0].name: "hypothesis-envoy-gateway-certgen" -> 0`
+
 ### [bitnami/etcd](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/etcd>)
 
 | Chart topology | Mutation sensitivity |
@@ -829,9 +839,7 @@ Audit findings: 325. Full paths and template references are retained in the JSON
 
 Overview cell: 27
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 407. Full paths and template references are retained in the JSON report.
 
@@ -853,9 +861,7 @@ Audit findings: 407. Full paths and template references are retained in the JSON
 
 Overview cell: 28
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 659
 
 Audit findings: 402. Full paths and template references are retained in the JSON report.
 
@@ -867,6 +873,82 @@ Audit findings: 402. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.akamai.secretName`: Undocumented values path (warning)
 - 396 additional audit findings in JSON.
 
+Configuration rejections: 0 excluded; 2 adjusted and tested; 2 Helm verification renders (separate from manifest-test attempts).
+
+#### E004 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on external-dns/templates/deployment.yaml: error converting YAML to JSON: yaml: line 28: did not find expected ','
+or ']'
+```
+
+Phase: $.image | Status: failed
+
+Changed overrides (used together):
+- `$.image.digest = "0" (was "")`
+- `$.image.registry = "" (was "docker.io")`
+- `$.image["0000000000"] = null`
+- `$.image.repository = "" (was "bitnami/external-dns")`
+- `$.image.pullSecrets = [[[{}, 6.2841568821697656e+16, {}]], [], {"aaaaaaaaZ": [], "": {"aXaaaagaa$kaaaa;a": {}, "aaaaza": false}}, {}, {"a;aaaa... [value shortened]`
+- `$.image["(@%8_$!"]["("] = -333`
+- 7 more paths; see full input.
+
+Renderer random inputs (replay tape in artifacts):
+
+Phase: $.image.pullSecrets | Status: failed
+
+Changed overrides (used together):
+- `$.image.pullSecrets = [[{}]]`
+
+Renderer random inputs (replay tape in artifacts):
+
+2 additional occurrences are retained in the JSON report and chart artifacts.
+
+#### E005 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on external-dns/templates/deployment.yaml: error converting YAML to JSON: yaml: line 67: could not find expected
+':'
+```
+
+Phase: $.zoneIdFilters[*] | Status: failed
+
+Changed overrides (used together):
+- `$.zoneIdFilters = [[{"\r": null}]]`
+Absent from overrides: $.zoneIdFilters["*"]. Defaults may still apply.
+
+Renderer random inputs (replay tape in artifacts):
+
+Phase: $.regexDomainExclusion | Status: failed
+
+Changed overrides (used together):
+- `$.regexDomainExclusion = "\n0" (was "")`
+
+Renderer random inputs (replay tape in artifacts):
+
+#### E006 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on external-dns/templates/deployment.yaml: error converting YAML to JSON: yaml: line 71: could not find expected
+':'
+```
+
+Phase: $.aws.zoneTags | Status: failed
+
+Changed overrides (used together):
+- `$.aws.zoneTags = [{"aa-,a)": null, "ha": {"aa2": 1.0914998582626766e+16, "aaaaQaacaaaa\raa.aaal,aaa>ialaaa": null, "a9aaVbaaaaaa\na": tru... [value shortened]`
+
+Renderer random inputs (replay tape in artifacts):
+
 ### [bitnami/flink](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/flink>)
 
 | Chart topology | Mutation sensitivity |
@@ -877,9 +959,7 @@ Audit findings: 402. Full paths and template references are retained in the JSON
 
 Overview cell: 29
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 281. Full paths and template references are retained in the JSON report.
 
@@ -901,9 +981,7 @@ Audit findings: 281. Full paths and template references are retained in the JSON
 
 Overview cell: 30
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 240. Full paths and template references are retained in the JSON report.
 
@@ -925,9 +1003,7 @@ Audit findings: 240. Full paths and template references are retained in the JSON
 
 Overview cell: 31
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 31
 
 Audit findings: 427. Full paths and template references are retained in the JSON report.
 
@@ -949,9 +1025,7 @@ Audit findings: 427. Full paths and template references are retained in the JSON
 
 Overview cell: 32
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 3
 
 Audit findings: 1042. Full paths and template references are retained in the JSON report.
 
@@ -971,9 +1045,7 @@ Audit findings: 1042. Full paths and template references are retained in the JSO
 
 Overview cell: 33
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 86
 
 Audit findings: 262. Full paths and template references are retained in the JSON report.
 
@@ -985,6 +1057,101 @@ Audit findings: 262. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.command`: Undocumented values path (warning)
 - 256 additional audit findings in JSON.
 
+#### E019 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ath': 'app-tmp-dir'}, {'name': 'empty-dir', 'mountPath': '/opt/bitnami/mysql/logs',
+'subPath': 'app-logs-dir'}, {'name': 'config', 'mountPath': '/opt/bitnami/mysql/conf/my.cnf', 'subPath': 'my.cnf'}, {'name':
+'mysql-credentials', 'mountPath': '/opt/bitnami/mysql/secrets/'}]}]" (original value: "[]") in "<unicode string>", line 412, column 7:
+containers: ^ (line: 412) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.mysql.primary.extraPodSpec.containers | Status: failed
+
+Changed overrides (used together):
+- `$.mysql.primary.extraPodSpec.containers = []`
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
+#### E020 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[Diagnostic shortened; full text in artifacts] ... gs', 'subPath': 'app-logs-dir'}, {'name': 'config', 'mountPath':
+'/opt/bitnami/mysql/conf/my.cnf', 'subPath': 'my.cnf'}, {'name': 'mysql-credentials', 'mountPath': '/opt/bitnami/mysql/secrets/'}]}]"
+(original value: "{'__hypothesis_key__': {'lifecycle': {'postStart': {'exec': {'command': None}}}}}") in "<unicode string>", line 417,
+column 7: containers: ^ (line: 417) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.mysql.primary.extraPodSpec.containers[*].lifecycle.postStart.exec.command | Status: failed
+
+Changed overrides (used together):
+- `$.mysql.primary.extraPodSpec.containers.__hypothesis_key__.lifecycle.postStart.exec.command = null`
+Absent from overrides: $.mysql.primary.extraPodSpec.containers["*"].lifecycle.postStart.exec.command. Defaults may still apply.
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
+#### E021 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ting a mapping in "<unicode string>", line 349, column 7: securityContext: ^ (line: 349)
+found duplicate key "securityContext" with value "{'fsGroup': 1001, 'fsGroupChangePolicy': 'Always', 'supplementalGroups': [], 'sysctls':
+[]}" (original value: "{'windowsOptions': {'runAsUserName': None}}") in "<unicode string>", line 369, column 7: securityContext: ^ (line:
+369) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName | Status: failed
+
+Changed overrides (used together):
+- `$.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName = null`
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
+#### E022 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[Diagnostic shortened; full text in artifacts] ... is-mysql', 'items': [{'key': 'mysql-root-password', 'path': 'mysql-root-password'},
+{'key': 'mysql-password', 'path': 'mysql-password'}]}}, {'name': 'empty-dir', 'emptyDir': {}}]" (original value: "{'__hypothesis_key__':
+{'projected': {'sources': {'__hypothesis_key__': {'secret': {'items': None}}}}}}") in "<unicode string>", line 530, column 7: volumes: ^
+(line: 530) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.mysql.primary.extraPodSpec.volumes[*].projected.sources[*].secret.items | Status: failed
+
+Changed overrides (used together):
+- `$.mysql.primary.extraPodSpec.volumes.__hypothesis_key__.projected.sources.__hypothesis_key__.secret.items = null`
+Absent from overrides: $.mysql.primary.extraPodSpec.volumes["*"].projected.sources["*"].secret.items. Defaults may still apply.
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
+#### E030 ([HH3001](#hh3001---template-accesses-a-missing-object))
+
+**Template accesses a missing object** (template / violation). Severity: **error**. Guard or default the parent object, or require it in the
+values schema.
+
+```text
+[HH3001] Error: ghost/charts/mysql/templates/networkpolicy.yaml:72:69 executing "ghost/charts/mysql/templates/networkpolicy.yaml" at
+<$value.port>: nil pointer evaluating interface {}.port
+```
+
+Phase: $.mysql.primary.service.extraPorts | Status: failed
+
+Changed overrides (used together):
+- `$.mysql.primary.service.extraPorts = [null]`
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
 ### [bitnami/gitea](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/gitea>)
 
 | Chart topology | Mutation sensitivity |
@@ -993,9 +1160,7 @@ Audit findings: 262. Full paths and template references are retained in the JSON
 
 Overview cell: 34
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 241. Full paths and template references are retained in the JSON report.
 
@@ -1015,9 +1180,7 @@ Audit findings: 241. Full paths and template references are retained in the JSON
 
 Overview cell: 35
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 266. Full paths and template references are retained in the JSON report.
 
@@ -1037,9 +1200,7 @@ Audit findings: 266. Full paths and template references are retained in the JSON
 
 Overview cell: 36
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 23
 
 Audit findings: 306. Full paths and template references are retained in the JSON report.
 
@@ -1061,9 +1222,7 @@ Audit findings: 306. Full paths and template references are retained in the JSON
 
 Overview cell: 37
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 292. Full paths and template references are retained in the JSON report.
 
@@ -1085,9 +1244,7 @@ Audit findings: 292. Full paths and template references are retained in the JSON
 
 Overview cell: 38
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 195. Full paths and template references are retained in the JSON report.
 
@@ -1109,9 +1266,7 @@ Audit findings: 195. Full paths and template references are retained in the JSON
 
 Overview cell: 39
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 1386. Full paths and template references are retained in the JSON report.
 
@@ -1131,9 +1286,7 @@ Audit findings: 1386. Full paths and template references are retained in the JSO
 
 Overview cell: 40
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 1540. Full paths and template references are retained in the JSON report.
 
@@ -1153,9 +1306,7 @@ Audit findings: 1540. Full paths and template references are retained in the JSO
 
 Overview cell: 41
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 1
 
 Audit findings: 277. Full paths and template references are retained in the JSON report.
 
@@ -1167,6 +1318,19 @@ Audit findings: 277. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.global.compatibility`: Undocumented values path (warning)
 - 271 additional audit findings in JSON.
 
+#### E026 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
+
+**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
+check the template and input schema.
+
+```text
+[HH1108] Custom resource grafana.integreatly.org/v1beta1/Grafana requires an explicit JSON schema in resource_schemas
+```
+
+Phase: chart | Status: failed
+
+No triggering values were recorded for this diagnostic.
+
 ### [bitnami/grafana-tempo](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/grafana-tempo>)
 
 | Chart topology | Mutation sensitivity |
@@ -1177,9 +1341,7 @@ Audit findings: 277. Full paths and template references are retained in the JSON
 
 Overview cell: 42
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 5
 
 Audit findings: 999. Full paths and template references are retained in the JSON report.
 
@@ -1201,9 +1363,7 @@ Audit findings: 999. Full paths and template references are retained in the JSON
 
 Overview cell: 43
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 186. Full paths and template references are retained in the JSON report.
 
@@ -1223,9 +1383,7 @@ Audit findings: 186. Full paths and template references are retained in the JSON
 
 Overview cell: 44
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 2
 
 Audit findings: 1499. Full paths and template references are retained in the JSON report.
 
@@ -1247,9 +1405,7 @@ Audit findings: 1499. Full paths and template references are retained in the JSO
 
 Overview cell: 45
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 425
 
 Audit findings: 345. Full paths and template references are retained in the JSON report.
 
@@ -1261,6 +1417,48 @@ Audit findings: 345. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.auth.enabled`: Undocumented values path (warning)
 - 339 additional audit findings in JSON.
 
+Configuration rejections: 0 excluded; 14 adjusted and tested; 14 Helm verification renders (separate from manifest-test attempts).
+
+#### E007 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on influxdb/templates/deployment.yaml: error converting YAML to JSON: yaml: line 36: did not find expected ',' or
+']'
+```
+
+Phase: $.image.pullSecrets | Status: failed
+
+Changed overrides (used together):
+- `$.image.pullSecrets = [[{}]]`
+
+Renderer random inputs (replay tape in artifacts):
+
+#### E008 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on influxdb/templates/deployment.yaml: error converting YAML to JSON: yaml: line 62: did not find expected node
+content
+```
+
+Phase: $.image | Status: failed
+
+Changed overrides (used together):
+- `$.global.security.allowInsecureImages = true (was false)`
+- `$.image.t1g = null`
+- `$.image.pullSecrets = [[]]`
+- `$.image.pullPolicy = "aUaI" (was "IfNotPresent")`
+- `$.image.registry = "," (was "docker.io")`
+- `$.image.approximation = false`
+- 11 more paths; see full input.
+
+Renderer random inputs (replay tape in artifacts):
+
 ### [bitnami/jaeger](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/jaeger>)
 
 | Chart topology | Mutation sensitivity |
@@ -1269,9 +1467,7 @@ Audit findings: 345. Full paths and template references are retained in the JSON
 
 Overview cell: 46
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 404. Full paths and template references are retained in the JSON report.
 
@@ -1291,9 +1487,7 @@ Audit findings: 404. Full paths and template references are retained in the JSON
 
 Overview cell: 47
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 31
 
 Audit findings: 328. Full paths and template references are retained in the JSON report.
 
@@ -1313,9 +1507,7 @@ Audit findings: 328. Full paths and template references are retained in the JSON
 
 Overview cell: 48
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 348. Full paths and template references are retained in the JSON report.
 
@@ -1335,9 +1527,7 @@ Audit findings: 348. Full paths and template references are retained in the JSON
 
 Overview cell: 49
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 21
 
 Audit findings: 625. Full paths and template references are retained in the JSON report.
 
@@ -1357,9 +1547,7 @@ Audit findings: 625. Full paths and template references are retained in the JSON
 
 Overview cell: 50
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 9
 
 Audit findings: 790. Full paths and template references are retained in the JSON report.
 
@@ -1379,9 +1567,7 @@ Audit findings: 790. Full paths and template references are retained in the JSON
 
 Overview cell: 51
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 26
 
 Audit findings: 448. Full paths and template references are retained in the JSON report.
 
@@ -1401,9 +1587,7 @@ Audit findings: 448. Full paths and template references are retained in the JSON
 
 Overview cell: 52
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 499. Full paths and template references are retained in the JSON report.
 
@@ -1425,9 +1609,7 @@ Audit findings: 499. Full paths and template references are retained in the JSON
 
 Overview cell: 53
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 257. Full paths and template references are retained in the JSON report.
 
@@ -1447,9 +1629,7 @@ Audit findings: 257. Full paths and template references are retained in the JSON
 
 Overview cell: 54
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 28
 
 Audit findings: 390. Full paths and template references are retained in the JSON report.
 
@@ -1469,9 +1649,7 @@ Audit findings: 390. Full paths and template references are retained in the JSON
 
 Overview cell: 55
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 23
 
 Audit findings: 324. Full paths and template references are retained in the JSON report.
 
@@ -1492,9 +1670,7 @@ Audit findings: 324. Full paths and template references are retained in the JSON
 
 Overview cell: 56
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 1
 
 Audit findings: 1172. Full paths and template references are retained in the JSON report.
 
@@ -1506,6 +1682,19 @@ Audit findings: 1172. Full paths and template references are retained in the JSO
 - [HH2001](#hh2001---undocumented-values-path) at `$.alertmanager.config.receivers`: Undocumented values path (warning)
 - 1166 additional audit findings in JSON.
 
+#### E027 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
+
+**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
+check the template and input schema.
+
+```text
+[HH1108] Custom resource monitoring.coreos.com/v1/Alertmanager requires an explicit JSON schema in resource_schemas
+```
+
+Phase: chart | Status: failed
+
+No triggering values were recorded for this diagnostic.
+
 ### [bitnami/kube-prometheus/charts/kube-prometheus-crds](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/kube-prometheus/charts/kube-prometheus-crds>)
 
 | Chart topology | Mutation sensitivity |
@@ -1514,13 +1703,24 @@ Audit findings: 1172. Full paths and template references are retained in the JSO
 
 Overview cell: 57
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 1
 
 Audit findings: 1. Full paths and template references are retained in the JSON report.
 
 - [HH2001](#hh2001---undocumented-values-path) at `$.exampleValue`: Undocumented values path (warning)
+
+#### E024 ([HH1107](#hh1107---empty-resource-bundle))
+
+**Empty resource bundle** (manifest / violation). Severity: **error**. Check resource activation; ignore this contract if an empty chart is
+intentional.
+
+```text
+[HH1107] chart rendered no resources
+```
+
+Phase: chart | Status: failed
+
+No triggering values were recorded for this diagnostic.
 
 ### [bitnami/kube-state-metrics](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/kube-state-metrics>)
 
@@ -1532,9 +1732,7 @@ Audit findings: 1. Full paths and template references are retained in the JSON r
 
 Overview cell: 58
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 208. Full paths and template references are retained in the JSON report.
 
@@ -1554,9 +1752,7 @@ Audit findings: 208. Full paths and template references are retained in the JSON
 
 Overview cell: 59
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 1
 
 Audit findings: 550. Full paths and template references are retained in the JSON report.
 
@@ -1568,6 +1764,19 @@ Audit findings: 550. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.apiserver.autoscaling.hpa`: Undocumented values path (warning)
 - 544 additional audit findings in JSON.
 
+#### E028 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
+
+**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
+check the template and input schema.
+
+```text
+[HH1108] Custom resource ray.io/v1/RayCluster requires an explicit JSON schema in resource_schemas
+```
+
+Phase: chart | Status: failed
+
+No triggering values were recorded for this diagnostic.
+
 ### [bitnami/kubernetes-event-exporter](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/kubernetes-event-exporter>)
 
 | Chart topology | Mutation sensitivity |
@@ -1578,9 +1787,7 @@ Audit findings: 550. Full paths and template references are retained in the JSON
 
 Overview cell: 60
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 219. Full paths and template references are retained in the JSON report.
 
@@ -1602,9 +1809,7 @@ Audit findings: 219. Full paths and template references are retained in the JSON
 
 Overview cell: 61
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 219. Full paths and template references are retained in the JSON report.
 
@@ -1624,9 +1829,7 @@ Audit findings: 219. Full paths and template references are retained in the JSON
 
 Overview cell: 62
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 21
 
 Audit findings: 232. Full paths and template references are retained in the JSON report.
 
@@ -1651,9 +1854,7 @@ Audit findings: 232. Full paths and template references are retained in the JSON
 
 Overview cell: 63
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 31
 
 Audit findings: 303. Full paths and template references are retained in the JSON report.
 
@@ -1673,9 +1874,7 @@ Audit findings: 303. Full paths and template references are retained in the JSON
 
 Overview cell: 64
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 752. Full paths and template references are retained in the JSON report.
 
@@ -1695,9 +1894,7 @@ Audit findings: 752. Full paths and template references are retained in the JSON
 
 Overview cell: 65
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 16
 
 Audit findings: 357. Full paths and template references are retained in the JSON report.
 
@@ -1719,9 +1916,7 @@ Audit findings: 357. Full paths and template references are retained in the JSON
 
 Overview cell: 66
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 23
 
 Audit findings: 276. Full paths and template references are retained in the JSON report.
 
@@ -1741,9 +1936,7 @@ Audit findings: 276. Full paths and template references are retained in the JSON
 
 Overview cell: 67
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 65
 
 Audit findings: 395. Full paths and template references are retained in the JSON report.
 
@@ -1765,9 +1958,7 @@ Audit findings: 395. Full paths and template references are retained in the JSON
 
 Overview cell: 68
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 159. Full paths and template references are retained in the JSON report.
 
@@ -1787,9 +1978,7 @@ Audit findings: 159. Full paths and template references are retained in the JSON
 
 Overview cell: 69
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 716. Full paths and template references are retained in the JSON report.
 
@@ -1809,9 +1998,7 @@ Audit findings: 716. Full paths and template references are retained in the JSON
 
 Overview cell: 70
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 8
 
 Audit findings: 332. Full paths and template references are retained in the JSON report.
 
@@ -1831,9 +2018,7 @@ Audit findings: 332. Full paths and template references are retained in the JSON
 
 Overview cell: 71
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 41
 
 Audit findings: 794. Full paths and template references are retained in the JSON report.
 
@@ -1853,9 +2038,7 @@ Audit findings: 794. Full paths and template references are retained in the JSON
 
 Overview cell: 72
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 647. Full paths and template references are retained in the JSON report.
 
@@ -1875,9 +2058,7 @@ Audit findings: 647. Full paths and template references are retained in the JSON
 
 Overview cell: 73
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 300. Full paths and template references are retained in the JSON report.
 
@@ -1899,9 +2080,7 @@ Audit findings: 300. Full paths and template references are retained in the JSON
 
 Overview cell: 74
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 135. Full paths and template references are retained in the JSON report.
 
@@ -1921,9 +2100,7 @@ Audit findings: 135. Full paths and template references are retained in the JSON
 
 Overview cell: 75
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 44
 
 Audit findings: 512. Full paths and template references are retained in the JSON report.
 
@@ -1936,6 +2113,26 @@ Audit findings: 512. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.auth.customPasswordFiles.root`: Undocumented values path (warning)
 - 506 additional audit findings in JSON.
 
+#### E018 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ', 'subPath': 'app-logs-dir'}, {'name': 'config', 'mountPath':
+'/opt/bitnami/mysql/conf/my.cnf', 'subPath': 'my.cnf'}, {'name': 'mysql-credentials', 'mountPath': '/opt/bitnami/mysql/secrets/'}]}]"
+(original value: "{'__hypothesis_key__': {'volumeMounts': {'__hypothesis_key__': {'subPath': None}}}}") in "<unicode string>", line 305,
+column 7: containers: ^ (line: 305) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.primary.extraPodSpec.containers[*].volumeMounts[*].subPath | Status: failed
+
+Changed overrides (used together):
+- `$.primary.extraPodSpec.containers.__hypothesis_key__.volumeMounts.__hypothesis_key__.subPath = null`
+Absent from overrides: $.primary.extraPodSpec.containers["*"].volumeMounts["*"].subPath. Defaults may still apply.
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
 ### [bitnami/nats](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/nats>)
 
 | Chart topology | Mutation sensitivity |
@@ -1944,9 +2141,7 @@ Audit findings: 512. Full paths and template references are retained in the JSON
 
 Overview cell: 76
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 23
 
 Audit findings: 307. Full paths and template references are retained in the JSON report.
 
@@ -1966,9 +2161,7 @@ Audit findings: 307. Full paths and template references are retained in the JSON
 
 Overview cell: 77
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 127
 
 Audit findings: 251. Full paths and template references are retained in the JSON report.
 
@@ -1980,6 +2173,8 @@ Audit findings: 251. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.auth.existingSecret`: Undocumented values path (warning)
 - 245 additional audit findings in JSON.
 
+Configuration rejections: 0 excluded; 1 adjusted and tested; 1 Helm verification renders (separate from manifest-test attempts).
+
 ### [bitnami/nessie](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/nessie>)
 
 | Chart topology | Mutation sensitivity |
@@ -1988,9 +2183,7 @@ Audit findings: 251. Full paths and template references are retained in the JSON
 
 Overview cell: 78
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 332. Full paths and template references are retained in the JSON report.
 
@@ -2010,9 +2203,7 @@ Audit findings: 332. Full paths and template references are retained in the JSON
 
 Overview cell: 79
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 23
 
 Audit findings: 321. Full paths and template references are retained in the JSON report.
 
@@ -2034,9 +2225,7 @@ Audit findings: 321. Full paths and template references are retained in the JSON
 
 Overview cell: 80
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 180. Full paths and template references are retained in the JSON report.
 
@@ -2056,9 +2245,7 @@ Audit findings: 180. Full paths and template references are retained in the JSON
 
 Overview cell: 81
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 223. Full paths and template references are retained in the JSON report.
 
@@ -2078,9 +2265,7 @@ Audit findings: 223. Full paths and template references are retained in the JSON
 
 Overview cell: 82
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 271. Full paths and template references are retained in the JSON report.
 
@@ -2102,9 +2287,7 @@ Audit findings: 271. Full paths and template references are retained in the JSON
 
 Overview cell: 83
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 93
 
 Audit findings: 1111. Full paths and template references are retained in the JSON report.
 
@@ -2124,9 +2307,7 @@ Audit findings: 1111. Full paths and template references are retained in the JSO
 
 Overview cell: 84
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 379. Full paths and template references are retained in the JSON report.
 
@@ -2148,9 +2329,7 @@ Audit findings: 379. Full paths and template references are retained in the JSON
 
 Overview cell: 85
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 37
 
 Audit findings: 246. Full paths and template references are retained in the JSON report.
 
@@ -2170,9 +2349,7 @@ Audit findings: 246. Full paths and template references are retained in the JSON
 
 Overview cell: 86
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 1
 
 Audit findings: 327. Full paths and template references are retained in the JSON report.
 
@@ -2184,6 +2361,19 @@ Audit findings: 327. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.concierge.automountServiceAccountToken`: Undocumented values path (warning)
 - 321 additional audit findings in JSON.
 
+#### E025 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
+
+**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
+check the template and input schema.
+
+```text
+[HH1108] Custom resource config.concierge.pinniped.dev/v1alpha1/CredentialIssuer requires an explicit JSON schema in resource_schemas
+```
+
+Phase: chart | Status: failed
+
+No triggering values were recorded for this diagnostic.
+
 ### [bitnami/postgresql](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/postgresql>)
 
 | Chart topology | Mutation sensitivity |
@@ -2192,9 +2382,7 @@ Audit findings: 327. Full paths and template references are retained in the JSON
 
 Overview cell: 87
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 78
 
 Audit findings: 674. Full paths and template references are retained in the JSON report.
 
@@ -2206,6 +2394,23 @@ Audit findings: 674. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.audit.logTimezone`: Undocumented values path (warning)
 - 668 additional audit findings in JSON.
 
+#### E001 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on postgresql/templates/primary/statefulset.yaml: error converting YAML to JSON: yaml: line 190: found
+unexpected end of stream
+```
+
+Phase: $.primary.existingConfigmap | Status: failed
+
+Changed overrides (used together):
+- `$.primary.existingConfigmap = "'" (was "")`
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
 ### [bitnami/postgresql-ha](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/postgresql-ha>)
 
 | Chart topology | Mutation sensitivity |
@@ -2214,9 +2419,7 @@ Audit findings: 674. Full paths and template references are retained in the JSON
 
 Overview cell: 88
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 10
 
 Audit findings: 732. Full paths and template references are retained in the JSON report.
 
@@ -2238,9 +2441,7 @@ Audit findings: 732. Full paths and template references are retained in the JSON
 
 Overview cell: 89
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 193. Full paths and template references are retained in the JSON report.
 
@@ -2264,9 +2465,7 @@ Audit findings: 193. Full paths and template references are retained in the JSON
 
 Overview cell: 90
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 310
 
 Audit findings: 219. Full paths and template references are retained in the JSON report.
 
@@ -2278,6 +2477,44 @@ Audit findings: 219. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.cloneFilesFromGit.extraVolumeMounts`: Undocumented values path (warning)
 - 213 additional audit findings in JSON.
 
+Configuration rejections: 0 excluded; 19 adjusted and tested; 19 Helm verification renders (separate from manifest-test attempts).
+
+#### E009 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on pytorch/templates/deployment.yaml: error converting YAML to JSON: yaml: line 32: did not find expected ',' or
+']'
+```
+
+Phase: $.image.pullSecrets | Status: failed
+
+Changed overrides (used together):
+- `$.image.pullSecrets = [[{}]]`
+
+Renderer random inputs (replay tape in artifacts):
+
+#### E010 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on pytorch/templates/deployment.yaml: error converting YAML to JSON: yaml: line 57: found character that cannot
+start any token
+```
+
+Phase: $.image | Status: failed
+
+Changed overrides (used together):
+- `$.image.digest = "0" (was "")`
+- `$.image.registry = "" (was "docker.io")`
+- `$.image.repository = "" (was "bitnami/pytorch")`
+
+Renderer random inputs (replay tape in artifacts):
+
 ### [bitnami/rabbitmq](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/rabbitmq>)
 
 | Chart topology | Mutation sensitivity |
@@ -2286,9 +2523,7 @@ Audit findings: 219. Full paths and template references are retained in the JSON
 
 Overview cell: 91
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 407. Full paths and template references are retained in the JSON report.
 
@@ -2308,9 +2543,7 @@ Audit findings: 407. Full paths and template references are retained in the JSON
 
 Overview cell: 92
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 20
 
 Audit findings: 387. Full paths and template references are retained in the JSON report.
 
@@ -2322,6 +2555,29 @@ Audit findings: 387. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.clusterOperator.containerPorts`: Undocumented values path (warning)
 - 381 additional audit findings in JSON.
 
+#### E029 ([HH1109](#hh1109---invalid-manifest-field-type))
+
+**Invalid manifest field type** (manifest / violation). Severity: **error**. Check the field named in Helm's decoding error and constrain
+its values to the required type.
+
+```text
+[HH1109] Error: YAML parse error on rabbitmq-cluster-operator/templates/cluster-operator/service-account.yaml: error unmarshaling JSON:
+while decoding JSON: json: cannot unmarshal object into Go struct field .metadata.annotations."2a}#^aZ[7 of type string
+```
+
+Phase: $.clusterOperator.serviceAccount | Status: failed
+
+Changed overrides (used together):
+- `$.clusterOperator.serviceAccount.annotations.http = null`
+- `$.clusterOperator.serviceAccount.annotations.E = 1307674368000`
+- `$.clusterOperator.serviceAccount.annotations["I("].a = ["aaE"]`
+- `$.clusterOperator.serviceAccount.annotations["I("].ajaaBaaz = []`
+- `$.clusterOperator.serviceAccount.annotations["I("].aaaa = {}`
+- `$.clusterOperator.serviceAccount.annotations["\"2a}#^aZ[7"]["aa\raa"].g4aa = [4.363245697574542e-147, null, true]`
+- 5 more paths; see full input.
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: genCA
+
 ### [bitnami/redis](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/redis>)
 
 | Chart topology | Mutation sensitivity |
@@ -2330,9 +2586,7 @@ Audit findings: 387. Full paths and template references are retained in the JSON
 
 Overview cell: 93
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 316
 
 Audit findings: 317. Full paths and template references are retained in the JSON report.
 
@@ -2344,6 +2598,67 @@ Audit findings: 317. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.configmapChecksumAnnotations`: Undocumented values path (warning)
 - 311 additional audit findings in JSON.
 
+Configuration rejections: 0 excluded; 0 adjusted and tested; 0 Helm verification renders (separate from manifest-test attempts).
+
+The template rejected inputs admitted by the declared values schema; these remain reported failures.
+
+#### E002 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on redis/templates/master/application.yaml: error converting YAML to JSON: yaml: line 172: could not find
+expected ':'
+```
+
+Phase: $.master.extraVolumes | Status: failed
+
+Changed overrides (used together):
+- `$.master.extraVolumes = "0" (was [])`
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
+#### E003 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] Error: YAML parse error on redis/templates/master/application.yaml: error converting YAML to JSON: yaml: line 66: mapping values
+are not allowed in this context
+```
+
+Phase: $.image | Status: failed
+
+Changed overrides (used together):
+- `$.image["JaaoUQ+c}\"p"] = null`
+- `$.image[""] = null`
+- ``$.image.pullPolicy = "L`" (was "IfNotPresent")``
+- `$.image["6"] = [null]`
+- `$.image.tag = "" (was "8.2.1-debian-12-r0")`
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
+#### E031 ([HH3001](#hh3001---template-accesses-a-missing-object))
+
+**Template accesses a missing object** (template / violation). Severity: **error**. Guard or default the parent object, or require it in the
+values schema.
+
+```text
+[HH3001] Error: redis/templates/replicas/application.yaml:49:38 executing "redis/templates/replicas/application.yaml" at <include (print
+$.Template.BasePath "/configmap.yaml") .>: error calling include: redis/templates/configmap.yaml:61:25 executing
+"redis/templates/configmap.yaml" at <.password>: nil pointer evaluating interface {}.password
+```
+
+Phase: $.auth.acl | Status: failed
+
+Changed overrides (used together):
+- `$.auth.acl.enabled = true (was false)`
+- `$.auth.acl.users = [null]`
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
 ### [bitnami/redis-cluster](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/redis-cluster>)
 
 | Chart topology | Mutation sensitivity |
@@ -2354,9 +2669,7 @@ Audit findings: 317. Full paths and template references are retained in the JSON
 
 Overview cell: 94
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 21
 
 Audit findings: 371. Full paths and template references are retained in the JSON report.
 
@@ -2377,9 +2690,7 @@ Audit findings: 371. Full paths and template references are retained in the JSON
 
 Overview cell: 95
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 18
 
 Audit findings: 374. Full paths and template references are retained in the JSON report.
 
@@ -2399,9 +2710,7 @@ Audit findings: 374. Full paths and template references are retained in the JSON
 
 Overview cell: 96
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 277. Full paths and template references are retained in the JSON report.
 
@@ -2421,9 +2730,7 @@ Audit findings: 277. Full paths and template references are retained in the JSON
 
 Overview cell: 97
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 13
 
 Audit findings: 390. Full paths and template references are retained in the JSON report.
 
@@ -2445,9 +2752,7 @@ Audit findings: 390. Full paths and template references are retained in the JSON
 
 Overview cell: 98
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 377
 
 Audit findings: 213. Full paths and template references are retained in the JSON report.
 
@@ -2459,6 +2764,67 @@ Audit findings: 213. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.command`: Undocumented values path (warning)
 - 207 additional audit findings in JSON.
 
+Configuration rejections: 0 excluded; 11 adjusted and tested; 11 Helm verification renders (separate from manifest-test attempts).
+
+#### E011 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on sealed-secrets/templates/deployment.yaml: error converting YAML to JSON: yaml: line 29: did not find expected
+',' or ']'
+```
+
+Phase: $.image.pullSecrets | Status: failed
+
+Changed overrides (used together):
+- `$.image.pullSecrets = [[{}]]`
+
+Renderer random inputs (replay tape in artifacts):
+
+Phase: $.global.imagePullSecrets | Status: failed
+
+Changed overrides (used together):
+- `$.global.imagePullSecrets = [[{}]]`
+
+Renderer random inputs (replay tape in artifacts):
+
+#### E012 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on sealed-secrets/templates/deployment.yaml: error converting YAML to JSON: yaml: line 52: mapping values are not
+allowed in this context
+```
+
+Phase: $.image | Status: failed
+
+Changed overrides (used together):
+- `$.image.tag = "" (was "0.31.0-debian-12-r0")`
+
+Renderer random inputs (replay tape in artifacts):
+
+#### E013 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] YAML parse error on sealed-secrets/templates/deployment.yaml: error converting YAML to JSON: yaml: line 69: did not find expected
+key
+```
+
+Phase: $.image.pullSecrets[*] | Status: failed
+
+Changed overrides (used together):
+- `$.image.pullSecrets = ["\""]`
+Absent from overrides: $.image.pullSecrets["*"]. Defaults may still apply.
+
+Renderer random inputs (replay tape in artifacts):
+
 ### [bitnami/seaweedfs](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/seaweedfs>)
 
 | Chart topology | Mutation sensitivity |
@@ -2467,9 +2833,7 @@ Audit findings: 213. Full paths and template references are retained in the JSON
 
 Overview cell: 99
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 2
 
 Audit findings: 1241. Full paths and template references are retained in the JSON report.
 
@@ -2489,9 +2853,7 @@ Audit findings: 1241. Full paths and template references are retained in the JSO
 
 Overview cell: 100
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 30
 
 Audit findings: 411. Full paths and template references are retained in the JSON report.
 
@@ -2511,9 +2873,7 @@ Audit findings: 411. Full paths and template references are retained in the JSON
 
 Overview cell: 101
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 33
 
 Audit findings: 419. Full paths and template references are retained in the JSON report.
 
@@ -2535,9 +2895,7 @@ Audit findings: 419. Full paths and template references are retained in the JSON
 
 Overview cell: 102
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 83
 
 Audit findings: 350. Full paths and template references are retained in the JSON report.
 
@@ -2557,9 +2915,7 @@ Audit findings: 350. Full paths and template references are retained in the JSON
 
 Overview cell: 103
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 7
 
 Audit findings: 752. Full paths and template references are retained in the JSON report.
 
@@ -2581,9 +2937,7 @@ Audit findings: 752. Full paths and template references are retained in the JSON
 
 Overview cell: 104
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 23
 
 Audit findings: 172. Full paths and template references are retained in the JSON report.
 
@@ -2603,9 +2957,7 @@ Audit findings: 172. Full paths and template references are retained in the JSON
 
 Overview cell: 105
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 43
 
 Audit findings: 1750. Full paths and template references are retained in the JSON report.
 
@@ -2625,9 +2977,7 @@ Audit findings: 1750. Full paths and template references are retained in the JSO
 
 Overview cell: 106
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 19
 
 Audit findings: 266. Full paths and template references are retained in the JSON report.
 
@@ -2639,6 +2989,47 @@ Audit findings: 266. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.command`: Undocumented values path (warning)
 - 260 additional audit findings in JSON.
 
+#### E016 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[Diagnostic shortened; full text in artifacts] ... ity': None, 'podAntiAffinity': {'preferredDuringSchedulingIgnoredDuringExecution':
+[{'podAffinityTerm': {'labelSelector': {'matchLabels': {'app.kubernetes.io/instance': 'hypothesis', 'app.kubernetes.io/name': 'tomcat'}},
+'topologyKey': 'kubernetes.io/hostname'}, 'weight': 1}]}, 'nodeAffinity': None}") in "<unicode string>", line 266, column 7: affinity: ^
+(line: 266) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[*].preference | Status: failed
+
+Changed overrides (used together):
+- `$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.__hypothesis_key__.preference = {}`
+Absent from overrides: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution["*"].preference. Defaults may
+still apply.
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
+#### E017 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] invalid rendered YAML: ruamel: while constructing a mapping in "<unicode string>", line 156, column 7:
+automountServiceAccountToken: false ^ (line: 156) found duplicate key "initContainers" with value "{'__hypothesis_key__': {'envFrom':
+{'__hypothesis_key__': {'configMapRef': {'name': None}}}}}" (original value: "None") in "<unicode string>", line 266, column 7:
+initContainers: ^ (line: 266) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
+```
+
+Phase: $.extraPodSpec.initContainers[*].envFrom[*].configMapRef.name | Status: failed
+
+Changed overrides (used together):
+- `$.extraPodSpec.initContainers.__hypothesis_key__.envFrom.__hypothesis_key__.configMapRef.name = null`
+Absent from overrides: $.extraPodSpec.initContainers["*"].envFrom["*"].configMapRef.name. Defaults may still apply.
+
+Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
+
 ### [bitnami/valkey](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/valkey>)
 
 | Chart topology | Mutation sensitivity |
@@ -2647,9 +3038,7 @@ Audit findings: 266. Full paths and template references are retained in the JSON
 
 Overview cell: 107
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 31
 
 Audit findings: 686. Full paths and template references are retained in the JSON report.
 
@@ -2671,9 +3060,7 @@ Audit findings: 686. Full paths and template references are retained in the JSON
 
 Overview cell: 108
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 41
 
 Audit findings: 359. Full paths and template references are retained in the JSON report.
 
@@ -2696,9 +3083,7 @@ Audit findings: 359. Full paths and template references are retained in the JSON
 
 Overview cell: 109
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 1
 
 Audit findings: 557. Full paths and template references are retained in the JSON report.
 
@@ -2720,9 +3105,7 @@ Audit findings: 557. Full paths and template references are retained in the JSON
 
 Overview cell: 110
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 8
 
 Audit findings: 1110. Full paths and template references are retained in the JSON report.
 
@@ -2745,9 +3128,7 @@ Audit findings: 1110. Full paths and template references are retained in the JSO
 
 Overview cell: 111
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 11
 
 Audit findings: 130. Full paths and template references are retained in the JSON report.
 
@@ -2769,9 +3150,7 @@ Audit findings: 130. Full paths and template references are retained in the JSON
 
 Overview cell: 112
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 31
 
 Audit findings: 233. Full paths and template references are retained in the JSON report.
 
@@ -2791,9 +3170,7 @@ Audit findings: 233. Full paths and template references are retained in the JSON
 
 Overview cell: 113
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 24
 
 Audit findings: 406. Full paths and template references are retained in the JSON report.
 
@@ -2813,9 +3190,7 @@ Audit findings: 406. Full paths and template references are retained in the JSON
 
 Overview cell: 114
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: failed | Attempts: 1
 
 Audit findings: 380. Full paths and template references are retained in the JSON report.
 
@@ -2827,6 +3202,20 @@ Audit findings: 380. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.hpa`: Undocumented values path (warning)
 - 374 additional audit findings in JSON.
 
+#### E014 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
+
+**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
+including quoting and indentation.
+
+```text
+[HH1101] invalid rendered YAML: ruamel: more indented follow up line than first in a block scalar in "<unicode string>", line 474, column
+15: set -o errexit ^ (line: 474)
+```
+
+Phase: chart | Status: failed
+
+No triggering values were recorded for this diagnostic.
+
 ### [bitnami/zookeeper](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/zookeeper>)
 
 | Chart topology | Mutation sensitivity |
@@ -2837,9 +3226,7 @@ Audit findings: 380. Full paths and template references are retained in the JSON
 
 Overview cell: 115
 
-Status: unsupported-schema | Attempts: N/A
-
-Testing limitation: permutations need closed objects at (); set additionalProperties: false
+Status: time-limit | Attempts: 43
 
 Audit findings: 319. Full paths and template references are retained in the JSON report.
 
@@ -3434,6 +3821,46 @@ Both heatmap axes use the same field numbers for each chart.
 HH codes identify finding categories. Numbered E entries, when present, identify recorded diagnostics.
 Severities below are defaults; configured overrides are shown with the findings above.
 
+### HH1101 - Invalid YAML in rendered output
+
+Default severity: **error** | Category: manifest | Evidence type: violation
+
+The YAML parser rejects rendered output, or Helm reports a YAML parse error.
+
+Suggested action: Inspect the failing YAML and template interpolation, including quoting and indentation.
+
+### HH1105 - Missing resource name
+
+Default severity: **error** | Category: manifest | Evidence type: violation
+
+The resource fails the tool's nonempty metadata.name contract.
+
+Suggested action: Provide a name in each resource branch; ignore this check if your workflow intentionally uses generated names.
+
+### HH1107 - Empty resource bundle
+
+Default severity: **error** | Category: manifest | Evidence type: violation
+
+The active test requires resources but this configuration renders none.
+
+Suggested action: Check resource activation; ignore this contract if an empty chart is intentional.
+
+### HH1108 - Kubernetes schema validation failed
+
+Default severity: **error** | Category: manifest | Evidence type: violation
+
+The configured Kubernetes validator rejects the output.
+
+Suggested action: Use the validator's field path and expected type to check the template and input schema.
+
+### HH1109 - Invalid manifest field type
+
+Default severity: **error** | Category: manifest | Evidence type: violation
+
+Helm parses the YAML but cannot decode a field into its required manifest type.
+
+Suggested action: Check the field named in Helm's decoding error and constrain its values to the required type.
+
 ### HH2001 - Undocumented values path
 
 Default severity: **warning** | Category: values | Evidence type: warning
@@ -3475,3 +3902,11 @@ An object permits unspecified entries without named fields, patterned fields or 
 
 Suggested action: Describe fields with properties, patternProperties or typed additionalProperties. Ignore
 [HH2006](#hh2006---opaque-object-schema) for intentional free-form configuration; tests still sample those values.
+
+### HH3001 - Template accesses a missing object
+
+Default severity: **error** | Category: template | Evidence type: violation
+
+Helm reports a nil pointer while evaluating a template field.
+
+Suggested action: Guard or default the parent object, or require it in the values schema.

@@ -188,6 +188,8 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--no-cache] [--jobs JOBS] [--permutations PERMUTATIONS]
                             [--filter] [--fail [{info,warning,error}]] [--seed SEED]
                             [--build-dependencies | --no-build-dependencies]
+                            [--max-mutations N]
+                            [--sensitivity-timeout SENSITIVITY_TIMEOUT]
                             [--filter-adaptive]
                             [--sampling-calibration SAMPLING_CALIBRATION]
                             [--sensitivity-order N] [--sample-random PERCENT]
@@ -252,6 +254,11 @@ options:
   --seed SEED
   --build-dependencies, --no-build-dependencies
                         build locked dependencies in temporary chart copies
+  --max-mutations N     with --report, measure sensitivity for up to N fields per
+                        chart and all their pairs (opt-in)
+  --sensitivity-timeout SENSITIVITY_TIMEOUT
+                        additional sensitivity measurement budget per chart with
+                        --max-mutations (default: 3m)
   --filter-adaptive     enable --filter and retain 70% subject to measured topology
                         sample floors; unmatched charts keep all filtered cases
   --sampling-calibration SAMPLING_CALIBRATION
@@ -266,7 +273,7 @@ options:
                         (default: 128)
   --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
                         seeded random (default), linear, root-first, leaf-first, or
-                        sensitivity-first for finite --permutations tests
+                        sensitivity-first (finite coverage defaults to pairs)
   --validate-schemas    validate rendered resources against the local Kubernetes
                         schema cache
   --schema-version SCHEMA_VERSION
@@ -491,7 +498,7 @@ options:
                         (default: 128)
   --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
                         seeded random (default), linear, root-first, leaf-first, or
-                        sensitivity-first for finite --permutations tests
+                        sensitivity-first (finite coverage defaults to pairs)
   --validate-schemas    validate rendered resources against the local Kubernetes
                         schema cache
   --schema-version SCHEMA_VERSION
@@ -553,8 +560,9 @@ options:
 <summary>helm hypothesis test</summary>
 
 ~~~text
-usage: helm hypothesis test [-h] [--report [PATH]] [--values VALUES]
-                            [--chart-timeout CHART_TIMEOUT]
+usage: helm hypothesis test [-h] [--report [PATH]] [--max-mutations N]
+                            [--sensitivity-timeout SENSITIVITY_TIMEOUT]
+                            [--values VALUES] [--chart-timeout CHART_TIMEOUT]
                             [--scan-timeout SCAN_TIMEOUT]
                             [--build-dependencies | --no-build-dependencies]
                             [--fail [{info,warning,error}]]
@@ -603,6 +611,11 @@ options:
   -h, --help            show this help message and exit
   --report [PATH]       write combined Markdown/PDF; default:
                         docs/reports/<dir>_<epoch>_report
+  --max-mutations N     with --report, measure sensitivity for up to N fields per
+                        chart and all their pairs (opt-in)
+  --sensitivity-timeout SENSITIVITY_TIMEOUT
+                        additional sensitivity measurement budget per chart with
+                        --max-mutations (default: 3m)
   --values VALUES       baseline file relative to each chart, or an absolute path
   --chart-timeout CHART_TIMEOUT
                         property-test budget per discovered chart (default: 3m)
@@ -658,7 +671,7 @@ options:
                         (default: 128)
   --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
                         seeded random (default), linear, root-first, leaf-first, or
-                        sensitivity-first for finite --permutations tests
+                        sensitivity-first (finite coverage defaults to pairs)
   --timeout TIMEOUT
   --helm HELM
   --release RELEASE

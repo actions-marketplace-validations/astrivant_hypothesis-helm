@@ -82,13 +82,21 @@ Per-path dry runs list the same ordered properties without executing them.
 Use `sensitivity-first` when you want measured interactions to determine which retained configurations run first:
 
 ```sh
+helm hypothesis test ./chart --traversal-strategy sensitivity-first --seed 42
 helm hypothesis test ./chart --permutations 3 --traversal-strategy sensitivity-first --sensitivity-order 2 --seed 42
 ```
 
-Here the tests cover triples, while sensitivity analysis considers individual changes and pairs. `--sensitivity-order N`
+The first command uses the default pairwise coverage (`--permutations 2`). In the second, tests cover triples,
+while sensitivity analysis considers individual changes and pairs. `--sensitivity-order N`
 sets the maximum number of changed paths in an analyzed group, independently of coverage. It must be between 1 and
 `--permutations`; the default is the smaller of 2 and the requested permutation strength. Increasing it never authorizes
 analysis above the interaction order selected for bug testing.
+
+Sensitivity ordering still needs a finite input domain. With automatic coverage, recursive `test` and remote `scan`
+use seeded random path testing for charts whose domains cannot be enumerated. They log this fallback and record its
+reason and effective traversal in the chart report. An explicit `--permutations N` continues to require finite coverage;
+it does not silently fall back. Saved suites and explicit `--paths`, `--whole-chart`, and `--exhaustive` modes cannot use
+`sensitivity-first`.
 
 Filtering and sampling select the configurations first. The scheduler then finds baseline-relative groups whose reference
 configurations survived selection. Measuring a pair requires the baseline, each change separately, and both changes together.

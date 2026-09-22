@@ -72,7 +72,7 @@ def test_chart_links_preserve_declared_sources_and_artifact_fallback(tmp_path: P
     chart: dict[str, object] = {"chart": "demo", "artifacts": str(tmp_path / "saved inputs")}
     source: dict[str, object] = {"url": "https://github.com/example/charts"}
     report = tmp_path / "report.md"
-    assert chart_heading(chart, source, report) == "### [demo](<saved%20inputs>)"
+    assert chart_heading(chart, source, report) == "### demo"
     assert chart_heading(chart, source, report, artifact_links=False) == "### demo"
     chart["artifacts"] = "https://example.org/runs/123/demo"
     assert chart_heading(chart, source, report) == "### [demo](<https://example.org/runs/123/demo>)"

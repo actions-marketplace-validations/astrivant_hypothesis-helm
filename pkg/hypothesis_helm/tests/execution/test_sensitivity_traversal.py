@@ -72,7 +72,7 @@ def test_missing_references_are_unknown() -> None:
 
 @pytest.mark.parametrize(
     ("strategy", "order", "permutations"),
-    [("random", 2, 2), ("sensitivity-first", 3, 2), ("sensitivity-first", 0, 2), ("sensitivity-first", 2, None)],
+    [("random", 2, 2), ("sensitivity-first", 3, 2), ("sensitivity-first", 0, 2), ("sensitivity-first", 3, None)],
 )
 def test_invalid_sensitivity_bound(strategy: str, order: int, permutations: int | None) -> None:
     """
@@ -137,7 +137,8 @@ def chart_fixture(tmp_path: Path) -> Chart:
 
 
 @pytest.mark.parametrize("expansion", [False, True])
-def test_profile_cases_are_checked_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, expansion: bool) -> None:
+@pytest.mark.parametrize("permutations", [None, 2])
+def test_profile_cases_are_checked_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, expansion: bool, permutations: int | None) -> None:
     """
     Reuse successful checked renders in ranking, including the failure-expansion executor.
 
@@ -145,6 +146,7 @@ def test_profile_cases_are_checked_once(tmp_path: Path, monkeypatch: pytest.Monk
         tmp_path (Path): Temporary chart.
         monkeypatch (pytest.MonkeyPatch): Deterministic renderer and application property.
         expansion (bool): Whether failure-region expansion is enabled.
+        permutations (int | None): Explicit pair coverage or the same automatic default.
 
     Returns:
         None: Every finite input is rendered and checked exactly once, with measured pair evidence.
@@ -171,7 +173,7 @@ def test_profile_cases_are_checked_once(tmp_path: Path, monkeypatch: pytest.Monk
     monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", render)
     result = check_chart(
         chart,
-        permutations=2,
+        permutations=permutations,
         traversal_strategy="sensitivity-first",
         sensitivity_order=2,
         properties=(tested.append,),
@@ -295,6 +297,109 @@ def test_cli_rejects_analysis_above_permutations(capsys: pytest.CaptureFixture[s
     with pytest.raises(SystemExit, match="2"):
         main(["test", "missing", "--permutations", "2", "--traversal-strategy", "sensitivity-first", "--sensitivity-order", "3"])
     assert "between 1 and --permutations" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("order", "strength", "expected"), [(None, None, 2), (1, None, 1), (None, 1, 1), (None, 3, 2), (3, 3, 3)])
+def test_sensitivity_defaults_to_requested_coverage(order: int | None, strength: int | None, expected: int) -> None:
+    """
+    Resolve missing sensitivity and coverage settings from the same pairwise default.
+
+    Args:
+        order (int | None): Optional measurement order.
+        strength (int | None): Optional finite interaction coverage.
+        expected (int): Resolved measurement order.
+
+    Returns:
+        None: Analysis remains bounded by explicit or default bug-test coverage.
+    """
+    assert validate_order("sensitivity-first", order, strength) == expected
+
+
+@pytest.mark.parametrize("mode", ["single", "recursive", "remote"])
+def test_cli_uses_default_pairwise_coverage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], mode: str
+) -> None:
+    """
+    Accept sensitivity-first without spelling out the pairwise permutation default.
+
+    Args:
+        tmp_path (Path): Finite chart fixture and output directory.
+        monkeypatch (pytest.MonkeyPatch): Capture finite execution and avoid remote network calls.
+        capsys (pytest.CaptureFixture[str]): Capture the scan or single-chart JSON result.
+        mode (str): Standalone chart, local discovery, or remote scan routing.
+
+    Returns:
+        None: Every entry point executes sensitivity-first using strength two.
+    """
+    from hypothesis_helm.charts.repositories.repository import RepositorySource
+    from hypothesis_helm.cli import main
+
+    chart_fixture(tmp_path)
+    calls: list[dict[str, object]] = []
+
+    def check(chart: object, **kwargs: object) -> dict[str, object]:
+        """
+        Capture the resolved coverage settings.
+
+        Args:
+            chart (object): Loaded chart.
+            **kwargs (object): Finite execution options.
+
+        Returns:
+            dict[str, object]: Successful synthetic test outcome.
+        """
+        calls.append(kwargs)
+        return {"status": "passed", "attempts": 1}
+
+    monkeypatch.setattr("hypothesis_helm.cli.check_chart", check)
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.check_chart", check)
+    remote = "https://example.org/charts.git"
+    monkeypatch.setattr(
+        "hypothesis_helm.charts.repositories.scan.prepare_helm_source",
+        lambda *args, **kwargs: RepositorySource(remote, tmp_path, "charts", True, revision="abc"),
+    )
+    options = [
+        "scan" if mode == "remote" else "test",
+        remote if mode == "remote" else str(tmp_path),
+        "--traversal-strategy",
+        "sensitivity-first",
+        "--helm",
+        "/usr/bin/true",
+        "--jobs",
+        "1",
+        "--no-cache",
+        "--log-file",
+        "/dev/stderr",
+        "--artifact-dir",
+        str(tmp_path / "results"),
+    ]
+    if mode != "single":
+        options.append("--no-build-dependencies")
+    assert main(options) == 0
+    assert len(calls) == 1
+    assert calls[0]["permutations"] == 2
+    assert calls[0]["traversal_strategy"] == "sensitivity-first"
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "passed" if mode == "single" else output["counts"] == {"passed": 1}
+
+
+@pytest.mark.parametrize("mode", ["--paths", "--whole-chart", "--exhaustive"])
+def test_sensitivity_default_does_not_override_explicit_mode(mode: str, capsys: pytest.CaptureFixture[str]) -> None:
+    """
+    Reject conflicting explicit execution modes rather than silently selecting finite permutation testing.
+
+    Args:
+        mode (str): Non-permutation execution mode.
+        capsys (pytest.CaptureFixture[str]): Parser error capture.
+
+    Returns:
+        None: The conflict is reported before attempting to read the chart.
+    """
+    from hypothesis_helm.cli import main
+
+    with pytest.raises(SystemExit, match="2"):
+        main(["test", "missing", mode, "--traversal-strategy", "sensitivity-first"])
+    assert "requires finite permutation testing" in capsys.readouterr().err
 
 
 def test_expansion_ranking_timeout_retains_failed_iteration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

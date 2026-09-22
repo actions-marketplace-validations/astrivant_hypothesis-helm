@@ -32,6 +32,7 @@ from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.passes.minimum import export_minimal
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
+from hypothesis_helm.execution.planning import DEFAULT_PERMUTATIONS
 from hypothesis_helm.execution.planning.sampling import Sampling
 from hypothesis_helm.execution.planning.sensitivity import validate_order
 from hypothesis_helm.execution.runtime.budget import execution_timer
@@ -227,8 +228,15 @@ def _exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> di
             return {"status": "unsupported-schema", "error": str(exc), "coverage": "lint only"}
         LOGGER.info("%s; using generated values per path%s", filtering["reason"], " with input filtering" if args.filter else "")
     else:
-        strength = strength or 2
+        strength = strength if strength is not None else DEFAULT_PERMUTATIONS
     if strength is None:
+        traversal = args.traversal_strategy
+        fallback: dict[str, object] = {}
+        if traversal == "sensitivity-first":
+            # An omitted strength preserves automatic path sampling; it must not turn open schemas into skipped charts.
+            traversal = "random"
+            fallback = {"requested": args.traversal_strategy, "effective": traversal, "reason": filtering["reason"]}
+            LOGGER.warning("sensitivity-first unavailable for %s: %s; using seeded random path traversal", path, filtering["reason"])
         result = check_paths(
             chart,
             budget=min(args.chart_timeout, max(0.000001, args.scan_deadline - time.monotonic()))
@@ -242,7 +250,7 @@ def _exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> di
             artifacts=artifacts,
             fail_fast=args.fail,
             filtering=args.filter,
-            traversal_strategy=args.traversal_strategy,
+            traversal_strategy=traversal,
             sampling=Sampling(
                 getattr(args, "sample_random", 100),
                 getattr(args, "sample_min_cases", 128),
@@ -256,6 +264,7 @@ def _exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> di
         )
         return {
             **result,
+            **({"traversal_fallback": fallback} if fallback else {}),
             "coverage": "unique discovered paths; time-bounded property testing",
             "schema_source": "declared" if has_schema else "inferred generation; no values schema",
             "lint": "ignored" if baseline.returncode else "passed",
@@ -319,6 +328,8 @@ def scan(args: argparse.Namespace) -> int:
         raise ValueError("max-examples and timeout must be positive and finite")
     if args.permutations is not None and args.permutations < 1:
         raise ValueError("permutations must be positive")
+    if getattr(args, "max_mutations", None) is not None and (args.max_mutations < 1 or args.report is None):
+        raise ValueError("positive --max-mutations requires --report")
     validate_order(args.traversal_strategy, getattr(args, "sensitivity_order", None), args.permutations)
     if shutil.which(args.helm) is None:
         raise ValueError(f"Helm executable not found: {args.helm}")
@@ -656,6 +667,8 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
             "seed": args.seed,
             "traversal_strategy": args.traversal_strategy,
             "sensitivity_order": getattr(args, "sensitivity_order", None),
+            "report_max_mutations": getattr(args, "max_mutations", None),
+            "report_sensitivity_timeout_seconds": getattr(args, "sensitivity_timeout", 180),
             "sampling": {
                 "percent": getattr(args, "sample_random", 100),
                 "minimum": getattr(args, "sample_min_cases", 128),
@@ -706,11 +719,21 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
     deduplicate_errors(report)
     trace_run(report, finished_epoch=time.time())
     (output / "scan.json").write_text(json.dumps(report, indent=2) + "\n")
+    figure_status = None
     if args.report is not None:
         stem = Path(args.report) if args.report else Path("docs/reports") / f"{source.name}_{int(started)}_report"
+        if getattr(args, "max_mutations", None) is not None:
+            if interrupted or timed_out or failed_early or source.status != "ready":
+                report["figure_generation"] = {"status": "skipped", "reason": "Scan stopped before completing its chart queue"}
+            else:
+                from hypothesis_helm.analysis.scan_figures import enrich_scan
+
+                figure_status = enrich_scan(report, args, root=root, artifacts=output, stem=stem)
+            # Save added evidence before PDF publication, retaining the original scan's timestamps and findings.
+            (output / "scan.json").write_text(json.dumps(report, indent=2) + "\n")
         write_reports(report, stem)
     print(json.dumps(report, indent=2))
-    if interrupted:
+    if interrupted or figure_status == "interrupted":
         return 130
     if timed_out:
         return 124
@@ -720,4 +743,6 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         return 1
     if any(status in counts for status in ("invalid-metadata", "baseline-failed", "failed", "error")):
         return 1
+    if figure_status == "failed":
+        return 2
     return 0 if records and set(counts) <= {"passed", "cached-pass", "ignored", "findings"} else 2

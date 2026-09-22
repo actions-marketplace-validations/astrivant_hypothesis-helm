@@ -5,7 +5,6 @@ Verify chart-grouped diagnostics retain exact triggering paths and joint values.
 import copy
 import re
 from pathlib import Path
-from urllib.parse import quote
 
 import pytest
 
@@ -81,13 +80,14 @@ def test_reports_group_errors_and_inputs_by_chart(tmp_path: Path) -> None:
     }
     original = copy.deepcopy(phases)
     markdown, pdf = write_reports(report, tmp_path / "report")
-    first, second = markdown.read_text().split("### [first](<first>)\n", 1)[1].split("### [second](<second>)\n", 1)
+    first, second = markdown.read_text().split("### first\n", 1)[1].split("### second\n", 1)
     assert "incompatible ingress and service" in first and "incompatible ingress and service" in second
     assert "$.ingress.enabled = true" in first
     assert '$.service.type = "ExternalName"' in first
     assert '$.service.externalName = ""' in first
     assert "$.service.port = 0" in second
-    assert "second/paths/port" in second
+    assert "Full input and diagnostic" not in second
+    assert "Chart artifacts" not in second
     assert "required context" not in second
     assert "Selected fields (full context in artifacts)" in second
     assert "--debug" not in markdown.read_text()
@@ -170,7 +170,8 @@ def test_changed_overrides_and_bounded_previews(tmp_path: Path) -> None:
     assert "98 additional occurrences" in text
     assert "994 more paths" in text
     assert "value shortened" in text
-    assert "full-evidence" in text
+    assert "full-evidence" not in text
+    assert mapping(sequence(report["charts"])[0])["artifacts"] == "full-evidence"
     assert b"/Subtype /Link" in pdf.read_bytes()
     assert mapping(report["error_summary"])["occurrences"] == 100
     assert mapping(sequence(report["charts"])[0])["phases"] == failures
@@ -227,9 +228,9 @@ def test_public_pdf_links(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("filename", ["report.json", "observed-failure.json"])
 @pytest.mark.parametrize("relative", [False, True])
-def test_local_pdf_diagnostic_links(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str, relative: bool) -> None:
+def test_local_pdf_diagnostic_links_are_omitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str, relative: bool) -> None:
     """
-    Open actual saved evidence from a PDF independently of the generator's working directory.
+    Avoid publishing file links that PDF readers block or other machines cannot resolve.
 
     Args:
         tmp_path (Path): Report location with spaces and reserved characters in the artifact path.
@@ -238,7 +239,7 @@ def test_local_pdf_diagnostic_links(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         relative (bool): Whether the recorded artifact directory is report-relative or absolute.
 
     Returns:
-        None: Markdown stays portable while PDF annotations use correctly escaped absolute file URLs.
+        None: Reports omit local evidence links even when the files exist, preserving evidence on disk.
     """
     directory = tmp_path / "reports"
     artifacts = directory / "saved inputs (one) # café"
@@ -265,11 +266,10 @@ def test_local_pdf_diagnostic_links(tmp_path: Path, monkeypatch: pytest.MonkeyPa
         ],
     }
     markdown, pdf = write_reports(report, directory / "report")
-    target = quote(evidence.relative_to(directory).as_posix(), safe="/._-")
-    assert f"[Full input and diagnostic](<{target}>)" in markdown.read_text()
+    assert "Full input and diagnostic" not in markdown.read_text()
+    assert "Chart artifacts" not in markdown.read_text()
     uris = re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
-    assert evidence.resolve().as_uri().encode() in uris
-    assert artifacts.resolve().as_uri().encode() in uris
-    assert all(uri.startswith(b"file:///") or uri == b"https://github.com/HypothesisWorks/hypothesis/" for uri in uris)
+    assert not any(uri.startswith(b"file:") for uri in uris)
+    assert evidence.is_file()
     assert b"/Dest" in pdf.read_bytes()
     assert str(tmp_path) not in markdown.read_text()
