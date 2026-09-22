@@ -255,9 +255,9 @@ findings:
 compiler:
   max_call_depth: 16  # Nested helper/tpl calls.
   max_files: 10000  # Members inspected per chart archive, including directories.
-  max_context_bytes: 67108864  # Packed archive bytes and total unpacked member bytes, per archive.
+  max_context_bytes: 67108864  # Packed/unpacked bytes per archive; retained native certificate records per prepared chart.
   max_template_bytes: 1048576  # UTF-8 bytes in each dynamically analyzed tpl source.
-  max_steps: 10000  # Statements and range iterations per root rejection evaluation.
+  max_steps: 10000  # Statements/iterations per root analysis; effect calls per render and retained crypto records per chart.
   max_discovery_nodes: 10000  # Actions per discovery traversal or nodes per helper projection.
   max_tpl_depth: 32  # Nested tpl expansions during value-path discovery.
   max_range_items: 4096  # Elements in a collection evaluated by a range.

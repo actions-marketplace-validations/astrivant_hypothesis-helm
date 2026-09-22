@@ -5,6 +5,7 @@ Verify bounded per-chart sensitivity measurements and their publication evidence
 import json
 import threading
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from matplotlib.figure import Figure
@@ -86,6 +87,58 @@ def test_mutations_are_unique_reproducible_and_schema_valid() -> None:
     assert mutations(values, schema, 2, 12) == selected[:2]
     assert all(item.path != ("name",) for item in selected)
     assert values == {"enabled": False, "replicas": 1, "name": "valid-name", "items": [True]}
+
+
+def test_renderer_preparation_precedes_measurement_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Exclude first-use compilation from the per-chart sensitivity deadline.
+
+    Args:
+        tmp_path (Path): Small source chart.
+        monkeypatch (pytest.MonkeyPatch): Simulate a long build without sleeping.
+
+    Returns:
+        None: Measurements retain their full time allowance after automatic preparation.
+    """
+    (tmp_path / "Chart.yaml").write_text(yamlio.dump({"apiVersion": "v2", "name": "test", "version": "1.0.0"}))
+    (tmp_path / "values.yaml").write_text(yamlio.dump({"a": False, "b": False}))
+    clock = [0.0]
+    stopped = threading.Event()
+
+    def prepare(*args: object, **kwargs: object) -> None:
+        """
+        Advance the setup clock beyond the requested testing budget.
+
+        Args:
+            *args (object): Prepared chart and configured Helm executable.
+            **kwargs (object): Forced preparation and cancellation signal.
+
+        Returns:
+            None: The fake renderer is ready after a lengthy setup.
+        """
+        assert kwargs == {"force": True, "stopped": stopped}
+        clock[0] += 1000
+
+    def render(*args: object, **kwargs: object) -> object:
+        """
+        Assert that the render starts with the complete measurement budget.
+
+        Args:
+            *args (object): Prepared chart and mutated values.
+            **kwargs (object): Renderer options and remaining deadline.
+
+        Returns:
+            object: Stable input-shaped output.
+        """
+        assert clock[0] == 1000
+        assert kwargs["timeout"] == 1
+        return args[1]
+
+    monkeypatch.setattr("hypothesis_helm.analysis.repository.prepare_renderer", prepare)
+    monkeypatch.setattr("hypothesis_helm.analysis.repository.time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr("hypothesis_helm.analysis.repository.render", render)
+    result = measure_chart(tmp_path, helm="helm", limit=2, seed=0, seconds=1, stopped=stopped)
+    assert result["status"] == "complete", result
 
 
 @pytest.mark.parametrize("unstable", [False, True])

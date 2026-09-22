@@ -7,13 +7,14 @@ import shutil
 import subprocess
 from functools import lru_cache
 from pathlib import Path
+from threading import Event
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.compiler.asts.actions import TOKEN
 from hypothesis_helm.compiler.asts.templates import lower, walk
 from hypothesis_helm.compiler.builtins import EFFECTS
 from hypothesis_helm.compiler.passes.dependencies import Dependencies
-from hypothesis_helm.compiler.randomness.toolchain import SOURCE, build, identity
+from hypothesis_helm.compiler.randomness.toolchain import SOURCE, ensure
 from hypothesis_helm.exceptions.rendering import RendererUnavailable
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.configuration.settings import generation_settings, settings_at
@@ -115,13 +116,15 @@ def compatible(helm: str, *, timeout: float = 5) -> None:
         raise RendererUnavailable(f"Selected Helm {version} differs from controlled renderer {SDK_VERSION}")
 
 
-def prepare(chart: Chart, helm: str = "helm") -> Path | None:
+def prepare(chart: Chart, helm: str = "helm", *, force: bool = False, stopped: Event | None = None) -> Path | None:
     """
-    Find a prepared renderer; automatic runs never compile tools inside a chart's time budget.
+    Build a compatible renderer before starting chart or sensitivity execution budgets.
 
     Args:
         chart (Chart): Chart with inherited execution policy.
         helm (str): Configured Helm executable to compare with the SDK.
+        force (bool): Prepare for an explicit draw/replay context even if static effect discovery finds no calls.
+        stopped (Event | None): Optional coordinator cancellation during compilation.
 
     Returns:
         Path | None: Compatible renderer, or None when automatic mode must use native Helm.
@@ -129,16 +132,13 @@ def prepare(chart: Chart, helm: str = "helm") -> Path | None:
     Raises:
         RendererUnavailable: Strict execution cannot provide its required renderer.
     """
-    if not enabled(chart):
+    if not force and not enabled(chart):
         return None
     try:
         compatible(helm)
-        binary = Path(".cache/random-renderer").resolve() / identity() / "renderer"
-        if not binary.is_file():
-            if policy(chart) == "strict":
-                return build()
-            raise RendererUnavailable("Controlled renderer is not built; run hypothesis-helm-renderer --build")
-        return binary
+        return ensure(stopped=stopped)
+    except InterruptedError:
+        raise
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         if policy(chart) == "strict":
             raise RendererUnavailable(str(exc)) from exc

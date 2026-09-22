@@ -11,6 +11,7 @@ from hypothesis_helm.analysis.report import write_report
 from hypothesis_helm.analysis.sensitivity import Mutation, analyze
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.rendering import render
+from hypothesis_helm.compiler.randomness.policy import prepare
 from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
@@ -74,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("max-pairs must be nonnegative and max-mutations must be positive")
     chart = Chart.load(args.chart)
     mutations = load_mutations(args.mutations)
+    prepare(chart, args.helm)
     deadline = time.monotonic() + args.time_limit
 
     def invoke(values: dict[str, object]) -> object:

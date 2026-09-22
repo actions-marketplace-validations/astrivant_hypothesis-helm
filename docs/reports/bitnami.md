@@ -9,7 +9,6 @@
 - [Scan summary](#scan-summary)
 - [Status counts](#status-counts)
 - [Settings](#settings)
-- [Errors](#errors)
 - [Charts](#charts)
   - [bitnami/airflow](#bitnamiairflow)
   - [bitnami/apache](#bitnamiapache)
@@ -158,7 +157,6 @@
   - [bitnami/mariadb-galera](#bitnamimariadb-galera-1)
   - [bitnami/memcached](#bitnamimemcached-1)
   - [bitnami/metrics-server](#bitnamimetrics-server-1)
-  - [bitnami/multus-cni](#bitnamimultus-cni-1)
   - [bitnami/node-exporter](#bitnaminode-exporter-1)
   - [bitnami/opensearch](#bitnamiopensearch-1)
   - [bitnami/phpmyadmin](#bitnamiphpmyadmin-1)
@@ -166,8 +164,8 @@
   - [bitnami/pytorch](#bitnamipytorch-1)
   - [bitnami/redis-cluster](#bitnamiredis-cluster-1)
   - [bitnami/sealed-secrets](#bitnamisealed-secrets-1)
-  - [bitnami/spark](#bitnamispark-1)
   - [bitnami/tensorflow-resnet](#bitnamitensorflow-resnet-1)
+  - [bitnami/thanos](#bitnamithanos-1)
   - [bitnami/valkey-cluster](#bitnamivalkey-cluster-1)
   - [bitnami/vault](#bitnamivault-1)
   - [bitnami/victoriametrics](#bitnamivictoriametrics-1)
@@ -175,17 +173,11 @@
   - [bitnami/wildfly](#bitnamiwildfly-1)
   - [bitnami/zookeeper](#bitnamizookeeper-1)
 - [Appendix: finding codes](#appendix-finding-codes)
-  - [HH1101 - Invalid YAML in rendered output](#hh1101---invalid-yaml-in-rendered-output)
-  - [HH1105 - Missing resource name](#hh1105---missing-resource-name)
-  - [HH1107 - Empty resource bundle](#hh1107---empty-resource-bundle)
-  - [HH1108 - Kubernetes schema validation failed](#hh1108---kubernetes-schema-validation-failed)
-  - [HH1109 - Invalid manifest field type](#hh1109---invalid-manifest-field-type)
   - [HH2001 - Undocumented values path](#hh2001---undocumented-values-path)
   - [HH2002 - Unspecified values type](#hh2002---unspecified-values-type)
   - [HH2003 - Missing values description](#hh2003---missing-values-description)
   - [HH2004 - No supplied default for a values path](#hh2004---no-supplied-default-for-a-values-path)
   - [HH2006 - Opaque object schema](#hh2006---opaque-object-schema)
-  - [HH3001 - Template accesses a missing object](#hh3001---template-accesses-a-missing-object)
 
 </details>
 <!-- toc:end -->
@@ -213,14 +205,14 @@ Parallel edges count separately. These are structural measurements from the publ
 Git comparison unavailable; no charts skipped using previous test results.
 
 Directory: /Users/emmadoyle/projects/personal/hypothesis-helm/third_party/bitnami-charts
-Started (Unix epoch): 1790039844
-Started (UTC): 2026-09-22T01:17:24.000+00:00
-Finished (UTC): 2026-09-22T03:55:21.600+00:00
-Run fingerprint (SHA-256): `b00a713d4f1271b6a08ecb68952fc23253daf7344f5ac0c4e4ed86ab175cca77`
-Versions: Hypothesis not recorded; hypothesis-helm not recorded
-Elapsed (wall clock): 9418.10 seconds
-Chart testing: 8615.48 seconds
-Dependency preparation: 790.53 seconds (excluded from testing budgets)
+Started (Unix epoch): 1790099808
+Started (UTC): 2026-09-22T17:56:48.000+00:00
+Finished (UTC): 2026-09-22T18:13:44.403+00:00
+Run fingerprint (SHA-256): `492fa1e15a72c15d7d1c3e0c4006cda8e0a31762c9be48b7329af0d5b4540dfb`
+Versions: Hypothesis 6.168.0; hypothesis-helm 0.1.0
+Elapsed (wall clock): 1015.73 seconds
+Chart testing: 115.91 seconds
+Dependency preparation: 886.48 seconds (excluded from testing budgets)
 Charts discovered: 115
 Scan status: completed
 Discovery complete: True
@@ -231,28 +223,26 @@ Baseline-only, skipped, blocked, and incomplete charts retain their respective s
 
 ## Status counts
 
-93 time-limit; 18 failed; 1 skipped-library; 3 error.
+114 unsupported-schema; 1 skipped-library.
 
 ## Settings
 
-Filtering: True | Seed: 0 | Traversal: random
-Chart timeout: 60.0 seconds | Workers: 6
+Filtering: True | Seed: 0 | Traversal: sensitivity-first
+Chart timeout: 600.0 seconds | Workers: 6
 Complete settings are retained in the JSON report.
 
-Scan command: Not recorded for this run
+Command working directory: `/Users/emmadoyle/projects/personal/hypothesis-helm`
+
+Scan command:
+
+```bash
+hypothesis-helm test third_party/bitnami-charts --filter --disable-codes HH2006 --jobs 6 --chart-timeout 10m --max-examples 10 --seed 0 --no-cache --shard none --artifact-dir docs/reports/bitnami-runs --report docs/reports/bitnami.md --log-color --traversal-strategy sensitivity-first --max-mutations 48 --permutations 10 --sensitivity-timeout 9m
+```
 
 Generated values use the configured input domains and any supported destination constraints. Coverage excludes inputs outside these domains;
 supplied defaults are tested unchanged. The JSON report records constraints and unresolved mappings.
 
 Disabled checks: [HH2006](#hh2006---opaque-object-schema)
-
-## Errors
-
-34 distinct diagnostics across 39 occurrences; 5 repeats grouped.
-Diagnostics and their triggering inputs are grouped under each chart below.
-Up to two examples per diagnostic and six fields per example are shown. Long values and diagnostics are shortened.
-Full inputs, diagnostics, and remaining cases are retained in local run data.
-Selected fields identify the inputs varied by the test. Causal attribution requires further investigation.
 
 ## Charts
 
@@ -260,11 +250,13 @@ Selected fields identify the inputs varied by the test. Causal attribution requi
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/airflow](<../../studies/chart-topologies/bitnami/airflow/topology.png>) | ![Sensitivity: bitnami/airflow](<../../studies/chart-topologies/bitnami/airflow/sensitivity.png>) |
+| ![Topology: bitnami/airflow](<../../studies/chart-topologies/bitnami/airflow/topology.png>) | ![Sensitivity: bitnami/airflow](<bitnami-figures/bitnami/airflow/sensitivity.png>) |
 
 Overview cell: 01
 
-Status: time-limit | Attempts: 5
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1190. Full paths and template references are retained in the JSON report.
 
@@ -280,13 +272,15 @@ Audit findings: 1190. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/apache](<../../studies/chart-topologies/bitnami/apache/topology.png>) | ![Sensitivity: bitnami/apache](<../../studies/chart-topologies/bitnami/apache/sensitivity.png>) |
+| ![Topology: bitnami/apache](<../../studies/chart-topologies/bitnami/apache/topology.png>) | ![Sensitivity: bitnami/apache](<bitnami-figures/bitnami/apache/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiapache-1).
 
 Overview cell: 02
 
-Status: failed | Attempts: 24
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 245. Full paths and template references are retained in the JSON report.
 
@@ -298,36 +292,17 @@ Audit findings: 245. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.minReplicas`: Undocumented values path (warning)
 - 239 additional audit findings in JSON.
 
-#### E015 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ity': None, 'podAntiAffinity': {'preferredDuringSchedulingIgnoredDuringExecution':
-[{'podAffinityTerm': {'labelSelector': {'matchLabels': {'app.kubernetes.io/instance': 'hypothesis', 'app.kubernetes.io/name': 'apache'}},
-'topologyKey': 'kubernetes.io/hostname'}, 'weight': 1}]}, 'nodeAffinity': None}") in "<unicode string>", line 265, column 7: affinity: ^
-(line: 265) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[*].preference | Status: failed
-
-Changed overrides (used together):
-- `$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.__hypothesis_key__.preference = {}`
-Absent from overrides: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution["*"].preference. Defaults may
-still apply.
-
-Renderer random inputs (replay tape in artifacts):
-
 ### [bitnami/apisix](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/apisix>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/apisix](<../../studies/chart-topologies/bitnami/apisix/topology.png>) | ![Sensitivity: bitnami/apisix](<../../studies/chart-topologies/bitnami/apisix/sensitivity.png>) |
+| ![Topology: bitnami/apisix](<../../studies/chart-topologies/bitnami/apisix/topology.png>) | ![Sensitivity: bitnami/apisix](<bitnami-figures/bitnami/apisix/sensitivity.png>) |
 
 Overview cell: 03
 
-Status: time-limit | Attempts: 5
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 344. Full paths and template references are retained in the JSON report.
 
@@ -343,11 +318,13 @@ Audit findings: 344. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/appsmith](<../../studies/chart-topologies/bitnami/appsmith/topology.png>) | ![Sensitivity: bitnami/appsmith](<../../studies/chart-topologies/bitnami/appsmith/sensitivity.png>) |
+| ![Topology: bitnami/appsmith](<../../studies/chart-topologies/bitnami/appsmith/topology.png>) | ![Sensitivity: bitnami/appsmith](<bitnami-figures/bitnami/appsmith/sensitivity.png>) |
 
 Overview cell: 04
 
-Status: time-limit | Attempts: 3
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 543. Full paths and template references are retained in the JSON report.
 
@@ -363,11 +340,13 @@ Audit findings: 543. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/argo-cd](<../../studies/chart-topologies/bitnami/argo-cd/topology.png>) | ![Sensitivity: bitnami/argo-cd](<../../studies/chart-topologies/bitnami/argo-cd/sensitivity.png>) |
+| ![Topology: bitnami/argo-cd](<../../studies/chart-topologies/bitnami/argo-cd/topology.png>) | ![Sensitivity: bitnami/argo-cd](<bitnami-figures/bitnami/argo-cd/sensitivity.png>) |
 
 Overview cell: 05
 
-Status: time-limit | Attempts: 2
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1251. Full paths and template references are retained in the JSON report.
 
@@ -383,11 +362,13 @@ Audit findings: 1251. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/argo-workflows](<../../studies/chart-topologies/bitnami/argo-workflows/topology.png>) | ![Sensitivity: bitnami/argo-workflows](<../../studies/chart-topologies/bitnami/argo-workflows/sensitivity.png>) |
+| ![Topology: bitnami/argo-workflows](<../../studies/chart-topologies/bitnami/argo-workflows/topology.png>) | ![Sensitivity: bitnami/argo-workflows](<bitnami-figures/bitnami/argo-workflows/sensitivity.png>) |
 
 Overview cell: 06
 
-Status: time-limit | Attempts: 4
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 452. Full paths and template references are retained in the JSON report.
 
@@ -403,13 +384,15 @@ Audit findings: 452. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/aspnet-core](<../../studies/chart-topologies/bitnami/aspnet-core/topology.png>) | ![Sensitivity: bitnami/aspnet-core](<../../studies/chart-topologies/bitnami/aspnet-core/sensitivity.png>) |
+| ![Topology: bitnami/aspnet-core](<../../studies/chart-topologies/bitnami/aspnet-core/topology.png>) | ![Sensitivity: bitnami/aspnet-core](<bitnami-figures/bitnami/aspnet-core/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiaspnet-core-1).
 
 Overview cell: 07
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 224. Full paths and template references are retained in the JSON report.
 
@@ -425,13 +408,15 @@ Audit findings: 224. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/cadvisor](<../../studies/chart-topologies/bitnami/cadvisor/topology.png>) | ![Sensitivity: bitnami/cadvisor](<../../studies/chart-topologies/bitnami/cadvisor/sensitivity.png>) |
+| ![Topology: bitnami/cadvisor](<../../studies/chart-topologies/bitnami/cadvisor/topology.png>) | ![Sensitivity: bitnami/cadvisor](<bitnami-figures/bitnami/cadvisor/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamicadvisor-1).
 
 Overview cell: 08
 
-Status: time-limit | Attempts: 21
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 192. Full paths and template references are retained in the JSON report.
 
@@ -447,11 +432,13 @@ Audit findings: 192. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/cassandra](<../../studies/chart-topologies/bitnami/cassandra/topology.png>) | ![Sensitivity: bitnami/cassandra](<../../studies/chart-topologies/bitnami/cassandra/sensitivity.png>) |
+| ![Topology: bitnami/cassandra](<../../studies/chart-topologies/bitnami/cassandra/topology.png>) | ![Sensitivity: bitnami/cassandra](<bitnami-figures/bitnami/cassandra/sensitivity.png>) |
 
 Overview cell: 09
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 309. Full paths and template references are retained in the JSON report.
 
@@ -467,13 +454,15 @@ Audit findings: 309. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/cert-manager](<../../studies/chart-topologies/bitnami/cert-manager/topology.png>) | ![Sensitivity: bitnami/cert-manager](<../../studies/chart-topologies/bitnami/cert-manager/sensitivity.png>) |
+| ![Topology: bitnami/cert-manager](<../../studies/chart-topologies/bitnami/cert-manager/topology.png>) | ![Sensitivity: bitnami/cert-manager](<bitnami-figures/bitnami/cert-manager/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamicert-manager-1).
 
 Overview cell: 10
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 404. Full paths and template references are retained in the JSON report.
 
@@ -490,11 +479,13 @@ Audit findings: 404. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/chainloop](<../../studies/chart-topologies/bitnami/chainloop/topology.png>) | ![Sensitivity: bitnami/chainloop](<../../studies/chart-topologies/bitnami/chainloop/sensitivity.png>) |
+| ![Topology: bitnami/chainloop](<../../studies/chart-topologies/bitnami/chainloop/topology.png>) | ![Sensitivity: bitnami/chainloop](<bitnami-figures/bitnami/chainloop/sensitivity.png>) |
 
 Overview cell: 11
 
-Status: time-limit | Attempts: 7
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 643. Full paths and template references are retained in the JSON report.
 
@@ -510,11 +501,13 @@ Audit findings: 643. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/cilium](<../../studies/chart-topologies/bitnami/cilium/topology.png>) | ![Sensitivity: bitnami/cilium](<../../studies/chart-topologies/bitnami/cilium/sensitivity.png>) |
+| ![Topology: bitnami/cilium](<../../studies/chart-topologies/bitnami/cilium/topology.png>) | ![Sensitivity: bitnami/cilium](<bitnami-figures/bitnami/cilium/sensitivity.png>) |
 
 Overview cell: 12
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1163. Full paths and template references are retained in the JSON report.
 
@@ -530,11 +523,13 @@ Audit findings: 1163. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/clickhouse](<../../studies/chart-topologies/bitnami/clickhouse/topology.png>) | ![Sensitivity: bitnami/clickhouse](<../../studies/chart-topologies/bitnami/clickhouse/sensitivity.png>) |
+| ![Topology: bitnami/clickhouse](<../../studies/chart-topologies/bitnami/clickhouse/topology.png>) | ![Sensitivity: bitnami/clickhouse](<bitnami-figures/bitnami/clickhouse/sensitivity.png>) |
 
 Overview cell: 13
 
-Status: time-limit | Attempts: 5
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 507. Full paths and template references are retained in the JSON report.
 
@@ -550,11 +545,13 @@ Audit findings: 507. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/clickhouse-operator](<../../studies/chart-topologies/bitnami/clickhouse-operator/topology.png>) | ![Sensitivity: bitnami/clickhouse-operator](<../../studies/chart-topologies/bitnami/clickhouse-operator/sensitivity.png>) |
+| ![Topology: bitnami/clickhouse-operator](<../../studies/chart-topologies/bitnami/clickhouse-operator/topology.png>) | ![Sensitivity: bitnami/clickhouse-operator](<bitnami-figures/bitnami/clickhouse-operator/sensitivity.png>) |
 
 Overview cell: 14
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 276. Full paths and template references are retained in the JSON report.
 
@@ -570,11 +567,13 @@ Audit findings: 276. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/cloudnative-pg](<../../studies/chart-topologies/bitnami/cloudnative-pg/topology.png>) | ![Sensitivity: bitnami/cloudnative-pg](<../../studies/chart-topologies/bitnami/cloudnative-pg/sensitivity.png>) |
+| ![Topology: bitnami/cloudnative-pg](<../../studies/chart-topologies/bitnami/cloudnative-pg/topology.png>) | ![Sensitivity: bitnami/cloudnative-pg](<bitnami-figures/bitnami/cloudnative-pg/sensitivity.png>) |
 
 Overview cell: 15
 
-Status: time-limit | Attempts: 43
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 423. Full paths and template references are retained in the JSON report.
 
@@ -600,11 +599,13 @@ Status: skipped-library | Attempts: N/A
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/concourse](<../../studies/chart-topologies/bitnami/concourse/topology.png>) | ![Sensitivity: bitnami/concourse](<../../studies/chart-topologies/bitnami/concourse/sensitivity.png>) |
+| ![Topology: bitnami/concourse](<../../studies/chart-topologies/bitnami/concourse/topology.png>) | ![Sensitivity: bitnami/concourse](<bitnami-figures/bitnami/concourse/sensitivity.png>) |
 
 Overview cell: 17
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 470. Full paths and template references are retained in the JSON report.
 
@@ -620,13 +621,15 @@ Audit findings: 470. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/consul](<../../studies/chart-topologies/bitnami/consul/topology.png>) | ![Sensitivity: bitnami/consul](<../../studies/chart-topologies/bitnami/consul/sensitivity.png>) |
+| ![Topology: bitnami/consul](<../../studies/chart-topologies/bitnami/consul/topology.png>) | ![Sensitivity: bitnami/consul](<bitnami-figures/bitnami/consul/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiconsul-1).
 
 Overview cell: 18
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 255. Full paths and template references are retained in the JSON report.
 
@@ -642,13 +645,15 @@ Audit findings: 255. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/contour](<../../studies/chart-topologies/bitnami/contour/topology.png>) | ![Sensitivity: bitnami/contour](<../../studies/chart-topologies/bitnami/contour/sensitivity.png>) |
+| ![Topology: bitnami/contour](<../../studies/chart-topologies/bitnami/contour/topology.png>) | ![Sensitivity: bitnami/contour](<bitnami-figures/bitnami/contour/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamicontour-1).
 
 Overview cell: 19
 
-Status: time-limit | Attempts: 21
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 591. Full paths and template references are retained in the JSON report.
 
@@ -664,11 +669,13 @@ Audit findings: 591. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/deepspeed](<../../studies/chart-topologies/bitnami/deepspeed/topology.png>) | ![Sensitivity: bitnami/deepspeed](<../../studies/chart-topologies/bitnami/deepspeed/sensitivity.png>) |
+| ![Topology: bitnami/deepspeed](<../../studies/chart-topologies/bitnami/deepspeed/topology.png>) | ![Sensitivity: bitnami/deepspeed](<bitnami-figures/bitnami/deepspeed/sensitivity.png>) |
 
 Overview cell: 20
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 166. Full paths and template references are retained in the JSON report.
 
@@ -685,74 +692,81 @@ Audit findings: 166. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/discourse](<../../studies/chart-topologies/bitnami/discourse/topology.png>) | ![Sensitivity: bitnami/discourse](<../../studies/chart-topologies/bitnami/discourse/sensitivity.png>) |
+| ![Topology: bitnami/discourse](<../../studies/chart-topologies/bitnami/discourse/topology.png>) | ![Sensitivity: bitnami/discourse](<bitnami-figures/bitnami/discourse/sensitivity.png>) |
 
 Overview cell: 21
 
-Status: error | Attempts: N/A
+Status: unsupported-schema | Attempts: N/A
 
-#### E032
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
-```text
-Path worker exited with status 1; see
-/Users/emmadoyle/projects/personal/hypothesis-helm/docs/reports/bitnami-runs/bitnami-charts_1790039844/0020/path-workers-j061t2vq/queue
-```
+Audit findings: 346. Full paths and template references are retained in the JSON report.
 
-Phase: chart | Status: error
-
-No triggering values were recorded for this diagnostic.
+- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.auth.email`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.auth.existingSecret`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.auth.password`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.auth.username`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.auth`: Undocumented values path (warning)
+- 340 additional audit findings in JSON.
 
 ### [bitnami/dremio](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/dremio>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/dremio](<../../studies/chart-topologies/bitnami/dremio/topology.png>) | ![Sensitivity: bitnami/dremio](<../../studies/chart-topologies/bitnami/dremio/sensitivity.png>) |
+| ![Topology: bitnami/dremio](<../../studies/chart-topologies/bitnami/dremio/topology.png>) | ![Sensitivity: bitnami/dremio](<bitnami-figures/bitnami/dremio/sensitivity.png>) |
 
 Overview cell: 22
 
-Status: error | Attempts: N/A
+Status: unsupported-schema | Attempts: N/A
 
-#### E033
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
-```text
-Path worker exited with status 1; see
-/Users/emmadoyle/projects/personal/hypothesis-helm/docs/reports/bitnami-runs/bitnami-charts_1790039844/0021/path-workers-_7l15_nd/queue
-```
+Audit findings: 1181. Full paths and template references are retained in the JSON report.
 
-Phase: chart | Status: error
-
-No triggering values were recorded for this diagnostic.
+- [HH2001](#hh2001---undocumented-values-path) at `$.apiVersions`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations["helm.sh/hook"]`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations["helm.sh/hook-delete-policy"]`: Undocumented values path
+  (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.annotations["helm.sh/hook-weight"]`: Undocumented values path
+  (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.bootstrapUserJob.automountServiceAccountToken`: Undocumented values path (warning)
+- 1175 additional audit findings in JSON.
 
 ### [bitnami/drupal](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/drupal>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/drupal](<../../studies/chart-topologies/bitnami/drupal/topology.png>) | ![Sensitivity: bitnami/drupal](<../../studies/chart-topologies/bitnami/drupal/sensitivity.png>) |
+| ![Topology: bitnami/drupal](<../../studies/chart-topologies/bitnami/drupal/topology.png>) | ![Sensitivity: bitnami/drupal](<bitnami-figures/bitnami/drupal/sensitivity.png>) |
 
 Overview cell: 23
 
-Status: error | Attempts: N/A
+Status: unsupported-schema | Attempts: N/A
 
-#### E034
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
-```text
-Path worker exited with status 1; see
-/Users/emmadoyle/projects/personal/hypothesis-helm/docs/reports/bitnami-runs/bitnami-charts_1790039844/0022/path-workers-fuy59jh1/queue
-```
+Audit findings: 319. Full paths and template references are retained in the JSON report.
 
-Phase: chart | Status: error
-
-No triggering values were recorded for this diagnostic.
+- [HH2001](#hh2001---undocumented-values-path) at `$.affinity`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.allowEmptyPassword`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.args`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.automountServiceAccountToken`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.certificates.args`: Undocumented values path (warning)
+- [HH2001](#hh2001---undocumented-values-path) at `$.certificates.command`: Undocumented values path (warning)
+- 313 additional audit findings in JSON.
 
 ### [bitnami/ejbca](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/ejbca>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/ejbca](<../../studies/chart-topologies/bitnami/ejbca/topology.png>) | ![Sensitivity: bitnami/ejbca](<../../studies/chart-topologies/bitnami/ejbca/sensitivity.png>) |
+| ![Topology: bitnami/ejbca](<../../studies/chart-topologies/bitnami/ejbca/topology.png>) | ![Sensitivity: bitnami/ejbca](<bitnami-figures/bitnami/ejbca/sensitivity.png>) |
 
 Overview cell: 24
 
-Status: time-limit | Attempts: 21
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 224. Full paths and template references are retained in the JSON report.
 
@@ -768,13 +782,15 @@ Audit findings: 224. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/elasticsearch](<../../studies/chart-topologies/bitnami/elasticsearch/topology.png>) | ![Sensitivity: bitnami/elasticsearch](<../../studies/chart-topologies/bitnami/elasticsearch/sensitivity.png>) |
+| ![Topology: bitnami/elasticsearch](<../../studies/chart-topologies/bitnami/elasticsearch/topology.png>) | ![Sensitivity: bitnami/elasticsearch](<bitnami-figures/bitnami/elasticsearch/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamielasticsearch-1).
 
 Overview cell: 25
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 814. Full paths and template references are retained in the JSON report.
 
@@ -790,13 +806,15 @@ Audit findings: 814. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/envoy-gateway](<../../studies/chart-topologies/bitnami/envoy-gateway/topology.png>) | ![Sensitivity: bitnami/envoy-gateway](<../../studies/chart-topologies/bitnami/envoy-gateway/sensitivity.png>) |
+| ![Topology: bitnami/envoy-gateway](<../../studies/chart-topologies/bitnami/envoy-gateway/topology.png>) | ![Sensitivity: bitnami/envoy-gateway](<bitnami-figures/bitnami/envoy-gateway/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamienvoy-gateway-1).
 
 Overview cell: 26
 
-Status: failed | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 325. Full paths and template references are retained in the JSON report.
 
@@ -808,38 +826,17 @@ Audit findings: 325. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.hpa.enabled`: Undocumented values path (warning)
 - 319 additional audit findings in JSON.
 
-#### E023 ([HH1105](#hh1105---missing-resource-name))
-
-**Missing resource name** (manifest / violation). Severity: **error**. Provide a name in each resource branch; ignore this check if your
-workflow intentionally uses generated names.
-
-```text
-[HH1105] resource has no metadata.name
-```
-
-Phase: $.certgen.serviceAccount.name | Status: failed
-
-Changed overrides (used together):
-- `$.certgen.serviceAccount.name = "0" (was "")`
-
-Renderer random inputs (replay tape in artifacts):
-
-Manifest changes from rendered defaults (document and list order preserved):
-- `$[11].spec.template.spec.serviceAccountName: "hypothesis-envoy-gateway-certgen" -> 0`
-- `$[2].metadata.name: "hypothesis-envoy-gateway-certgen" -> 0`
-- `$[5].subjects[0].name: "hypothesis-envoy-gateway-certgen" -> 0`
-- `$[8].subjects[0].name: "hypothesis-envoy-gateway-certgen" -> 0`
-- `$[9].subjects[0].name: "hypothesis-envoy-gateway-certgen" -> 0`
-
 ### [bitnami/etcd](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/etcd>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/etcd](<../../studies/chart-topologies/bitnami/etcd/topology.png>) | ![Sensitivity: bitnami/etcd](<../../studies/chart-topologies/bitnami/etcd/sensitivity.png>) |
+| ![Topology: bitnami/etcd](<../../studies/chart-topologies/bitnami/etcd/topology.png>) | ![Sensitivity: bitnami/etcd](<bitnami-figures/bitnami/etcd/sensitivity.png>) |
 
 Overview cell: 27
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 407. Full paths and template references are retained in the JSON report.
 
@@ -855,13 +852,15 @@ Audit findings: 407. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/external-dns](<../../studies/chart-topologies/bitnami/external-dns/topology.png>) | ![Sensitivity: bitnami/external-dns](<../../studies/chart-topologies/bitnami/external-dns/sensitivity.png>) |
+| ![Topology: bitnami/external-dns](<../../studies/chart-topologies/bitnami/external-dns/topology.png>) | ![Sensitivity: bitnami/external-dns](<bitnami-figures/bitnami/external-dns/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiexternal-dns-1).
 
 Overview cell: 28
 
-Status: failed | Attempts: 659
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 402. Full paths and template references are retained in the JSON report.
 
@@ -873,93 +872,19 @@ Audit findings: 402. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.akamai.secretName`: Undocumented values path (warning)
 - 396 additional audit findings in JSON.
 
-Configuration rejections: 0 excluded; 2 adjusted and tested; 2 Helm verification renders (separate from manifest-test attempts).
-
-#### E004 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on external-dns/templates/deployment.yaml: error converting YAML to JSON: yaml: line 28: did not find expected ','
-or ']'
-```
-
-Phase: $.image | Status: failed
-
-Changed overrides (used together):
-- `$.image.digest = "0" (was "")`
-- `$.image.registry = "" (was "docker.io")`
-- `$.image["0000000000"] = null`
-- `$.image.repository = "" (was "bitnami/external-dns")`
-- `$.image.pullSecrets = [[[{}, 6.2841568821697656e+16, {}]], [], {"aaaaaaaaZ": [], "": {"aXaaaagaa$kaaaa;a": {}, "aaaaza": false}}, {}, {"a;aaaa... [value shortened]`
-- `$.image["(@%8_$!"]["("] = -333`
-- 7 more paths; see full input.
-
-Renderer random inputs (replay tape in artifacts):
-
-Phase: $.image.pullSecrets | Status: failed
-
-Changed overrides (used together):
-- `$.image.pullSecrets = [[{}]]`
-
-Renderer random inputs (replay tape in artifacts):
-
-2 additional occurrences are retained in the JSON report and chart artifacts.
-
-#### E005 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on external-dns/templates/deployment.yaml: error converting YAML to JSON: yaml: line 67: could not find expected
-':'
-```
-
-Phase: $.zoneIdFilters[*] | Status: failed
-
-Changed overrides (used together):
-- `$.zoneIdFilters = [[{"\r": null}]]`
-Absent from overrides: $.zoneIdFilters["*"]. Defaults may still apply.
-
-Renderer random inputs (replay tape in artifacts):
-
-Phase: $.regexDomainExclusion | Status: failed
-
-Changed overrides (used together):
-- `$.regexDomainExclusion = "\n0" (was "")`
-
-Renderer random inputs (replay tape in artifacts):
-
-#### E006 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on external-dns/templates/deployment.yaml: error converting YAML to JSON: yaml: line 71: could not find expected
-':'
-```
-
-Phase: $.aws.zoneTags | Status: failed
-
-Changed overrides (used together):
-- `$.aws.zoneTags = [{"aa-,a)": null, "ha": {"aa2": 1.0914998582626766e+16, "aaaaQaacaaaa\raa.aaal,aaa>ialaaa": null, "a9aaVbaaaaaa\na": tru... [value shortened]`
-
-Renderer random inputs (replay tape in artifacts):
-
 ### [bitnami/flink](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/flink>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/flink](<../../studies/chart-topologies/bitnami/flink/topology.png>) | ![Sensitivity: bitnami/flink](<../../studies/chart-topologies/bitnami/flink/sensitivity.png>) |
+| ![Topology: bitnami/flink](<../../studies/chart-topologies/bitnami/flink/topology.png>) | ![Sensitivity: bitnami/flink](<bitnami-figures/bitnami/flink/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiflink-1).
 
 Overview cell: 29
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 281. Full paths and template references are retained in the JSON report.
 
@@ -975,13 +900,15 @@ Audit findings: 281. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/fluent-bit](<../../studies/chart-topologies/bitnami/fluent-bit/topology.png>) | ![Sensitivity: bitnami/fluent-bit](<../../studies/chart-topologies/bitnami/fluent-bit/sensitivity.png>) |
+| ![Topology: bitnami/fluent-bit](<../../studies/chart-topologies/bitnami/fluent-bit/topology.png>) | ![Sensitivity: bitnami/fluent-bit](<bitnami-figures/bitnami/fluent-bit/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamifluent-bit-1).
 
 Overview cell: 30
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 240. Full paths and template references are retained in the JSON report.
 
@@ -997,13 +924,15 @@ Audit findings: 240. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/fluentd](<../../studies/chart-topologies/bitnami/fluentd/topology.png>) | ![Sensitivity: bitnami/fluentd](<../../studies/chart-topologies/bitnami/fluentd/sensitivity.png>) |
+| ![Topology: bitnami/fluentd](<../../studies/chart-topologies/bitnami/fluentd/topology.png>) | ![Sensitivity: bitnami/fluentd](<bitnami-figures/bitnami/fluentd/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamifluentd-1).
 
 Overview cell: 31
 
-Status: time-limit | Attempts: 31
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 427. Full paths and template references are retained in the JSON report.
 
@@ -1019,13 +948,15 @@ Audit findings: 427. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/flux](<../../studies/chart-topologies/bitnami/flux/topology.png>) | ![Sensitivity: bitnami/flux](<../../studies/chart-topologies/bitnami/flux/sensitivity.png>) |
+| ![Topology: bitnami/flux](<../../studies/chart-topologies/bitnami/flux/topology.png>) | ![Sensitivity: bitnami/flux](<bitnami-figures/bitnami/flux/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiflux-1).
 
 Overview cell: 32
 
-Status: time-limit | Attempts: 3
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1042. Full paths and template references are retained in the JSON report.
 
@@ -1041,11 +972,13 @@ Audit findings: 1042. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/ghost](<../../studies/chart-topologies/bitnami/ghost/topology.png>) | ![Sensitivity: bitnami/ghost](<../../studies/chart-topologies/bitnami/ghost/sensitivity.png>) |
+| ![Topology: bitnami/ghost](<../../studies/chart-topologies/bitnami/ghost/topology.png>) | ![Sensitivity: bitnami/ghost](<bitnami-figures/bitnami/ghost/sensitivity.png>) |
 
 Overview cell: 33
 
-Status: failed | Attempts: 86
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 262. Full paths and template references are retained in the JSON report.
 
@@ -1057,110 +990,17 @@ Audit findings: 262. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.command`: Undocumented values path (warning)
 - 256 additional audit findings in JSON.
 
-#### E019 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ath': 'app-tmp-dir'}, {'name': 'empty-dir', 'mountPath': '/opt/bitnami/mysql/logs',
-'subPath': 'app-logs-dir'}, {'name': 'config', 'mountPath': '/opt/bitnami/mysql/conf/my.cnf', 'subPath': 'my.cnf'}, {'name':
-'mysql-credentials', 'mountPath': '/opt/bitnami/mysql/secrets/'}]}]" (original value: "[]") in "<unicode string>", line 412, column 7:
-containers: ^ (line: 412) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.mysql.primary.extraPodSpec.containers | Status: failed
-
-Changed overrides (used together):
-- `$.mysql.primary.extraPodSpec.containers = []`
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
-#### E020 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... gs', 'subPath': 'app-logs-dir'}, {'name': 'config', 'mountPath':
-'/opt/bitnami/mysql/conf/my.cnf', 'subPath': 'my.cnf'}, {'name': 'mysql-credentials', 'mountPath': '/opt/bitnami/mysql/secrets/'}]}]"
-(original value: "{'__hypothesis_key__': {'lifecycle': {'postStart': {'exec': {'command': None}}}}}") in "<unicode string>", line 417,
-column 7: containers: ^ (line: 417) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.mysql.primary.extraPodSpec.containers[*].lifecycle.postStart.exec.command | Status: failed
-
-Changed overrides (used together):
-- `$.mysql.primary.extraPodSpec.containers.__hypothesis_key__.lifecycle.postStart.exec.command = null`
-Absent from overrides: $.mysql.primary.extraPodSpec.containers["*"].lifecycle.postStart.exec.command. Defaults may still apply.
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
-#### E021 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ting a mapping in "<unicode string>", line 349, column 7: securityContext: ^ (line: 349)
-found duplicate key "securityContext" with value "{'fsGroup': 1001, 'fsGroupChangePolicy': 'Always', 'supplementalGroups': [], 'sysctls':
-[]}" (original value: "{'windowsOptions': {'runAsUserName': None}}") in "<unicode string>", line 369, column 7: securityContext: ^ (line:
-369) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName | Status: failed
-
-Changed overrides (used together):
-- `$.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName = null`
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
-#### E022 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... is-mysql', 'items': [{'key': 'mysql-root-password', 'path': 'mysql-root-password'},
-{'key': 'mysql-password', 'path': 'mysql-password'}]}}, {'name': 'empty-dir', 'emptyDir': {}}]" (original value: "{'__hypothesis_key__':
-{'projected': {'sources': {'__hypothesis_key__': {'secret': {'items': None}}}}}}") in "<unicode string>", line 530, column 7: volumes: ^
-(line: 530) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.mysql.primary.extraPodSpec.volumes[*].projected.sources[*].secret.items | Status: failed
-
-Changed overrides (used together):
-- `$.mysql.primary.extraPodSpec.volumes.__hypothesis_key__.projected.sources.__hypothesis_key__.secret.items = null`
-Absent from overrides: $.mysql.primary.extraPodSpec.volumes["*"].projected.sources["*"].secret.items. Defaults may still apply.
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
-#### E030 ([HH3001](#hh3001---template-accesses-a-missing-object))
-
-**Template accesses a missing object** (template / violation). Severity: **error**. Guard or default the parent object, or require it in the
-values schema.
-
-```text
-[HH3001] Error: ghost/charts/mysql/templates/networkpolicy.yaml:72:69 executing "ghost/charts/mysql/templates/networkpolicy.yaml" at
-<$value.port>: nil pointer evaluating interface {}.port
-```
-
-Phase: $.mysql.primary.service.extraPorts | Status: failed
-
-Changed overrides (used together):
-- `$.mysql.primary.service.extraPorts = [null]`
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
 ### [bitnami/gitea](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/gitea>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/gitea](<../../studies/chart-topologies/bitnami/gitea/topology.png>) | ![Sensitivity: bitnami/gitea](<../../studies/chart-topologies/bitnami/gitea/sensitivity.png>) |
+| ![Topology: bitnami/gitea](<../../studies/chart-topologies/bitnami/gitea/topology.png>) | ![Sensitivity: bitnami/gitea](<bitnami-figures/bitnami/gitea/sensitivity.png>) |
 
 Overview cell: 34
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 241. Full paths and template references are retained in the JSON report.
 
@@ -1176,11 +1016,13 @@ Audit findings: 241. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/gitlab-runner](<../../studies/chart-topologies/bitnami/gitlab-runner/topology.png>) | ![Sensitivity: bitnami/gitlab-runner](<../../studies/chart-topologies/bitnami/gitlab-runner/sensitivity.png>) |
+| ![Topology: bitnami/gitlab-runner](<../../studies/chart-topologies/bitnami/gitlab-runner/topology.png>) | ![Sensitivity: bitnami/gitlab-runner](<bitnami-figures/bitnami/gitlab-runner/sensitivity.png>) |
 
 Overview cell: 35
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 266. Full paths and template references are retained in the JSON report.
 
@@ -1196,11 +1038,13 @@ Audit findings: 266. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/grafana](<../../studies/chart-topologies/bitnami/grafana/topology.png>) | ![Sensitivity: bitnami/grafana](<../../studies/chart-topologies/bitnami/grafana/sensitivity.png>) |
+| ![Topology: bitnami/grafana](<../../studies/chart-topologies/bitnami/grafana/topology.png>) | ![Sensitivity: bitnami/grafana](<bitnami-figures/bitnami/grafana/sensitivity.png>) |
 
 Overview cell: 36
 
-Status: time-limit | Attempts: 23
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 306. Full paths and template references are retained in the JSON report.
 
@@ -1216,13 +1060,15 @@ Audit findings: 306. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/grafana-alloy](<../../studies/chart-topologies/bitnami/grafana-alloy/topology.png>) | ![Sensitivity: bitnami/grafana-alloy](<../../studies/chart-topologies/bitnami/grafana-alloy/sensitivity.png>) |
+| ![Topology: bitnami/grafana-alloy](<../../studies/chart-topologies/bitnami/grafana-alloy/topology.png>) | ![Sensitivity: bitnami/grafana-alloy](<bitnami-figures/bitnami/grafana-alloy/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamigrafana-alloy-1).
 
 Overview cell: 37
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 292. Full paths and template references are retained in the JSON report.
 
@@ -1238,13 +1084,15 @@ Audit findings: 292. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/grafana-k6-operator](<../../studies/chart-topologies/bitnami/grafana-k6-operator/topology.png>) | ![Sensitivity: bitnami/grafana-k6-operator](<../../studies/chart-topologies/bitnami/grafana-k6-operator/sensitivity.png>) |
+| ![Topology: bitnami/grafana-k6-operator](<../../studies/chart-topologies/bitnami/grafana-k6-operator/topology.png>) | ![Sensitivity: bitnami/grafana-k6-operator](<bitnami-figures/bitnami/grafana-k6-operator/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamigrafana-k6-operator-1).
 
 Overview cell: 38
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 195. Full paths and template references are retained in the JSON report.
 
@@ -1260,13 +1108,15 @@ Audit findings: 195. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/grafana-loki](<../../studies/chart-topologies/bitnami/grafana-loki/topology.png>) | ![Sensitivity: bitnami/grafana-loki](<../../studies/chart-topologies/bitnami/grafana-loki/sensitivity.png>) |
+| ![Topology: bitnami/grafana-loki](<../../studies/chart-topologies/bitnami/grafana-loki/topology.png>) | ![Sensitivity: bitnami/grafana-loki](<bitnami-figures/bitnami/grafana-loki/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamigrafana-loki-1).
 
 Overview cell: 39
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1386. Full paths and template references are retained in the JSON report.
 
@@ -1282,11 +1132,13 @@ Audit findings: 1386. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/grafana-mimir](<../../studies/chart-topologies/bitnami/grafana-mimir/topology.png>) | ![Sensitivity: bitnami/grafana-mimir](<../../studies/chart-topologies/bitnami/grafana-mimir/sensitivity.png>) |
+| ![Topology: bitnami/grafana-mimir](<../../studies/chart-topologies/bitnami/grafana-mimir/topology.png>) | ![Sensitivity: bitnami/grafana-mimir](<bitnami-figures/bitnami/grafana-mimir/sensitivity.png>) |
 
 Overview cell: 40
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1540. Full paths and template references are retained in the JSON report.
 
@@ -1302,11 +1154,13 @@ Audit findings: 1540. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/grafana-operator](<../../studies/chart-topologies/bitnami/grafana-operator/topology.png>) | ![Sensitivity: bitnami/grafana-operator](<../../studies/chart-topologies/bitnami/grafana-operator/sensitivity.png>) |
+| ![Topology: bitnami/grafana-operator](<../../studies/chart-topologies/bitnami/grafana-operator/topology.png>) | ![Sensitivity: bitnami/grafana-operator](<bitnami-figures/bitnami/grafana-operator/sensitivity.png>) |
 
 Overview cell: 41
 
-Status: failed | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 277. Full paths and template references are retained in the JSON report.
 
@@ -1318,30 +1172,19 @@ Audit findings: 277. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.global.compatibility`: Undocumented values path (warning)
 - 271 additional audit findings in JSON.
 
-#### E026 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
-
-**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
-check the template and input schema.
-
-```text
-[HH1108] Custom resource grafana.integreatly.org/v1beta1/Grafana requires an explicit JSON schema in resource_schemas
-```
-
-Phase: chart | Status: failed
-
-No triggering values were recorded for this diagnostic.
-
 ### [bitnami/grafana-tempo](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/grafana-tempo>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/grafana-tempo](<../../studies/chart-topologies/bitnami/grafana-tempo/topology.png>) | ![Sensitivity: bitnami/grafana-tempo](<../../studies/chart-topologies/bitnami/grafana-tempo/sensitivity.png>) |
+| ![Topology: bitnami/grafana-tempo](<../../studies/chart-topologies/bitnami/grafana-tempo/topology.png>) | ![Sensitivity: bitnami/grafana-tempo](<bitnami-figures/bitnami/grafana-tempo/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamigrafana-tempo-1).
 
 Overview cell: 42
 
-Status: time-limit | Attempts: 5
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 999. Full paths and template references are retained in the JSON report.
 
@@ -1357,13 +1200,15 @@ Audit findings: 999. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/haproxy](<../../studies/chart-topologies/bitnami/haproxy/topology.png>) | ![Sensitivity: bitnami/haproxy](<../../studies/chart-topologies/bitnami/haproxy/sensitivity.png>) |
+| ![Topology: bitnami/haproxy](<../../studies/chart-topologies/bitnami/haproxy/topology.png>) | ![Sensitivity: bitnami/haproxy](<bitnami-figures/bitnami/haproxy/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamihaproxy-1).
 
 Overview cell: 43
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 186. Full paths and template references are retained in the JSON report.
 
@@ -1379,11 +1224,13 @@ Audit findings: 186. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/harbor](<../../studies/chart-topologies/bitnami/harbor/topology.png>) | ![Sensitivity: bitnami/harbor](<../../studies/chart-topologies/bitnami/harbor/sensitivity.png>) |
+| ![Topology: bitnami/harbor](<../../studies/chart-topologies/bitnami/harbor/topology.png>) | ![Sensitivity: bitnami/harbor](<bitnami-figures/bitnami/harbor/sensitivity.png>) |
 
 Overview cell: 44
 
-Status: time-limit | Attempts: 2
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1499. Full paths and template references are retained in the JSON report.
 
@@ -1399,13 +1246,15 @@ Audit findings: 1499. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/influxdb](<../../studies/chart-topologies/bitnami/influxdb/topology.png>) | ![Sensitivity: bitnami/influxdb](<../../studies/chart-topologies/bitnami/influxdb/sensitivity.png>) |
+| ![Topology: bitnami/influxdb](<../../studies/chart-topologies/bitnami/influxdb/topology.png>) | ![Sensitivity: bitnami/influxdb](<bitnami-figures/bitnami/influxdb/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiinfluxdb-1).
 
 Overview cell: 45
 
-Status: failed | Attempts: 425
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 345. Full paths and template references are retained in the JSON report.
 
@@ -1417,57 +1266,17 @@ Audit findings: 345. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.auth.enabled`: Undocumented values path (warning)
 - 339 additional audit findings in JSON.
 
-Configuration rejections: 0 excluded; 14 adjusted and tested; 14 Helm verification renders (separate from manifest-test attempts).
-
-#### E007 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on influxdb/templates/deployment.yaml: error converting YAML to JSON: yaml: line 36: did not find expected ',' or
-']'
-```
-
-Phase: $.image.pullSecrets | Status: failed
-
-Changed overrides (used together):
-- `$.image.pullSecrets = [[{}]]`
-
-Renderer random inputs (replay tape in artifacts):
-
-#### E008 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on influxdb/templates/deployment.yaml: error converting YAML to JSON: yaml: line 62: did not find expected node
-content
-```
-
-Phase: $.image | Status: failed
-
-Changed overrides (used together):
-- `$.global.security.allowInsecureImages = true (was false)`
-- `$.image.t1g = null`
-- `$.image.pullSecrets = [[]]`
-- `$.image.pullPolicy = "aUaI" (was "IfNotPresent")`
-- `$.image.registry = "," (was "docker.io")`
-- `$.image.approximation = false`
-- 11 more paths; see full input.
-
-Renderer random inputs (replay tape in artifacts):
-
 ### [bitnami/jaeger](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/jaeger>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/jaeger](<../../studies/chart-topologies/bitnami/jaeger/topology.png>) | ![Sensitivity: bitnami/jaeger](<../../studies/chart-topologies/bitnami/jaeger/sensitivity.png>) |
+| ![Topology: bitnami/jaeger](<../../studies/chart-topologies/bitnami/jaeger/topology.png>) | ![Sensitivity: bitnami/jaeger](<bitnami-figures/bitnami/jaeger/sensitivity.png>) |
 
 Overview cell: 46
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 404. Full paths and template references are retained in the JSON report.
 
@@ -1483,11 +1292,13 @@ Audit findings: 404. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/janusgraph](<../../studies/chart-topologies/bitnami/janusgraph/topology.png>) | ![Sensitivity: bitnami/janusgraph](<../../studies/chart-topologies/bitnami/janusgraph/sensitivity.png>) |
+| ![Topology: bitnami/janusgraph](<../../studies/chart-topologies/bitnami/janusgraph/topology.png>) | ![Sensitivity: bitnami/janusgraph](<bitnami-figures/bitnami/janusgraph/sensitivity.png>) |
 
 Overview cell: 47
 
-Status: time-limit | Attempts: 31
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 328. Full paths and template references are retained in the JSON report.
 
@@ -1503,11 +1314,13 @@ Audit findings: 328. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/jenkins](<../../studies/chart-topologies/bitnami/jenkins/topology.png>) | ![Sensitivity: bitnami/jenkins](<../../studies/chart-topologies/bitnami/jenkins/sensitivity.png>) |
+| ![Topology: bitnami/jenkins](<../../studies/chart-topologies/bitnami/jenkins/topology.png>) | ![Sensitivity: bitnami/jenkins](<bitnami-figures/bitnami/jenkins/sensitivity.png>) |
 
 Overview cell: 48
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 348. Full paths and template references are retained in the JSON report.
 
@@ -1523,11 +1336,13 @@ Audit findings: 348. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/jupyterhub](<../../studies/chart-topologies/bitnami/jupyterhub/topology.png>) | ![Sensitivity: bitnami/jupyterhub](<../../studies/chart-topologies/bitnami/jupyterhub/sensitivity.png>) |
+| ![Topology: bitnami/jupyterhub](<../../studies/chart-topologies/bitnami/jupyterhub/topology.png>) | ![Sensitivity: bitnami/jupyterhub](<bitnami-figures/bitnami/jupyterhub/sensitivity.png>) |
 
 Overview cell: 49
 
-Status: time-limit | Attempts: 21
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 625. Full paths and template references are retained in the JSON report.
 
@@ -1543,11 +1358,13 @@ Audit findings: 625. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kafka](<../../studies/chart-topologies/bitnami/kafka/topology.png>) | ![Sensitivity: bitnami/kafka](<../../studies/chart-topologies/bitnami/kafka/sensitivity.png>) |
+| ![Topology: bitnami/kafka](<../../studies/chart-topologies/bitnami/kafka/topology.png>) | ![Sensitivity: bitnami/kafka](<bitnami-figures/bitnami/kafka/sensitivity.png>) |
 
 Overview cell: 50
 
-Status: time-limit | Attempts: 9
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 790. Full paths and template references are retained in the JSON report.
 
@@ -1563,11 +1380,13 @@ Audit findings: 790. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/keycloak](<../../studies/chart-topologies/bitnami/keycloak/topology.png>) | ![Sensitivity: bitnami/keycloak](<../../studies/chart-topologies/bitnami/keycloak/sensitivity.png>) |
+| ![Topology: bitnami/keycloak](<../../studies/chart-topologies/bitnami/keycloak/topology.png>) | ![Sensitivity: bitnami/keycloak](<bitnami-figures/bitnami/keycloak/sensitivity.png>) |
 
 Overview cell: 51
 
-Status: time-limit | Attempts: 26
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 448. Full paths and template references are retained in the JSON report.
 
@@ -1583,11 +1402,13 @@ Audit findings: 448. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/keydb](<../../studies/chart-topologies/bitnami/keydb/topology.png>) | ![Sensitivity: bitnami/keydb](<../../studies/chart-topologies/bitnami/keydb/sensitivity.png>) |
+| ![Topology: bitnami/keydb](<../../studies/chart-topologies/bitnami/keydb/topology.png>) | ![Sensitivity: bitnami/keydb](<bitnami-figures/bitnami/keydb/sensitivity.png>) |
 
 Overview cell: 52
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 499. Full paths and template references are retained in the JSON report.
 
@@ -1603,13 +1424,15 @@ Audit findings: 499. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kibana](<../../studies/chart-topologies/bitnami/kibana/topology.png>) | ![Sensitivity: bitnami/kibana](<../../studies/chart-topologies/bitnami/kibana/sensitivity.png>) |
+| ![Topology: bitnami/kibana](<../../studies/chart-topologies/bitnami/kibana/topology.png>) | ![Sensitivity: bitnami/kibana](<bitnami-figures/bitnami/kibana/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamikibana-1).
 
 Overview cell: 53
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 257. Full paths and template references are retained in the JSON report.
 
@@ -1625,11 +1448,13 @@ Audit findings: 257. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kong](<../../studies/chart-topologies/bitnami/kong/topology.png>) | ![Sensitivity: bitnami/kong](<../../studies/chart-topologies/bitnami/kong/sensitivity.png>) |
+| ![Topology: bitnami/kong](<../../studies/chart-topologies/bitnami/kong/topology.png>) | ![Sensitivity: bitnami/kong](<bitnami-figures/bitnami/kong/sensitivity.png>) |
 
 Overview cell: 54
 
-Status: time-limit | Attempts: 28
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 390. Full paths and template references are retained in the JSON report.
 
@@ -1645,11 +1470,13 @@ Audit findings: 390. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kube-arangodb](<../../studies/chart-topologies/bitnami/kube-arangodb/topology.png>) | ![Sensitivity: bitnami/kube-arangodb](<../../studies/chart-topologies/bitnami/kube-arangodb/sensitivity.png>) |
+| ![Topology: bitnami/kube-arangodb](<../../studies/chart-topologies/bitnami/kube-arangodb/topology.png>) | ![Sensitivity: bitnami/kube-arangodb](<bitnami-figures/bitnami/kube-arangodb/sensitivity.png>) |
 
 Overview cell: 55
 
-Status: time-limit | Attempts: 23
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 324. Full paths and template references are retained in the JSON report.
 
@@ -1666,11 +1493,13 @@ Audit findings: 324. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kube-prometheus](<../../studies/chart-topologies/bitnami/kube-prometheus/topology.png>) | ![Sensitivity: bitnami/kube-prometheus](<../../studies/chart-topologies/bitnami/kube-prometheus/sensitivity.png>) |
+| ![Topology: bitnami/kube-prometheus](<../../studies/chart-topologies/bitnami/kube-prometheus/topology.png>) | ![Sensitivity: bitnami/kube-prometheus](<bitnami-figures/bitnami/kube-prometheus/sensitivity.png>) |
 
 Overview cell: 56
 
-Status: failed | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1172. Full paths and template references are retained in the JSON report.
 
@@ -1682,57 +1511,35 @@ Audit findings: 1172. Full paths and template references are retained in the JSO
 - [HH2001](#hh2001---undocumented-values-path) at `$.alertmanager.config.receivers`: Undocumented values path (warning)
 - 1166 additional audit findings in JSON.
 
-#### E027 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
-
-**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
-check the template and input schema.
-
-```text
-[HH1108] Custom resource monitoring.coreos.com/v1/Alertmanager requires an explicit JSON schema in resource_schemas
-```
-
-Phase: chart | Status: failed
-
-No triggering values were recorded for this diagnostic.
-
 ### [bitnami/kube-prometheus/charts/kube-prometheus-crds](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/kube-prometheus/charts/kube-prometheus-crds>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kube-prometheus/charts/kube-prometheus-crds](<../../studies/chart-topologies/bitnami/kube-prometheus/charts/kube-prometheus-crds/topology.png>) | ![Sensitivity: bitnami/kube-prometheus/charts/kube-prometheus-crds](<../../studies/chart-topologies/bitnami/kube-prometheus/charts/kube-prometheus-crds/sensitivity.png>) |
+| ![Topology: bitnami/kube-prometheus/charts/kube-prometheus-crds](<../../studies/chart-topologies/bitnami/kube-prometheus/charts/kube-prometheus-crds/topology.png>) | ![Sensitivity: bitnami/kube-prometheus/charts/kube-prometheus-crds](<bitnami-figures/bitnami/kube-prometheus/charts/kube-prometheus-crds/sensitivity.png>) |
 
 Overview cell: 57
 
-Status: failed | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1. Full paths and template references are retained in the JSON report.
 
 - [HH2001](#hh2001---undocumented-values-path) at `$.exampleValue`: Undocumented values path (warning)
 
-#### E024 ([HH1107](#hh1107---empty-resource-bundle))
-
-**Empty resource bundle** (manifest / violation). Severity: **error**. Check resource activation; ignore this contract if an empty chart is
-intentional.
-
-```text
-[HH1107] chart rendered no resources
-```
-
-Phase: chart | Status: failed
-
-No triggering values were recorded for this diagnostic.
-
 ### [bitnami/kube-state-metrics](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/kube-state-metrics>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kube-state-metrics](<../../studies/chart-topologies/bitnami/kube-state-metrics/topology.png>) | ![Sensitivity: bitnami/kube-state-metrics](<../../studies/chart-topologies/bitnami/kube-state-metrics/sensitivity.png>) |
+| ![Topology: bitnami/kube-state-metrics](<../../studies/chart-topologies/bitnami/kube-state-metrics/topology.png>) | ![Sensitivity: bitnami/kube-state-metrics](<bitnami-figures/bitnami/kube-state-metrics/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamikube-state-metrics-1).
 
 Overview cell: 58
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 208. Full paths and template references are retained in the JSON report.
 
@@ -1748,11 +1555,13 @@ Audit findings: 208. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kuberay](<../../studies/chart-topologies/bitnami/kuberay/topology.png>) | ![Sensitivity: bitnami/kuberay](<../../studies/chart-topologies/bitnami/kuberay/sensitivity.png>) |
+| ![Topology: bitnami/kuberay](<../../studies/chart-topologies/bitnami/kuberay/topology.png>) | ![Sensitivity: bitnami/kuberay](<bitnami-figures/bitnami/kuberay/sensitivity.png>) |
 
 Overview cell: 59
 
-Status: failed | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 550. Full paths and template references are retained in the JSON report.
 
@@ -1764,30 +1573,19 @@ Audit findings: 550. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.apiserver.autoscaling.hpa`: Undocumented values path (warning)
 - 544 additional audit findings in JSON.
 
-#### E028 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
-
-**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
-check the template and input schema.
-
-```text
-[HH1108] Custom resource ray.io/v1/RayCluster requires an explicit JSON schema in resource_schemas
-```
-
-Phase: chart | Status: failed
-
-No triggering values were recorded for this diagnostic.
-
 ### [bitnami/kubernetes-event-exporter](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/kubernetes-event-exporter>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/kubernetes-event-exporter](<../../studies/chart-topologies/bitnami/kubernetes-event-exporter/topology.png>) | ![Sensitivity: bitnami/kubernetes-event-exporter](<../../studies/chart-topologies/bitnami/kubernetes-event-exporter/sensitivity.png>) |
+| ![Topology: bitnami/kubernetes-event-exporter](<../../studies/chart-topologies/bitnami/kubernetes-event-exporter/topology.png>) | ![Sensitivity: bitnami/kubernetes-event-exporter](<bitnami-figures/bitnami/kubernetes-event-exporter/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamikubernetes-event-exporter-1).
 
 Overview cell: 60
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 219. Full paths and template references are retained in the JSON report.
 
@@ -1803,13 +1601,15 @@ Audit findings: 219. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/logstash](<../../studies/chart-topologies/bitnami/logstash/topology.png>) | ![Sensitivity: bitnami/logstash](<../../studies/chart-topologies/bitnami/logstash/sensitivity.png>) |
+| ![Topology: bitnami/logstash](<../../studies/chart-topologies/bitnami/logstash/topology.png>) | ![Sensitivity: bitnami/logstash](<bitnami-figures/bitnami/logstash/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamilogstash-1).
 
 Overview cell: 61
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 219. Full paths and template references are retained in the JSON report.
 
@@ -1825,11 +1625,13 @@ Audit findings: 219. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/mariadb](<../../studies/chart-topologies/bitnami/mariadb/topology.png>) | ![Sensitivity: bitnami/mariadb](<../../studies/chart-topologies/bitnami/mariadb/sensitivity.png>) |
+| ![Topology: bitnami/mariadb](<../../studies/chart-topologies/bitnami/mariadb/topology.png>) | ![Sensitivity: bitnami/mariadb](<bitnami-figures/bitnami/mariadb/sensitivity.png>) |
 
 Overview cell: 62
 
-Status: time-limit | Attempts: 21
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 232. Full paths and template references are retained in the JSON report.
 
@@ -1848,13 +1650,15 @@ Audit findings: 232. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/mariadb-galera](<../../studies/chart-topologies/bitnami/mariadb-galera/topology.png>) | ![Sensitivity: bitnami/mariadb-galera](<../../studies/chart-topologies/bitnami/mariadb-galera/sensitivity.png>) |
+| ![Topology: bitnami/mariadb-galera](<../../studies/chart-topologies/bitnami/mariadb-galera/topology.png>) | ![Sensitivity: bitnami/mariadb-galera](<bitnami-figures/bitnami/mariadb-galera/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamimariadb-galera-1).
 
 Overview cell: 63
 
-Status: time-limit | Attempts: 31
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 303. Full paths and template references are retained in the JSON report.
 
@@ -1870,11 +1674,13 @@ Audit findings: 303. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/mastodon](<../../studies/chart-topologies/bitnami/mastodon/topology.png>) | ![Sensitivity: bitnami/mastodon](<../../studies/chart-topologies/bitnami/mastodon/sensitivity.png>) |
+| ![Topology: bitnami/mastodon](<../../studies/chart-topologies/bitnami/mastodon/topology.png>) | ![Sensitivity: bitnami/mastodon](<bitnami-figures/bitnami/mastodon/sensitivity.png>) |
 
 Overview cell: 64
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 752. Full paths and template references are retained in the JSON report.
 
@@ -1890,11 +1696,13 @@ Audit findings: 752. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/matomo](<../../studies/chart-topologies/bitnami/matomo/topology.png>) | ![Sensitivity: bitnami/matomo](<../../studies/chart-topologies/bitnami/matomo/sensitivity.png>) |
+| ![Topology: bitnami/matomo](<../../studies/chart-topologies/bitnami/matomo/topology.png>) | ![Sensitivity: bitnami/matomo](<bitnami-figures/bitnami/matomo/sensitivity.png>) |
 
 Overview cell: 65
 
-Status: time-limit | Attempts: 16
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 357. Full paths and template references are retained in the JSON report.
 
@@ -1910,13 +1718,15 @@ Audit findings: 357. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/memcached](<../../studies/chart-topologies/bitnami/memcached/topology.png>) | ![Sensitivity: bitnami/memcached](<../../studies/chart-topologies/bitnami/memcached/sensitivity.png>) |
+| ![Topology: bitnami/memcached](<../../studies/chart-topologies/bitnami/memcached/topology.png>) | ![Sensitivity: bitnami/memcached](<bitnami-figures/bitnami/memcached/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamimemcached-1).
 
 Overview cell: 66
 
-Status: time-limit | Attempts: 23
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 276. Full paths and template references are retained in the JSON report.
 
@@ -1932,11 +1742,13 @@ Audit findings: 276. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/metallb](<../../studies/chart-topologies/bitnami/metallb/topology.png>) | ![Sensitivity: bitnami/metallb](<../../studies/chart-topologies/bitnami/metallb/sensitivity.png>) |
+| ![Topology: bitnami/metallb](<../../studies/chart-topologies/bitnami/metallb/topology.png>) | ![Sensitivity: bitnami/metallb](<bitnami-figures/bitnami/metallb/sensitivity.png>) |
 
 Overview cell: 67
 
-Status: time-limit | Attempts: 65
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 395. Full paths and template references are retained in the JSON report.
 
@@ -1952,13 +1764,15 @@ Audit findings: 395. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/metrics-server](<../../studies/chart-topologies/bitnami/metrics-server/topology.png>) | ![Sensitivity: bitnami/metrics-server](<../../studies/chart-topologies/bitnami/metrics-server/sensitivity.png>) |
+| ![Topology: bitnami/metrics-server](<../../studies/chart-topologies/bitnami/metrics-server/topology.png>) | ![Sensitivity: bitnami/metrics-server](<bitnami-figures/bitnami/metrics-server/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamimetrics-server-1).
 
 Overview cell: 68
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 159. Full paths and template references are retained in the JSON report.
 
@@ -1974,11 +1788,13 @@ Audit findings: 159. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/milvus](<../../studies/chart-topologies/bitnami/milvus/topology.png>) | ![Sensitivity: bitnami/milvus](<../../studies/chart-topologies/bitnami/milvus/sensitivity.png>) |
+| ![Topology: bitnami/milvus](<../../studies/chart-topologies/bitnami/milvus/topology.png>) | ![Sensitivity: bitnami/milvus](<bitnami-figures/bitnami/milvus/sensitivity.png>) |
 
 Overview cell: 69
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 716. Full paths and template references are retained in the JSON report.
 
@@ -1994,11 +1810,13 @@ Audit findings: 716. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/mlflow](<../../studies/chart-topologies/bitnami/mlflow/topology.png>) | ![Sensitivity: bitnami/mlflow](<../../studies/chart-topologies/bitnami/mlflow/sensitivity.png>) |
+| ![Topology: bitnami/mlflow](<../../studies/chart-topologies/bitnami/mlflow/topology.png>) | ![Sensitivity: bitnami/mlflow](<bitnami-figures/bitnami/mlflow/sensitivity.png>) |
 
 Overview cell: 70
 
-Status: time-limit | Attempts: 8
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 332. Full paths and template references are retained in the JSON report.
 
@@ -2014,11 +1832,13 @@ Audit findings: 332. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/mongodb](<../../studies/chart-topologies/bitnami/mongodb/topology.png>) | ![Sensitivity: bitnami/mongodb](<../../studies/chart-topologies/bitnami/mongodb/sensitivity.png>) |
+| ![Topology: bitnami/mongodb](<../../studies/chart-topologies/bitnami/mongodb/topology.png>) | ![Sensitivity: bitnami/mongodb](<bitnami-figures/bitnami/mongodb/sensitivity.png>) |
 
 Overview cell: 71
 
-Status: time-limit | Attempts: 41
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 794. Full paths and template references are retained in the JSON report.
 
@@ -2034,11 +1854,13 @@ Audit findings: 794. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/mongodb-sharded](<../../studies/chart-topologies/bitnami/mongodb-sharded/topology.png>) | ![Sensitivity: bitnami/mongodb-sharded](<../../studies/chart-topologies/bitnami/mongodb-sharded/sensitivity.png>) |
+| ![Topology: bitnami/mongodb-sharded](<../../studies/chart-topologies/bitnami/mongodb-sharded/topology.png>) | ![Sensitivity: bitnami/mongodb-sharded](<bitnami-figures/bitnami/mongodb-sharded/sensitivity.png>) |
 
 Overview cell: 72
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 647. Full paths and template references are retained in the JSON report.
 
@@ -2054,11 +1876,13 @@ Audit findings: 647. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/moodle](<../../studies/chart-topologies/bitnami/moodle/topology.png>) | ![Sensitivity: bitnami/moodle](<../../studies/chart-topologies/bitnami/moodle/sensitivity.png>) |
+| ![Topology: bitnami/moodle](<../../studies/chart-topologies/bitnami/moodle/topology.png>) | ![Sensitivity: bitnami/moodle](<bitnami-figures/bitnami/moodle/sensitivity.png>) |
 
 Overview cell: 73
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 300. Full paths and template references are retained in the JSON report.
 
@@ -2074,13 +1898,13 @@ Audit findings: 300. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/multus-cni](<../../studies/chart-topologies/bitnami/multus-cni/topology.png>) | ![Sensitivity: bitnami/multus-cni](<../../studies/chart-topologies/bitnami/multus-cni/sensitivity.png>) |
-
-[Sensitivity field key](#bitnamimultus-cni-1).
+| ![Topology: bitnami/multus-cni](<../../studies/chart-topologies/bitnami/multus-cni/topology.png>) | ![Sensitivity: bitnami/multus-cni](<bitnami-figures/bitnami/multus-cni/sensitivity.png>) |
 
 Overview cell: 74
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 135. Full paths and template references are retained in the JSON report.
 
@@ -2096,11 +1920,13 @@ Audit findings: 135. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/mysql](<../../studies/chart-topologies/bitnami/mysql/topology.png>) | ![Sensitivity: bitnami/mysql](<../../studies/chart-topologies/bitnami/mysql/sensitivity.png>) |
+| ![Topology: bitnami/mysql](<../../studies/chart-topologies/bitnami/mysql/topology.png>) | ![Sensitivity: bitnami/mysql](<bitnami-figures/bitnami/mysql/sensitivity.png>) |
 
 Overview cell: 75
 
-Status: failed | Attempts: 44
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 512. Full paths and template references are retained in the JSON report.
 
@@ -2113,35 +1939,17 @@ Audit findings: 512. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.auth.customPasswordFiles.root`: Undocumented values path (warning)
 - 506 additional audit findings in JSON.
 
-#### E018 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ', 'subPath': 'app-logs-dir'}, {'name': 'config', 'mountPath':
-'/opt/bitnami/mysql/conf/my.cnf', 'subPath': 'my.cnf'}, {'name': 'mysql-credentials', 'mountPath': '/opt/bitnami/mysql/secrets/'}]}]"
-(original value: "{'__hypothesis_key__': {'volumeMounts': {'__hypothesis_key__': {'subPath': None}}}}") in "<unicode string>", line 305,
-column 7: containers: ^ (line: 305) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.primary.extraPodSpec.containers[*].volumeMounts[*].subPath | Status: failed
-
-Changed overrides (used together):
-- `$.primary.extraPodSpec.containers.__hypothesis_key__.volumeMounts.__hypothesis_key__.subPath = null`
-Absent from overrides: $.primary.extraPodSpec.containers["*"].volumeMounts["*"].subPath. Defaults may still apply.
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
 ### [bitnami/nats](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/nats>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/nats](<../../studies/chart-topologies/bitnami/nats/topology.png>) | ![Sensitivity: bitnami/nats](<../../studies/chart-topologies/bitnami/nats/sensitivity.png>) |
+| ![Topology: bitnami/nats](<../../studies/chart-topologies/bitnami/nats/topology.png>) | ![Sensitivity: bitnami/nats](<bitnami-figures/bitnami/nats/sensitivity.png>) |
 
 Overview cell: 76
 
-Status: time-limit | Attempts: 23
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 307. Full paths and template references are retained in the JSON report.
 
@@ -2157,11 +1965,13 @@ Audit findings: 307. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/neo4j](<../../studies/chart-topologies/bitnami/neo4j/topology.png>) | ![Sensitivity: bitnami/neo4j](<../../studies/chart-topologies/bitnami/neo4j/sensitivity.png>) |
+| ![Topology: bitnami/neo4j](<../../studies/chart-topologies/bitnami/neo4j/topology.png>) | ![Sensitivity: bitnami/neo4j](<bitnami-figures/bitnami/neo4j/sensitivity.png>) |
 
 Overview cell: 77
 
-Status: time-limit | Attempts: 127
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 251. Full paths and template references are retained in the JSON report.
 
@@ -2173,17 +1983,17 @@ Audit findings: 251. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.auth.existingSecret`: Undocumented values path (warning)
 - 245 additional audit findings in JSON.
 
-Configuration rejections: 0 excluded; 1 adjusted and tested; 1 Helm verification renders (separate from manifest-test attempts).
-
 ### [bitnami/nessie](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/nessie>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/nessie](<../../studies/chart-topologies/bitnami/nessie/topology.png>) | ![Sensitivity: bitnami/nessie](<../../studies/chart-topologies/bitnami/nessie/sensitivity.png>) |
+| ![Topology: bitnami/nessie](<../../studies/chart-topologies/bitnami/nessie/topology.png>) | ![Sensitivity: bitnami/nessie](<bitnami-figures/bitnami/nessie/sensitivity.png>) |
 
 Overview cell: 78
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 332. Full paths and template references are retained in the JSON report.
 
@@ -2199,11 +2009,13 @@ Audit findings: 332. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/nginx](<../../studies/chart-topologies/bitnami/nginx/topology.png>) | ![Sensitivity: bitnami/nginx](<../../studies/chart-topologies/bitnami/nginx/sensitivity.png>) |
+| ![Topology: bitnami/nginx](<../../studies/chart-topologies/bitnami/nginx/topology.png>) | ![Sensitivity: bitnami/nginx](<bitnami-figures/bitnami/nginx/sensitivity.png>) |
 
 Overview cell: 79
 
-Status: time-limit | Attempts: 23
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 321. Full paths and template references are retained in the JSON report.
 
@@ -2219,13 +2031,15 @@ Audit findings: 321. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/node-exporter](<../../studies/chart-topologies/bitnami/node-exporter/topology.png>) | ![Sensitivity: bitnami/node-exporter](<../../studies/chart-topologies/bitnami/node-exporter/sensitivity.png>) |
+| ![Topology: bitnami/node-exporter](<../../studies/chart-topologies/bitnami/node-exporter/topology.png>) | ![Sensitivity: bitnami/node-exporter](<bitnami-figures/bitnami/node-exporter/sensitivity.png>) |
 
 [Sensitivity field key](#bitnaminode-exporter-1).
 
 Overview cell: 80
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 180. Full paths and template references are retained in the JSON report.
 
@@ -2241,11 +2055,13 @@ Audit findings: 180. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/oauth2-proxy](<../../studies/chart-topologies/bitnami/oauth2-proxy/topology.png>) | ![Sensitivity: bitnami/oauth2-proxy](<../../studies/chart-topologies/bitnami/oauth2-proxy/sensitivity.png>) |
+| ![Topology: bitnami/oauth2-proxy](<../../studies/chart-topologies/bitnami/oauth2-proxy/topology.png>) | ![Sensitivity: bitnami/oauth2-proxy](<bitnami-figures/bitnami/oauth2-proxy/sensitivity.png>) |
 
 Overview cell: 81
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 223. Full paths and template references are retained in the JSON report.
 
@@ -2261,11 +2077,13 @@ Audit findings: 223. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/odoo](<../../studies/chart-topologies/bitnami/odoo/topology.png>) | ![Sensitivity: bitnami/odoo](<../../studies/chart-topologies/bitnami/odoo/sensitivity.png>) |
+| ![Topology: bitnami/odoo](<../../studies/chart-topologies/bitnami/odoo/topology.png>) | ![Sensitivity: bitnami/odoo](<bitnami-figures/bitnami/odoo/sensitivity.png>) |
 
 Overview cell: 82
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 271. Full paths and template references are retained in the JSON report.
 
@@ -2281,13 +2099,15 @@ Audit findings: 271. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/opensearch](<../../studies/chart-topologies/bitnami/opensearch/topology.png>) | ![Sensitivity: bitnami/opensearch](<../../studies/chart-topologies/bitnami/opensearch/sensitivity.png>) |
+| ![Topology: bitnami/opensearch](<../../studies/chart-topologies/bitnami/opensearch/topology.png>) | ![Sensitivity: bitnami/opensearch](<bitnami-figures/bitnami/opensearch/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiopensearch-1).
 
 Overview cell: 83
 
-Status: time-limit | Attempts: 93
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1111. Full paths and template references are retained in the JSON report.
 
@@ -2303,11 +2123,13 @@ Audit findings: 1111. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/parse](<../../studies/chart-topologies/bitnami/parse/topology.png>) | ![Sensitivity: bitnami/parse](<../../studies/chart-topologies/bitnami/parse/sensitivity.png>) |
+| ![Topology: bitnami/parse](<../../studies/chart-topologies/bitnami/parse/topology.png>) | ![Sensitivity: bitnami/parse](<bitnami-figures/bitnami/parse/sensitivity.png>) |
 
 Overview cell: 84
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 379. Full paths and template references are retained in the JSON report.
 
@@ -2323,13 +2145,15 @@ Audit findings: 379. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/phpmyadmin](<../../studies/chart-topologies/bitnami/phpmyadmin/topology.png>) | ![Sensitivity: bitnami/phpmyadmin](<../../studies/chart-topologies/bitnami/phpmyadmin/sensitivity.png>) |
+| ![Topology: bitnami/phpmyadmin](<../../studies/chart-topologies/bitnami/phpmyadmin/topology.png>) | ![Sensitivity: bitnami/phpmyadmin](<bitnami-figures/bitnami/phpmyadmin/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiphpmyadmin-1).
 
 Overview cell: 85
 
-Status: time-limit | Attempts: 37
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 246. Full paths and template references are retained in the JSON report.
 
@@ -2345,11 +2169,13 @@ Audit findings: 246. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/pinniped](<../../studies/chart-topologies/bitnami/pinniped/topology.png>) | ![Sensitivity: bitnami/pinniped](<../../studies/chart-topologies/bitnami/pinniped/sensitivity.png>) |
+| ![Topology: bitnami/pinniped](<../../studies/chart-topologies/bitnami/pinniped/topology.png>) | ![Sensitivity: bitnami/pinniped](<bitnami-figures/bitnami/pinniped/sensitivity.png>) |
 
 Overview cell: 86
 
-Status: failed | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 327. Full paths and template references are retained in the JSON report.
 
@@ -2361,28 +2187,17 @@ Audit findings: 327. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.concierge.automountServiceAccountToken`: Undocumented values path (warning)
 - 321 additional audit findings in JSON.
 
-#### E025 ([HH1108](#hh1108---kubernetes-schema-validation-failed))
-
-**Kubernetes schema validation failed** (manifest / violation). Severity: **error**. Use the validator's field path and expected type to
-check the template and input schema.
-
-```text
-[HH1108] Custom resource config.concierge.pinniped.dev/v1alpha1/CredentialIssuer requires an explicit JSON schema in resource_schemas
-```
-
-Phase: chart | Status: failed
-
-No triggering values were recorded for this diagnostic.
-
 ### [bitnami/postgresql](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/postgresql>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/postgresql](<../../studies/chart-topologies/bitnami/postgresql/topology.png>) | ![Sensitivity: bitnami/postgresql](<../../studies/chart-topologies/bitnami/postgresql/sensitivity.png>) |
+| ![Topology: bitnami/postgresql](<../../studies/chart-topologies/bitnami/postgresql/topology.png>) | ![Sensitivity: bitnami/postgresql](<bitnami-figures/bitnami/postgresql/sensitivity.png>) |
 
 Overview cell: 87
 
-Status: failed | Attempts: 78
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 674. Full paths and template references are retained in the JSON report.
 
@@ -2394,32 +2209,17 @@ Audit findings: 674. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.audit.logTimezone`: Undocumented values path (warning)
 - 668 additional audit findings in JSON.
 
-#### E001 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] Error: YAML parse error on postgresql/templates/primary/statefulset.yaml: error converting YAML to JSON: yaml: line 190: found
-unexpected end of stream
-```
-
-Phase: $.primary.existingConfigmap | Status: failed
-
-Changed overrides (used together):
-- `$.primary.existingConfigmap = "'" (was "")`
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
 ### [bitnami/postgresql-ha](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/postgresql-ha>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/postgresql-ha](<../../studies/chart-topologies/bitnami/postgresql-ha/topology.png>) | ![Sensitivity: bitnami/postgresql-ha](<../../studies/chart-topologies/bitnami/postgresql-ha/sensitivity.png>) |
+| ![Topology: bitnami/postgresql-ha](<../../studies/chart-topologies/bitnami/postgresql-ha/topology.png>) | ![Sensitivity: bitnami/postgresql-ha](<bitnami-figures/bitnami/postgresql-ha/sensitivity.png>) |
 
 Overview cell: 88
 
-Status: time-limit | Attempts: 10
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 732. Full paths and template references are retained in the JSON report.
 
@@ -2435,13 +2235,15 @@ Audit findings: 732. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/prometheus](<../../studies/chart-topologies/bitnami/prometheus/topology.png>) | ![Sensitivity: bitnami/prometheus](<../../studies/chart-topologies/bitnami/prometheus/sensitivity.png>) |
+| ![Topology: bitnami/prometheus](<../../studies/chart-topologies/bitnami/prometheus/topology.png>) | ![Sensitivity: bitnami/prometheus](<bitnami-figures/bitnami/prometheus/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiprometheus-1).
 
 Overview cell: 89
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 193. Full paths and template references are retained in the JSON report.
 
@@ -2459,13 +2261,15 @@ Audit findings: 193. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/pytorch](<../../studies/chart-topologies/bitnami/pytorch/topology.png>) | ![Sensitivity: bitnami/pytorch](<../../studies/chart-topologies/bitnami/pytorch/sensitivity.png>) |
+| ![Topology: bitnami/pytorch](<../../studies/chart-topologies/bitnami/pytorch/topology.png>) | ![Sensitivity: bitnami/pytorch](<bitnami-figures/bitnami/pytorch/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamipytorch-1).
 
 Overview cell: 90
 
-Status: failed | Attempts: 310
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 219. Full paths and template references are retained in the JSON report.
 
@@ -2477,53 +2281,17 @@ Audit findings: 219. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.cloneFilesFromGit.extraVolumeMounts`: Undocumented values path (warning)
 - 213 additional audit findings in JSON.
 
-Configuration rejections: 0 excluded; 19 adjusted and tested; 19 Helm verification renders (separate from manifest-test attempts).
-
-#### E009 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on pytorch/templates/deployment.yaml: error converting YAML to JSON: yaml: line 32: did not find expected ',' or
-']'
-```
-
-Phase: $.image.pullSecrets | Status: failed
-
-Changed overrides (used together):
-- `$.image.pullSecrets = [[{}]]`
-
-Renderer random inputs (replay tape in artifacts):
-
-#### E010 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on pytorch/templates/deployment.yaml: error converting YAML to JSON: yaml: line 57: found character that cannot
-start any token
-```
-
-Phase: $.image | Status: failed
-
-Changed overrides (used together):
-- `$.image.digest = "0" (was "")`
-- `$.image.registry = "" (was "docker.io")`
-- `$.image.repository = "" (was "bitnami/pytorch")`
-
-Renderer random inputs (replay tape in artifacts):
-
 ### [bitnami/rabbitmq](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/rabbitmq>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/rabbitmq](<../../studies/chart-topologies/bitnami/rabbitmq/topology.png>) | ![Sensitivity: bitnami/rabbitmq](<../../studies/chart-topologies/bitnami/rabbitmq/sensitivity.png>) |
+| ![Topology: bitnami/rabbitmq](<../../studies/chart-topologies/bitnami/rabbitmq/topology.png>) | ![Sensitivity: bitnami/rabbitmq](<bitnami-figures/bitnami/rabbitmq/sensitivity.png>) |
 
 Overview cell: 91
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 407. Full paths and template references are retained in the JSON report.
 
@@ -2539,11 +2307,13 @@ Audit findings: 407. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/rabbitmq-cluster-operator](<../../studies/chart-topologies/bitnami/rabbitmq-cluster-operator/topology.png>) | ![Sensitivity: bitnami/rabbitmq-cluster-operator](<../../studies/chart-topologies/bitnami/rabbitmq-cluster-operator/sensitivity.png>) |
+| ![Topology: bitnami/rabbitmq-cluster-operator](<../../studies/chart-topologies/bitnami/rabbitmq-cluster-operator/topology.png>) | ![Sensitivity: bitnami/rabbitmq-cluster-operator](<bitnami-figures/bitnami/rabbitmq-cluster-operator/sensitivity.png>) |
 
 Overview cell: 92
 
-Status: failed | Attempts: 20
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 387. Full paths and template references are retained in the JSON report.
 
@@ -2555,38 +2325,17 @@ Audit findings: 387. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.clusterOperator.containerPorts`: Undocumented values path (warning)
 - 381 additional audit findings in JSON.
 
-#### E029 ([HH1109](#hh1109---invalid-manifest-field-type))
-
-**Invalid manifest field type** (manifest / violation). Severity: **error**. Check the field named in Helm's decoding error and constrain
-its values to the required type.
-
-```text
-[HH1109] Error: YAML parse error on rabbitmq-cluster-operator/templates/cluster-operator/service-account.yaml: error unmarshaling JSON:
-while decoding JSON: json: cannot unmarshal object into Go struct field .metadata.annotations."2a}#^aZ[7 of type string
-```
-
-Phase: $.clusterOperator.serviceAccount | Status: failed
-
-Changed overrides (used together):
-- `$.clusterOperator.serviceAccount.annotations.http = null`
-- `$.clusterOperator.serviceAccount.annotations.E = 1307674368000`
-- `$.clusterOperator.serviceAccount.annotations["I("].a = ["aaE"]`
-- `$.clusterOperator.serviceAccount.annotations["I("].ajaaBaaz = []`
-- `$.clusterOperator.serviceAccount.annotations["I("].aaaa = {}`
-- `$.clusterOperator.serviceAccount.annotations["\"2a}#^aZ[7"]["aa\raa"].g4aa = [4.363245697574542e-147, null, true]`
-- 5 more paths; see full input.
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: genCA
-
 ### [bitnami/redis](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/redis>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/redis](<../../studies/chart-topologies/bitnami/redis/topology.png>) | ![Sensitivity: bitnami/redis](<../../studies/chart-topologies/bitnami/redis/sensitivity.png>) |
+| ![Topology: bitnami/redis](<../../studies/chart-topologies/bitnami/redis/topology.png>) | ![Sensitivity: bitnami/redis](<bitnami-figures/bitnami/redis/sensitivity.png>) |
 
 Overview cell: 93
 
-Status: failed | Attempts: 316
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 317. Full paths and template references are retained in the JSON report.
 
@@ -2598,78 +2347,19 @@ Audit findings: 317. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.configmapChecksumAnnotations`: Undocumented values path (warning)
 - 311 additional audit findings in JSON.
 
-Configuration rejections: 0 excluded; 0 adjusted and tested; 0 Helm verification renders (separate from manifest-test attempts).
-
-The template rejected inputs admitted by the declared values schema; these remain reported failures.
-
-#### E002 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] Error: YAML parse error on redis/templates/master/application.yaml: error converting YAML to JSON: yaml: line 172: could not find
-expected ':'
-```
-
-Phase: $.master.extraVolumes | Status: failed
-
-Changed overrides (used together):
-- `$.master.extraVolumes = "0" (was [])`
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
-#### E003 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] Error: YAML parse error on redis/templates/master/application.yaml: error converting YAML to JSON: yaml: line 66: mapping values
-are not allowed in this context
-```
-
-Phase: $.image | Status: failed
-
-Changed overrides (used together):
-- `$.image["JaaoUQ+c}\"p"] = null`
-- `$.image[""] = null`
-- ``$.image.pullPolicy = "L`" (was "IfNotPresent")``
-- `$.image["6"] = [null]`
-- `$.image.tag = "" (was "8.2.1-debian-12-r0")`
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
-#### E031 ([HH3001](#hh3001---template-accesses-a-missing-object))
-
-**Template accesses a missing object** (template / violation). Severity: **error**. Guard or default the parent object, or require it in the
-values schema.
-
-```text
-[HH3001] Error: redis/templates/replicas/application.yaml:49:38 executing "redis/templates/replicas/application.yaml" at <include (print
-$.Template.BasePath "/configmap.yaml") .>: error calling include: redis/templates/configmap.yaml:61:25 executing
-"redis/templates/configmap.yaml" at <.password>: nil pointer evaluating interface {}.password
-```
-
-Phase: $.auth.acl | Status: failed
-
-Changed overrides (used together):
-- `$.auth.acl.enabled = true (was false)`
-- `$.auth.acl.users = [null]`
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
 ### [bitnami/redis-cluster](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/redis-cluster>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/redis-cluster](<../../studies/chart-topologies/bitnami/redis-cluster/topology.png>) | ![Sensitivity: bitnami/redis-cluster](<../../studies/chart-topologies/bitnami/redis-cluster/sensitivity.png>) |
+| ![Topology: bitnami/redis-cluster](<../../studies/chart-topologies/bitnami/redis-cluster/topology.png>) | ![Sensitivity: bitnami/redis-cluster](<bitnami-figures/bitnami/redis-cluster/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiredis-cluster-1).
 
 Overview cell: 94
 
-Status: time-limit | Attempts: 21
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 371. Full paths and template references are retained in the JSON report.
 
@@ -2686,11 +2376,13 @@ Audit findings: 371. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/redmine](<../../studies/chart-topologies/bitnami/redmine/topology.png>) | ![Sensitivity: bitnami/redmine](<../../studies/chart-topologies/bitnami/redmine/sensitivity.png>) |
+| ![Topology: bitnami/redmine](<../../studies/chart-topologies/bitnami/redmine/topology.png>) | ![Sensitivity: bitnami/redmine](<bitnami-figures/bitnami/redmine/sensitivity.png>) |
 
 Overview cell: 95
 
-Status: time-limit | Attempts: 18
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 374. Full paths and template references are retained in the JSON report.
 
@@ -2706,11 +2398,13 @@ Audit findings: 374. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/schema-registry](<../../studies/chart-topologies/bitnami/schema-registry/topology.png>) | ![Sensitivity: bitnami/schema-registry](<../../studies/chart-topologies/bitnami/schema-registry/sensitivity.png>) |
+| ![Topology: bitnami/schema-registry](<../../studies/chart-topologies/bitnami/schema-registry/topology.png>) | ![Sensitivity: bitnami/schema-registry](<bitnami-figures/bitnami/schema-registry/sensitivity.png>) |
 
 Overview cell: 96
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 277. Full paths and template references are retained in the JSON report.
 
@@ -2726,11 +2420,13 @@ Audit findings: 277. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/scylladb](<../../studies/chart-topologies/bitnami/scylladb/topology.png>) | ![Sensitivity: bitnami/scylladb](<../../studies/chart-topologies/bitnami/scylladb/sensitivity.png>) |
+| ![Topology: bitnami/scylladb](<../../studies/chart-topologies/bitnami/scylladb/topology.png>) | ![Sensitivity: bitnami/scylladb](<bitnami-figures/bitnami/scylladb/sensitivity.png>) |
 
 Overview cell: 97
 
-Status: time-limit | Attempts: 13
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 390. Full paths and template references are retained in the JSON report.
 
@@ -2746,13 +2442,15 @@ Audit findings: 390. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/sealed-secrets](<../../studies/chart-topologies/bitnami/sealed-secrets/topology.png>) | ![Sensitivity: bitnami/sealed-secrets](<../../studies/chart-topologies/bitnami/sealed-secrets/sensitivity.png>) |
+| ![Topology: bitnami/sealed-secrets](<../../studies/chart-topologies/bitnami/sealed-secrets/topology.png>) | ![Sensitivity: bitnami/sealed-secrets](<bitnami-figures/bitnami/sealed-secrets/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamisealed-secrets-1).
 
 Overview cell: 98
 
-Status: failed | Attempts: 377
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 213. Full paths and template references are retained in the JSON report.
 
@@ -2764,76 +2462,17 @@ Audit findings: 213. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.command`: Undocumented values path (warning)
 - 207 additional audit findings in JSON.
 
-Configuration rejections: 0 excluded; 11 adjusted and tested; 11 Helm verification renders (separate from manifest-test attempts).
-
-#### E011 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on sealed-secrets/templates/deployment.yaml: error converting YAML to JSON: yaml: line 29: did not find expected
-',' or ']'
-```
-
-Phase: $.image.pullSecrets | Status: failed
-
-Changed overrides (used together):
-- `$.image.pullSecrets = [[{}]]`
-
-Renderer random inputs (replay tape in artifacts):
-
-Phase: $.global.imagePullSecrets | Status: failed
-
-Changed overrides (used together):
-- `$.global.imagePullSecrets = [[{}]]`
-
-Renderer random inputs (replay tape in artifacts):
-
-#### E012 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on sealed-secrets/templates/deployment.yaml: error converting YAML to JSON: yaml: line 52: mapping values are not
-allowed in this context
-```
-
-Phase: $.image | Status: failed
-
-Changed overrides (used together):
-- `$.image.tag = "" (was "0.31.0-debian-12-r0")`
-
-Renderer random inputs (replay tape in artifacts):
-
-#### E013 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] YAML parse error on sealed-secrets/templates/deployment.yaml: error converting YAML to JSON: yaml: line 69: did not find expected
-key
-```
-
-Phase: $.image.pullSecrets[*] | Status: failed
-
-Changed overrides (used together):
-- `$.image.pullSecrets = ["\""]`
-Absent from overrides: $.image.pullSecrets["*"]. Defaults may still apply.
-
-Renderer random inputs (replay tape in artifacts):
-
 ### [bitnami/seaweedfs](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/seaweedfs>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/seaweedfs](<../../studies/chart-topologies/bitnami/seaweedfs/topology.png>) | ![Sensitivity: bitnami/seaweedfs](<../../studies/chart-topologies/bitnami/seaweedfs/sensitivity.png>) |
+| ![Topology: bitnami/seaweedfs](<../../studies/chart-topologies/bitnami/seaweedfs/topology.png>) | ![Sensitivity: bitnami/seaweedfs](<bitnami-figures/bitnami/seaweedfs/sensitivity.png>) |
 
 Overview cell: 99
 
-Status: time-limit | Attempts: 2
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1241. Full paths and template references are retained in the JSON report.
 
@@ -2849,11 +2488,13 @@ Audit findings: 1241. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/solr](<../../studies/chart-topologies/bitnami/solr/topology.png>) | ![Sensitivity: bitnami/solr](<../../studies/chart-topologies/bitnami/solr/sensitivity.png>) |
+| ![Topology: bitnami/solr](<../../studies/chart-topologies/bitnami/solr/topology.png>) | ![Sensitivity: bitnami/solr](<bitnami-figures/bitnami/solr/sensitivity.png>) |
 
 Overview cell: 100
 
-Status: time-limit | Attempts: 30
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 411. Full paths and template references are retained in the JSON report.
 
@@ -2869,11 +2510,13 @@ Audit findings: 411. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/sonarqube](<../../studies/chart-topologies/bitnami/sonarqube/topology.png>) | ![Sensitivity: bitnami/sonarqube](<../../studies/chart-topologies/bitnami/sonarqube/sensitivity.png>) |
+| ![Topology: bitnami/sonarqube](<../../studies/chart-topologies/bitnami/sonarqube/topology.png>) | ![Sensitivity: bitnami/sonarqube](<bitnami-figures/bitnami/sonarqube/sensitivity.png>) |
 
 Overview cell: 101
 
-Status: time-limit | Attempts: 33
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 419. Full paths and template references are retained in the JSON report.
 
@@ -2889,13 +2532,13 @@ Audit findings: 419. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/spark](<../../studies/chart-topologies/bitnami/spark/topology.png>) | ![Sensitivity: bitnami/spark](<../../studies/chart-topologies/bitnami/spark/sensitivity.png>) |
-
-[Sensitivity field key](#bitnamispark-1).
+| ![Topology: bitnami/spark](<../../studies/chart-topologies/bitnami/spark/topology.png>) | ![Sensitivity: bitnami/spark](<bitnami-figures/bitnami/spark/sensitivity.png>) |
 
 Overview cell: 102
 
-Status: time-limit | Attempts: 83
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 350. Full paths and template references are retained in the JSON report.
 
@@ -2911,11 +2554,13 @@ Audit findings: 350. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/superset](<../../studies/chart-topologies/bitnami/superset/topology.png>) | ![Sensitivity: bitnami/superset](<../../studies/chart-topologies/bitnami/superset/sensitivity.png>) |
+| ![Topology: bitnami/superset](<../../studies/chart-topologies/bitnami/superset/topology.png>) | ![Sensitivity: bitnami/superset](<bitnami-figures/bitnami/superset/sensitivity.png>) |
 
 Overview cell: 103
 
-Status: time-limit | Attempts: 7
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 752. Full paths and template references are retained in the JSON report.
 
@@ -2931,13 +2576,15 @@ Audit findings: 752. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/tensorflow-resnet](<../../studies/chart-topologies/bitnami/tensorflow-resnet/topology.png>) | ![Sensitivity: bitnami/tensorflow-resnet](<../../studies/chart-topologies/bitnami/tensorflow-resnet/sensitivity.png>) |
+| ![Topology: bitnami/tensorflow-resnet](<../../studies/chart-topologies/bitnami/tensorflow-resnet/topology.png>) | ![Sensitivity: bitnami/tensorflow-resnet](<bitnami-figures/bitnami/tensorflow-resnet/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamitensorflow-resnet-1).
 
 Overview cell: 104
 
-Status: time-limit | Attempts: 23
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 172. Full paths and template references are retained in the JSON report.
 
@@ -2953,11 +2600,15 @@ Audit findings: 172. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/thanos](<../../studies/chart-topologies/bitnami/thanos/topology.png>) | ![Sensitivity: bitnami/thanos](<../../studies/chart-topologies/bitnami/thanos/sensitivity.png>) |
+| ![Topology: bitnami/thanos](<../../studies/chart-topologies/bitnami/thanos/topology.png>) | ![Sensitivity: bitnami/thanos](<bitnami-figures/bitnami/thanos/sensitivity.png>) |
+
+[Sensitivity field key](#bitnamithanos-1).
 
 Overview cell: 105
 
-Status: time-limit | Attempts: 43
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1750. Full paths and template references are retained in the JSON report.
 
@@ -2973,11 +2624,13 @@ Audit findings: 1750. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/tomcat](<../../studies/chart-topologies/bitnami/tomcat/topology.png>) | ![Sensitivity: bitnami/tomcat](<../../studies/chart-topologies/bitnami/tomcat/sensitivity.png>) |
+| ![Topology: bitnami/tomcat](<../../studies/chart-topologies/bitnami/tomcat/topology.png>) | ![Sensitivity: bitnami/tomcat](<bitnami-figures/bitnami/tomcat/sensitivity.png>) |
 
 Overview cell: 106
 
-Status: failed | Attempts: 19
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 266. Full paths and template references are retained in the JSON report.
 
@@ -2989,56 +2642,17 @@ Audit findings: 266. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.command`: Undocumented values path (warning)
 - 260 additional audit findings in JSON.
 
-#### E016 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[Diagnostic shortened; full text in artifacts] ... ity': None, 'podAntiAffinity': {'preferredDuringSchedulingIgnoredDuringExecution':
-[{'podAffinityTerm': {'labelSelector': {'matchLabels': {'app.kubernetes.io/instance': 'hypothesis', 'app.kubernetes.io/name': 'tomcat'}},
-'topologyKey': 'kubernetes.io/hostname'}, 'weight': 1}]}, 'nodeAffinity': None}") in "<unicode string>", line 266, column 7: affinity: ^
-(line: 266) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[*].preference | Status: failed
-
-Changed overrides (used together):
-- `$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.__hypothesis_key__.preference = {}`
-Absent from overrides: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution["*"].preference. Defaults may
-still apply.
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
-#### E017 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] invalid rendered YAML: ruamel: while constructing a mapping in "<unicode string>", line 156, column 7:
-automountServiceAccountToken: false ^ (line: 156) found duplicate key "initContainers" with value "{'__hypothesis_key__': {'envFrom':
-{'__hypothesis_key__': {'configMapRef': {'name': None}}}}}" (original value: "None") in "<unicode string>", line 266, column 7:
-initContainers: ^ (line: 266) To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys
-```
-
-Phase: $.extraPodSpec.initContainers[*].envFrom[*].configMapRef.name | Status: failed
-
-Changed overrides (used together):
-- `$.extraPodSpec.initContainers.__hypothesis_key__.envFrom.__hypothesis_key__.configMapRef.name = null`
-Absent from overrides: $.extraPodSpec.initContainers["*"].envFrom["*"].configMapRef.name. Defaults may still apply.
-
-Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
-
 ### [bitnami/valkey](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/valkey>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/valkey](<../../studies/chart-topologies/bitnami/valkey/topology.png>) | ![Sensitivity: bitnami/valkey](<../../studies/chart-topologies/bitnami/valkey/sensitivity.png>) |
+| ![Topology: bitnami/valkey](<../../studies/chart-topologies/bitnami/valkey/topology.png>) | ![Sensitivity: bitnami/valkey](<bitnami-figures/bitnami/valkey/sensitivity.png>) |
 
 Overview cell: 107
 
-Status: time-limit | Attempts: 31
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 686. Full paths and template references are retained in the JSON report.
 
@@ -3054,13 +2668,15 @@ Audit findings: 686. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/valkey-cluster](<../../studies/chart-topologies/bitnami/valkey-cluster/topology.png>) | ![Sensitivity: bitnami/valkey-cluster](<../../studies/chart-topologies/bitnami/valkey-cluster/sensitivity.png>) |
+| ![Topology: bitnami/valkey-cluster](<../../studies/chart-topologies/bitnami/valkey-cluster/topology.png>) | ![Sensitivity: bitnami/valkey-cluster](<bitnami-figures/bitnami/valkey-cluster/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamivalkey-cluster-1).
 
 Overview cell: 108
 
-Status: time-limit | Attempts: 41
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 359. Full paths and template references are retained in the JSON report.
 
@@ -3077,13 +2693,15 @@ Audit findings: 359. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/vault](<../../studies/chart-topologies/bitnami/vault/topology.png>) | ![Sensitivity: bitnami/vault](<../../studies/chart-topologies/bitnami/vault/sensitivity.png>) |
+| ![Topology: bitnami/vault](<../../studies/chart-topologies/bitnami/vault/topology.png>) | ![Sensitivity: bitnami/vault](<bitnami-figures/bitnami/vault/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamivault-1).
 
 Overview cell: 109
 
-Status: time-limit | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 557. Full paths and template references are retained in the JSON report.
 
@@ -3099,13 +2717,15 @@ Audit findings: 557. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/victoriametrics](<../../studies/chart-topologies/bitnami/victoriametrics/topology.png>) | ![Sensitivity: bitnami/victoriametrics](<../../studies/chart-topologies/bitnami/victoriametrics/sensitivity.png>) |
+| ![Topology: bitnami/victoriametrics](<../../studies/chart-topologies/bitnami/victoriametrics/topology.png>) | ![Sensitivity: bitnami/victoriametrics](<bitnami-figures/bitnami/victoriametrics/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamivictoriametrics-1).
 
 Overview cell: 110
 
-Status: time-limit | Attempts: 8
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 1110. Full paths and template references are retained in the JSON report.
 
@@ -3122,13 +2742,15 @@ Audit findings: 1110. Full paths and template references are retained in the JSO
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/whereabouts](<../../studies/chart-topologies/bitnami/whereabouts/topology.png>) | ![Sensitivity: bitnami/whereabouts](<../../studies/chart-topologies/bitnami/whereabouts/sensitivity.png>) |
+| ![Topology: bitnami/whereabouts](<../../studies/chart-topologies/bitnami/whereabouts/topology.png>) | ![Sensitivity: bitnami/whereabouts](<bitnami-figures/bitnami/whereabouts/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiwhereabouts-1).
 
 Overview cell: 111
 
-Status: time-limit | Attempts: 11
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 130. Full paths and template references are retained in the JSON report.
 
@@ -3144,13 +2766,15 @@ Audit findings: 130. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/wildfly](<../../studies/chart-topologies/bitnami/wildfly/topology.png>) | ![Sensitivity: bitnami/wildfly](<../../studies/chart-topologies/bitnami/wildfly/sensitivity.png>) |
+| ![Topology: bitnami/wildfly](<../../studies/chart-topologies/bitnami/wildfly/topology.png>) | ![Sensitivity: bitnami/wildfly](<bitnami-figures/bitnami/wildfly/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamiwildfly-1).
 
 Overview cell: 112
 
-Status: time-limit | Attempts: 31
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 233. Full paths and template references are retained in the JSON report.
 
@@ -3166,11 +2790,13 @@ Audit findings: 233. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/wordpress](<../../studies/chart-topologies/bitnami/wordpress/topology.png>) | ![Sensitivity: bitnami/wordpress](<../../studies/chart-topologies/bitnami/wordpress/sensitivity.png>) |
+| ![Topology: bitnami/wordpress](<../../studies/chart-topologies/bitnami/wordpress/topology.png>) | ![Sensitivity: bitnami/wordpress](<bitnami-figures/bitnami/wordpress/sensitivity.png>) |
 
 Overview cell: 113
 
-Status: time-limit | Attempts: 24
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 406. Full paths and template references are retained in the JSON report.
 
@@ -3186,11 +2812,13 @@ Audit findings: 406. Full paths and template references are retained in the JSON
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/zipkin](<../../studies/chart-topologies/bitnami/zipkin/topology.png>) | ![Sensitivity: bitnami/zipkin](<../../studies/chart-topologies/bitnami/zipkin/sensitivity.png>) |
+| ![Topology: bitnami/zipkin](<../../studies/chart-topologies/bitnami/zipkin/topology.png>) | ![Sensitivity: bitnami/zipkin](<bitnami-figures/bitnami/zipkin/sensitivity.png>) |
 
 Overview cell: 114
 
-Status: failed | Attempts: 1
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 380. Full paths and template references are retained in the JSON report.
 
@@ -3202,31 +2830,19 @@ Audit findings: 380. Full paths and template references are retained in the JSON
 - [HH2001](#hh2001---undocumented-values-path) at `$.autoscaling.hpa`: Undocumented values path (warning)
 - 374 additional audit findings in JSON.
 
-#### E014 ([HH1101](#hh1101---invalid-yaml-in-rendered-output))
-
-**Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
-including quoting and indentation.
-
-```text
-[HH1101] invalid rendered YAML: ruamel: more indented follow up line than first in a block scalar in "<unicode string>", line 474, column
-15: set -o errexit ^ (line: 474)
-```
-
-Phase: chart | Status: failed
-
-No triggering values were recorded for this diagnostic.
-
 ### [bitnami/zookeeper](<https://github.com/bitnami/charts/tree/6a8cccf3c29a1faabf0c34c8276a09ed14f3c5b3/bitnami/zookeeper>)
 
 | Chart topology | Mutation sensitivity |
 | --- | --- |
-| ![Topology: bitnami/zookeeper](<../../studies/chart-topologies/bitnami/zookeeper/topology.png>) | ![Sensitivity: bitnami/zookeeper](<../../studies/chart-topologies/bitnami/zookeeper/sensitivity.png>) |
+| ![Topology: bitnami/zookeeper](<../../studies/chart-topologies/bitnami/zookeeper/topology.png>) | ![Sensitivity: bitnami/zookeeper](<bitnami-figures/bitnami/zookeeper/sensitivity.png>) |
 
 [Sensitivity field key](#bitnamizookeeper-1).
 
 Overview cell: 115
 
-Status: time-limit | Attempts: 43
+Status: unsupported-schema | Attempts: N/A
+
+Testing limitation: permutations need closed objects at (); set additionalProperties: false
 
 Audit findings: 319. Full paths and template references are retained in the JSON report.
 
@@ -3280,6 +2896,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.cloneHtdocsFromGit.enabled`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.metrics.service.port`
+- **12**: `$.metrics.enabled`
+- **13**: `$.cloneHtdocsFromGit.interval`
+- **14**: `$.networkPolicy.allowExternalEgress`
+- **15**: `$.metrics.containerPort`
+- **16**: `$.livenessProbe.enabled`
+- **17**: `$.readinessProbe.enabled`
+- **18**: `$.replicaCount`
+- **19**: `$.autoscaling.minReplicas`
+- **20**: `$.containerPorts.http`
+- **21**: `$.startupProbe.initialDelaySeconds`
+- **22**: `$.startupProbe.failureThreshold`
+- **23**: `$.autoscaling.maxReplicas`
+- **24**: `$.networkPolicy.allowExternal`
+- **25**: `$.ingress.tls`
+- **26**: `$.autoscaling.targetMemory`
+- **27**: `$.readinessProbe.periodSeconds`
+- **28**: `$.podSecurityContext.fsGroup`
+- **29**: `$.revisionHistoryLimit`
+- **30**: `$.metrics.prometheusRule.enabled`
+- **31**: `$.startupProbe.timeoutSeconds`
+- **32**: `$.containerSecurityContext.privileged`
+- **33**: `$.cloneHtdocsFromGit.enableAutoRefresh`
+- **34**: `$.containerSecurityContext.runAsGroup`
+- **35**: `$.image.debug`
+- **36**: `$.containerSecurityContext.runAsNonRoot`
+- **37**: `$.service.ports.https`
+- **38**: `$.autoscaling.targetCPU`
+- **39**: `$.serviceAccount.automountServiceAccountToken`
+- **40**: `$.readinessProbe.successThreshold`
+- **41**: `$.livenessProbe.timeoutSeconds`
+- **42**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **43**: `$.podSecurityContext.enabled`
+- **44**: `$.startupProbe.periodSeconds`
+- **45**: `$.networkPolicy.enabled`
+- **46**: `$.containerPorts.https`
+- **47**: `$.serviceAccount.create`
+- **48**: `$.readinessProbe.failureThreshold`
 
 [Back to chart](#bitnamiapache)
 
@@ -3293,6 +2949,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.healthIngress.enabled`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.networkPolicy.allowExternalEgress`
+- **12**: `$.livenessProbe.enabled`
+- **13**: `$.readinessProbe.enabled`
+- **14**: `$.replicaCount`
+- **15**: `$.autoscaling.minReplicas`
+- **16**: `$.containerPorts.http`
+- **17**: `$.startupProbe.initialDelaySeconds`
+- **18**: `$.startupProbe.failureThreshold`
+- **19**: `$.autoscaling.maxReplicas`
+- **20**: `$.appFromExternalRepo.clone.depth`
+- **21**: `$.networkPolicy.allowExternal`
+- **22**: `$.ingress.tls`
+- **23**: `$.readinessProbe.periodSeconds`
+- **24**: `$.startupProbe.timeoutSeconds`
+- **25**: `$.appFromExternalRepo.enabled`
+- **26**: `$.containerSecurityContext.runAsGroup`
+- **27**: `$.image.debug`
+- **28**: `$.containerSecurityContext.runAsNonRoot`
+- **29**: `$.serviceAccount.automountServiceAccountToken`
+- **30**: `$.readinessProbe.successThreshold`
+- **31**: `$.livenessProbe.timeoutSeconds`
+- **32**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **33**: `$.podSecurityContext.enabled`
+- **34**: `$.startupProbe.periodSeconds`
+- **35**: `$.networkPolicy.enabled`
+- **36**: `$.serviceAccount.create`
+- **37**: `$.readinessProbe.failureThreshold`
+- **38**: `$.ingress.enabled`
+- **39**: `$.containerSecurityContext.runAsUser`
+- **40**: `$.livenessProbe.failureThreshold`
+- **41**: `$.ingress.selfSigned`
+- **42**: `$.global.security.allowInsecureImages`
+- **43**: `$.service.ports.http`
+- **44**: `$.autoscaling.enabled`
+- **45**: `$.appFromExistingPVC.enabled`
+- **46**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **47**: `$.containerSecurityContext.enabled`
+- **48**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnamiaspnet-core)
 
@@ -3306,6 +3002,45 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.readinessProbe.timeoutSeconds`
 - **7**: `$.readinessProbe.initialDelaySeconds`
 - **8**: `$.livenessProbe.successThreshold`
+- **9**: `$.metrics.enabled`
+- **10**: `$.networkPolicy.allowExternalEgress`
+- **11**: `$.livenessProbe.enabled`
+- **12**: `$.defaultMounts.varRun`
+- **13**: `$.readinessProbe.enabled`
+- **14**: `$.containerPorts.http`
+- **15**: `$.startupProbe.initialDelaySeconds`
+- **16**: `$.startupProbe.failureThreshold`
+- **17**: `$.ingress.tls`
+- **18**: `$.networkPolicy.addExternalClientAccess`
+- **19**: `$.readinessProbe.periodSeconds`
+- **20**: `$.defaultMounts.sys`
+- **21**: `$.startupProbe.timeoutSeconds`
+- **22**: `$.containerSecurityContext.privileged`
+- **23**: `$.containerSecurityContext.runAsNonRoot`
+- **24**: `$.serviceAccount.automountServiceAccountToken`
+- **25**: `$.readinessProbe.successThreshold`
+- **26**: `$.livenessProbe.timeoutSeconds`
+- **27**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **28**: `$.podSecurityContext.enabled`
+- **29**: `$.metrics.serviceMonitor.honorLabels`
+- **30**: `$.startupProbe.periodSeconds`
+- **31**: `$.networkPolicy.enabled`
+- **32**: `$.serviceAccount.create`
+- **33**: `$.readinessProbe.failureThreshold`
+- **34**: `$.ingress.enabled`
+- **35**: `$.livenessProbe.failureThreshold`
+- **36**: `$.ingress.selfSigned`
+- **37**: `$.defaultMounts.devDisk`
+- **38**: `$.ingress.tlsWwwPrefix`
+- **39**: `$.global.security.allowInsecureImages`
+- **40**: `$.service.ports.http`
+- **41**: `$.metrics.serviceMonitor.enabled`
+- **42**: `$.defaultMounts.varLibDocker`
+- **43**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **44**: `$.containerSecurityContext.enabled`
+- **45**: `$.defaultMounts.rootfs`
+- **46**: `$.startupProbe.enabled`
+- **47**: `$.service.enabled`
 
 [Back to chart](#bitnamicadvisor)
 
@@ -3319,6 +3054,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.cainjector.startupProbe.periodSeconds`
 - **7**: `$.controller.networkPolicy.allowExternal`
 - **8**: `$.controller.acmesolver.image.debug`
+- **9**: `$.controller.serviceAccount.automountServiceAccountToken`
+- **10**: `$.webhook.podSecurityContext.fsGroup`
+- **11**: `$.cainjector.containerSecurityContext.runAsNonRoot`
+- **12**: `$.controller.livenessProbe.enabled`
+- **13**: `$.metrics.enabled`
+- **14**: `$.cainjector.podSecurityContext.fsGroup`
+- **15**: `$.rbac.create`
+- **16**: `$.webhook.livenessProbe.initialDelaySeconds`
+- **17**: `$.controller.startupProbe.timeoutSeconds`
+- **18**: `$.cainjector.startupProbe.successThreshold`
+- **19**: `$.cainjector.startupProbe.initialDelaySeconds`
+- **20**: `$.cainjector.podSecurityContext.enabled`
+- **21**: `$.metrics.serviceMonitor.targetPort`
+- **22**: `$.cainjector.livenessProbe.failureThreshold`
+- **23**: `$.webhook.readinessProbe.failureThreshold`
+- **24**: `$.cainjector.automountServiceAccountToken`
+- **25**: `$.controller.podSecurityContext.fsGroup`
+- **26**: `$.webhook.networkPolicy.kubeAPIServerPorts[1]`
+- **27**: `$.cainjector.containerSecurityContext.runAsGroup`
+- **28**: `$.controller.automountServiceAccountToken`
+- **29**: `$.webhook.hostNetwork`
+- **30**: `$.replicaCount`
+- **31**: `$.controller.containerSecurityContext.privileged`
+- **32**: `$.cainjector.readinessProbe.timeoutSeconds`
+- **33**: `$.controller.livenessProbe.initialDelaySeconds`
+- **34**: `$.webhook.containerPorts.health`
+- **35**: `$.webhook.podSecurityContext.enabled`
+- **36**: `$.cainjector.containerSecurityContext.enabled`
+- **37**: `$.controller.podSecurityContext.enabled`
+- **38**: `$.controller.containerSecurityContext.readOnlyRootFilesystem`
+- **39**: `$.cainjector.livenessProbe.initialDelaySeconds`
+- **40**: `$.webhook.timeoutSeconds`
+- **41**: `$.controller.readinessProbe.initialDelaySeconds`
+- **42**: `$.cainjector.readinessProbe.enabled`
+- **43**: `$.webhook.serviceAccount.create`
+- **44**: `$.webhook.networkPolicy.kubeAPIServerPorts[2]`
+- **45**: `$.cainjector.livenessProbe.timeoutSeconds`
+- **46**: `$.controller.networkPolicy.allowExternalEgress`
+- **47**: `$.webhook.replicaCount`
+- **48**: `$.controller.containerSecurityContext.enabled`
 
 [Back to chart](#bitnamicert-manager)
 
@@ -3332,6 +3107,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.readinessProbe.initialDelaySeconds`
+- **9**: `$.livenessProbe.successThreshold`
+- **10**: `$.metrics.enabled`
+- **11**: `$.metrics.containerSecurityContext.privileged`
+- **12**: `$.networkPolicy.allowExternalEgress`
+- **13**: `$.livenessProbe.enabled`
+- **14**: `$.readinessProbe.enabled`
+- **15**: `$.replicaCount`
+- **16**: `$.containerPorts.http`
+- **17**: `$.startupProbe.failureThreshold`
+- **18**: `$.containerPorts.rpc`
+- **19**: `$.metrics.containerSecurityContext.runAsNonRoot`
+- **20**: `$.networkPolicy.allowExternal`
+- **21**: `$.metrics.containerSecurityContext.enabled`
+- **22**: `$.ingress.tls`
+- **23**: `$.metrics.containerSecurityContext.allowPrivilegeEscalation`
+- **24**: `$.metrics.containerSecurityContext.runAsGroup`
+- **25**: `$.readinessProbe.periodSeconds`
+- **26**: `$.podSecurityContext.fsGroup`
+- **27**: `$.startupProbe.timeoutSeconds`
+- **28**: `$.containerSecurityContext.privileged`
+- **29**: `$.containerSecurityContext.runAsGroup`
+- **30**: `$.image.debug`
+- **31**: `$.containerSecurityContext.runAsNonRoot`
+- **32**: `$.containerPorts.serfWAN`
+- **33**: `$.serviceAccount.automountServiceAccountToken`
+- **34**: `$.metrics.containerSecurityContext.readOnlyRootFilesystem`
+- **35**: `$.readinessProbe.successThreshold`
+- **36**: `$.containerPorts.dns`
+- **37**: `$.livenessProbe.timeoutSeconds`
+- **38**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **39**: `$.volumePermissions.enabled`
+- **40**: `$.podSecurityContext.enabled`
+- **41**: `$.metrics.serviceMonitor.honorLabels`
+- **42**: `$.startupProbe.periodSeconds`
+- **43**: `$.networkPolicy.enabled`
+- **44**: `$.serviceAccount.create`
+- **45**: `$.readinessProbe.failureThreshold`
+- **46**: `$.ingress.enabled`
+- **47**: `$.containerSecurityContext.runAsUser`
+- **48**: `$.containerPorts.rpcServer`
 
 [Back to chart](#bitnamiconsul)
 
@@ -3345,6 +3160,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.envoy.shutdownManager.startupProbe.successThreshold`
 - **7**: `$.contour.readinessProbe.enabled`
 - **8**: `$.envoy.service.exposeMetrics`
+- **9**: `$.defaultBackend.livenessProbe.successThreshold`
+- **10**: `$.contour.service.ports.xds`
+- **11**: `$.envoy.hostPorts.http`
+- **12**: `$.envoy.shutdownManager.enabled`
+- **13**: `$.contour.networkPolicy.kubeAPIServerPorts[2]`
+- **14**: `$.envoy.useHostPort.metrics`
+- **15**: `$.contour.containerSecurityContext.enabled`
+- **16**: `$.diagnosticMode.enabled`
+- **17**: `$.contour.configPath`
+- **18**: `$.envoy.containerSecurityContext.allowPrivilegeEscalation`
+- **19**: `$.contour.containerSecurityContext.runAsGroup`
+- **20**: `$.configInline.disablePermitInsecure`
+- **21**: `$.contour.serviceAccount.create`
+- **22**: `$.defaultBackend.replicaCount`
+- **23**: `$.envoy.defaultInitContainers.initConfig.containerSecurityContext.allowPrivilegeEscalation`
+- **24**: `$.envoy.shutdownManager.containerSecurityContext.enabled`
+- **25**: `$.rbac.create`
+- **26**: `$.contour.service.ports.metrics`
+- **27**: `$.envoy.containerSecurityContext.runAsGroup`
+- **28**: `$.envoy.readinessProbe.port`
+- **29**: `$.envoy.autoscaling.maxReplicas`
+- **30**: `$.contour.containerSecurityContext.allowPrivilegeEscalation`
+- **31**: `$.contour.certgen.networkPolicy.kubeAPIServerPorts[2]`
+- **32**: `$.defaultBackend.startupProbe.successThreshold`
+- **33**: `$.defaultBackend.containerSecurityContext.allowPrivilegeEscalation`
+- **34**: `$.contour.containerSecurityContext.readOnlyRootFilesystem`
+- **35**: `$.envoy.shutdownManager.startupProbe.periodSeconds`
+- **36**: `$.envoy.livenessProbe.failureThreshold`
+- **37**: `$.envoy.containerPorts.http`
+- **38**: `$.envoy.startupProbe.failureThreshold`
+- **39**: `$.envoy.serviceAccount.automountServiceAccountToken`
+- **40**: `$.contour.readinessProbe.failureThreshold`
+- **41**: `$.envoy.defaultInitContainers.initConfig.containerSecurityContext.readOnlyRootFilesystem`
+- **42**: `$.defaultBackend.podSecurityContext.enabled`
+- **43**: `$.contour.certgen.serviceAccount.automountServiceAccountToken`
+- **44**: `$.contour.networkPolicy.enabled`
+- **45**: `$.defaultBackend.networkPolicy.enabled`
+- **46**: `$.contour.automountServiceAccountToken`
+- **47**: `$.contour.readinessProbe.timeoutSeconds`
+- **48**: `$.contour.containerPorts.xds`
 
 [Back to chart](#bitnamicontour)
 
@@ -3358,6 +3213,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.data.startupProbe.initialDelaySeconds`
 - **7**: `$.master.livenessProbe.successThreshold`
 - **8**: `$.data.autoscaling.minReplicas`
+- **9**: `$.ingest.enabled`
+- **10**: `$.security.fipsMode`
+- **11**: `$.master.networkPolicy.allowExternal`
+- **12**: `$.diagnosticMode.enabled`
+- **13**: `$.ingest.livenessProbe.successThreshold`
+- **14**: `$.ingest.readinessProbe.failureThreshold`
+- **15**: `$.master.autoscaling.enabled`
+- **16**: `$.metrics.startupProbe.timeoutSeconds`
+- **17**: `$.data.shareProcessNamespace`
+- **18**: `$.coordinating.readinessProbe.failureThreshold`
+- **19**: `$.useIstioLabels`
+- **20**: `$.data.livenessProbe.initialDelaySeconds`
+- **21**: `$.metrics.service.port`
+- **22**: `$.master.livenessProbe.initialDelaySeconds`
+- **23**: `$.metrics.automountServiceAccountToken`
+- **24**: `$.metrics.livenessProbe.failureThreshold`
+- **25**: `$.master.persistentVolumeClaimRetentionPolicy.enabled`
+- **26**: `$.master.readinessProbe.timeoutSeconds`
+- **27**: `$.master.serviceAccount.automountServiceAccountToken`
+- **28**: `$.ingest.startupProbe.periodSeconds`
+- **29**: `$.master.readinessProbe.initialDelaySeconds`
+- **30**: `$.metrics.enabled`
+- **31**: `$.data.replicaCount`
+- **32**: `$.metrics.containerSecurityContext.privileged`
+- **33**: `$.ingest.livenessProbe.failureThreshold`
+- **34**: `$.coordinating.readinessProbe.successThreshold`
+- **35**: `$.ingest.containerSecurityContext.runAsNonRoot`
+- **36**: `$.coordinating.containerSecurityContext.runAsUser`
+- **37**: `$.coordinating.livenessProbe.failureThreshold`
+- **38**: `$.metrics.networkPolicy.allowExternal`
+- **39**: `$.data.persistence.enabled`
+- **40**: `$.metrics.livenessProbe.timeoutSeconds`
+- **41**: `$.data.containerSecurityContext.privileged`
+- **42**: `$.coordinating.podSecurityContext.fsGroup`
+- **43**: `$.coordinating.networkPolicy.allowExternal`
+- **44**: `$.metrics.livenessProbe.initialDelaySeconds`
+- **45**: `$.usePasswordFiles`
+- **46**: `$.data.persistentVolumeClaimRetentionPolicy.enabled`
+- **47**: `$.security.tls.autoGenerated`
+- **48**: `$.coordinating.containerSecurityContext.readOnlyRootFilesystem`
 
 [Back to chart](#bitnamielasticsearch)
 
@@ -3371,6 +3266,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.certgen.networkPolicy.kubeAPIServerPorts[1]`
+- **9**: `$.readinessProbe.timeoutSeconds`
+- **10**: `$.readinessProbe.initialDelaySeconds`
+- **11**: `$.livenessProbe.successThreshold`
+- **12**: `$.certgen.startupProbe.timeoutSeconds`
+- **13**: `$.certgen.networkPolicy.allowExternal`
+- **14**: `$.metrics.enabled`
+- **15**: `$.rbac.create`
+- **16**: `$.certgen.serviceAccount.automountServiceAccountToken`
+- **17**: `$.certgen.networkPolicy.allowExternalEgress`
+- **18**: `$.watchAllNamespaces`
+- **19**: `$.certgen.networkPolicy.kubeAPIServerPorts[2]`
+- **20**: `$.certgen.containerSecurityContext.readOnlyRootFilesystem`
+- **21**: `$.networkPolicy.allowExternalEgress`
+- **22**: `$.exposeAdmin`
+- **23**: `$.topologyInjector.enabled`
+- **24**: `$.livenessProbe.enabled`
+- **25**: `$.certgen.completions`
+- **26**: `$.readinessProbe.enabled`
+- **27**: `$.certgen.readinessProbe.timeoutSeconds`
+- **28**: `$.replicaCount`
+- **29**: `$.certgen.automountServiceAccountToken`
+- **30**: `$.certgen.readinessProbe.enabled`
+- **31**: `$.certgen.containerSecurityContext.allowPrivilegeEscalation`
+- **32**: `$.startupProbe.initialDelaySeconds`
+- **33**: `$.networkPolicy.kubeAPIServerPorts[0]`
+- **34**: `$.startupProbe.failureThreshold`
+- **35**: `$.certgen.containerSecurityContext.privileged`
+- **36**: `$.certgen.containerSecurityContext.enabled`
+- **37**: `$.certgen.enabled`
+- **38**: `$.certgen.livenessProbe.failureThreshold`
+- **39**: `$.networkPolicy.allowExternal`
+- **40**: `$.certgen.startupProbe.initialDelaySeconds`
+- **41**: `$.certgen.podSecurityContext.fsGroup`
+- **42**: `$.certgen.livenessProbe.timeoutSeconds`
+- **43**: `$.readinessProbe.periodSeconds`
+- **44**: `$.podSecurityContext.fsGroup`
+- **45**: `$.certgen.startupProbe.periodSeconds`
+- **46**: `$.startupProbe.timeoutSeconds`
+- **47**: `$.certgen.serviceAccount.create`
+- **48**: `$.certgen.livenessProbe.enabled`
 
 [Back to chart](#bitnamienvoy-gateway)
 
@@ -3384,6 +3319,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.readinessProbe.initialDelaySeconds`
+- **9**: `$.livenessProbe.successThreshold`
+- **10**: `$.metrics.enabled`
+- **11**: `$.rbac.create`
+- **12**: `$.cloudflare.dnsRecordsPerPage`
+- **13**: `$.networkPolicy.allowExternalEgress`
+- **14**: `$.rfc2136.port`
+- **15**: `$.livenessProbe.enabled`
+- **16**: `$.readinessProbe.enabled`
+- **17**: `$.traefik.disableLegacy`
+- **18**: `$.cloudflare.regionalServices`
+- **19**: `$.oci.useWorkloadIdentity`
+- **20**: `$.containerPorts.http`
+- **21**: `$.startupProbe.initialDelaySeconds`
+- **22**: `$.networkPolicy.kubeAPIServerPorts[0]`
+- **23**: `$.metrics.googlePodMonitor.enabled`
+- **24**: `$.aws.apiRetries`
+- **25**: `$.startupProbe.failureThreshold`
+- **26**: `$.networkPolicy.allowExternal`
+- **27**: `$.cloudflare.proxied`
+- **28**: `$.traefik.disableNew`
+- **29**: `$.txtEncrypt.enabled`
+- **30**: `$.readinessProbe.periodSeconds`
+- **31**: `$.podSecurityContext.fsGroup`
+- **32**: `$.revisionHistoryLimit`
+- **33**: `$.startupProbe.timeoutSeconds`
+- **34**: `$.txtNewFormatOnly`
+- **35**: `$.containerSecurityContext.privileged`
+- **36**: `$.dryRun`
+- **37**: `$.containerSecurityContext.runAsGroup`
+- **38**: `$.containerSecurityContext.runAsNonRoot`
+- **39**: `$.crd.create`
+- **40**: `$.rbac.clusterRole`
+- **41**: `$.azure.useWorkloadIdentityExtension`
+- **42**: `$.rfc2136.tsigAxfr`
+- **43**: `$.serviceAccount.automountServiceAccountToken`
+- **44**: `$.forceTxtOwnerId`
+- **45**: `$.triggerLoopOnEvent`
+- **46**: `$.readinessProbe.successThreshold`
+- **47**: `$.aws.batchChangeSize`
+- **48**: `$.rfc2136.rfc3645Enabled`
 
 [Back to chart](#bitnamiexternal-dns)
 
@@ -3397,6 +3372,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.jobmanager.readinessProbe.successThreshold`
 - **8**: `$.taskmanager.containerSecurityContext.runAsGroup`
+- **9**: `$.jobmanager.serviceAccount.automountServiceAccountToken`
+- **10**: `$.jobmanager.containerPorts.blob`
+- **11**: `$.jobmanager.readinessProbe.timeoutSeconds`
+- **12**: `$.taskmanager.livenessProbe.enabled`
+- **13**: `$.jobmanager.containerPorts.rpc`
+- **14**: `$.jobmanager.startupProbe.failureThreshold`
+- **15**: `$.taskmanager.service.ports.internalMetrics`
+- **16**: `$.jobmanager.podSecurityContext.enabled`
+- **17**: `$.taskmanager.startupProbe.failureThreshold`
+- **18**: `$.taskmanager.startupProbe.enabled`
+- **19**: `$.taskmanager.containerSecurityContext.privileged`
+- **20**: `$.taskmanager.containerSecurityContext.runAsUser`
+- **21**: `$.taskmanager.startupProbe.periodSeconds`
+- **22**: `$.taskmanager.automountServiceAccountToken`
+- **23**: `$.jobmanager.containerSecurityContext.allowPrivilegeEscalation`
+- **24**: `$.taskmanager.service.ports.data`
+- **25**: `$.jobmanager.containerSecurityContext.runAsGroup`
+- **26**: `$.jobmanager.startupProbe.successThreshold`
+- **27**: `$.jobmanager.startupProbe.initialDelaySeconds`
+- **28**: `$.taskmanager.livenessProbe.periodSeconds`
+- **29**: `$.jobmanager.startupProbe.enabled`
+- **30**: `$.jobmanager.startupProbe.timeoutSeconds`
+- **31**: `$.jobmanager.livenessProbe.successThreshold`
+- **32**: `$.taskmanager.containerSecurityContext.runAsNonRoot`
+- **33**: `$.taskmanager.startupProbe.initialDelaySeconds`
+- **34**: `$.taskmanager.containerPorts.data`
+- **35**: `$.taskmanager.pdb.create`
+- **36**: `$.jobmanager.livenessProbe.initialDelaySeconds`
+- **37**: `$.jobmanager.containerSecurityContext.runAsNonRoot`
+- **38**: `$.jobmanager.networkPolicy.allowExternalEgress`
+- **39**: `$.jobmanager.containerPorts.http`
+- **40**: `$.taskmanager.livenessProbe.failureThreshold`
+- **41**: `$.image.debug`
+- **42**: `$.jobmanager.podSecurityContext.fsGroup`
+- **43**: `$.taskmanager.startupProbe.successThreshold`
+- **44**: `$.taskmanager.replicaCount`
+- **45**: `$.jobmanager.networkPolicy.enabled`
+- **46**: `$.jobmanager.automountServiceAccountToken`
+- **47**: `$.taskmanager.containerSecurityContext.readOnlyRootFilesystem`
+- **48**: `$.taskmanager.livenessProbe.timeoutSeconds`
 
 [Back to chart](#bitnamiflink)
 
@@ -3410,6 +3425,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.autoscaling.hpa.targetCPUUtilizationPercentage`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.metrics.enabled`
+- **12**: `$.rbac.create`
+- **13**: `$.networkPolicy.allowExternalEgress`
+- **14**: `$.livenessProbe.enabled`
+- **15**: `$.readinessProbe.enabled`
+- **16**: `$.replicaCount`
+- **17**: `$.daemonset.podSecurityContext.enabled`
+- **18**: `$.containerPorts.http`
+- **19**: `$.startupProbe.initialDelaySeconds`
+- **20**: `$.networkPolicy.kubeAPIServerPorts[0]`
+- **21**: `$.startupProbe.failureThreshold`
+- **22**: `$.networkPolicy.allowExternal`
+- **23**: `$.ingress.tls`
+- **24**: `$.autoscaling.hpa.minReplicas`
+- **25**: `$.readinessProbe.periodSeconds`
+- **26**: `$.podSecurityContext.fsGroup`
+- **27**: `$.startupProbe.timeoutSeconds`
+- **28**: `$.containerSecurityContext.privileged`
+- **29**: `$.containerSecurityContext.runAsGroup`
+- **30**: `$.image.debug`
+- **31**: `$.containerSecurityContext.runAsNonRoot`
+- **32**: `$.hostNetwork`
+- **33**: `$.serviceAccount.automountServiceAccountToken`
+- **34**: `$.rbac.nodeAccess`
+- **35**: `$.readinessProbe.successThreshold`
+- **36**: `$.autoscaling.vpa.enabled`
+- **37**: `$.livenessProbe.timeoutSeconds`
+- **38**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **39**: `$.autoscaling.hpa.enabled`
+- **40**: `$.podSecurityContext.enabled`
+- **41**: `$.metrics.serviceMonitor.honorLabels`
+- **42**: `$.networkPolicy.kubeAPIServerPorts[2]`
+- **43**: `$.startupProbe.periodSeconds`
+- **44**: `$.networkPolicy.enabled`
+- **45**: `$.serviceAccount.create`
+- **46**: `$.readinessProbe.failureThreshold`
+- **47**: `$.ingress.enabled`
+- **48**: `$.containerSecurityContext.runAsUser`
 
 [Back to chart](#bitnamifluent-bit)
 
@@ -3423,6 +3478,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.aggregator.startupProbe.periodSeconds`
 - **7**: `$.aggregator.containerSecurityContext.runAsGroup`
 - **8**: `$.diagnosticMode.enabled`
+- **9**: `$.aggregator.readinessProbe.timeoutSeconds`
+- **10**: `$.metrics.service.port`
+- **11**: `$.aggregator.networkPolicy.enabled`
+- **12**: `$.metrics.enabled`
+- **13**: `$.forwarder.networkPolicy.enabled`
+- **14**: `$.forwarder.readinessProbe.initialDelaySeconds`
+- **15**: `$.aggregator.autoscaling.enabled`
+- **16**: `$.forwarder.readinessProbe.timeoutSeconds`
+- **17**: `$.aggregator.readinessProbe.periodSeconds`
+- **18**: `$.aggregator.containerSecurityContext.enabled`
+- **19**: `$.forwarder.automountServiceAccountToken`
+- **20**: `$.forwarder.serviceAccount.automountServiceAccountToken`
+- **21**: `$.forwarder.networkPolicy.allowExternalEgress`
+- **22**: `$.forwarder.persistence.enabled`
+- **23**: `$.aggregator.terminationGracePeriodSeconds`
+- **24**: `$.aggregator.livenessProbe.timeoutSeconds`
+- **25**: `$.forwarder.containerSecurityContext.enabled`
+- **26**: `$.forwarder.startupProbe.timeoutSeconds`
+- **27**: `$.aggregator.service.ports.tcp.port`
+- **28**: `$.aggregator.startupProbe.initialDelaySeconds`
+- **29**: `$.aggregator.ingress.enabled`
+- **30**: `$.tls.autoGenerated`
+- **31**: `$.forwarder.enabled`
+- **32**: `$.aggregator.replicaCount`
+- **33**: `$.forwarder.containerSecurityContext.privileged`
+- **34**: `$.forwarder.readinessProbe.periodSeconds`
+- **35**: `$.aggregator.startupProbe.successThreshold`
+- **36**: `$.aggregator.livenessProbe.initialDelaySeconds`
+- **37**: `$.forwarder.startupProbe.periodSeconds`
+- **38**: `$.forwarder.terminationGracePeriodSeconds`
+- **39**: `$.forwarder.networkPolicy.allowExternal`
+- **40**: `$.forwarder.readinessProbe.enabled`
+- **41**: `$.aggregator.persistence.enabled`
+- **42**: `$.varlog.readonly`
+- **43**: `$.forwarder.livenessProbe.failureThreshold`
+- **44**: `$.forwarder.networkPolicy.kubeAPIServerPorts[2]`
+- **45**: `$.aggregator.containerPorts[0].containerPort`
+- **46**: `$.aggregator.livenessProbe.periodSeconds`
+- **47**: `$.forwarder.livenessProbe.periodSeconds`
+- **48**: `$.forwarder.livenessProbe.successThreshold`
 
 [Back to chart](#bitnamifluentd)
 
@@ -3436,6 +3531,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.sourceController.readinessProbe.failureThreshold`
 - **7**: `$.sourceController.rbac.create`
 - **8**: `$.imageAutomationController.serviceAccount.automountServiceAccountToken`
+- **9**: `$.sourceController.readinessProbe.successThreshold`
+- **10**: `$.sourceController.containerPorts.http`
+- **11**: `$.sourceController.networkPolicy.allowExternal`
+- **12**: `$.sourceController.livenessProbe.successThreshold`
+- **13**: `$.helmController.rbac.create`
+- **14**: `$.notificationController.automountServiceAccountToken`
+- **15**: `$.helmController.containerSecurityContext.readOnlyRootFilesystem`
+- **16**: `$.kustomizeController.containerPorts.metrics`
+- **17**: `$.notificationController.readinessProbe.failureThreshold`
+- **18**: `$.imageReflectorController.readinessProbe.initialDelaySeconds`
+- **19**: `$.helmController.livenessProbe.periodSeconds`
+- **20**: `$.diagnosticMode.enabled`
+- **21**: `$.imageAutomationController.installCRDs`
+- **22**: `$.kustomizeController.livenessProbe.successThreshold`
+- **23**: `$.kustomizeController.automountServiceAccountToken`
+- **24**: `$.imageAutomationController.podSecurityContext.enabled`
+- **25**: `$.imageReflectorController.containerSecurityContext.privileged`
+- **26**: `$.helmController.containerSecurityContext.runAsGroup`
+- **27**: `$.imageAutomationController.networkPolicy.kubeAPIServerPorts[2]`
+- **28**: `$.imageAutomationController.replicaCount`
+- **29**: `$.helmController.startupProbe.enabled`
+- **30**: `$.helmController.containerSecurityContext.enabled`
+- **31**: `$.volumePermissions.containerSecurityContext.enabled`
+- **32**: `$.helmController.containerSecurityContext.runAsUser`
+- **33**: `$.imageAutomationController.rbac.create`
+- **34**: `$.kustomizeController.containerSecurityContext.readOnlyRootFilesystem`
+- **35**: `$.notificationController.installCRDs`
+- **36**: `$.sourceController.livenessProbe.failureThreshold`
+- **37**: `$.imageReflectorController.networkPolicy.enabled`
+- **38**: `$.imageAutomationController.metrics.service.ports.metrics`
+- **39**: `$.kustomizeController.containerSecurityContext.enabled`
+- **40**: `$.imageReflectorController.livenessProbe.enabled`
+- **41**: `$.sourceController.serviceAccount.automountServiceAccountToken`
+- **42**: `$.imageAutomationController.livenessProbe.initialDelaySeconds`
+- **43**: `$.helmController.networkPolicy.kubeAPIServerPorts[1]`
+- **44**: `$.kustomizeController.containerSecurityContext.privileged`
+- **45**: `$.imageReflectorController.containerSecurityContext.enabled`
+- **46**: `$.kustomizeController.readinessProbe.enabled`
+- **47**: `$.kustomizeController.containerSecurityContext.runAsGroup`
+- **48**: `$.notificationController.livenessProbe.timeoutSeconds`
 
 [Back to chart](#bitnamiflux)
 
@@ -3449,6 +3584,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.configReloader.livenessProbe.successThreshold`
 - **8**: `$.alloy.startupProbe.periodSeconds`
+- **9**: `$.alloy.containerSecurityContext.runAsGroup`
+- **10**: `$.alloy.livenessProbe.enabled`
+- **11**: `$.configReloader.livenessProbe.initialDelaySeconds`
+- **12**: `$.metrics.enabled`
+- **13**: `$.alloy.startupProbe.initialDelaySeconds`
+- **14**: `$.alloy.containerPorts.http`
+- **15**: `$.alloy.readinessProbe.initialDelaySeconds`
+- **16**: `$.rbac.create`
+- **17**: `$.configReloader.readinessProbe.periodSeconds`
+- **18**: `$.configReloader.livenessProbe.enabled`
+- **19**: `$.alloy.containerSecurityContext.runAsNonRoot`
+- **20**: `$.configReloader.containerSecurityContext.privileged`
+- **21**: `$.networkPolicy.allowExternalEgress`
+- **22**: `$.alloy.enableReporting`
+- **23**: `$.alloy.startupProbe.enabled`
+- **24**: `$.alloy.livenessProbe.initialDelaySeconds`
+- **25**: `$.configReloader.readinessProbe.initialDelaySeconds`
+- **26**: `$.configReloader.containerPorts.http`
+- **27**: `$.alloy.readinessProbe.periodSeconds`
+- **28**: `$.alloy.startupProbe.timeoutSeconds`
+- **29**: `$.alloy.containerSecurityContext.readOnlyRootFilesystem`
+- **30**: `$.configReloader.containerSecurityContext.runAsGroup`
+- **31**: `$.replicaCount`
+- **32**: `$.configReloader.startupProbe.initialDelaySeconds`
+- **33**: `$.configReloader.containerSecurityContext.allowPrivilegeEscalation`
+- **34**: `$.alloy.readinessProbe.failureThreshold`
+- **35**: `$.alloy.containerSecurityContext.enabled`
+- **36**: `$.alloy.readinessProbe.enabled`
+- **37**: `$.configReloader.startupProbe.periodSeconds`
+- **38**: `$.configReloader.containerSecurityContext.readOnlyRootFilesystem`
+- **39**: `$.networkPolicy.allowExternal`
+- **40**: `$.ingress.tls`
+- **41**: `$.networkPolicy.addExternalClientAccess`
+- **42**: `$.podSecurityContext.fsGroup`
+- **43**: `$.configReloader.livenessProbe.failureThreshold`
+- **44**: `$.alloy.readinessProbe.timeoutSeconds`
+- **45**: `$.configReloader.readinessProbe.failureThreshold`
+- **46**: `$.configReloader.readinessProbe.enabled`
+- **47**: `$.alloy.containerSecurityContext.allowPrivilegeEscalation`
+- **48**: `$.configReloader.containerSecurityContext.runAsUser`
 
 [Back to chart](#bitnamigrafana-alloy)
 
@@ -3462,6 +3637,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.readinessProbe.initialDelaySeconds`
+- **9**: `$.livenessProbe.successThreshold`
+- **10**: `$.metrics.enabled`
+- **11**: `$.rbac.create`
+- **12**: `$.watchAllNamespaces`
+- **13**: `$.networkPolicy.allowExternalEgress`
+- **14**: `$.livenessProbe.enabled`
+- **15**: `$.readinessProbe.enabled`
+- **16**: `$.replicaCount`
+- **17**: `$.startupProbe.initialDelaySeconds`
+- **18**: `$.networkPolicy.kubeAPIServerPorts[0]`
+- **19**: `$.startupProbe.failureThreshold`
+- **20**: `$.networkPolicy.allowExternal`
+- **21**: `$.networkPolicy.addExternalClientAccess`
+- **22**: `$.readinessProbe.periodSeconds`
+- **23**: `$.podSecurityContext.fsGroup`
+- **24**: `$.startupProbe.timeoutSeconds`
+- **25**: `$.containerSecurityContext.privileged`
+- **26**: `$.containerSecurityContext.runAsGroup`
+- **27**: `$.containerSecurityContext.runAsNonRoot`
+- **28**: `$.serviceAccount.automountServiceAccountToken`
+- **29**: `$.readinessProbe.successThreshold`
+- **30**: `$.autoscaling.vpa.enabled`
+- **31**: `$.livenessProbe.timeoutSeconds`
+- **32**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **33**: `$.autoscaling.hpa.enabled`
+- **34**: `$.containerPorts.metrics`
+- **35**: `$.podSecurityContext.enabled`
+- **36**: `$.metrics.serviceMonitor.honorLabels`
+- **37**: `$.networkPolicy.kubeAPIServerPorts[2]`
+- **38**: `$.startupProbe.periodSeconds`
+- **39**: `$.networkPolicy.enabled`
+- **40**: `$.serviceAccount.create`
+- **41**: `$.readinessProbe.failureThreshold`
+- **42**: `$.containerSecurityContext.runAsUser`
+- **43**: `$.livenessProbe.failureThreshold`
+- **44**: `$.global.security.allowInsecureImages`
+- **45**: `$.metrics.serviceMonitor.enabled`
+- **46**: `$.networkPolicy.kubeAPIServerPorts[1]`
+- **47**: `$.metrics.service.ports.metrics`
+- **48**: `$.containerSecurityContext.readOnlyRootFilesystem`
 
 [Back to chart](#bitnamigrafana-k6-operator)
 
@@ -3475,6 +3690,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.indexGateway.livenessProbe.enabled`
 - **7**: `$.queryScheduler.startupProbe.timeoutSeconds`
 - **8**: `$.queryScheduler.containerSecurityContext.privileged`
+- **9**: `$.distributor.livenessProbe.successThreshold`
+- **10**: `$.ruler.livenessProbe.enabled`
+- **11**: `$.queryFrontend.startupProbe.initialDelaySeconds`
+- **12**: `$.queryFrontend.readinessProbe.timeoutSeconds`
+- **13**: `$.queryFrontend.containerSecurityContext.runAsGroup`
+- **14**: `$.distributor.containerSecurityContext.allowPrivilegeEscalation`
+- **15**: `$.tableManager.containerSecurityContext.readOnlyRootFilesystem`
+- **16**: `$.distributor.containerSecurityContext.runAsUser`
+- **17**: `$.queryScheduler.networkPolicy.addExternalClientAccess`
+- **18**: `$.queryScheduler.livenessProbe.initialDelaySeconds`
+- **19**: `$.querier.livenessProbe.periodSeconds`
+- **20**: `$.queryFrontend.startupProbe.timeoutSeconds`
+- **21**: `$.queryScheduler.startupProbe.failureThreshold`
+- **22**: `$.gateway.containerSecurityContext.runAsNonRoot`
+- **23**: `$.diagnosticMode.enabled`
+- **24**: `$.ruler.startupProbe.successThreshold`
+- **25**: `$.ingester.replicaCount`
+- **26**: `$.gateway.startupProbe.periodSeconds`
+- **27**: `$.ingester.startupProbe.periodSeconds`
+- **28**: `$.loki.containerPorts.grpc`
+- **29**: `$.ingester.pdb.create`
+- **30**: `$.ruler.livenessProbe.initialDelaySeconds`
+- **31**: `$.ruler.containerSecurityContext.allowPrivilegeEscalation`
+- **32**: `$.ingester.containerSecurityContext.privileged`
+- **33**: `$.indexGateway.readinessProbe.timeoutSeconds`
+- **34**: `$.tableManager.enabled`
+- **35**: `$.gateway.replicaCount`
+- **36**: `$.distributor.pdb.create`
+- **37**: `$.compactor.containerSecurityContext.runAsGroup`
+- **38**: `$.ingester.containerSecurityContext.runAsNonRoot`
+- **39**: `$.compactor.podSecurityContext.enabled`
+- **40**: `$.tableManager.readinessProbe.timeoutSeconds`
+- **41**: `$.indexGateway.containerSecurityContext.enabled`
+- **42**: `$.compactor.readinessProbe.periodSeconds`
+- **43**: `$.metrics.enabled`
+- **44**: `$.indexGateway.replicaCount`
+- **45**: `$.ingester.networkPolicy.allowExternalEgress`
+- **46**: `$.tableManager.readinessProbe.enabled`
+- **47**: `$.indexGateway.startupProbe.initialDelaySeconds`
+- **48**: `$.ingester.startupProbe.failureThreshold`
 
 [Back to chart](#bitnamigrafana-loki)
 
@@ -3488,6 +3743,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.vulture.readinessProbe.enabled`
 - **7**: `$.compactor.enableServiceLinks`
 - **8**: `$.distributor.livenessProbe.successThreshold`
+- **9**: `$.queryFrontend.startupProbe.initialDelaySeconds`
+- **10**: `$.queryFrontend.readinessProbe.timeoutSeconds`
+- **11**: `$.queryFrontend.containerSecurityContext.runAsGroup`
+- **12**: `$.tempo.memBallastSizeMbs`
+- **13**: `$.distributor.containerSecurityContext.allowPrivilegeEscalation`
+- **14**: `$.tempo.containerPorts.gossipRing`
+- **15**: `$.distributor.containerSecurityContext.runAsUser`
+- **16**: `$.metricsGenerator.readinessProbe.timeoutSeconds`
+- **17**: `$.querier.livenessProbe.periodSeconds`
+- **18**: `$.queryFrontend.startupProbe.timeoutSeconds`
+- **19**: `$.metricsGenerator.livenessProbe.enabled`
+- **20**: `$.metricsGenerator.readinessProbe.periodSeconds`
+- **21**: `$.diagnosticMode.enabled`
+- **22**: `$.ingester.replicaCount`
+- **23**: `$.ingester.startupProbe.periodSeconds`
+- **24**: `$.ingester.pdb.create`
+- **25**: `$.ingester.containerSecurityContext.privileged`
+- **26**: `$.vulture.readinessProbe.periodSeconds`
+- **27**: `$.distributor.pdb.create`
+- **28**: `$.metricsGenerator.containerSecurityContext.readOnlyRootFilesystem`
+- **29**: `$.vulture.readinessProbe.timeoutSeconds`
+- **30**: `$.compactor.containerSecurityContext.runAsGroup`
+- **31**: `$.queryFrontend.query.containerSecurityContext.privileged`
+- **32**: `$.queryFrontend.query.startupProbe.initialDelaySeconds`
+- **33**: `$.ingester.containerSecurityContext.runAsNonRoot`
+- **34**: `$.compactor.podSecurityContext.enabled`
+- **35**: `$.vulture.networkPolicy.addExternalClientAccess`
+- **36**: `$.compactor.readinessProbe.periodSeconds`
+- **37**: `$.metrics.enabled`
+- **38**: `$.ingester.networkPolicy.allowExternalEgress`
+- **39**: `$.ingester.startupProbe.failureThreshold`
+- **40**: `$.queryFrontend.readinessProbe.enabled`
+- **41**: `$.querier.livenessProbe.successThreshold`
+- **42**: `$.queryFrontend.startupProbe.failureThreshold`
+- **43**: `$.tempo.traces.jaeger.thriftBinary`
+- **44**: `$.querier.podSecurityContext.enabled`
+- **45**: `$.vulture.startupProbe.failureThreshold`
+- **46**: `$.compactor.startupProbe.failureThreshold`
+- **47**: `$.queryFrontend.livenessProbe.periodSeconds`
+- **48**: `$.compactor.livenessProbe.initialDelaySeconds`
 
 [Back to chart](#bitnamigrafana-tempo)
 
@@ -3501,6 +3796,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.readinessProbe.initialDelaySeconds`
+- **9**: `$.livenessProbe.successThreshold`
+- **10**: `$.enableServiceLinks`
+- **11**: `$.networkPolicy.allowExternalEgress`
+- **12**: `$.livenessProbe.enabled`
+- **13**: `$.readinessProbe.enabled`
+- **14**: `$.replicaCount`
+- **15**: `$.autoscaling.minReplicas`
+- **16**: `$.startupProbe.initialDelaySeconds`
+- **17**: `$.startupProbe.failureThreshold`
+- **18**: `$.autoscaling.maxReplicas`
+- **19**: `$.networkPolicy.allowExternal`
+- **20**: `$.ingress.tls`
+- **21**: `$.autoscaling.targetMemory`
+- **22**: `$.readinessProbe.periodSeconds`
+- **23**: `$.podSecurityContext.fsGroup`
+- **24**: `$.startupProbe.timeoutSeconds`
+- **25**: `$.containerSecurityContext.privileged`
+- **26**: `$.containerSecurityContext.runAsGroup`
+- **27**: `$.containerSecurityContext.runAsNonRoot`
+- **28**: `$.autoscaling.targetCPU`
+- **29**: `$.serviceAccount.automountServiceAccountToken`
+- **30**: `$.readinessProbe.successThreshold`
+- **31**: `$.livenessProbe.timeoutSeconds`
+- **32**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **33**: `$.podSecurityContext.enabled`
+- **34**: `$.startupProbe.periodSeconds`
+- **35**: `$.networkPolicy.enabled`
+- **36**: `$.serviceAccount.create`
+- **37**: `$.readinessProbe.failureThreshold`
+- **38**: `$.ingress.enabled`
+- **39**: `$.service.ports[0].port`
+- **40**: `$.containerSecurityContext.runAsUser`
+- **41**: `$.livenessProbe.failureThreshold`
+- **42**: `$.ingress.selfSigned`
+- **43**: `$.global.security.allowInsecureImages`
+- **44**: `$.autoscaling.enabled`
+- **45**: `$.containerPorts[0].containerPort`
+- **46**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **47**: `$.containerSecurityContext.enabled`
+- **48**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnamihaproxy)
 
@@ -3514,6 +3849,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.initialDelaySeconds`
 - **7**: `$.diagnosticMode.enabled`
 - **8**: `$.defaultInitContainers.volumePermissions.containerSecurityContext.allowPrivilegeEscalation`
+- **9**: `$.livenessProbe.periodSeconds`
+- **10**: `$.readinessProbe.timeoutSeconds`
+- **11**: `$.readinessProbe.initialDelaySeconds`
+- **12**: `$.livenessProbe.successThreshold`
+- **13**: `$.defaultInitContainers.volumePermissions.containerSecurityContext.privileged`
+- **14**: `$.metrics.enabled`
+- **15**: `$.rbac.create`
+- **16**: `$.tls.autoGenerated.enabled`
+- **17**: `$.networkPolicy.allowExternalEgress`
+- **18**: `$.usePasswordFiles`
+- **19**: `$.livenessProbe.enabled`
+- **20**: `$.readinessProbe.enabled`
+- **21**: `$.createAdminTokenJob.containerSecurityContext.readOnlyRootFilesystem`
+- **22**: `$.replicaCount`
+- **23**: `$.containerPorts.http`
+- **24**: `$.startupProbe.initialDelaySeconds`
+- **25**: `$.startupProbe.failureThreshold`
+- **26**: `$.auth.enabled`
+- **27**: `$.networkPolicy.allowExternal`
+- **28**: `$.ingress.tls`
+- **29**: `$.tls.autoGenerated.certManager.keySize`
+- **30**: `$.createAdminTokenJob.serviceAccount.create`
+- **31**: `$.readinessProbe.periodSeconds`
+- **32**: `$.createAdminTokenJob.containerSecurityContext.privileged`
+- **33**: `$.podSecurityContext.fsGroup`
+- **34**: `$.createAdminTokenJob.containerSecurityContext.allowPrivilegeEscalation`
+- **35**: `$.revisionHistoryLimit`
+- **36**: `$.startupProbe.timeoutSeconds`
+- **37**: `$.containerSecurityContext.privileged`
+- **38**: `$.containerSecurityContext.runAsGroup`
+- **39**: `$.image.debug`
+- **40**: `$.containerSecurityContext.runAsNonRoot`
+- **41**: `$.defaultInitContainers.volumePermissions.enabled`
+- **42**: `$.serviceAccount.automountServiceAccountToken`
+- **43**: `$.tls.enabled`
+- **44**: `$.createAdminTokenJob.enabled`
+- **45**: `$.readinessProbe.successThreshold`
+- **46**: `$.autoscaling.vpa.enabled`
+- **47**: `$.livenessProbe.timeoutSeconds`
+- **48**: `$.createAdminTokenJob.serviceAccount.automountServiceAccountToken`
 
 [Back to chart](#bitnamiinfluxdb)
 
@@ -3527,6 +3902,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.metrics.enabled`
+- **12**: `$.tls.usePemCerts`
+- **13**: `$.savedObjects.overwrite`
+- **14**: `$.networkPolicy.allowExternalEgress`
+- **15**: `$.usePasswordFiles`
+- **16**: `$.livenessProbe.enabled`
+- **17**: `$.readinessProbe.enabled`
+- **18**: `$.forceInitScripts`
+- **19**: `$.replicaCount`
+- **20**: `$.containerPorts.http`
+- **21**: `$.startupProbe.initialDelaySeconds`
+- **22**: `$.tls.autoGenerated`
+- **23**: `$.startupProbe.failureThreshold`
+- **24**: `$.networkPolicy.allowExternal`
+- **25**: `$.ingress.tls`
+- **26**: `$.readinessProbe.periodSeconds`
+- **27**: `$.podSecurityContext.fsGroup`
+- **28**: `$.revisionHistoryLimit`
+- **29**: `$.startupProbe.timeoutSeconds`
+- **30**: `$.elasticsearch.security.tls.enabled`
+- **31**: `$.containerSecurityContext.privileged`
+- **32**: `$.containerSecurityContext.runAsGroup`
+- **33**: `$.image.debug`
+- **34**: `$.containerSecurityContext.runAsNonRoot`
+- **35**: `$.serviceAccount.automountServiceAccountToken`
+- **36**: `$.tls.enabled`
+- **37**: `$.readinessProbe.successThreshold`
+- **38**: `$.livenessProbe.timeoutSeconds`
+- **39**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **40**: `$.volumePermissions.enabled`
+- **41**: `$.podSecurityContext.enabled`
+- **42**: `$.elasticsearch.security.auth.createSystemUser`
+- **43**: `$.metrics.serviceMonitor.honorLabels`
+- **44**: `$.startupProbe.periodSeconds`
+- **45**: `$.networkPolicy.enabled`
+- **46**: `$.configuration.server.rewriteBasePath`
+- **47**: `$.serviceAccount.create`
+- **48**: `$.readinessProbe.failureThreshold`
 
 [Back to chart](#bitnamikibana)
 
@@ -3540,6 +3955,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.startupProbe.successThreshold`
 - **7**: `$.automountServiceAccountToken`
 - **8**: `$.pdb.create`
+- **9**: `$.livenessProbe.initialDelaySeconds`
+- **10**: `$.diagnosticMode.enabled`
+- **11**: `$.kubeResources.certificatesigningrequests`
+- **12**: `$.livenessProbe.periodSeconds`
+- **13**: `$.readinessProbe.timeoutSeconds`
+- **14**: `$.readinessProbe.initialDelaySeconds`
+- **15**: `$.livenessProbe.successThreshold`
+- **16**: `$.kubeResources.limitranges`
+- **17**: `$.kubeResources.persistentvolumes`
+- **18**: `$.kubeResources.mutatingwebhookconfigurations`
+- **19**: `$.rbac.create`
+- **20**: `$.kubeResources.leases`
+- **21**: `$.selfMonitor.enabled`
+- **22**: `$.kubeResources.cronjobs`
+- **23**: `$.networkPolicy.allowExternalEgress`
+- **24**: `$.kubeResources.horizontalpodautoscalers`
+- **25**: `$.livenessProbe.enabled`
+- **26**: `$.readinessProbe.enabled`
+- **27**: `$.kubeResources.validatingwebhookconfigurations`
+- **28**: `$.replicaCount`
+- **29**: `$.containerPorts.http`
+- **30**: `$.startupProbe.initialDelaySeconds`
+- **31**: `$.networkPolicy.kubeAPIServerPorts[0]`
+- **32**: `$.startupProbe.failureThreshold`
+- **33**: `$.kubeResources.endpoints`
+- **34**: `$.networkPolicy.allowExternal`
+- **35**: `$.serviceMonitor.honorLabels`
+- **36**: `$.kubeResources.replicasets`
+- **37**: `$.kubeResources.configmaps`
+- **38**: `$.readinessProbe.periodSeconds`
+- **39**: `$.podSecurityContext.fsGroup`
+- **40**: `$.startupProbe.timeoutSeconds`
+- **41**: `$.kubeResources.storageclasses`
+- **42**: `$.kubeResources.statefulsets`
+- **43**: `$.containerSecurityContext.privileged`
+- **44**: `$.containerSecurityContext.runAsGroup`
+- **45**: `$.containerSecurityContext.runAsNonRoot`
+- **46**: `$.kubeResources.replicationcontrollers`
+- **47**: `$.hostNetwork`
+- **48**: `$.serviceAccount.automountServiceAccountToken`
 
 [Back to chart](#bitnamikube-state-metrics)
 
@@ -3553,6 +4008,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.metrics.enabled`
+- **12**: `$.rbac.create`
+- **13**: `$.networkPolicy.allowExternalEgress`
+- **14**: `$.livenessProbe.enabled`
+- **15**: `$.readinessProbe.enabled`
+- **16**: `$.autoscaling.vpa.updatePolicy.minReplicas`
+- **17**: `$.replicaCount`
+- **18**: `$.containerPorts.http`
+- **19**: `$.startupProbe.initialDelaySeconds`
+- **20**: `$.networkPolicy.kubeAPIServerPorts[0]`
+- **21**: `$.startupProbe.failureThreshold`
+- **22**: `$.networkPolicy.allowExternal`
+- **23**: `$.readinessProbe.periodSeconds`
+- **24**: `$.podSecurityContext.fsGroup`
+- **25**: `$.revisionHistoryLimit`
+- **26**: `$.metrics.prometheusRule.enabled`
+- **27**: `$.startupProbe.timeoutSeconds`
+- **28**: `$.containerSecurityContext.privileged`
+- **29**: `$.containerSecurityContext.runAsGroup`
+- **30**: `$.containerSecurityContext.runAsNonRoot`
+- **31**: `$.serviceAccount.automountServiceAccountToken`
+- **32**: `$.readinessProbe.successThreshold`
+- **33**: `$.autoscaling.vpa.enabled`
+- **34**: `$.livenessProbe.timeoutSeconds`
+- **35**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **36**: `$.podSecurityContext.enabled`
+- **37**: `$.metrics.serviceMonitor.honorLabels`
+- **38**: `$.networkPolicy.kubeAPIServerPorts[2]`
+- **39**: `$.startupProbe.periodSeconds`
+- **40**: `$.networkPolicy.enabled`
+- **41**: `$.serviceAccount.create`
+- **42**: `$.readinessProbe.failureThreshold`
+- **43**: `$.containerSecurityContext.runAsUser`
+- **44**: `$.livenessProbe.failureThreshold`
+- **45**: `$.global.security.allowInsecureImages`
+- **46**: `$.metrics.serviceMonitor.enabled`
+- **47**: `$.networkPolicy.kubeAPIServerPorts[1]`
+- **48**: `$.containerSecurityContext.readOnlyRootFilesystem`
 
 [Back to chart](#bitnamikubernetes-event-exporter)
 
@@ -3566,6 +4061,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.initialDelaySeconds`
 - **7**: `$.diagnosticMode.enabled`
 - **8**: `$.livenessProbe.periodSeconds`
+- **9**: `$.readinessProbe.timeoutSeconds`
+- **10**: `$.readinessProbe.initialDelaySeconds`
+- **11**: `$.livenessProbe.successThreshold`
+- **12**: `$.networkPolicy.allowExternalEgress`
+- **13**: `$.livenessProbe.enabled`
+- **14**: `$.readinessProbe.enabled`
+- **15**: `$.replicaCount`
+- **16**: `$.startupProbe.initialDelaySeconds`
+- **17**: `$.startupProbe.failureThreshold`
+- **18**: `$.networkPolicy.allowExternal`
+- **19**: `$.ingress.tls`
+- **20**: `$.readinessProbe.periodSeconds`
+- **21**: `$.podSecurityContext.fsGroup`
+- **22**: `$.startupProbe.timeoutSeconds`
+- **23**: `$.containerSecurityContext.privileged`
+- **24**: `$.containerSecurityContext.runAsGroup`
+- **25**: `$.image.debug`
+- **26**: `$.containerSecurityContext.runAsNonRoot`
+- **27**: `$.serviceAccount.automountServiceAccountToken`
+- **28**: `$.readinessProbe.successThreshold`
+- **29**: `$.livenessProbe.timeoutSeconds`
+- **30**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **31**: `$.volumePermissions.enabled`
+- **32**: `$.podSecurityContext.enabled`
+- **33**: `$.startupProbe.periodSeconds`
+- **34**: `$.networkPolicy.enabled`
+- **35**: `$.serviceAccount.create`
+- **36**: `$.readinessProbe.failureThreshold`
+- **37**: `$.ingress.enabled`
+- **38**: `$.service.ports[0].port`
+- **39**: `$.containerSecurityContext.runAsUser`
+- **40**: `$.livenessProbe.failureThreshold`
+- **41**: `$.persistence.enabled`
+- **42**: `$.ingress.selfSigned`
+- **43**: `$.global.security.allowInsecureImages`
+- **44**: `$.enableMultiplePipelines`
+- **45**: `$.containerPorts[0].containerPort`
+- **46**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **47**: `$.containerSecurityContext.enabled`
+- **48**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnamilogstash)
 
@@ -3579,6 +4114,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.readinessProbe.initialDelaySeconds`
+- **9**: `$.livenessProbe.successThreshold`
+- **10**: `$.metrics.service.port`
+- **11**: `$.galera.bootstrap.forceBootstrap`
+- **12**: `$.metrics.enabled`
+- **13**: `$.metrics.containerSecurityContext.privileged`
+- **14**: `$.rbac.create`
+- **15**: `$.containerPorts.mysql`
+- **16**: `$.galera.bootstrap.forceSafeToBootstrap`
+- **17**: `$.networkPolicy.allowExternalEgress`
+- **18**: `$.usePasswordFiles`
+- **19**: `$.livenessProbe.enabled`
+- **20**: `$.readinessProbe.enabled`
+- **21**: `$.metrics.prometheusRules.enabled`
+- **22**: `$.containerPorts.sst`
+- **23**: `$.replicaCount`
+- **24**: `$.startupProbe.initialDelaySeconds`
+- **25**: `$.tls.autoGenerated`
+- **26**: `$.startupProbe.failureThreshold`
+- **27**: `$.metrics.containerSecurityContext.runAsNonRoot`
+- **28**: `$.galera.mariabackup.forcePassword`
+- **29**: `$.service.headless.publishNotReadyAddresses`
+- **30**: `$.networkPolicy.allowExternal`
+- **31**: `$.metrics.containerSecurityContext.enabled`
+- **32**: `$.metrics.containerSecurityContext.allowPrivilegeEscalation`
+- **33**: `$.metrics.containerPorts.http`
+- **34**: `$.containerPorts.ist`
+- **35**: `$.metrics.containerSecurityContext.runAsGroup`
+- **36**: `$.readinessProbe.periodSeconds`
+- **37**: `$.podSecurityContext.fsGroup`
+- **38**: `$.ldap.enabled`
+- **39**: `$.startupProbe.timeoutSeconds`
+- **40**: `$.containerSecurityContext.privileged`
+- **41**: `$.containerSecurityContext.runAsGroup`
+- **42**: `$.image.debug`
+- **43**: `$.containerSecurityContext.runAsNonRoot`
+- **44**: `$.containerPorts.galera`
+- **45**: `$.serviceAccount.automountServiceAccountToken`
+- **46**: `$.tls.enabled`
+- **47**: `$.metrics.containerSecurityContext.readOnlyRootFilesystem`
+- **48**: `$.readinessProbe.successThreshold`
 
 [Back to chart](#bitnamimariadb-galera)
 
@@ -3592,6 +4167,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.metrics.startupProbe.timeoutSeconds`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.metrics.livenessProbe.failureThreshold`
+- **12**: `$.metrics.enabled`
+- **13**: `$.metrics.containerSecurityContext.privileged`
+- **14**: `$.enableServiceLinks`
+- **15**: `$.metrics.livenessProbe.timeoutSeconds`
+- **16**: `$.networkPolicy.allowExternalEgress`
+- **17**: `$.metrics.livenessProbe.initialDelaySeconds`
+- **18**: `$.livenessProbe.enabled`
+- **19**: `$.metrics.readinessProbe.timeoutSeconds`
+- **20**: `$.readinessProbe.enabled`
+- **21**: `$.metrics.readinessProbe.periodSeconds`
+- **22**: `$.replicaCount`
+- **23**: `$.autoscaling.minReplicas`
+- **24**: `$.metrics.livenessProbe.successThreshold`
+- **25**: `$.startupProbe.initialDelaySeconds`
+- **26**: `$.metrics.livenessProbe.periodSeconds`
+- **27**: `$.startupProbe.failureThreshold`
+- **28**: `$.metrics.readinessProbe.successThreshold`
+- **29**: `$.auth.enabled`
+- **30**: `$.metrics.containerSecurityContext.runAsNonRoot`
+- **31**: `$.autoscaling.maxReplicas`
+- **32**: `$.networkPolicy.allowExternal`
+- **33**: `$.metrics.containerSecurityContext.enabled`
+- **34**: `$.metrics.containerSecurityContext.allowPrivilegeEscalation`
+- **35**: `$.networkPolicy.addExternalClientAccess`
+- **36**: `$.autoscaling.targetMemory`
+- **37**: `$.metrics.containerSecurityContext.runAsGroup`
+- **38**: `$.readinessProbe.periodSeconds`
+- **39**: `$.metrics.containerPorts.metrics`
+- **40**: `$.podSecurityContext.fsGroup`
+- **41**: `$.startupProbe.timeoutSeconds`
+- **42**: `$.metrics.startupProbe.successThreshold`
+- **43**: `$.containerSecurityContext.privileged`
+- **44**: `$.containerSecurityContext.runAsGroup`
+- **45**: `$.image.debug`
+- **46**: `$.containerSecurityContext.runAsNonRoot`
+- **47**: `$.autoscaling.targetCPU`
+- **48**: `$.metrics.startupProbe.failureThreshold`
 
 [Back to chart](#bitnamimemcached)
 
@@ -3605,21 +4220,44 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.networkPolicy.kubernetesPorts[3]`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.livenessProbe.successThreshold`
+- **9**: `$.apiService.create`
+- **10**: `$.networkPolicy.kubernetesPorts[0]`
+- **11**: `$.rbac.create`
+- **12**: `$.networkPolicy.allowExternalEgress`
+- **13**: `$.livenessProbe.enabled`
+- **14**: `$.readinessProbe.enabled`
+- **15**: `$.networkPolicy.kubernetesPorts[1]`
+- **16**: `$.startupProbe.failureThreshold`
+- **17**: `$.apiService.insecureSkipTLSVerify`
+- **18**: `$.networkPolicy.allowExternal`
+- **19**: `$.readinessProbe.periodSeconds`
+- **20**: `$.podSecurityContext.fsGroup`
+- **21**: `$.startupProbe.timeoutSeconds`
+- **22**: `$.containerSecurityContext.privileged`
+- **23**: `$.replicas`
+- **24**: `$.containerSecurityContext.runAsGroup`
+- **25**: `$.containerSecurityContext.runAsNonRoot`
+- **26**: `$.service.ports.https`
+- **27**: `$.networkPolicy.kubernetesPorts[2]`
+- **28**: `$.hostNetwork`
+- **29**: `$.serviceAccount.automountServiceAccountToken`
+- **30**: `$.readinessProbe.successThreshold`
+- **31**: `$.livenessProbe.timeoutSeconds`
+- **32**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **33**: `$.podSecurityContext.enabled`
+- **34**: `$.startupProbe.periodSeconds`
+- **35**: `$.networkPolicy.enabled`
+- **36**: `$.containerPorts.https`
+- **37**: `$.serviceAccount.create`
+- **38**: `$.readinessProbe.failureThreshold`
+- **39**: `$.containerSecurityContext.runAsUser`
+- **40**: `$.livenessProbe.failureThreshold`
+- **41**: `$.global.security.allowInsecureImages`
+- **42**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **43**: `$.containerSecurityContext.enabled`
+- **44**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnamimetrics-server)
-
-### bitnami/multus-cni
-
-- **1**: `$.startupProbe.successThreshold`
-- **2**: `$.automountServiceAccountToken`
-- **3**: `$.livenessProbe.initialDelaySeconds`
-- **4**: `$.diagnosticMode.enabled`
-- **5**: `$.livenessProbe.periodSeconds`
-- **6**: `$.readinessProbe.timeoutSeconds`
-- **7**: `$.readinessProbe.initialDelaySeconds`
-- **8**: `$.livenessProbe.successThreshold`
-
-[Back to chart](#bitnamimultus-cni)
 
 ### bitnami/node-exporter
 
@@ -3631,6 +4269,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.isolatedDeployment`
+- **12**: `$.rbac.create`
+- **13**: `$.hostPID`
+- **14**: `$.networkPolicy.allowExternalEgress`
+- **15**: `$.livenessProbe.enabled`
+- **16**: `$.readinessProbe.enabled`
+- **17**: `$.replicaCount`
+- **18**: `$.startupProbe.initialDelaySeconds`
+- **19**: `$.updateStrategy.rollingUpdate.maxUnavailable`
+- **20**: `$.startupProbe.failureThreshold`
+- **21**: `$.networkPolicy.allowExternal`
+- **22**: `$.serviceMonitor.honorLabels`
+- **23**: `$.readinessProbe.periodSeconds`
+- **24**: `$.podSecurityContext.fsGroup`
+- **25**: `$.startupProbe.timeoutSeconds`
+- **26**: `$.containerSecurityContext.privileged`
+- **27**: `$.containerSecurityContext.runAsGroup`
+- **28**: `$.containerSecurityContext.runAsNonRoot`
+- **29**: `$.hostNetwork`
+- **30**: `$.serviceAccount.automountServiceAccountToken`
+- **31**: `$.readinessProbe.successThreshold`
+- **32**: `$.livenessProbe.timeoutSeconds`
+- **33**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **34**: `$.serviceMonitor.enabled`
+- **35**: `$.containerPorts.metrics`
+- **36**: `$.podSecurityContext.enabled`
+- **37**: `$.service.addPrometheusScrapeAnnotation`
+- **38**: `$.startupProbe.periodSeconds`
+- **39**: `$.networkPolicy.enabled`
+- **40**: `$.service.ports.metrics`
+- **41**: `$.serviceAccount.create`
+- **42**: `$.readinessProbe.failureThreshold`
+- **43**: `$.containerSecurityContext.runAsUser`
+- **44**: `$.livenessProbe.failureThreshold`
+- **45**: `$.global.security.allowInsecureImages`
+- **46**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **47**: `$.containerSecurityContext.enabled`
+- **48**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnaminode-exporter)
 
@@ -3644,6 +4322,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.coordinating.networkPolicy.allowExternalEgress`
 - **7**: `$.data.autoscaling.hpa.enabled`
 - **8**: `$.dashboards.livenessProbe.successThreshold`
+- **9**: `$.data.startupProbe.initialDelaySeconds`
+- **10**: `$.snapshots.containerSecurityContext.runAsUser`
+- **11**: `$.dashboards.livenessProbe.initialDelaySeconds`
+- **12**: `$.master.livenessProbe.successThreshold`
+- **13**: `$.ingest.autoscaling.hpa.enabled`
+- **14**: `$.ingest.enabled`
+- **15**: `$.security.fipsMode`
+- **16**: `$.ingest.autoscaling.vpa.enabled`
+- **17**: `$.master.networkPolicy.allowExternal`
+- **18**: `$.diagnosticMode.enabled`
+- **19**: `$.ingest.livenessProbe.successThreshold`
+- **20**: `$.ingest.readinessProbe.failureThreshold`
+- **21**: `$.dashboards.containerSecurityContext.runAsNonRoot`
+- **22**: `$.coordinating.readinessProbe.failureThreshold`
+- **23**: `$.useIstioLabels`
+- **24**: `$.coordinating.autoscaling.vpa.enabled`
+- **25**: `$.data.livenessProbe.initialDelaySeconds`
+- **26**: `$.master.livenessProbe.initialDelaySeconds`
+- **27**: `$.master.readinessProbe.timeoutSeconds`
+- **28**: `$.master.serviceAccount.automountServiceAccountToken`
+- **29**: `$.data.autoscaling.hpa.minReplicas`
+- **30**: `$.snapshots.containerSecurityContext.privileged`
+- **31**: `$.ingest.startupProbe.periodSeconds`
+- **32**: `$.master.readinessProbe.initialDelaySeconds`
+- **33**: `$.data.replicaCount`
+- **34**: `$.coordinating.metrics.enabled`
+- **35**: `$.dashboards.livenessProbe.timeoutSeconds`
+- **36**: `$.ingest.livenessProbe.failureThreshold`
+- **37**: `$.coordinating.readinessProbe.successThreshold`
+- **38**: `$.ingest.containerSecurityContext.runAsNonRoot`
+- **39**: `$.coordinating.containerSecurityContext.runAsUser`
+- **40**: `$.coordinating.livenessProbe.failureThreshold`
+- **41**: `$.dashboards.containerPorts.http`
+- **42**: `$.data.persistence.enabled`
+- **43**: `$.dashboards.readinessProbe.enabled`
+- **44**: `$.data.containerSecurityContext.privileged`
+- **45**: `$.coordinating.podSecurityContext.fsGroup`
+- **46**: `$.coordinating.networkPolicy.allowExternal`
+- **47**: `$.usePasswordFiles`
+- **48**: `$.snapshots.persistence.enabled`
 
 [Back to chart](#bitnamiopensearch)
 
@@ -3657,6 +4375,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.readinessProbe.timeoutSeconds`
 - **7**: `$.readinessProbe.initialDelaySeconds`
 - **8**: `$.livenessProbe.successThreshold`
+- **9**: `$.metrics.service.port`
+- **10**: `$.db.ssl.verify`
+- **11**: `$.metrics.enabled`
+- **12**: `$.db.port`
+- **13**: `$.networkPolicy.allowExternalEgress`
+- **14**: `$.livenessProbe.enabled`
+- **15**: `$.readinessProbe.enabled`
+- **16**: `$.containerPorts.http`
+- **17**: `$.startupProbe.initialDelaySeconds`
+- **18**: `$.db.bundleTestDB`
+- **19**: `$.startupProbe.failureThreshold`
+- **20**: `$.networkPolicy.allowExternal`
+- **21**: `$.ingress.tls`
+- **22**: `$.readinessProbe.periodSeconds`
+- **23**: `$.podSecurityContext.fsGroup`
+- **24**: `$.startupProbe.timeoutSeconds`
+- **25**: `$.containerSecurityContext.privileged`
+- **26**: `$.replicas`
+- **27**: `$.containerSecurityContext.runAsGroup`
+- **28**: `$.image.debug`
+- **29**: `$.containerSecurityContext.runAsNonRoot`
+- **30**: `$.db.enableSsl`
+- **31**: `$.service.ports.https`
+- **32**: `$.service.targetPorts.http`
+- **33**: `$.serviceAccount.automountServiceAccountToken`
+- **34**: `$.readinessProbe.successThreshold`
+- **35**: `$.livenessProbe.timeoutSeconds`
+- **36**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **37**: `$.db.allowArbitraryServer`
+- **38**: `$.podSecurityContext.enabled`
+- **39**: `$.metrics.serviceMonitor.honorLabels`
+- **40**: `$.startupProbe.periodSeconds`
+- **41**: `$.networkPolicy.enabled`
+- **42**: `$.containerPorts.https`
+- **43**: `$.serviceAccount.create`
+- **44**: `$.readinessProbe.failureThreshold`
+- **45**: `$.ingress.enabled`
+- **46**: `$.containerSecurityContext.runAsUser`
+- **47**: `$.livenessProbe.failureThreshold`
+- **48**: `$.global.security.allowInsecureImages`
 
 [Back to chart](#bitnamiphpmyadmin)
 
@@ -3670,6 +4428,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.server.startupProbe.enabled`
 - **7**: `$.alertmanager.ingress.enabled`
 - **8**: `$.server.networkPolicy.allowExternal`
+- **9**: `$.diagnosticMode.enabled`
+- **10**: `$.server.thanos.ingress.selfSigned`
+- **11**: `$.server.enableRemoteWriteReceiver`
+- **12**: `$.alertmanager.networkPolicy.addExternalClientAccess`
+- **13**: `$.alertmanager.startupProbe.periodSeconds`
+- **14**: `$.server.containerSecurityContext.enabled`
+- **15**: `$.alertmanager.enabled`
+- **16**: `$.alertmanager.containerSecurityContext.readOnlyRootFilesystem`
+- **17**: `$.server.networkPolicy.enabled`
+- **18**: `$.server.thanos.containerSecurityContext.privileged`
+- **19**: `$.server.containerSecurityContext.privileged`
+- **20**: `$.server.thanos.readinessProbe.timeoutSeconds`
+- **21**: `$.server.thanos.livenessProbe.successThreshold`
+- **22**: `$.alertmanager.livenessProbe.initialDelaySeconds`
+- **23**: `$.server.pdb.create`
+- **24**: `$.server.replicaCount`
+- **25**: `$.alertmanager.startupProbe.enabled`
+- **26**: `$.server.startupProbe.successThreshold`
+- **27**: `$.server.livenessProbe.enabled`
+- **28**: `$.alertmanager.readinessProbe.periodSeconds`
+- **29**: `$.server.readinessProbe.enabled`
+- **30**: `$.server.networkPolicy.allowExternalEgress`
+- **31**: `$.alertmanager.startupProbe.initialDelaySeconds`
+- **32**: `$.server.livenessProbe.initialDelaySeconds`
+- **33**: `$.server.thanos.readinessProbe.periodSeconds`
+- **34**: `$.server.thanos.livenessProbe.periodSeconds`
+- **35**: `$.alertmanager.networkPolicy.allowExternal`
+- **36**: `$.alertmanager.persistence.enabled`
+- **37**: `$.alertmanager.livenessProbe.periodSeconds`
+- **38**: `$.alertmanager.startupProbe.timeoutSeconds`
+- **39**: `$.alertmanager.serviceAccount.automountServiceAccountToken`
+- **40**: `$.alertmanager.readinessProbe.successThreshold`
+- **41**: `$.server.useStatefulSet`
+- **42**: `$.server.thanos.ingress.tls`
+- **43**: `$.server.thanos.containerSecurityContext.enabled`
+- **44**: `$.server.startupProbe.periodSeconds`
+- **45**: `$.alertmanager.containerSecurityContext.allowPrivilegeEscalation`
+- **46**: `$.alertmanager.containerSecurityContext.runAsUser`
+- **47**: `$.server.podSecurityContext.fsGroup`
+- **48**: `$.server.rbac.create`
 
 [Back to chart](#bitnamiprometheus)
 
@@ -3683,6 +4481,40 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.networkPolicy.allowExternalEgress`
+- **12**: `$.livenessProbe.enabled`
+- **13**: `$.readinessProbe.enabled`
+- **14**: `$.containerPorts.pytorch`
+- **15**: `$.startupProbe.initialDelaySeconds`
+- **16**: `$.startupProbe.failureThreshold`
+- **17**: `$.worldSize`
+- **18**: `$.networkPolicy.allowExternal`
+- **19**: `$.readinessProbe.periodSeconds`
+- **20**: `$.podSecurityContext.fsGroup`
+- **21**: `$.startupProbe.timeoutSeconds`
+- **22**: `$.containerSecurityContext.privileged`
+- **23**: `$.containerSecurityContext.runAsGroup`
+- **24**: `$.containerSecurityContext.runAsNonRoot`
+- **25**: `$.serviceAccount.automountServiceAccountToken`
+- **26**: `$.readinessProbe.successThreshold`
+- **27**: `$.livenessProbe.timeoutSeconds`
+- **28**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **29**: `$.volumePermissions.enabled`
+- **30**: `$.cloneFilesFromGit.enabled`
+- **31**: `$.podSecurityContext.enabled`
+- **32**: `$.startupProbe.periodSeconds`
+- **33**: `$.networkPolicy.enabled`
+- **34**: `$.serviceAccount.create`
+- **35**: `$.readinessProbe.failureThreshold`
+- **36**: `$.containerSecurityContext.runAsUser`
+- **37**: `$.livenessProbe.failureThreshold`
+- **38**: `$.persistence.enabled`
+- **39**: `$.global.security.allowInsecureImages`
+- **40**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **41**: `$.containerSecurityContext.enabled`
+- **42**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnamipytorch)
 
@@ -3696,6 +4528,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.volumePermissions.containerSecurityContext.enabled`
 - **7**: `$.metrics.enabled`
 - **8**: `$.metrics.containerSecurityContext.privileged`
+- **9**: `$.rbac.create`
+- **10**: `$.cluster.replicas`
+- **11**: `$.redis.shareProcessNamespace`
+- **12**: `$.redis.hostNetwork`
+- **13**: `$.networkPolicy.allowExternalEgress`
+- **14**: `$.usePasswordFiles`
+- **15**: `$.redis.startupProbe.periodSeconds`
+- **16**: `$.redis.automountServiceAccountToken`
+- **17**: `$.redis.livenessProbe.failureThreshold`
+- **18**: `$.cluster.update.addNodes`
+- **19**: `$.sysctlImage.mountHostSys`
+- **20**: `$.tls.autoGenerated`
+- **21**: `$.cluster.init`
+- **22**: `$.redis.containerPorts.bus`
+- **23**: `$.redis.startupProbe.failureThreshold`
+- **24**: `$.metrics.containerSecurityContext.runAsNonRoot`
+- **25**: `$.updateJob.activeDeadlineSeconds`
+- **26**: `$.redis.terminationGracePeriodSeconds`
+- **27**: `$.redis.readinessProbe.timeoutSeconds`
+- **28**: `$.networkPolicy.allowExternal`
+- **29**: `$.metrics.containerSecurityContext.enabled`
+- **30**: `$.metrics.containerSecurityContext.allowPrivilegeEscalation`
+- **31**: `$.metrics.containerPorts.http`
+- **32**: `$.updateJob.automountServiceAccountToken`
+- **33**: `$.cluster.externalAccess.hostMode`
+- **34**: `$.metrics.containerSecurityContext.runAsGroup`
+- **35**: `$.podSecurityContext.fsGroup`
+- **36**: `$.redis.startupProbe.initialDelaySeconds`
+- **37**: `$.metrics.prometheusRule.enabled`
+- **38**: `$.serviceBindings.enabled`
+- **39**: `$.redis.livenessProbe.periodSeconds`
+- **40**: `$.persistentVolumeClaimRetentionPolicy.enabled`
+- **41**: `$.redis.startupProbe.enabled`
+- **42**: `$.containerSecurityContext.privileged`
+- **43**: `$.containerSecurityContext.runAsGroup`
+- **44**: `$.image.debug`
+- **45**: `$.containerSecurityContext.runAsNonRoot`
+- **46**: `$.redis.readinessProbe.periodSeconds`
+- **47**: `$.redis.livenessProbe.enabled`
+- **48**: `$.serviceAccount.automountServiceAccountToken`
 
 [Back to chart](#bitnamiredis-cluster)
 
@@ -3709,21 +4581,48 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.rbac.namespacedRoles`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.metrics.enabled`
+- **12**: `$.rbac.create`
+- **13**: `$.livenessProbe.enabled`
+- **14**: `$.readinessProbe.enabled`
+- **15**: `$.containerPorts.http`
+- **16**: `$.startupProbe.initialDelaySeconds`
+- **17**: `$.startupProbe.failureThreshold`
+- **18**: `$.updateStatus`
+- **19**: `$.networkPolicy.allowExternal`
+- **20**: `$.ingress.tls`
+- **21**: `$.readinessProbe.periodSeconds`
+- **22**: `$.podSecurityContext.fsGroup`
+- **23**: `$.startupProbe.timeoutSeconds`
+- **24**: `$.containerSecurityContext.runAsGroup`
+- **25**: `$.image.debug`
+- **26**: `$.metrics.serviceMonitor.port.number`
+- **27**: `$.containerSecurityContext.runAsNonRoot`
+- **28**: `$.rbac.clusterRole`
+- **29**: `$.createController`
+- **30**: `$.serviceAccount.automountServiceAccountToken`
+- **31**: `$.readinessProbe.successThreshold`
+- **32**: `$.livenessProbe.timeoutSeconds`
+- **33**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **34**: `$.containerPorts.metrics`
+- **35**: `$.podSecurityContext.enabled`
+- **36**: `$.metrics.serviceMonitor.honorLabels`
+- **37**: `$.startupProbe.periodSeconds`
+- **38**: `$.networkPolicy.enabled`
+- **39**: `$.logInfoStdout`
+- **40**: `$.skipRecreate`
+- **41**: `$.serviceAccount.create`
+- **42**: `$.readinessProbe.failureThreshold`
+- **43**: `$.ingress.enabled`
+- **44**: `$.containerSecurityContext.runAsUser`
+- **45**: `$.livenessProbe.failureThreshold`
+- **46**: `$.ingress.selfSigned`
+- **47**: `$.global.security.allowInsecureImages`
+- **48**: `$.service.ports.http`
 
 [Back to chart](#bitnamisealed-secrets)
-
-### bitnami/spark
-
-- **1**: `$.master.podSecurityContext.fsGroup`
-- **2**: `$.master.enabled`
-- **3**: `$.master.livenessProbe.successThreshold`
-- **4**: `$.master.networkPolicy.allowExternal`
-- **5**: `$.worker.readinessProbe.timeoutSeconds`
-- **6**: `$.diagnosticMode.enabled`
-- **7**: `$.worker.containerPorts.https`
-- **8**: `$.master.livenessProbe.initialDelaySeconds`
-
-[Back to chart](#bitnamispark)
 
 ### bitnami/tensorflow-resnet
 
@@ -3735,8 +4634,96 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.readinessProbe.initialDelaySeconds`
+- **9**: `$.livenessProbe.successThreshold`
+- **10**: `$.metrics.enabled`
+- **11**: `$.service.ports.server`
+- **12**: `$.networkPolicy.allowExternalEgress`
+- **13**: `$.livenessProbe.enabled`
+- **14**: `$.readinessProbe.enabled`
+- **15**: `$.replicaCount`
+- **16**: `$.startupProbe.initialDelaySeconds`
+- **17**: `$.startupProbe.failureThreshold`
+- **18**: `$.enableDefaultInitContainers`
+- **19**: `$.networkPolicy.allowExternal`
+- **20**: `$.readinessProbe.periodSeconds`
+- **21**: `$.podSecurityContext.fsGroup`
+- **22**: `$.startupProbe.timeoutSeconds`
+- **23**: `$.containerPorts.restApi`
+- **24**: `$.containerSecurityContext.privileged`
+- **25**: `$.containerSecurityContext.runAsGroup`
+- **26**: `$.containerSecurityContext.runAsNonRoot`
+- **27**: `$.containerPorts.server`
+- **28**: `$.serviceAccount.automountServiceAccountToken`
+- **29**: `$.readinessProbe.successThreshold`
+- **30**: `$.livenessProbe.timeoutSeconds`
+- **31**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **32**: `$.podSecurityContext.enabled`
+- **33**: `$.startupProbe.periodSeconds`
+- **34**: `$.networkPolicy.enabled`
+- **35**: `$.serviceAccount.create`
+- **36**: `$.readinessProbe.failureThreshold`
+- **37**: `$.service.ports.restApi`
+- **38**: `$.containerSecurityContext.runAsUser`
+- **39**: `$.livenessProbe.failureThreshold`
+- **40**: `$.global.security.allowInsecureImages`
+- **41**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **42**: `$.containerSecurityContext.enabled`
+- **43**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnamitensorflow-resnet)
+
+### bitnami/thanos
+
+- **1**: `$.storegateway.livenessProbe.periodSeconds`
+- **2**: `$.ruler.autoscaling.enabled`
+- **3**: `$.queryFrontend.autoscaling.enabled`
+- **4**: `$.receive.livenessProbe.periodSeconds`
+- **5**: `$.receive.startupProbe.successThreshold`
+- **6**: `$.storegateway.podSecurityContext.enabled`
+- **7**: `$.query.podSecurityContext.enabled`
+- **8**: `$.receive.ingress.selfSigned`
+- **9**: `$.ruler.livenessProbe.enabled`
+- **10**: `$.queryFrontend.startupProbe.initialDelaySeconds`
+- **11**: `$.queryFrontend.readinessProbe.timeoutSeconds`
+- **12**: `$.queryFrontend.containerSecurityContext.runAsGroup`
+- **13**: `$.storegateway.automountServiceAccountToken`
+- **14**: `$.receive.startupProbe.enabled`
+- **15**: `$.receive.readinessProbe.initialDelaySeconds`
+- **16**: `$.bucketweb.ingress.enabled`
+- **17**: `$.queryFrontend.startupProbe.timeoutSeconds`
+- **18**: `$.storegateway.persistentVolumeClaimRetentionPolicy.enabled`
+- **19**: `$.storegateway.ingress.grpc.tls`
+- **20**: `$.bucketweb.startupProbe.periodSeconds`
+- **21**: `$.ruler.startupProbe.successThreshold`
+- **22**: `$.bucketweb.startupProbe.timeoutSeconds`
+- **23**: `$.receive.serviceAccount.automountServiceAccountToken`
+- **24**: `$.bucketweb.automountServiceAccountToken`
+- **25**: `$.receiveDistributor.startupProbe.successThreshold`
+- **26**: `$.receiveDistributor.containerSecurityContext.enabled`
+- **27**: `$.query.serviceGrpc.additionalHeadless`
+- **28**: `$.receive.containerSecurityContext.enabled`
+- **29**: `$.bucketweb.containerSecurityContext.readOnlyRootFilesystem`
+- **30**: `$.ruler.livenessProbe.initialDelaySeconds`
+- **31**: `$.receiveDistributor.readinessProbe.failureThreshold`
+- **32**: `$.query.startupProbe.enabled`
+- **33**: `$.ruler.containerSecurityContext.allowPrivilegeEscalation`
+- **34**: `$.receiveDistributor.livenessProbe.failureThreshold`
+- **35**: `$.storegateway.containerSecurityContext.readOnlyRootFilesystem`
+- **36**: `$.receive.containerPorts.remote`
+- **37**: `$.query.networkPolicy.enabled`
+- **38**: `$.compactor.containerSecurityContext.runAsGroup`
+- **39**: `$.compactor.concurrency`
+- **40**: `$.receiveDistributor.startupProbe.failureThreshold`
+- **41**: `$.receiveDistributor.readinessProbe.timeoutSeconds`
+- **42**: `$.compactor.podSecurityContext.enabled`
+- **43**: `$.bucketweb.pdb.create`
+- **44**: `$.bucketweb.readinessProbe.enabled`
+- **45**: `$.compactor.readinessProbe.periodSeconds`
+- **46**: `$.metrics.enabled`
+- **47**: `$.query.externalAutoscaler`
+- **48**: `$.storegateway.autoscaling.enabled`
+
+[Back to chart](#bitnamithanos)
 
 ### bitnami/valkey-cluster
 
@@ -3748,6 +4735,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.valkey.shareProcessNamespace`
 - **7**: `$.metrics.enabled`
 - **8**: `$.metrics.containerSecurityContext.privileged`
+- **9**: `$.rbac.create`
+- **10**: `$.cluster.replicas`
+- **11**: `$.networkPolicy.allowExternalEgress`
+- **12**: `$.usePasswordFiles`
+- **13**: `$.valkey.automountServiceAccountToken`
+- **14**: `$.valkey.readinessProbe.timeoutSeconds`
+- **15**: `$.cluster.update.addNodes`
+- **16**: `$.valkey.livenessProbe.periodSeconds`
+- **17**: `$.sysctlImage.mountHostSys`
+- **18**: `$.tls.autoGenerated`
+- **19**: `$.valkey.startupProbe.enabled`
+- **20**: `$.cluster.init`
+- **21**: `$.valkey.readinessProbe.successThreshold`
+- **22**: `$.metrics.containerSecurityContext.runAsNonRoot`
+- **23**: `$.updateJob.activeDeadlineSeconds`
+- **24**: `$.networkPolicy.allowExternal`
+- **25**: `$.metrics.containerSecurityContext.enabled`
+- **26**: `$.metrics.containerSecurityContext.allowPrivilegeEscalation`
+- **27**: `$.metrics.containerPorts.http`
+- **28**: `$.updateJob.automountServiceAccountToken`
+- **29**: `$.cluster.externalAccess.hostMode`
+- **30**: `$.metrics.containerSecurityContext.runAsGroup`
+- **31**: `$.podSecurityContext.fsGroup`
+- **32**: `$.metrics.prometheusRule.enabled`
+- **33**: `$.persistentVolumeClaimRetentionPolicy.enabled`
+- **34**: `$.containerSecurityContext.privileged`
+- **35**: `$.containerSecurityContext.runAsGroup`
+- **36**: `$.image.debug`
+- **37**: `$.containerSecurityContext.runAsNonRoot`
+- **38**: `$.serviceAccount.automountServiceAccountToken`
+- **39**: `$.valkey.containerPorts.valkey`
+- **40**: `$.tls.enabled`
+- **41**: `$.metrics.containerSecurityContext.readOnlyRootFilesystem`
+- **42**: `$.valkey.readinessProbe.failureThreshold`
+- **43**: `$.volumePermissions.containerSecurityContext.privileged`
+- **44**: `$.valkey.startupProbe.successThreshold`
+- **45**: `$.cluster.update.currentNumberOfReplicas`
+- **46**: `$.valkey.readinessProbe.periodSeconds`
+- **47**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **48**: `$.volumePermissions.enabled`
 
 [Back to chart](#bitnamivalkey-cluster)
 
@@ -3761,6 +4788,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.server.ingress.tls`
 - **7**: `$.injector.networkPolicy.allowExternal`
 - **8**: `$.server.startupProbe.enabled`
+- **9**: `$.csiProvider.networkPolicy.allowExternalEgress`
+- **10**: `$.server.enabled`
+- **11**: `$.server.metrics.enabled`
+- **12**: `$.server.networkPolicy.allowExternal`
+- **13**: `$.diagnosticMode.enabled`
+- **14**: `$.csiProvider.provider.startupProbe.timeoutSeconds`
+- **15**: `$.injector.startupProbe.enabled`
+- **16**: `$.volumePermissions.containerSecurityContext.enabled`
+- **17**: `$.injector.enabled`
+- **18**: `$.injector.containerSecurityContext.runAsNonRoot`
+- **19**: `$.csiProvider.provider.startupProbe.enabled`
+- **20**: `$.csiProvider.provider.startupProbe.initialDelaySeconds`
+- **21**: `$.server.metrics.serviceMonitor.honorLabels`
+- **22**: `$.server.containerSecurityContext.enabled`
+- **23**: `$.csiProvider.provider.livenessProbe.timeoutSeconds`
+- **24**: `$.injector.containerSecurityContext.readOnlyRootFilesystem`
+- **25**: `$.csiProvider.provider.containerSecurityContext.enabled`
+- **26**: `$.csiProvider.agent.livenessProbe.enabled`
+- **27**: `$.server.networkPolicy.enabled`
+- **28**: `$.csiProvider.provider.livenessProbe.enabled`
+- **29**: `$.injector.networkPolicy.kubeAPIServerPorts[1]`
+- **30**: `$.csiProvider.agent.startupProbe.failureThreshold`
+- **31**: `$.csiProvider.agent.containerSecurityContext.privileged`
+- **32**: `$.csiProvider.agent.startupProbe.enabled`
+- **33**: `$.server.rbac.createClusterRoleBinding`
+- **34**: `$.csiProvider.agent.livenessProbe.periodSeconds`
+- **35**: `$.injector.networkPolicy.kubeAPIServerPorts[0]`
+- **36**: `$.csiProvider.provider.readinessProbe.timeoutSeconds`
+- **37**: `$.csiProvider.agent.containerSecurityContext.allowPrivilegeEscalation`
+- **38**: `$.csiProvider.serviceAccount.create`
+- **39**: `$.server.containerSecurityContext.privileged`
+- **40**: `$.csiProvider.provider.readinessProbe.initialDelaySeconds`
+- **41**: `$.injector.livenessProbe.initialDelaySeconds`
+- **42**: `$.server.pdb.create`
+- **43**: `$.server.replicaCount`
+- **44**: `$.csiProvider.provider.livenessProbe.successThreshold`
+- **45**: `$.csiProvider.provider.startupProbe.periodSeconds`
+- **46**: `$.server.startupProbe.successThreshold`
+- **47**: `$.csiProvider.agent.readinessProbe.enabled`
+- **48**: `$.csiProvider.agent.containerSecurityContext.runAsUser`
 
 [Back to chart](#bitnamivault)
 
@@ -3774,6 +4841,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.vmauth.livenessProbe.failureThreshold`
 - **7**: `$.vmauth.startupProbe.timeoutSeconds`
 - **8**: `$.vmagent.autoscaling.vpa.enabled`
+- **9**: `$.vmstorage.livenessProbe.timeoutSeconds`
+- **10**: `$.vmselect.startupProbe.initialDelaySeconds`
+- **11**: `$.vmauth.containerSecurityContext.runAsNonRoot`
+- **12**: `$.vmagent.containerSecurityContext.readOnlyRootFilesystem`
+- **13**: `$.vminsert.metrics.serviceMonitor.enabled`
+- **14**: `$.vmauth.readinessProbe.initialDelaySeconds`
+- **15**: `$.vmalert.containerPorts.http`
+- **16**: `$.vmstorage.autoscaling.vpa.enabled`
+- **17**: `$.vmalert.containerSecurityContext.privileged`
+- **18**: `$.vminsert.startupProbe.timeoutSeconds`
+- **19**: `$.vmstorage.readinessProbe.initialDelaySeconds`
+- **20**: `$.vminsert.startupProbe.enabled`
+- **21**: `$.vmauth.containerSecurityContext.readOnlyRootFilesystem`
+- **22**: `$.vmselect.ingress.selfSigned`
+- **23**: `$.vminsert.automountServiceAccountToken`
+- **24**: `$.vmalert.metrics.serviceMonitor.enabled`
+- **25**: `$.vmselect.containerSecurityContext.allowPrivilegeEscalation`
+- **26**: `$.vmauth.replicaCount`
+- **27**: `$.vmstorage.networkPolicy.enabled`
+- **28**: `$.vmselect.autoscaling.hpa.enabled`
+- **29**: `$.vmalert.containerSecurityContext.allowPrivilegeEscalation`
+- **30**: `$.vmagent.startupProbe.timeoutSeconds`
+- **31**: `$.vmselect.livenessProbe.timeoutSeconds`
+- **32**: `$.vmalert.service.ports.http`
+- **33**: `$.vmauth.startupProbe.initialDelaySeconds`
+- **34**: `$.vmselect.ingress.enabled`
+- **35**: `$.vmagent.metrics.serviceMonitor.honorLabels`
+- **36**: `$.vmstorage.serviceAccount.create`
+- **37**: `$.vmauth.livenessProbe.timeoutSeconds`
+- **38**: `$.vminsert.containerSecurityContext.runAsUser`
+- **39**: `$.vmselect.readinessProbe.enabled`
+- **40**: `$.vmstorage.readinessProbe.successThreshold`
+- **41**: `$.vminsert.readinessProbe.periodSeconds`
+- **42**: `$.vmselect.serviceAccount.create`
+- **43**: `$.vmagent.readinessProbe.enabled`
+- **44**: `$.vmauth.enabled`
+- **45**: `$.vminsert.podSecurityContext.enabled`
+- **46**: `$.vminsert.readinessProbe.enabled`
+- **47**: `$.vmalert.readinessProbe.successThreshold`
+- **48**: `$.vminsert.metrics.serviceMonitor.honorLabels`
 
 [Back to chart](#bitnamivictoriametrics)
 
@@ -3787,6 +4894,31 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.readinessProbe.timeoutSeconds`
 - **7**: `$.readinessProbe.initialDelaySeconds`
 - **8**: `$.livenessProbe.successThreshold`
+- **9**: `$.rbac.create`
+- **10**: `$.networkPolicy.allowExternalEgress`
+- **11**: `$.livenessProbe.enabled`
+- **12**: `$.readinessProbe.enabled`
+- **13**: `$.startupProbe.initialDelaySeconds`
+- **14**: `$.startupProbe.failureThreshold`
+- **15**: `$.readinessProbe.periodSeconds`
+- **16**: `$.startupProbe.timeoutSeconds`
+- **17**: `$.containerSecurityContext.privileged`
+- **18**: `$.image.debug`
+- **19**: `$.containerSecurityContext.runAsNonRoot`
+- **20**: `$.serviceAccount.automountServiceAccountToken`
+- **21**: `$.readinessProbe.successThreshold`
+- **22**: `$.livenessProbe.timeoutSeconds`
+- **23**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **24**: `$.podSecurityContext.enabled`
+- **25**: `$.startupProbe.periodSeconds`
+- **26**: `$.networkPolicy.enabled`
+- **27**: `$.serviceAccount.create`
+- **28**: `$.readinessProbe.failureThreshold`
+- **29**: `$.livenessProbe.failureThreshold`
+- **30**: `$.global.security.allowInsecureImages`
+- **31**: `$.containerSecurityContext.readOnlyRootFilesystem`
+- **32**: `$.containerSecurityContext.enabled`
+- **33**: `$.startupProbe.enabled`
 
 [Back to chart](#bitnamiwhereabouts)
 
@@ -3800,6 +4932,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.livenessProbe.periodSeconds`
 - **7**: `$.readinessProbe.timeoutSeconds`
 - **8**: `$.readinessProbe.initialDelaySeconds`
+- **9**: `$.livenessProbe.successThreshold`
+- **10**: `$.networkPolicy.allowExternalEgress`
+- **11**: `$.usePasswordFiles`
+- **12**: `$.livenessProbe.enabled`
+- **13**: `$.readinessProbe.enabled`
+- **14**: `$.replicaCount`
+- **15**: `$.containerPorts.http`
+- **16**: `$.startupProbe.initialDelaySeconds`
+- **17**: `$.exposeManagementConsole`
+- **18**: `$.startupProbe.failureThreshold`
+- **19**: `$.networkPolicy.allowExternal`
+- **20**: `$.ingress.tls`
+- **21**: `$.readinessProbe.periodSeconds`
+- **22**: `$.podSecurityContext.fsGroup`
+- **23**: `$.startupProbe.timeoutSeconds`
+- **24**: `$.containerPorts.mgmt`
+- **25**: `$.containerSecurityContext.privileged`
+- **26**: `$.containerSecurityContext.runAsGroup`
+- **27**: `$.image.debug`
+- **28**: `$.containerSecurityContext.runAsNonRoot`
+- **29**: `$.serviceAccount.automountServiceAccountToken`
+- **30**: `$.readinessProbe.successThreshold`
+- **31**: `$.livenessProbe.timeoutSeconds`
+- **32**: `$.containerSecurityContext.allowPrivilegeEscalation`
+- **33**: `$.volumePermissions.enabled`
+- **34**: `$.podSecurityContext.enabled`
+- **35**: `$.startupProbe.periodSeconds`
+- **36**: `$.networkPolicy.enabled`
+- **37**: `$.containerPorts.https`
+- **38**: `$.serviceAccount.create`
+- **39**: `$.readinessProbe.failureThreshold`
+- **40**: `$.ingress.enabled`
+- **41**: `$.containerSecurityContext.runAsUser`
+- **42**: `$.livenessProbe.failureThreshold`
+- **43**: `$.persistence.enabled`
+- **44**: `$.mgmtIngress.enabled`
+- **45**: `$.global.security.allowInsecureImages`
+- **46**: `$.service.ports.http`
+- **47**: `$.mgmtIngress.tls`
+- **48**: `$.containerSecurityContext.readOnlyRootFilesystem`
 
 [Back to chart](#bitnamiwildfly)
 
@@ -3813,6 +4985,46 @@ Both heatmap axes use the same field numbers for each chart.
 - **6**: `$.diagnosticMode.enabled`
 - **7**: `$.livenessProbe.periodSeconds`
 - **8**: `$.readinessProbe.timeoutSeconds`
+- **9**: `$.readinessProbe.initialDelaySeconds`
+- **10**: `$.livenessProbe.successThreshold`
+- **11**: `$.metrics.service.port`
+- **12**: `$.volumePermissions.containerSecurityContext.enabled`
+- **13**: `$.tls.quorum.enabled`
+- **14**: `$.heapSize`
+- **15**: `$.metrics.enabled`
+- **16**: `$.enableServiceLinks`
+- **17**: `$.tls.client.enabled`
+- **18**: `$.service.disableBaseClientPort`
+- **19**: `$.snapCount`
+- **20**: `$.networkPolicy.allowExternalEgress`
+- **21**: `$.usePasswordFiles`
+- **22**: `$.service.ports.tls`
+- **23**: `$.livenessProbe.enabled`
+- **24**: `$.autopurge.snapRetainCount`
+- **25**: `$.readinessProbe.enabled`
+- **26**: `$.containerPorts.adminServer`
+- **27**: `$.livenessProbe.probeCommandTimeout`
+- **28**: `$.replicaCount`
+- **29**: `$.startupProbe.initialDelaySeconds`
+- **30**: `$.startupProbe.failureThreshold`
+- **31**: `$.syncLimit`
+- **32**: `$.tls.client.autoGenerated`
+- **33**: `$.service.headless.publishNotReadyAddresses`
+- **34**: `$.networkPolicy.allowExternal`
+- **35**: `$.readinessProbe.periodSeconds`
+- **36**: `$.podSecurityContext.fsGroup`
+- **37**: `$.revisionHistoryLimit`
+- **38**: `$.metrics.prometheusRule.enabled`
+- **39**: `$.startupProbe.timeoutSeconds`
+- **40**: `$.containerSecurityContext.privileged`
+- **41**: `$.containerSecurityContext.runAsGroup`
+- **42**: `$.image.debug`
+- **43**: `$.initLimit`
+- **44**: `$.tls.quorum.autoGenerated`
+- **45**: `$.maxClientCnxns`
+- **46**: `$.containerSecurityContext.runAsNonRoot`
+- **47**: `$.containerPorts.tls`
+- **48**: `$.preAllocSize`
 
 [Back to chart](#bitnamizookeeper)
 
@@ -3820,46 +5032,6 @@ Both heatmap axes use the same field numbers for each chart.
 
 HH codes identify finding categories. Numbered E entries, when present, identify recorded diagnostics.
 Severities below are defaults; configured overrides are shown with the findings above.
-
-### HH1101 - Invalid YAML in rendered output
-
-Default severity: **error** | Category: manifest | Evidence type: violation
-
-The YAML parser rejects rendered output, or Helm reports a YAML parse error.
-
-Suggested action: Inspect the failing YAML and template interpolation, including quoting and indentation.
-
-### HH1105 - Missing resource name
-
-Default severity: **error** | Category: manifest | Evidence type: violation
-
-The resource fails the tool's nonempty metadata.name contract.
-
-Suggested action: Provide a name in each resource branch; ignore this check if your workflow intentionally uses generated names.
-
-### HH1107 - Empty resource bundle
-
-Default severity: **error** | Category: manifest | Evidence type: violation
-
-The active test requires resources but this configuration renders none.
-
-Suggested action: Check resource activation; ignore this contract if an empty chart is intentional.
-
-### HH1108 - Kubernetes schema validation failed
-
-Default severity: **error** | Category: manifest | Evidence type: violation
-
-The configured Kubernetes validator rejects the output.
-
-Suggested action: Use the validator's field path and expected type to check the template and input schema.
-
-### HH1109 - Invalid manifest field type
-
-Default severity: **error** | Category: manifest | Evidence type: violation
-
-Helm parses the YAML but cannot decode a field into its required manifest type.
-
-Suggested action: Check the field named in Helm's decoding error and constrain its values to the required type.
 
 ### HH2001 - Undocumented values path
 
@@ -3902,11 +5074,3 @@ An object permits unspecified entries without named fields, patterned fields or 
 
 Suggested action: Describe fields with properties, patternProperties or typed additionalProperties. Ignore
 [HH2006](#hh2006---opaque-object-schema) for intentional free-form configuration; tests still sample those values.
-
-### HH3001 - Template accesses a missing object
-
-Default severity: **error** | Category: template | Evidence type: violation
-
-Helm reports a nil pointer while evaluating a template field.
-
-Suggested action: Guard or default the parent object, or require it in the values schema.

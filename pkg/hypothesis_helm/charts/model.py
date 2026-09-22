@@ -16,6 +16,7 @@ from hypothesis.strategies import SearchStrategy
 from jsonschema import validators
 
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.compiler.randomness.certificates import CertificateStore
 from hypothesis_helm.exceptions.execution import ChartUnavailable
 
 __all__ = ("Chart", "merge_values")
@@ -45,6 +46,7 @@ class Chart:
         generated_schema (dict[str, object] | None): Cached default generation contract for this chart instance.
         renderer_effects (bool | None): Cached potential runtime effects in this prepared source snapshot.
         renderer_statistics (dict[str, object]): Observed execution modes and native fallback reasons for this chart job.
+        certificate_records (CertificateStore): Native crypto observations retained across retries within this prepared chart.
     """
 
     path: Path
@@ -55,6 +57,7 @@ class Chart:
     generated_schema: dict[str, object] | None = field(default=None, init=False)
     renderer_effects: bool | None = field(default=None, init=False)
     renderer_statistics: dict[str, object] = field(factory=dict, init=False)
+    certificate_records: CertificateStore = field(factory=CertificateStore, init=False, repr=False, eq=False)
 
     def require_source(self) -> None:
         """

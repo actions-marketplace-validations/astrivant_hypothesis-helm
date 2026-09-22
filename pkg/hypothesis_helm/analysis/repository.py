@@ -24,6 +24,8 @@ from hypothesis_helm.charts.testing.rendering import render
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.passes.inputs import load_input_chart
 from hypothesis_helm.compiler.randomness.model import RandomInputs
+from hypothesis_helm.compiler.randomness.policy import policy as renderer_policy
+from hypothesis_helm.compiler.randomness.policy import prepare as prepare_renderer
 from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.execution.runtime.processes import Processes
@@ -127,6 +129,8 @@ def measure_chart(
             selected = mutations(chart.defaults, chart.schema, limit, seed)
             if not selected:
                 return {**empty, "reason": "No schema-valid Boolean or integer mutations were available."}
+            if renderer_policy(chart) != "native":
+                prepare_renderer(chart, helm, force=True, stopped=stopped)
             deadline = time.monotonic() + seconds
 
             def invoke(values: dict[str, object]) -> object:

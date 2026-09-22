@@ -26,6 +26,7 @@ from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.charts.values.parsers import SUITE_YAML_PARSER, validate_backend
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.compiler.randomness.model import RandomInputs
+from hypothesis_helm.compiler.randomness.policy import prepare as prepare_renderer
 from hypothesis_helm.compiler.randomness.rendering import enabled as random_enabled
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.findings.policy import RuleScope
@@ -116,6 +117,7 @@ def prepared_chart(source: Path, generated: Path) -> Iterator[Chart]:
             character_token = SUITE_CHARACTER_SETS.set(selected)
 
         try:
+            prepare_renderer(chart, str(provenance.get("helm", "helm")))
             yield chart
         finally:
             if character_token is not None:

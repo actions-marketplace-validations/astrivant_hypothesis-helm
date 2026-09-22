@@ -9,6 +9,7 @@ from types import TracebackType
 from hypothesis import strategies as st
 from hypothesis.strategies import SearchStrategy
 
+from hypothesis_helm.compiler.randomness.certificates import CertificateInputs
 from hypothesis_helm.exceptions.rendering import RandomInputUnavailable
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
@@ -42,6 +43,7 @@ class RandomInputs:
         context (dict[str, object]): Source, overrides and renderer identities for portable replay verification.
         expected_context (dict[str, object] | None): Frozen context required by an imported replay artifact.
         fallback_reason (str | None): Why native output cannot be replayed from controlled draws.
+        certificates (CertificateInputs | None): Native certificate exchange initialized after source verification.
     """
 
     draw: Callable[[SearchStrategy[str], str], str] | None
@@ -50,6 +52,7 @@ class RandomInputs:
     context: dict[str, object]
     expected_context: dict[str, object] | None
     fallback_reason: str | None
+    certificates: CertificateInputs | None
 
     def __init__(
         self, draw: Callable[[SearchStrategy[str], str], str] | None = None, *, replay: list[dict[str, object]] | None = None
@@ -67,6 +70,7 @@ class RandomInputs:
         self.context: dict[str, object] = {}
         self.expected_context: dict[str, object] | None = None
         self.fallback_reason = None
+        self.certificates: CertificateInputs | None = None
         self._token: Token[RandomInputs | None] | None = None
 
     def __enter__(self) -> "RandomInputs":
@@ -112,6 +116,15 @@ class RandomInputs:
         Raises:
             ValueError: Replay is incomplete, diverges from native control flow, or violates the source function's domain.
         """
+        if request.get("function"):
+            if self.certificates is None:
+                raise RandomInputUnavailable("Certificate input requested before source verification")
+            if self.replay is not None and len(self.records) >= len(self.replay):
+                raise RandomInputUnavailable(f"Certificate replay has no observation for {request['path']}")
+            reply = self.certificates.exchange(request, self.replay[len(self.records)] if self.replay is not None else None)
+            if not reply.get("generate"):
+                self.records.append(reply)
+            return reply
         length = int(str(request["length"]))
         path = str(request["path"])
         if self.replay is not None:
@@ -146,7 +159,7 @@ class RandomInputs:
             raise RandomInputUnavailable(
                 "Native fallback has no exact random replay: " + str(data.get("fallback_reason", "uncontrolled effects"))
             )
-        if data.get("format") != "helm-random-inputs-v1" or data.get("renderer") != "helm-4.3.0":
+        if data.get("format") not in ("helm-random-inputs-v1", "helm-random-inputs-v2") or data.get("renderer") != "helm-4.3.0":
             raise ValueError("Unsupported random-input replay format or renderer version")
         case = cls(replay=[mapping(record) for record in sequence(data["draws"])])
         case.expected_context = mapping(data["context"])
@@ -169,7 +182,7 @@ class RandomInputs:
                 "draws": [],
             }
         return {
-            "format": "helm-random-inputs-v1",
+            "format": "helm-random-inputs-v2" if any(record.get("function") for record in self.records) else "helm-random-inputs-v1",
             "renderer": "helm-4.3.0",
             "replayable": True,
             "context": dict(self.context),

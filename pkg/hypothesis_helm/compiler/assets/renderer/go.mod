@@ -2,14 +2,16 @@ module github.com/astrivant/hypothesis-helm/random-renderer
 
 go 1.26.0
 
-require helm.sh/helm/v4 v4.3.0
+require (
+	github.com/Masterminds/sprig/v3 v3.3.0
+	helm.sh/helm/v4 v4.3.0
+)
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
-	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.7.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect

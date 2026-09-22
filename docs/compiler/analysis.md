@@ -312,8 +312,8 @@ traced individually. Incompatible containers or absent origins remain unresolved
 dependency schemas remain authoritative, and all predictions involving forwarded globals
 require native Helm verification, even after earlier candidates were confirmed.
 
-Clock, randomness and cluster lookups keep their normal Helm behavior by default. The optional
-[`--renderer-policy` modes](functions.md#testing-random-outputs) tests replayable `randAlphaNum` outputs with the pinned Helm SDK.
+The default auto [`--renderer-policy`](functions.md#testing-random-outputs) tests replayable `randAlphaNum` outputs and records
+native certificate/key generation with the pinned Helm SDK when the compatible renderer is prepared.
 It does not inject a clock or simulate a Kubernetes cluster.
 An attached offline renderer context allows `lookup` to return its native empty map;
 disabled DNS similarly allows an empty `getHostByName` result. These are fixed

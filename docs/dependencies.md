@@ -49,7 +49,7 @@ There are **two independent Go modules**. Updating one does not update the other
 
 | Component | Current baseline | Purpose |
 | --- | --- | --- |
-| Optional random-input renderer | Helm `v4.3.0`, Go `1.26.0` | Executes Helm's SDK with controlled random draws. Sprig and Kubernetes libraries are transitive dependencies in its `go.mod`. |
+| Optional random-input renderer | Helm `v4.3.0`, Sprig `v3.3.0`, Go `1.26.0` | Executes Helm's SDK with controlled random draws and recorded native certificate generation. Sprig is a direct dependency; Kubernetes libraries remain transitive. |
 | Catalog extractor | Go `1.25.0`, `k8s.io/apimachinery v0.35.0` | Reads upstream syntax trees and checks generated input bounds against compiled Kubernetes validators. |
 | Builtin source inventory | Helm `4.3.0`, Sprig `3.3.0`, Go `1.26.0` | Describes the upstream functions analyzed by the compiler; these source downloads are separate from the extractor's own imports. |
 
@@ -85,8 +85,9 @@ bash scripts/project-run.sh cog -r docs/compiler/functions.md
 bash scripts/project-run.sh pytest pkg/hypothesis_helm/tests/compiler pkg/hypothesis_helm/tests/schemas/test_builtin_sources.py
 ```
 
-Build the optional renderer before its tests: otherwise native random-input tests can skip. Changing its source or Go manifests
-changes the build identity, so the helper rebuilds under `.cache/random-renderer/` and prior replay context hashes no longer match.
+Automatic testing builds a missing renderer when Go is available, before chart or sensitivity testing budgets start. The explicit
+build command above prepares that cache in advance; native integration tests can skip when Go is unavailable. Changing source
+or Go manifests changes the build identity, so the helper rebuilds under `.cache/random-renderer/` and prior replay context hashes no longer match.
 Ordinary [native function probes](../pkg/hypothesis_helm/compiler/asts/native_operations.py) instead invoke the selected Helm CLI;
 they do not use this SDK helper. Test both execution paths when upgrading Helm.
 

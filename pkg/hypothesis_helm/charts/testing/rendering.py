@@ -114,17 +114,21 @@ def render_output(
     chart.require_source()
     from hypothesis_helm.compiler.randomness import rendering as random_rendering
     from hypothesis_helm.compiler.randomness.model import CURRENT, RandomInputs, RandomOutput
-    from hypothesis_helm.compiler.randomness.policy import observed, policy
+    from hypothesis_helm.compiler.randomness.policy import observed, policy, prepare
 
     random_case = CURRENT.get()
+    controlled = (random_case is not None and random_case.replay is not None) or (
+        policy(chart) != "native" and (random_case is not None or random_rendering.enabled(chart))
+    )
+    if controlled:
+        # Compilation, including a failed attempt, is setup rather than native render time.
+        prepare(chart, helm, force=True)
     started = time.monotonic()
     if policy(chart) == "native" and random_case is not None and random_case.replay is None:
         random_case.records.clear()
         random_case.context.clear()
         random_case.fallback_reason = "Native renderer policy selected; runtime effects are uncontrolled"
-    if (random_case is not None and random_case.replay is not None) or (
-        policy(chart) != "native" and (random_case is not None or random_rendering.enabled(chart))
-    ):
+    if controlled:
         random_case = random_case if random_case is not None else RandomInputs()
         try:
             return random_rendering.render(

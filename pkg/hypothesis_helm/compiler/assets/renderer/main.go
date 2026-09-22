@@ -1,4 +1,4 @@
-// Command random-renderer renders charts with replayable synthetic random inputs.
+// Command random-renderer renders charts with replayable random and native crypto inputs.
 package main
 
 import (
@@ -24,11 +24,16 @@ import (
 
 const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
-// Draw describes one evaluated random call, separately from chart values.
+// Draw exchanges one random input or native certificate observation, separately from chart values.
 type Draw struct {
-	Path   string `json:"path"`
-	Length int    `json:"length"`
-	Value  string `json:"value"`
+	Path      string          `json:"path"`
+	Length    int             `json:"length"`
+	Value     string          `json:"value"`
+	Function  string          `json:"function,omitempty"`
+	Arguments json.RawMessage `json:"arguments,omitempty"`
+	Result    json.RawMessage `json:"result,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	Generate  bool            `json:"generate,omitempty"`
 }
 
 // Request supplies a chart, renderer context, and a stream of random draws.
@@ -40,6 +45,7 @@ type Request struct {
 	KubeVersion string          `json:"kube_version"`
 	MaxChars    int             `json:"max_chars"`
 	MaxCalls    int             `json:"max_calls"`
+	MaxBytes    int             `json:"max_bytes"`
 	Unsupported []string        `json:"unsupported"`
 }
 
@@ -116,7 +122,11 @@ func (t *Tape) function(site string) func(int) (string, error) {
 //	error: Native parse error; nil when every original template is preserved or instrumented.
 func (t *Tape) instrument(c *chart.Chart) error {
 	for _, file := range c.Templates {
-		if !bytes.Contains(file.Data, []byte("randAlphaNum")) {
+		selected := bytes.Contains(file.Data, []byte("randAlphaNum"))
+		for name := range certificateFunctions {
+			selected = selected || bytes.Contains(file.Data, []byte(name))
+		}
+		if !selected {
 			continue
 		}
 		name := c.ChartFullPath() + "/" + file.Name
@@ -128,7 +138,8 @@ func (t *Tape) instrument(c *chart.Chart) error {
 		}
 		// Locate calls with the native AST, then replace only their identifier tokens.
 		// Keeping the surrounding bytes preserves whitespace, definitions and source lines.
-		replacements := map[int]string{}
+		type replacement struct{ name, original string }
+		replacements := map[int]replacement{}
 		var walk func(parse.Node, *parse.Tree)
 		walk = func(node parse.Node, tree *parse.Tree) {
 			if node == nil {
@@ -170,13 +181,17 @@ func (t *Tape) instrument(c *chart.Chart) error {
 			case *parse.ChainNode:
 				walk(n.Node, tree)
 			case *parse.IdentifierNode:
-				if n.Ident == "randAlphaNum" {
+				if n.Ident == "randAlphaNum" || certificateFunctions[n.Ident] != nil {
 					location, _ := tree.ErrorContext(n)
 					site := name + "@" + location
 					digest := sha256.Sum256([]byte(site))
 					identifier := "hhRandom_" + hex.EncodeToString(digest[:])
-					t.functions[identifier] = t.function(site)
-					replacements[int(n.Position())] = identifier
+					if n.Ident == "randAlphaNum" {
+						t.functions[identifier] = t.function(site)
+					} else {
+						t.functions[identifier] = t.certificateFunction(n.Ident, site)
+					}
+					replacements[int(n.Position())] = replacement{identifier, n.Ident}
 				}
 			}
 		}
@@ -193,11 +208,12 @@ func (t *Tape) instrument(c *chart.Chart) error {
 		sort.Sort(sort.Reverse(sort.IntSlice(offsets)))
 		source := string(file.Data)
 		for _, offset := range offsets {
-			end := offset + len("randAlphaNum")
-			if offset < 0 || end > len(source) || source[offset:end] != "randAlphaNum" {
+			change := replacements[offset]
+			end := offset + len(change.original)
+			if offset < 0 || end > len(source) || source[offset:end] != change.original {
 				return fmt.Errorf("native parser returned an invalid random call position in %s", name)
 			}
-			source = source[:offset] + replacements[offset] + source[end:]
+			source = source[:offset] + change.name + source[end:]
 		}
 		file.Data = []byte(source)
 	}
@@ -284,6 +300,9 @@ func render(request Request, decoder *json.Decoder, encoder *json.Encoder) (resp
 		return reply, err
 	}
 	tape.functions["randAlphaNum"] = tape.function("dynamic:randAlphaNum")
+	for name := range certificateFunctions {
+		tape.functions[name] = tape.certificateFunction(name, "dynamic:"+name)
+	}
 	for _, name := range request.Unsupported {
 		tape.functions[name] = func(...any) (any, error) {
 			tape.unavailable = "controlled renderer does not support native effect: " + name

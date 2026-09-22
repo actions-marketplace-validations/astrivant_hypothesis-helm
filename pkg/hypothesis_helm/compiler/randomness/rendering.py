@@ -5,16 +5,16 @@ Drive a single native Helm render with Hypothesis-controlled draws and strict re
 import hashlib
 import json
 import time
-from pathlib import Path
 
 from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.compiler.builtins import EFFECTS
 from hypothesis_helm.compiler.limits import active_limits
+from hypothesis_helm.compiler.randomness.certificates import CERTIFICATE_FUNCTIONS, CertificateInputs
 from hypothesis_helm.compiler.randomness.model import RandomInputs, RandomOutput
-from hypothesis_helm.compiler.randomness.policy import compatible, enabled, observed, policy
+from hypothesis_helm.compiler.randomness.policy import compatible, enabled, observed
 from hypothesis_helm.compiler.randomness.protocol import exchange
-from hypothesis_helm.compiler.randomness.toolchain import build, identity
+from hypothesis_helm.compiler.randomness.toolchain import ensure, identity
 from hypothesis_helm.exceptions.rendering import RandomInputUnavailable, RendererUnavailable, RenderFailure
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.findings.generator import FindingGenerator
@@ -52,13 +52,9 @@ def render(
     Returns:
         str: Rendered manifests with replay provenance from the pinned Helm SDK.
     """
-    deadline = time.monotonic() + timeout
     compatible(helm, timeout=timeout)
-    binary = Path(".cache/random-renderer").resolve() / identity() / "renderer"
-    if not binary.is_file() and (policy(chart) == "strict" or case.replay is not None):
-        binary = build()
-    if not binary.is_file():
-        raise RendererUnavailable("Controlled renderer is not prepared; run hypothesis-helm-renderer --build")
+    binary = ensure()
+    deadline = time.monotonic() + timeout
     limits = active_limits(chart.path)
     case.records.clear()
     case.context.clear()
@@ -71,8 +67,11 @@ def render(
         "kube_version": kube_version or "",
         "max_chars": limits["max_string_chars"],
         "max_calls": limits["max_steps"],
+        "max_bytes": limits["max_context_bytes"],
         # Even effects with no supplied random values must be stopped before a tape can claim replayability.
-        "unsupported": sorted((EFFECTS["randomness"] | EFFECTS["clock-or-timezone"] | EFFECTS["external-state"]) - {"randAlphaNum"}),
+        "unsupported": sorted(
+            (EFFECTS["randomness"] | EFFECTS["clock-or-timezone"] | EFFECTS["external-state"]) - {"randAlphaNum"} - CERTIFICATE_FUNCTIONS
+        ),
     }
     context: dict[str, object] = {
         "source_digest": identity(),
@@ -96,6 +95,7 @@ def render(
             case.context = {**context, "chart_digest": response["chart_digest"]}
             if case.expected_context is not None and case.context != case.expected_context:
                 raise RandomInputUnavailable("Random replay chart, values, renderer or release context changed")
+            case.certificates = CertificateInputs(chart.certificate_records, case.context, limits["max_context_bytes"], limits["max_steps"])
         elif response.get("request"):
             if not case.context:
                 raise RandomInputUnavailable("Controlled renderer requested input before source verification")

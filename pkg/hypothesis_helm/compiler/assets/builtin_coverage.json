@@ -448,43 +448,43 @@
     "genCA": {
       "expression": "genCA \"ca\" 1",
       "outcome": "deferred",
-      "scope": "Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm.",
+      "scope": "Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis.",
       "limitation": "runtime effect"
     },
     "genCAWithKey": {
       "expression": "genCAWithKey \"ca\" 1 \"key\"",
       "outcome": "deferred",
-      "scope": "Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm.",
+      "scope": "Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis.",
       "limitation": "runtime effect"
     },
     "genPrivateKey": {
       "expression": "genPrivateKey \"ecdsa\"",
       "outcome": "deferred",
-      "scope": "Key generation uses randomness and expensive native work; no static value can represent all outputs.",
+      "scope": "Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis.",
       "limitation": "runtime effect"
     },
     "genSelfSignedCert": {
       "expression": "genSelfSignedCert \"example\" nil nil 1",
       "outcome": "deferred",
-      "scope": "Certificate generation uses randomness and time; only record shape and input origins are tracked.",
+      "scope": "Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis.",
       "limitation": "runtime effect"
     },
     "genSelfSignedCertWithKey": {
       "expression": "genSelfSignedCertWithKey \"example\" nil nil 1 \"key\"",
       "outcome": "deferred",
-      "scope": "Certificate generation uses randomness and time; only record shape and input origins are tracked.",
+      "scope": "Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis.",
       "limitation": "runtime effect"
     },
     "genSignedCert": {
       "expression": "genSignedCert \"example\" nil nil 1 .Values.certificate",
       "outcome": "deferred",
-      "scope": "Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred.",
+      "scope": "Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis.",
       "limitation": "runtime effect"
     },
     "genSignedCertWithKey": {
       "expression": "genSignedCertWithKey \"example\" nil nil 1 .Values.certificate \"key\"",
       "outcome": "deferred",
-      "scope": "Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred.",
+      "scope": "Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis.",
       "limitation": "runtime effect"
     },
     "get": {

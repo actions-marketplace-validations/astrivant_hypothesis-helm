@@ -25,26 +25,34 @@ between otherwise identical renders.
 `--renderer-policy auto` is the default. For charts with possible runtime effects, it lets Hypothesis generate and shrink
 supported random outputs separately from the chart's values. For example, `randAlphaNum 8` becomes an input with exactly
 eight ASCII letters or digits, including uppercase and digit-only strings.
+Certificate and private-key generators execute Sprig's native functions and record their results for replay.
 
 | Policy | Execution | When control is unavailable |
 | --- | --- | --- |
-| `auto` (default) | Use the prepared, compatible renderer for potential runtime effects; ordinary charts use Helm. | Log the reason and rerender the whole case with native Helm. |
+| `auto` (default) | Build and cache the compatible renderer when needed; ordinary charts use Helm. | Log the reason and rerender the whole case with native Helm. |
 | `native` | Always use the configured Helm executable during testing. | Random outputs remain native and cannot be replayed from a draw tape. |
 | `strict` | Require the pinned renderer and control every effect reached during that render. | Stop with an unavailable result, not a chart-defect finding. |
 
-Prepare the controlled renderer once, then test or scan normally:
+Test or scan normally. Automatic mode prepares the controlled renderer when needed:
 
 ```sh
-hypothesis-helm-renderer --build
 helm hypothesis test ./chart --filter --max-examples 10
 helm hypothesis test ./chart --renderer-policy strict
 helm hypothesis test ./chart --renderer-policy native
 ```
 
+To prepare the cache ahead of time, run `hypothesis-helm-renderer --build`.
+
 The build requires Go and downloads the pinned Go 1.26 toolchain and Helm 4.3.0 SDK when needed. Its source-addressed executable
 lives under `.cache/random-renderer/`; `--go /path/to/go` selects the compiler. Repository refresh builds it automatically.
-Automatic testing does not download or compile tools inside a chart's execution budget. An absent build causes a visible native
-fallback. Strict chart testing prepares its required build before the test budget starts.
+Tests, saved suites and sensitivity measurements prepare the helper before starting their execution budgets. First use can
+therefore take longer than the requested testing timeout. Local workers share an atomic build protected by a file lock, and
+cancellation stops the owned compiler process. Subsequent calls reuse the cached executable. Source or dependency changes
+select a new build automatically.
+
+If Go is absent, the Helm version is incompatible, or compilation fails, auto mode reports the reason and uses native Helm;
+strict mode reports unavailable execution. A failed automatic build is not retried for every input in that Python process.
+A new command retries preparation, and a successful manual `--build` is recognized immediately by subsequent calls.
 
 The selected Helm executable must report version 4.3.0, matching the reviewed SDK. A different version, including a prerelease,
 causes automatic fallback or strict rejection. This checks version compatibility; it does not certify custom Helm builds.
@@ -76,7 +84,25 @@ use a fixed all-zero alphanumeric representative. Their counts cover values conf
 **Sampled outputs never justify rejection or exact-equivalence pruning.** Static analysis can still report `HH2007` at a random
 call because a sampled value is not a proven constant.
 
-An executed clock, lookup, or unsupported random function makes that case unavailable for controlled replay. Automatic mode
+`genCA`, `genPrivateKey`, `genSelfSignedCert`, `genSignedCert` and their `WithKey` variants use the original Sprig implementation
+on first execution. The renderer records the native arguments, certificate/key bytes and any returned error. It preserves
+Sprig's certificate type, so `.Cert`, `.Key`, `buildCustomCert` and subsequent signing calls remain compatible. No OpenSSL
+installation is required.
+
+Within one prepared chart, the same call location, occurrence, arguments and renderer context reuse that observation. This
+keeps Hypothesis retries and shrinking stable. Different calls, changed arguments and fresh chart runs generate new material.
+Worker processes retain their own observations; they do not share a cross-job certificate cache. Certificate randomness and
+the generation clock are recorded outcomes, not Hypothesis-generated fields: a seed alone cannot reproduce their bytes.
+Exact reproduction requires the saved tape. Replay retains the original validity timestamps, even after a certificate expires.
+
+Certificate records use `helm-random-inputs-v2`, including typed arguments and integrity checksums; string-only tapes remain v1.
+The bounded observation cache uses `compiler.max_context_bytes` and `compiler.max_steps`. Exhaustion stops controlled recording
+without evicting old results or silently changing retries. The ordinary render timeout also bounds native key generation.
+Generated test keys and any explicitly supplied signing keys are present in replay artifacts; report prose shows call identities
+and checksums instead of PEM blocks. This tests chart behavior with real certificates, without claiming cryptographic coverage
+or proving that every possible certificate produces equivalent manifests.
+
+An explicitly executed clock function, lookup, or unsupported random function makes that case unavailable for controlled replay. Automatic mode
 discards its partial draw tape and rerenders the original input entirely with native Helm, using the remaining execution budget.
 The output and any resulting finding carry `replayable: false` and the fallback reason. Reports show the limitation, and run
 coverage records observed controlled renders and native fallback reasons. Native failures remain findings. Unreached unsupported
@@ -88,7 +114,7 @@ Explicit replay always requires full control, regardless of the chart's automati
 Path scans and saved suites include a root property for renderer inputs, so charts with an empty values file still exercise
 random outputs. Reports show the synthetic call paths and strings alongside ordinary changed values.
 
-Failure artifacts include `random-inputs.json` beside `values.json`. The tape retains call paths, lengths, exact strings, and
+Failure artifacts include `random-inputs.json` beside `values.json`. The tape retains call paths, arguments, exact results, and
 hashes of the chart, values and renderer. Replay rejects changed inputs, missing or unused draws, and strings outside the
 function's domain:
 
@@ -260,13 +286,13 @@ All **251 registered functions** have a checked support decision. The representa
 | `fromYaml` | evaluated | `fromYaml "{}"` | Native JSON/YAML parsing is available for implemented calls; TOML and unimplemented must aliases need their own return/error contracts. |
 | `fromYamlArray` | evaluated | `fromYamlArray "[]"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
 | `ge` | evaluated | `ge 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |
-| `genCA` | deferred (runtime effect) | `genCA "ca" 1` | Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm. |
-| `genCAWithKey` | deferred (runtime effect) | `genCAWithKey "ca" 1 "key"` | Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm. |
-| `genPrivateKey` | deferred (runtime effect) | `genPrivateKey "ecdsa"` | Key generation uses randomness and expensive native work; no static value can represent all outputs. |
-| `genSelfSignedCert` | deferred (runtime effect) | `genSelfSignedCert "example" nil nil 1` | Certificate generation uses randomness and time; only record shape and input origins are tracked. |
-| `genSelfSignedCertWithKey` | deferred (runtime effect) | `genSelfSignedCertWithKey "example" nil nil 1 "key"` | Certificate generation uses randomness and time; only record shape and input origins are tracked. |
-| `genSignedCert` | deferred (runtime effect) | `genSignedCert "example" nil nil 1 .Values.certificate` | Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred. |
-| `genSignedCertWithKey` | deferred (runtime effect) | `genSignedCertWithKey "example" nil nil 1 .Values.certificate "key"` | Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred. |
+| `genCA` | deferred (runtime effect) | `genCA "ca" 1` | Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis. |
+| `genCAWithKey` | deferred (runtime effect) | `genCAWithKey "ca" 1 "key"` | Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis. |
+| `genPrivateKey` | deferred (runtime effect) | `genPrivateKey "ecdsa"` | Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis. |
+| `genSelfSignedCert` | deferred (runtime effect) | `genSelfSignedCert "example" nil nil 1` | Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis. |
+| `genSelfSignedCertWithKey` | deferred (runtime effect) | `genSelfSignedCertWithKey "example" nil nil 1 "key"` | Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis. |
+| `genSignedCert` | deferred (runtime effect) | `genSignedCert "example" nil nil 1 .Values.certificate` | Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis. |
+| `genSignedCertWithKey` | deferred (runtime effect) | `genSignedCertWithKey "example" nil nil 1 .Values.certificate "key"` | Native generation is recorded and replayed by the controlled renderer. Randomness/time remain unknown to static analysis. |
 | `get` | evaluated | `get (dict "key" .Values.text) "key"` | Known dictionary keys; missing keys follow the modeled Go/Sprig lookup semantics. |
 | `getHostByName` | evaluated | `getHostByName "localhost"` | Evaluates as empty only when the verified renderer disables DNS; enabled DNS remains external state. |
 | `gt` | evaluated | `gt 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |

@@ -182,7 +182,11 @@ def input_summary(evidence: dict[str, object]) -> list[str]:
         draws = randomness["draws"]
         lines.extend(["", "Renderer random inputs (replay tape in artifacts):"])
         for draw in draws[:6]:
-            content = str(draw["path"]) + " = " + json.dumps(draw["value"], ensure_ascii=True)
+            if draw.get("function"):
+                # Keep PEM blocks out of prose; the exact generated test material remains in the replay artifact.
+                content = f"{draw['path']}: {draw['function']}; recorded native outcome SHA-256 {draw['checksum']}"
+            else:
+                content = str(draw["path"]) + " = " + json.dumps(draw["value"], ensure_ascii=True)
             fence = "`" * (max((len(part) for part in re.findall(r"`+", content)), default=0) + 1)
             lines.append(f"- {fence}{content[:240]}{fence}")
         if len(draws) > 6:

@@ -736,28 +736,82 @@ def test_version_mismatch_policy(random_chart: Chart, tmp_path: Path, monkeypatc
         assert "4.2.0" in str(output.random_inputs["fallback_reason"])
 
 
-def test_auto_missing_helper_uses_native_without_building(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_auto_missing_helper_builds_once(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Avoid unbounded toolchain installation during an automatically selected chart render.
+    Prepare a missing compatible helper automatically and reuse it across examples.
 
     Args:
         random_chart (Chart): Native fixture.
         tmp_path (Path): Policy location.
-        monkeypatch (pytest.MonkeyPatch): Hide the prepared helper.
+        monkeypatch (pytest.MonkeyPatch): Select an empty cache and simulate compilation.
 
     Returns:
         None: Assertions establish the execution-policy contract.
     """
+    from unittest.mock import Mock
+
+    from hypothesis_helm.charts.testing.rendering import render_output
+    from hypothesis_helm.compiler.randomness.model import RandomOutput
+    from hypothesis_helm.compiler.randomness.toolchain import identity
+
+    prepared = build()
+    configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
+    template(random_chart, "{{ randAlphaNum 3 | quote }}")
+    monkeypatch.chdir(tmp_path)
+    target = Path(".cache/random-renderer") / identity() / "renderer"
+
+    def compile(**kwargs: object) -> Path:
+        """
+        Publish an existing native executable into the otherwise empty cache.
+
+        Args:
+            **kwargs (object): Automatic build settings.
+
+        Returns:
+            Path: Complete renderer at its expected source-addressed location.
+        """
+        target.parent.mkdir(parents=True)
+        target.symlink_to(prepared)
+        return target.resolve()
+
+    builder = Mock(side_effect=compile)
+    monkeypatch.setattr("hypothesis_helm.compiler.randomness.toolchain.build", builder)
+    for _ in range(2):
+        output = render_output(random_chart, {}, timeout=10)
+        assert isinstance(output, RandomOutput)
+        assert output.random_inputs["replayable"] is True
+        assert 'token: "000"' in output
+    builder.assert_called_once()
+
+
+def test_auto_build_failure_is_visible_and_not_retried(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Fall back with the build failure rather than compiling again for every generated input.
+
+    Args:
+        random_chart (Chart): Native chart fixture.
+        tmp_path (Path): Empty renderer cache and local configuration.
+        monkeypatch (pytest.MonkeyPatch): Simulate unavailable Go tooling.
+
+    Returns:
+        None: Native output retains its actual fallback cause and one build attempt serves repeated calls.
+    """
+    from unittest.mock import Mock
+
     from hypothesis_helm.charts.testing.rendering import render_output
     from hypothesis_helm.compiler.randomness.model import RandomOutput
 
     configure(tmp_path, monkeypatch, "hypothesis:\n  renderer_policy: auto\n")
     template(random_chart, "{{ randAlphaNum 3 | quote }}")
-    monkeypatch.setattr("hypothesis_helm.compiler.randomness.rendering.identity", lambda: "missing-helper")
-    output = render_output(random_chart, {}, timeout=10)
-    assert isinstance(output, RandomOutput)
-    assert output.random_inputs["replayable"] is False
-    assert "not prepared" in str(output.random_inputs["fallback_reason"])
+    monkeypatch.chdir(tmp_path)
+    builder = Mock(side_effect=ValueError("Go is unavailable"))
+    monkeypatch.setattr("hypothesis_helm.compiler.randomness.toolchain.build", builder)
+    for _ in range(2):
+        output = render_output(random_chart, {}, timeout=10)
+        assert isinstance(output, RandomOutput)
+        assert output.random_inputs["replayable"] is False
+        assert "Go is unavailable" in str(output.random_inputs["fallback_reason"])
+    builder.assert_called_once()
 
 
 def test_native_policy_skips_controlled_execution(random_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
