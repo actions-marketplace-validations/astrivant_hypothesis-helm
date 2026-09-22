@@ -5,6 +5,7 @@
 
 - [Testing random outputs](#testing-random-outputs)
 - [Coverage and limits](#coverage-and-limits)
+- [Checked evaluation coverage](#checked-evaluation-coverage)
 - [Effects and compiler decisions](#effects-and-compiler-decisions)
 - [Findings addressed](#findings-addressed)
 - [Function matrix](#function-matrix)
@@ -136,6 +137,309 @@ have concrete models. A known return shape is insufficient to prove truthiness,
 an enum or equivalent manifests. Unsupported expressions retain uncertainty and
 remain eligible for Helm testing. A new function absent from this pinned inventory
 is also unknown; it is never automatically treated as pure.
+
+## Checked evaluation coverage
+
+Every upstream function also needs a representative semantic test and a documented analysis boundary.
+The table below is generated from [the coverage contract](../../pkg/hypothesis_helm/compiler/assets/builtin_coverage.json).
+Its names must exactly match the upstream inventory. Adding or removing a function without reviewing its coverage fails
+tests and generated-documentation checks, including repository refresh.
+
+`evaluated` means the representative call is compared against the selected Helm executable. It does **not** mean every
+possible operand is supported. `symbolic` preserves uncertainty such as map-key ordering. `rejection` checks an explicit
+`fail` or `required` result against Helm. `deferred` asserts that the compiler returns unknown and cannot use that call to
+prune an input; the last column explains the missing semantics or external dependency. The existing boundary suite also
+exercises missing arguments, nils, empty values, mixed types, collections and incorrect argument counts for every name.
+
+The remaining deferred representative calls have a **runtime effect**, or invoke a **dynamic call**. A runtime effect can
+execute during a test, but its observed value does not establish a constant across inputs or renders. A dynamic call needs
+a callable value and a contract for the effects of its target. Invalid arguments and unsupported compositions can still
+defer even when a function's representative call evaluates concretely.
+
+For example, `print` on a numeric port now uses bounded native Go formatting. The adapter preserves chart-value numeric
+types separately from template literals and explicit `int`/`int64` conversions. This matters because Go adds a space
+between adjacent operands only when neither is a string. `println` uses Go's newline/spacing behavior too. Unknown
+transformed numeric kinds and unordered symbolic text remain unresolved rather than being coerced incorrectly.
+`printf` also supports native flags, widths, precision, explicit operand indices and additional verbs within the allocation
+budget. A mismatched format can return Go's diagnostic text; it is not automatically an exception.
+
+Native evaluation uses the configured Helm executable. No second Go installation or compiler-specific build is required.
+The adapter covers deterministic text, numeric, collection, reflection, serialization, digest, version and fixed-date
+operations. A frozen recipe preserves Go types through later calls, including `time.Time`, semantic versions, typed slices
+and named duration values. Input text stays JSON data and is never inserted into executable template source.
+
+Calls are cached by executable identity, operands, timezone and timeout. Sequence lengths, repetition, regex expansion, format widths,
+operand trees and payloads are bounded before execution using the chart's [compiler settings](../input-domains/README.md).
+Native invocation timeouts and process ownership also apply. Native evaluation adds process overhead on cache misses.
+
+The compiler distinguishes a fixed date from a date operand that would silently use the current time. It does not freeze
+the order of a multi-entry `values` result. Deep copies own their local maps; shared input maps stay protected. If a copied
+native result is later mutated, its old recipe cannot be reused: subsequent native operations defer until its updated Go
+type can be established. None of these deferrals suppresses a Helm test or proves an enum or equivalent output.
+
+The coverage fixture includes a generated test-only certificate and key to exercise deterministic `buildCustomCert` parsing;
+they are public test data, not application credentials.
+
+<!-- [[[cog
+from hypothesis_helm.compiler.builtin_coverage import reference
+cog.outl(reference())
+]]] -->
+All **251 registered functions** have a checked support decision. The representative probes produce **227 concrete results**, **1 symbolic result**, **2 explicit rejections**, and **21 deferred results**.
+
+| Function | Probe outcome | Representative expression | Supported scope or reason for deferral |
+| --- | --- | --- | --- |
+| `abbrev` | evaluated | `abbrev 5 .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `abbrevboth` | evaluated | `abbrevboth 2 5 .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `add` | evaluated | `add 2 3` | Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved. |
+| `add1` | evaluated | `add1 2` | Numeric conversion, rounding and result-kind semantics are required before folding this operation. |
+| `add1f` | evaluated | `add1f 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `addf` | evaluated | `addf 2 3` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `adler32sum` | evaluated | `adler32sum .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `ago` | deferred (runtime effect) | `ago 0` | Relative time depends on the current clock; sampled timestamps cannot prove a static result. |
+| `all` | evaluated | `all true false` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `and` | evaluated | `and true false` | Go short-circuit and/or are modeled; Sprig all/any do not yet have concrete emptiness handlers. |
+| `any` | evaluated | `any true false` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `append` | evaluated | `append (list "first") .Values.text` | Discovery follows collection elements; concrete evaluation is available only for implemented collection calls and aliases. |
+| `atoi` | evaluated | `atoi "12"` | Decimal string conversion with Go integer bounds; invalid strings follow Sprig conversion behavior. |
+| `b32dec` | evaluated | `b32dec "MZXW6==="` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `b32enc` | evaluated | `b32enc .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `b64dec` | evaluated | `b64dec "aGVsbG8="` | Native Helm decoding with UTF-8 output; invalid byte sequences remain unresolved. |
+| `b64enc` | evaluated | `b64enc .Values.text` | Base64 UTF-8 encoding is modeled; Base32 alphabet and padding rules have no concrete handler yet. |
+| `base` | evaluated | `base "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `bcrypt` | deferred (runtime effect) | `bcrypt "password"` | Password hashing uses randomness and/or expensive work; results stay with native Helm and cannot prove static equality. |
+| `biggest` | evaluated | `biggest 2 3` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `buildCustomCert` | evaluated | `buildCustomCert .Values.certEncoded .Values.keyEncoded` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `call` | deferred (dynamic call) | `call .Values.text` | Dynamic invocation requires a Go function value and its effects; values-file strings are not executable functions. |
+| `camelcase` | evaluated | `camelcase .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `cat` | evaluated | `cat "hello" .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `ceil` | evaluated | `ceil 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `chunk` | evaluated | `chunk 2 (list "a" "b" "c")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `clean` | evaluated | `clean "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `coalesce` | evaluated | `coalesce "" .Values.text` | Select the first nonempty supported value using Helm-compatible emptiness; unsupported Go types remain unresolved. |
+| `compact` | evaluated | `compact (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `concat` | evaluated | `concat (list "a") (list .Values.text)` | Concatenate concrete lists while retaining element provenance and typed nil distinctions. |
+| `contains` | evaluated | `contains "hello" .Values.text` | Concrete string operands only; no type coercion is inferred. |
+| `date` | evaluated | `date "2006-01-02" 0` | Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent. |
+| `dateInZone` | evaluated | `dateInZone "2006-01-02" 0 "UTC"` | Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent. |
+| `dateModify` | evaluated | `dateModify "1h" (toDate "2006-01-02" "2026-01-02")` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `date_in_zone` | evaluated | `date_in_zone "2006-01-02" 0 "UTC"` | Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent. |
+| `date_modify` | evaluated | `date_modify "1h" (toDate "2006-01-02" "2026-01-02")` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `decryptAES` | evaluated | `decryptAES "password" .Values.ciphertext` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `deepCopy` | evaluated | `deepCopy (dict "key" "value")` | Native copying creates a fresh local map. Aliases to the copy share writes; the original input is unchanged. Modified replay snapshots defer instead of replaying stale data. |
+| `deepEqual` | evaluated | `deepEqual (dict "key" "value") (dict "key" "value")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `default` | evaluated | `default "fallback" .Values.text` | Known scalar/list/map emptiness only; fallback evaluation is eager and still retains its effects. |
+| `derivePassword` | evaluated | `derivePassword 1 "long" "password" "user" "site"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `dict` | evaluated | `dict "key" .Values.text` | Literal-key dictionaries retain origins; malformed arguments and unsupported key coercions remain unresolved. |
+| `dig` | evaluated | `dig "key" "fallback" (dict "key" "value")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `dir` | evaluated | `dir "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `div` | evaluated | `div 5 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `divf` | evaluated | `divf 5 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `duration` | evaluated | `duration "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationDays` | evaluated | `durationDays "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationHours` | evaluated | `durationHours "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationMicroseconds` | evaluated | `durationMicroseconds "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationMilliseconds` | evaluated | `durationMilliseconds "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationMinutes` | evaluated | `durationMinutes "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationNanoseconds` | evaluated | `durationNanoseconds "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationRound` | evaluated | `durationRound "1h"` | Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent. |
+| `durationRoundTo` | evaluated | `durationRoundTo "1h" "1m"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationSeconds` | evaluated | `durationSeconds "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationTruncateTo` | evaluated | `durationTruncateTo "1h" "1m"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `durationWeeks` | evaluated | `durationWeeks "1h"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `empty` | evaluated | `empty false` | Known scalar and container emptiness; no claim about arbitrary Go objects. |
+| `encryptAES` | deferred (runtime effect) | `encryptAES "password" "text"` | Encryption randomness and binary/padding error behavior have no concrete contract; decryption is also deferred rather than guessed. |
+| `eq` | evaluated | `eq 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |
+| `ext` | evaluated | `ext "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `fail` | rejection | `fail "coverage rejection"` | An explicit rejection is evidence to verify with Helm, never a successful render. |
+| `first` | evaluated | `first (list "first" "second")` | Collection shape tracking is separate from concrete slice operations; nil slices, equality and alias behavior bound support. |
+| `float64` | evaluated | `float64 "12"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `floor` | evaluated | `floor 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `fromJson` | evaluated | `fromJson "{}"` | Native JSON/YAML parsing is available for implemented calls; TOML and unimplemented must aliases need their own return/error contracts. |
+| `fromJsonArray` | evaluated | `fromJsonArray "[]"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `fromToml` | evaluated | `fromToml "{}"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `fromYaml` | evaluated | `fromYaml "{}"` | Native JSON/YAML parsing is available for implemented calls; TOML and unimplemented must aliases need their own return/error contracts. |
+| `fromYamlArray` | evaluated | `fromYamlArray "[]"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `ge` | evaluated | `ge 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |
+| `genCA` | deferred (runtime effect) | `genCA "ca" 1` | Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm. |
+| `genCAWithKey` | deferred (runtime effect) | `genCAWithKey "ca" 1 "key"` | Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm. |
+| `genPrivateKey` | deferred (runtime effect) | `genPrivateKey "ecdsa"` | Key generation uses randomness and expensive native work; no static value can represent all outputs. |
+| `genSelfSignedCert` | deferred (runtime effect) | `genSelfSignedCert "example" nil nil 1` | Certificate generation uses randomness and time; only record shape and input origins are tracked. |
+| `genSelfSignedCertWithKey` | deferred (runtime effect) | `genSelfSignedCertWithKey "example" nil nil 1 "key"` | Certificate generation uses randomness and time; only record shape and input origins are tracked. |
+| `genSignedCert` | deferred (runtime effect) | `genSignedCert "example" nil nil 1 .Values.certificate` | Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred. |
+| `genSignedCertWithKey` | deferred (runtime effect) | `genSignedCertWithKey "example" nil nil 1 .Values.certificate "key"` | Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred. |
+| `get` | evaluated | `get (dict "key" .Values.text) "key"` | Known dictionary keys; missing keys follow the modeled Go/Sprig lookup semantics. |
+| `getHostByName` | evaluated | `getHostByName "localhost"` | Evaluates as empty only when the verified renderer disables DNS; enabled DNS remains external state. |
+| `gt` | evaluated | `gt 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |
+| `has` | evaluated | `has .Values.text (list "hello world")` | Membership over supported concrete string lists; sampled members do not establish a chart-authored enum. |
+| `hasKey` | evaluated | `hasKey (dict "key" .Values.text) "key"` | Literal dictionary keys can establish a guarded allowlist; sampled keys cannot. |
+| `hasPrefix` | evaluated | `hasPrefix "hello" .Values.text` | Concrete string operands only; no type coercion is inferred. |
+| `hasSuffix` | evaluated | `hasSuffix "hello" .Values.text` | Concrete string operands only; no type coercion is inferred. |
+| `hello` | evaluated | `hello` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `html` | evaluated | `html .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `htmlDate` | evaluated | `htmlDate 0` | Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent. |
+| `htmlDateInZone` | evaluated | `htmlDateInZone 0 "UTC"` | Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent. |
+| `htpasswd` | deferred (runtime effect) | `htpasswd "user" "password"` | Password hashing uses randomness and/or expensive work; results stay with native Helm and cannot prove static equality. |
+| `include` | evaluated | `include "coverage.echo" .` | Known helpers and resolvable contexts; recursive calls obey compiler limits and unresolved code remains with Helm. |
+| `indent` | evaluated | `indent 2 .Values.text` | Known integer widths and concrete text bounded by max_string_chars; arbitrary width types remain unresolved. |
+| `index` | evaluated | `index (list "a" .Values.text) 1` | Known collection and supported index; out-of-range access remains a potential chart failure, not a rejection rule. |
+| `initial` | evaluated | `initial (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `initials` | evaluated | `initials .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `int` | evaluated | `int 12` | Known integer operands within signed 64-bit bounds; other coercions remain unresolved. |
+| `int64` | evaluated | `int64 12` | Known integer operands within signed 64-bit bounds; other coercions remain unresolved. |
+| `isAbs` | evaluated | `isAbs "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `join` | evaluated | `join "," (list "a" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `js` | evaluated | `js .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `kebabcase` | evaluated | `kebabcase .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `keys` | symbolic | `keys (dict "key" .Values.text)` | Returns symbolic unordered keys; membership can be proved without claiming one iteration order. |
+| `kindIs` | evaluated | `kindIs "string" .Values.text` | Stable nonnumeric reflection kinds; raw numeric Go kinds require renderer context. |
+| `kindOf` | evaluated | `kindOf .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `last` | evaluated | `last (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `le` | evaluated | `le 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |
+| `len` | evaluated | `len (list .Values.text)` | Known strings and containers only; input length bounds do not make an unknown value concrete. |
+| `list` | evaluated | `list .Values.text "second"` | Discovery preserves element origins; unimplemented aliases remain unavailable to concrete evaluation. |
+| `lookup` | evaluated | `lookup "v1" "Secret" "default" "example"` | Empty only under a verified offline renderer; live cluster state cannot justify a static rejection. |
+| `lower` | evaluated | `lower .Values.text` | Reviewed ASCII case/whitespace rules; unsupported Unicode transformations remain unresolved. |
+| `lt` | evaluated | `lt 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |
+| `max` | evaluated | `max 2 3` | Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved. |
+| `maxf` | evaluated | `maxf 2 3` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `merge` | evaluated | `merge (dict) (dict "key" .Values.text)` | Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved. |
+| `mergeOverwrite` | evaluated | `mergeOverwrite (dict) (dict "key" .Values.text)` | Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved. |
+| `min` | evaluated | `min 2 3` | Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved. |
+| `minf` | evaluated | `minf 2 3` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mod` | evaluated | `mod 5 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mul` | evaluated | `mul 2 3` | Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved. |
+| `mulf` | evaluated | `mulf 2 3` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustAppend` | evaluated | `mustAppend (list "first") .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustChunk` | evaluated | `mustChunk 2 (list "a" "b" "c")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustCompact` | evaluated | `mustCompact (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustDateModify` | evaluated | `mustDateModify "1h" (toDate "2006-01-02" "2026-01-02")` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `mustDeepCopy` | evaluated | `mustDeepCopy (dict "key" "value")` | Native copying creates a fresh local map. Aliases to the copy share writes; the original input is unchanged. Modified replay snapshots defer instead of replaying stale data. |
+| `mustFirst` | evaluated | `mustFirst (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustFromJson` | evaluated | `mustFromJson "{}"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustHas` | evaluated | `mustHas .Values.text (list "hello world")` | Membership over supported concrete string lists; sampled members do not establish a chart-authored enum. |
+| `mustInitial` | evaluated | `mustInitial (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustLast` | evaluated | `mustLast (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustMerge` | evaluated | `mustMerge (dict) (dict "key" .Values.text)` | Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved. |
+| `mustMergeOverwrite` | evaluated | `mustMergeOverwrite (dict) (dict "key" .Values.text)` | Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved. |
+| `mustPrepend` | evaluated | `mustPrepend (list "first") .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustPush` | evaluated | `mustPush (list "first") .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustRegexFind` | evaluated | `mustRegexFind "hello" .Values.text` | Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved. |
+| `mustRegexFindAll` | evaluated | `mustRegexFindAll "l" .Values.text -1` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustRegexMatch` | evaluated | `mustRegexMatch "hello" .Values.text` | Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved. |
+| `mustRegexReplaceAll` | evaluated | `mustRegexReplaceAll "hello" .Values.text "hi"` | Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract. |
+| `mustRegexReplaceAllLiteral` | evaluated | `mustRegexReplaceAllLiteral "hello" .Values.text "hi"` | Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract. |
+| `mustRegexSplit` | evaluated | `mustRegexSplit "l" .Values.text -1` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustRest` | evaluated | `mustRest (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustReverse` | evaluated | `mustReverse (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustSlice` | evaluated | `mustSlice (list "a" "b") 0 1` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustToDate` | evaluated | `mustToDate "2006-01-02" "2026-01-02"` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `mustToDuration` | evaluated | `mustToDuration "1h"` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `mustToJson` | evaluated | `mustToJson (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustToPrettyJson` | evaluated | `mustToPrettyJson (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustToRawJson` | evaluated | `mustToRawJson (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustToToml` | evaluated | `mustToToml (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustToYaml` | evaluated | `mustToYaml (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustUniq` | evaluated | `mustUniq (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `mustWithout` | evaluated | `mustWithout (list "a" "b") "a"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `must_date_modify` | evaluated | `must_date_modify "1h" (toDate "2006-01-02" "2026-01-02")` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `ne` | evaluated | `ne 2 3` | Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved. |
+| `nindent` | evaluated | `nindent 2 .Values.text` | Known integer widths and concrete text bounded by max_string_chars; arbitrary width types remain unresolved. |
+| `nospace` | evaluated | `nospace .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `not` | evaluated | `not false` | Known scalar and container emptiness; no claim about arbitrary Go objects. |
+| `now` | deferred (runtime effect) | `now` | The current clock is external to chart values and cannot establish a static constant. |
+| `omit` | evaluated | `omit (dict "key" .Values.text) "key"` | Supported string-key dictionaries with provenance-preserving field selection. |
+| `or` | evaluated | `or true false` | Go short-circuit and/or are modeled; Sprig all/any do not yet have concrete emptiness handlers. |
+| `osBase` | evaluated | `osBase "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `osClean` | evaluated | `osClean "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `osDir` | evaluated | `osDir "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `osExt` | evaluated | `osExt "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `osIsAbs` | evaluated | `osIsAbs "/a/b.txt"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `pick` | evaluated | `pick (dict "key" .Values.text) "key"` | Supported string-key dictionaries with provenance-preserving field selection. |
+| `pluck` | evaluated | `pluck "key" (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `plural` | evaluated | `plural "one" "many" 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `prepend` | evaluated | `prepend (list "first") .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `print` | evaluated | `print .Values.port` | Formatting preserves native Go types, spacing, flags and type-error diagnostics. Widths and precision are bounded before execution; symbolic key order is never fixed by sampling. |
+| `printf` | evaluated | `printf "%s:%s" "host" (print .Values.port)` | Formatting preserves native Go types, spacing, flags and type-error diagnostics. Widths and precision are bounded before execution; symbolic key order is never fixed by sampling. |
+| `println` | evaluated | `println .Values.port` | Formatting preserves native Go types, spacing, flags and type-error diagnostics. Widths and precision are bounded before execution; symbolic key order is never fixed by sampling. |
+| `push` | evaluated | `push (list "first") .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `quote` | evaluated | `quote .Values.text` | Reviewed string/Boolean quoting; quote can use native Helm for concrete operands, while unsupported squote coercions remain unresolved. |
+| `randAlpha` | deferred (runtime effect) | `randAlpha 8` | Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay. |
+| `randAlphaNum` | deferred (runtime effect) | `randAlphaNum 8` | Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay. |
+| `randAscii` | deferred (runtime effect) | `randAscii 8` | Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay. |
+| `randBytes` | deferred (runtime effect) | `randBytes 8` | Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay. |
+| `randInt` | deferred (runtime effect) | `randInt 0 10` | Random integers cannot prove static branches; native rendering owns the random draw. |
+| `randNumeric` | deferred (runtime effect) | `randNumeric 8` | Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay. |
+| `regexFind` | evaluated | `regexFind "hello" .Values.text` | Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved. |
+| `regexFindAll` | evaluated | `regexFindAll "l" .Values.text -1` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `regexMatch` | evaluated | `regexMatch "hello" .Values.text` | Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved. |
+| `regexQuoteMeta` | evaluated | `regexQuoteMeta .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `regexReplaceAll` | evaluated | `regexReplaceAll "hello" .Values.text "hi"` | Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract. |
+| `regexReplaceAllLiteral` | evaluated | `regexReplaceAllLiteral "hello" .Values.text "hi"` | Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract. |
+| `regexSplit` | evaluated | `regexSplit "l" .Values.text -1` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `repeat` | evaluated | `repeat 2 .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `replace` | evaluated | `replace "hello" "hi" .Values.text` | Concrete string replacement within configured output limits, including empty search strings. |
+| `required` | rejection | `required "coverage rejection" ""` | Reject known empty operands; nonempty operands preserve their input origin. |
+| `rest` | evaluated | `rest (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `reverse` | evaluated | `reverse (list "first" "second")` | Collection shape tracking is separate from concrete slice operations; nil slices, equality and alias behavior bound support. |
+| `round` | evaluated | `round 1 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `semver` | evaluated | `semver "1.2.3"` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `semverCompare` | evaluated | `semverCompare ">=1.0.0" "1.2.3"` | Native Helm version comparison under configured input-length and invocation limits. |
+| `seq` | evaluated | `seq 1 3` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `set` | evaluated | `set (dict) "key" .Values.text` | Only owned local maps may be mutated; shared values, alias escapes and cycles remain explicit barriers. |
+| `sha1sum` | evaluated | `sha1sum .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `sha256sum` | evaluated | `sha256sum .Values.text` | Digest evaluation is implemented only for reviewed algorithms; other algorithms retain input origins without a digest proof. |
+| `sha512sum` | evaluated | `sha512sum .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `shuffle` | deferred (runtime effect) | `shuffle .Values.text` | Random permutations cannot prove static output equality; native rendering owns the shuffle. |
+| `slice` | evaluated | `slice (list "a" "b") 0 1` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `snakecase` | evaluated | `snakecase .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `sortAlpha` | evaluated | `sortAlpha (list "b" "a")` | Sort concrete string lists and symbolic dictionary keys; unsupported coercions remain unresolved. |
+| `split` | evaluated | `split " " .Values.text` | Concrete string splitting; map-style split retains its lexical-key iteration semantics. |
+| `splitList` | evaluated | `splitList " " .Values.text` | Concrete string splitting; map-style split retains its lexical-key iteration semantics. |
+| `splitn` | evaluated | `splitn " " 2 .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `squote` | evaluated | `squote .Values.text` | Reviewed string/Boolean quoting; quote can use native Helm for concrete operands, while unsupported squote coercions remain unresolved. |
+| `sub` | evaluated | `sub 5 2` | Integer arithmetic is bounded; division, remainder and floating-point coercions need separate handlers. |
+| `subf` | evaluated | `subf 5 2` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `substr` | evaluated | `substr 0 3 .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `swapcase` | evaluated | `swapcase .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `ternary` | evaluated | `ternary "yes" "no" true` | Boolean selector only; both value arguments are evaluated and their effects must be retained. |
+| `title` | evaluated | `title .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `toDate` | evaluated | `toDate "2006-01-02" "2026-01-02"` | Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access. |
+| `toDecimal` | evaluated | `toDecimal "12"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `toJson` | evaluated | `toJson (dict "key" .Values.text)` | Implemented serializers use native Helm; alternate layouts, HTML escaping, TOML and must variants require separate adapters. |
+| `toPrettyJson` | evaluated | `toPrettyJson (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `toRawJson` | evaluated | `toRawJson (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `toString` | evaluated | `toString .Values.port` | Known strings, Booleans and integers; other scalar/container coercions remain unresolved. |
+| `toStrings` | evaluated | `toStrings (list "a" 2)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `toToml` | evaluated | `toToml (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `toYaml` | evaluated | `toYaml (dict "key" .Values.text)` | Implemented serializers use native Helm; alternate layouts, HTML escaping, TOML and must variants require separate adapters. |
+| `toYamlPretty` | evaluated | `toYamlPretty (dict "key" .Values.text)` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `tpl` | evaluated | `tpl "{{ .Values.text }}" .` | Concrete template source and a resolvable context are recursively analyzed within step, byte and depth budgets. |
+| `trim` | evaluated | `trim .Values.text` | Reviewed ASCII case/whitespace rules; unsupported Unicode transformations remain unresolved. |
+| `trimAll` | evaluated | `trimAll "x" .Values.text` | Reviewed ASCII trimAll character-set semantics; lowercase aliases need explicit evaluator dispatch. |
+| `trimPrefix` | evaluated | `trimPrefix "hello" .Values.text` | Remove a concrete prefix/suffix without regex interpretation. |
+| `trimSuffix` | evaluated | `trimSuffix "hello" .Values.text` | Remove a concrete prefix/suffix without regex interpretation. |
+| `trimall` | evaluated | `trimall "x" .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `trunc` | evaluated | `trunc 3 .Values.text` | Bounded ASCII byte truncation with supported signed literal/converted widths. |
+| `tuple` | evaluated | `tuple .Values.text "second"` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `typeIs` | evaluated | `typeIs "string" .Values.text` | Supported stable types only; pointer dereferencing and renderer-specific type identity are not inferred. |
+| `typeIsLike` | evaluated | `typeIsLike "string" .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `typeOf` | evaluated | `typeOf .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `uniq` | evaluated | `uniq (list "first" "second")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `unixEpoch` | evaluated | `unixEpoch (toDate "2006-01-02" "2026-01-02")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `unset` | evaluated | `unset (dict "key" .Values.text) "key"` | Only owned local maps may be mutated; shared values and alias escapes remain explicit barriers. |
+| `until` | evaluated | `until 3` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `untilStep` | evaluated | `untilStep 0 3 1` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `untitle` | evaluated | `untitle .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `upper` | evaluated | `upper .Values.text` | Reviewed ASCII case/whitespace rules; unsupported Unicode transformations remain unresolved. |
+| `urlJoin` | evaluated | `urlJoin (dict "scheme" "https" "host" "example.org" "path" "/path")` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `urlParse` | evaluated | `urlParse "https://example.org/path"` | Native Helm parsing under a verified renderer; parsed field origins remain derived. |
+| `urlquery` | evaluated | `urlquery .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `uuidv4` | deferred (runtime effect) | `uuidv4` | Random UUID generation remains native and cannot justify a static branch or equality proof. |
+| `values` | evaluated | `values (dict "key" .Values.text)` | Empty or single-entry maps evaluate concretely. Multiple entries retain unspecified Go map order and remain unresolved. |
+| `without` | evaluated | `without (list "a" "b") "a"` | Concrete list removal is available only for implemented calls; equality and aliases bound the supported cases. |
+| `wrap` | evaluated | `wrap 8 .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+| `wrapWith` | evaluated | `wrapWith 8 "&#124;" .Values.text` | Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved. |
+<!-- [[[end]]] -->
 
 `if`, `range`, `with`, `template`, `block`, `define`, `break` and `continue` are
 language actions, not function-map entries. `.Capabilities` and `.Files` are

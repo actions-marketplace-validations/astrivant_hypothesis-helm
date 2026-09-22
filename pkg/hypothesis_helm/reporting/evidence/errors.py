@@ -19,10 +19,36 @@ from hypothesis_helm.findings.severity import attributes
 from hypothesis_helm.reporting.evidence.reproductions import failing_input
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
-__all__ = ("TEMPLATE_FRAME", "chart_errors", "deduplicate_errors", "template_source")
+__all__ = ("TEMPLATE_FRAME", "chart_errors", "deduplicate_errors", "numbered_diagnostic", "template_source")
 
 
 TEMPLATE_FRAME = re.compile(r"(?:template: |execution error at \()(?P<path>[^\s\"():]+/templates/[^\s\"():]+):\d+(?::\d+)?")
+
+
+def numbered_diagnostic(record: dict[str, object]) -> bool:
+    """
+    Reserve report error numbers for observed diagnostics, excluding unsupported or unexecuted work.
+
+    Args:
+        record (dict[str, object]): Raw phase or previously serialized diagnostic.
+
+    Returns:
+        bool: Whether this record belongs in the numbered findings list.
+    """
+    if record.get("error_kind") == "execution" or record.get("suppressed"):
+        return False
+    if record.get("status") in {
+        "pending",
+        "not-started",
+        "not-needed",
+        "ignored",
+        "skipped",
+        "skipped-library",
+        "missing-values",
+        "unsupported-schema",
+    }:
+        return False
+    return bool(str(record.get("error") or "").strip())
 
 
 def template_source(chart: Path, location: str) -> dict[str, object] | None:
@@ -134,6 +160,9 @@ def chart_errors(record: dict[str, object], chart: Path | None = None) -> list[d
                     "phase": f"{source.get('phase', 'chart')} / case {index}",
                     "status": "failed",
                     "failure_type": case.get("failure_type"),
+                    # The parent may have failed later while executing another
+                    # candidate; that failure does not reclassify this finding.
+                    "error_kind": case.get("error_kind"),
                 }
             )
             matching_primary |= case.get("values") == source.get("values") and case["error"] == source.get("error")
@@ -143,7 +172,7 @@ def chart_errors(record: dict[str, object], chart: Path | None = None) -> list[d
             expanded_sources.append(source)
     errors: list[dict[str, object]] = []
     for source in expanded_sources:
-        if source.get("status") in {"pending", "not-started", "not-needed", "ignored"}:
+        if not numbered_diagnostic(source):
             continue
         diagnostic = str(source["error"]).strip()
         identity = None
@@ -200,6 +229,10 @@ def deduplicate_errors(report: dict[str, object]) -> None:
             diagnostics = chart_errors(chart)
         for diagnostic in sequence(diagnostics):
             error = mapping(diagnostic)
+            # Historical reports may already contain numbered preparation or
+            # unsupported-schema records. Reclassify them when republishing too.
+            if not numbered_diagnostic(error):
+                continue
             signature = {key: value for key, value in error.items() if key not in {"phase", "input", "artifacts"}}
             key = json.dumps(signature, sort_keys=True)
             if key not in groups:

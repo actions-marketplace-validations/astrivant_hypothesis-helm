@@ -1,0 +1,1523 @@
+{
+  "format": 1,
+  "values": {
+    "text": "hello world",
+    "port": 27017,
+    "certificate": {
+      "Cert": "certificate",
+      "Key": "key"
+    },
+    "certEncoded": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURKVENDQWcyZ0F3SUJBZ0lRZVRxSWZEU3d6akFwL3VYVG9KVzBWREFOQmdrcWhraUc5dzBCQVFzRkFEQWQKTVJzd0dRWURWUVFERXhKamIyMXdhV3hsY2kxMFpYTjBMVzl1Ykhrd0hoY05Nall3T1RJeU1ERTFNRFExV2hjTgpNall3T1RJek1ERTFNRFExV2pBZE1Sc3dHUVlEVlFRREV4SmpiMjF3YVd4bGNpMTBaWE4wTFc5dWJIa3dnZ0VpCk1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLQW9JQkFRRFo2Z3dlbXhQeUFpNWI4bDRvUkVwQnYxbysKZDQzM05sYjI0NGdjUjhlV243azFlQnMxVy9nOUptKzZmZ2dyZDNaQ0lRc0JieCtOYjVTZXRIWm1VaElQWlhiWgpmRHl2V29TQWs4ckgxRnZuV1Q2QmppN2dHWElwZzlrOTJDcXRINmVjK2ozeDVWOHlhdy8rL3NHb3dJV1F0ajhtCkZGRHV6ZzRCbkZVVC9wWlcrdVlSSEJneG1PVU8yNEFOQy9TZXJFb2I0WlZCN0xDRDZrNEc1WlJweDNMNWd4QWIKMk9xUGNaQnhOUk12clA3UXhrY2Q2TXE2ZytwQjRpRm5PZGxLbVFDanlZTkZIQkp6Z3dFSHJJUzJZOEh2UjdiSQpSN3NObUdKQjNEbVRlUEw1QTg3M0ZkZW14emd5aDNva3E5SU9YdGR5VmxhOUt2R05VWDc3SjAvL0FGQUpBZ01CCkFBR2pZVEJmTUE0R0ExVWREd0VCL3dRRUF3SUNwREFkQmdOVkhTVUVGakFVQmdnckJnRUZCUWNEQVFZSUt3WUIKQlFVSEF3SXdEd1lEVlIwVEFRSC9CQVV3QXdFQi96QWRCZ05WSFE0RUZnUVVyU3BrWC9nY1VTVWZ4OVJWY3VkYgpyWFJPekZvd0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFMRFp0UWFFeEpGNmVHem9ZYUdrc3FZTUFIR2dpWVloCjRHbGlRT2lRTDA2TjBNaGpBT2x2dGswNU5RQ29kRTZLV0UydmdJcmVSNmFMdmVmU1N3SGt5MklSWHRNZ3d5ajAKcjhVN1JUUmRSNFRJbFRwTnB5dG8zSUlCRlArOVRRako5YnhLdnlOR3lla1o0RFlXdHA4VjR1bnZneVo1VUpYWQp4SmlmSmhiSzhhcW14bDRWMEsreWQ2S0h5eDRxY1dkYU44d0FWTDUxTGVIdmF6SmNuT0hEaGZXZWxaQkJwK2VoCkhlMFR4WUlaWVIzOHlXUFZNYVBKM0lvZFU1MmtQV2tOR1Q0VzNEaUxzbzhtNXRiU2hGZmk3TEF1RGViYmdQbkIKdFZxTllqYVNyVWJvdWR4UTRQVG1Ob1JWRmI5bG0rWjlyTzBmUTFDVjFOeHJ6a2g0SHkwT2JwRT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=",
+    "keyEncoded": "LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBMmVvTUhwc1Q4Z0l1Vy9KZUtFUktRYjlhUG5lTjl6Wlc5dU9JSEVmSGxwKzVOWGdiCk5WdjRQU1p2dW40SUszZDJRaUVMQVc4ZmpXK1VuclIyWmxJU0QyVjIyWHc4cjFxRWdKUEt4OVJiNTFrK2dZNHUKNEJseUtZUFpQZGdxclIrbm5Qbzk4ZVZmTW1zUC92N0JxTUNGa0xZL0poUlE3czRPQVp4VkUvNldWdnJtRVJ3WQpNWmpsRHR1QURRdjBucXhLRytHVlFleXdnK3BPQnVXVWFjZHkrWU1RRzlqcWozR1FjVFVUTDZ6KzBNWkhIZWpLCnVvUHFRZUloWnpuWlNwa0FvOG1EUlJ3U2M0TUJCNnlFdG1QQjcwZTJ5RWU3RFpoaVFkdzVrM2p5K1FQTzl4WFgKcHNjNE1vZDZKS3ZTRGw3WGNsWld2U3J4alZGKyt5ZFAvd0JRQ1FJREFRQUJBb0lCQUVVT0Jna3MyNFUxYTd0MwpjcDhRQlBnUXkyaEFPcHk4ZTVLQlNBQ3VQbkZjN0RRbGUzbk5TejBWa1JKb0hlNm9UTEZvQnpUTkloS1A2V2poCmh5T2xubE9DczhiM3Q4Tlp5K055OGkrZysvNjBLVHFrOC9YUUduMU5hdXBPTmpmbWNCY3V0YktTSFRpODlMUzUKeG1UVG5YL2VRT1N3UzNWaGxzNnIyOG9hUTBvTVloSjBIdi91dXV3UWk4M3NqZGlkSkptRnhMSCtkMDdkK3k5egpPTlNldkhpdndTSmxWT1NTd09NWTFleUh2KzQ5Ym9WUkMzYlhmZkovK1BmdWhxZjgwZWkxWW5HNUoyUkw0WWpPCmRGT1F3NEVnZ2xsMFpsOTZyams5cXBnNGwzaGUrYVlvYTdKaVFqbDA5QWVTUGExS0pSN25kY3JKT1B5K1NaYXkKc1Vxc1JvRUNnWUVBM01UY2w4b1hvSkxjZExHUHZZaDhFbWR5aDNwRUY4Ym9idHFvTERjVnEydldBY0ZYa0lWWQpTaWtUWUJqSW15b2QwbmxkY3FLYkJYTFZ6Zmcvb3BrcDVtMHcwNlNPNlJaVFB2eTBlSVVvQ2c4NGRhSjlXL2g1CmtaU3ErN0hFaUdxakxjZjdQS0hwK3Z5Ly9oeXBGcVhCa2dXODdCejlSdGVqTFB1aHFxT0xkVThDZ1lFQS9MQ1AKWEVNTHlMQzJLN2lybWdmYVF0MVVRTVFSelFsRXpndTNsZHVmMFlVOTVZQkxCa3NXMXl2TzgxR3h2dVNlb2wyTQpVaFJTdnRGd3hTTEJiZ2lRdE1WTWEweVdVYUV3ZVpwYVRVQ04zK09QYUtyVjBBdWorS3BJM0pPUVU5ejl5MVBECk5ocGpHVjRmU0FHZlErVXFRaWcwTG5HbEk3dTBqYkpCVHB3dFB5Y0NnWUJYYTBDcWZtVFN1YlRBSkp0MWdya1cKbEkzK1pZVFhJWFZpaUFUMTFTNG9mZi8xRy9rdmlnM0c5L0xySjRVd0pBSkJHTHZQSytKVXl2OHNtek9ma0NUTwpVTWgzMWY2Yy83RWhEUEh0azFTaWZ4cHRRbFYvZUtteTR2cTl4Y3U3OVBYK3ArU3RRclFqSmJoa3lEYVFlRHhwCk5RcDFPSmwyVnVjUFplakRhQlZOOHdLQmdBeGZkTldXcnRnSDF4T3kraXdUb0Z0UHpSVlN4SEJldU5EQ0FCNUYKWDhENW5qdERtZWpYK21sVXl0QmRPcS9YTC9GUlZWS2JqaVdyeWJMTmJkMCtiQjk5M2EwUFZmanZSSmxmdG5ZNwo1L2FEaFAwaUNGQWtrY1hXU0xVTVFLL3FqVDdNZmkyREEwRTF1NkJoKy9OdUlEQ1hHVjhBejQ0OVhhem1nbzRmCjFaTlhBb0dCQUpVN3NzOHdad2xDRE1iTzhDd3hQSXBPSmROWTlTcDk4eFNHYTVjNi9ia1o2dGx5TmkremQxb0cKbGovTXpBR2dJNHpUaDZTVDBIdW4rak5GNWhHakgvWTF2ZDFUZTlXL0owVDl6bGNRNndYTjh1b3JZNVlIcjNXTQp1RFpYQzZmd1RTall4YXpSclBFZzZ1QlQ2QzRvR1g1SjJSSUVwUGpxdzVrU2VmamRvQ0srCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==",
+    "ciphertext": "idnOfKnF6mLWDIoyXh00+MSxoFPdKvCxPxUHOnAV38gTUOhBdiPS0PlYu1k1DQ02"
+  },
+  "helpers": "{{ define \"coverage.echo\" }}{{ .Values.text }}{{ end }}",
+  "functions": {
+    "abbrev": {
+      "expression": "abbrev 5 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "abbrevboth": {
+      "expression": "abbrevboth 2 5 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "add": {
+      "expression": "add 2 3",
+      "outcome": "evaluated",
+      "scope": "Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "add1": {
+      "expression": "add1 2",
+      "outcome": "evaluated",
+      "scope": "Numeric conversion, rounding and result-kind semantics are required before folding this operation.",
+      "limitation": "bounded support"
+    },
+    "add1f": {
+      "expression": "add1f 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "addf": {
+      "expression": "addf 2 3",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "adler32sum": {
+      "expression": "adler32sum .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "ago": {
+      "expression": "ago 0",
+      "outcome": "deferred",
+      "scope": "Relative time depends on the current clock; sampled timestamps cannot prove a static result.",
+      "limitation": "runtime effect"
+    },
+    "all": {
+      "expression": "all true false",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "and": {
+      "expression": "and true false",
+      "outcome": "evaluated",
+      "scope": "Go short-circuit and/or are modeled; Sprig all/any do not yet have concrete emptiness handlers.",
+      "limitation": "bounded support"
+    },
+    "any": {
+      "expression": "any true false",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "append": {
+      "expression": "append (list \"first\") .Values.text",
+      "outcome": "evaluated",
+      "scope": "Discovery follows collection elements; concrete evaluation is available only for implemented collection calls and aliases.",
+      "limitation": "bounded support"
+    },
+    "atoi": {
+      "expression": "atoi \"12\"",
+      "outcome": "evaluated",
+      "scope": "Decimal string conversion with Go integer bounds; invalid strings follow Sprig conversion behavior.",
+      "limitation": "bounded support"
+    },
+    "b32dec": {
+      "expression": "b32dec \"MZXW6===\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "b32enc": {
+      "expression": "b32enc .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "b64dec": {
+      "expression": "b64dec \"aGVsbG8=\"",
+      "outcome": "evaluated",
+      "scope": "Native Helm decoding with UTF-8 output; invalid byte sequences remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "b64enc": {
+      "expression": "b64enc .Values.text",
+      "outcome": "evaluated",
+      "scope": "Base64 UTF-8 encoding is modeled; Base32 alphabet and padding rules have no concrete handler yet.",
+      "limitation": "bounded support"
+    },
+    "base": {
+      "expression": "base \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "bcrypt": {
+      "expression": "bcrypt \"password\"",
+      "outcome": "deferred",
+      "scope": "Password hashing uses randomness and/or expensive work; results stay with native Helm and cannot prove static equality.",
+      "limitation": "runtime effect"
+    },
+    "biggest": {
+      "expression": "biggest 2 3",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "buildCustomCert": {
+      "expression": "buildCustomCert .Values.certEncoded .Values.keyEncoded",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "call": {
+      "expression": "call .Values.text",
+      "outcome": "deferred",
+      "scope": "Dynamic invocation requires a Go function value and its effects; values-file strings are not executable functions.",
+      "limitation": "dynamic call"
+    },
+    "camelcase": {
+      "expression": "camelcase .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "cat": {
+      "expression": "cat \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "ceil": {
+      "expression": "ceil 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "chunk": {
+      "expression": "chunk 2 (list \"a\" \"b\" \"c\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "clean": {
+      "expression": "clean \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "coalesce": {
+      "expression": "coalesce \"\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Select the first nonempty supported value using Helm-compatible emptiness; unsupported Go types remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "compact": {
+      "expression": "compact (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "concat": {
+      "expression": "concat (list \"a\") (list .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concatenate concrete lists while retaining element provenance and typed nil distinctions.",
+      "limitation": "bounded support"
+    },
+    "contains": {
+      "expression": "contains \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete string operands only; no type coercion is inferred.",
+      "limitation": "bounded support"
+    },
+    "date": {
+      "expression": "date \"2006-01-02\" 0",
+      "outcome": "evaluated",
+      "scope": "Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent.",
+      "limitation": "bounded support"
+    },
+    "dateInZone": {
+      "expression": "dateInZone \"2006-01-02\" 0 \"UTC\"",
+      "outcome": "evaluated",
+      "scope": "Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent.",
+      "limitation": "bounded support"
+    },
+    "dateModify": {
+      "expression": "dateModify \"1h\" (toDate \"2006-01-02\" \"2026-01-02\")",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "date_in_zone": {
+      "expression": "date_in_zone \"2006-01-02\" 0 \"UTC\"",
+      "outcome": "evaluated",
+      "scope": "Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent.",
+      "limitation": "bounded support"
+    },
+    "date_modify": {
+      "expression": "date_modify \"1h\" (toDate \"2006-01-02\" \"2026-01-02\")",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "decryptAES": {
+      "expression": "decryptAES \"password\" .Values.ciphertext",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "deepCopy": {
+      "expression": "deepCopy (dict \"key\" \"value\")",
+      "outcome": "evaluated",
+      "scope": "Native copying creates a fresh local map. Aliases to the copy share writes; the original input is unchanged. Modified replay snapshots defer instead of replaying stale data.",
+      "limitation": "bounded support"
+    },
+    "deepEqual": {
+      "expression": "deepEqual (dict \"key\" \"value\") (dict \"key\" \"value\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "default": {
+      "expression": "default \"fallback\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Known scalar/list/map emptiness only; fallback evaluation is eager and still retains its effects.",
+      "limitation": "bounded support"
+    },
+    "derivePassword": {
+      "expression": "derivePassword 1 \"long\" \"password\" \"user\" \"site\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "dict": {
+      "expression": "dict \"key\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Literal-key dictionaries retain origins; malformed arguments and unsupported key coercions remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "dig": {
+      "expression": "dig \"key\" \"fallback\" (dict \"key\" \"value\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "dir": {
+      "expression": "dir \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "div": {
+      "expression": "div 5 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "divf": {
+      "expression": "divf 5 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "duration": {
+      "expression": "duration \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationDays": {
+      "expression": "durationDays \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationHours": {
+      "expression": "durationHours \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationMicroseconds": {
+      "expression": "durationMicroseconds \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationMilliseconds": {
+      "expression": "durationMilliseconds \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationMinutes": {
+      "expression": "durationMinutes \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationNanoseconds": {
+      "expression": "durationNanoseconds \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationRound": {
+      "expression": "durationRound \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent.",
+      "limitation": "bounded support"
+    },
+    "durationRoundTo": {
+      "expression": "durationRoundTo \"1h\" \"1m\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationSeconds": {
+      "expression": "durationSeconds \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationTruncateTo": {
+      "expression": "durationTruncateTo \"1h\" \"1m\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "durationWeeks": {
+      "expression": "durationWeeks \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "empty": {
+      "expression": "empty false",
+      "outcome": "evaluated",
+      "scope": "Known scalar and container emptiness; no claim about arbitrary Go objects.",
+      "limitation": "bounded support"
+    },
+    "encryptAES": {
+      "expression": "encryptAES \"password\" \"text\"",
+      "outcome": "deferred",
+      "scope": "Encryption randomness and binary/padding error behavior have no concrete contract; decryption is also deferred rather than guessed.",
+      "limitation": "runtime effect"
+    },
+    "eq": {
+      "expression": "eq 2 3",
+      "outcome": "evaluated",
+      "scope": "Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "ext": {
+      "expression": "ext \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "fail": {
+      "expression": "fail \"coverage rejection\"",
+      "outcome": "rejection",
+      "scope": "An explicit rejection is evidence to verify with Helm, never a successful render.",
+      "limitation": "bounded support"
+    },
+    "first": {
+      "expression": "first (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Collection shape tracking is separate from concrete slice operations; nil slices, equality and alias behavior bound support.",
+      "limitation": "bounded support"
+    },
+    "float64": {
+      "expression": "float64 \"12\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "floor": {
+      "expression": "floor 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "fromJson": {
+      "expression": "fromJson \"{}\"",
+      "outcome": "evaluated",
+      "scope": "Native JSON/YAML parsing is available for implemented calls; TOML and unimplemented must aliases need their own return/error contracts.",
+      "limitation": "bounded support"
+    },
+    "fromJsonArray": {
+      "expression": "fromJsonArray \"[]\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "fromToml": {
+      "expression": "fromToml \"{}\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "fromYaml": {
+      "expression": "fromYaml \"{}\"",
+      "outcome": "evaluated",
+      "scope": "Native JSON/YAML parsing is available for implemented calls; TOML and unimplemented must aliases need their own return/error contracts.",
+      "limitation": "bounded support"
+    },
+    "fromYamlArray": {
+      "expression": "fromYamlArray \"[]\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "ge": {
+      "expression": "ge 2 3",
+      "outcome": "evaluated",
+      "scope": "Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "genCA": {
+      "expression": "genCA \"ca\" 1",
+      "outcome": "deferred",
+      "scope": "Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm.",
+      "limitation": "runtime effect"
+    },
+    "genCAWithKey": {
+      "expression": "genCAWithKey \"ca\" 1 \"key\"",
+      "outcome": "deferred",
+      "scope": "Certificate creation uses randomness and time. Discovery tracks Cert/Key; concrete contents remain with Helm.",
+      "limitation": "runtime effect"
+    },
+    "genPrivateKey": {
+      "expression": "genPrivateKey \"ecdsa\"",
+      "outcome": "deferred",
+      "scope": "Key generation uses randomness and expensive native work; no static value can represent all outputs.",
+      "limitation": "runtime effect"
+    },
+    "genSelfSignedCert": {
+      "expression": "genSelfSignedCert \"example\" nil nil 1",
+      "outcome": "deferred",
+      "scope": "Certificate generation uses randomness and time; only record shape and input origins are tracked.",
+      "limitation": "runtime effect"
+    },
+    "genSelfSignedCertWithKey": {
+      "expression": "genSelfSignedCertWithKey \"example\" nil nil 1 \"key\"",
+      "outcome": "deferred",
+      "scope": "Certificate generation uses randomness and time; only record shape and input origins are tracked.",
+      "limitation": "runtime effect"
+    },
+    "genSignedCert": {
+      "expression": "genSignedCert \"example\" nil nil 1 .Values.certificate",
+      "outcome": "deferred",
+      "scope": "Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred.",
+      "limitation": "runtime effect"
+    },
+    "genSignedCertWithKey": {
+      "expression": "genSignedCertWithKey \"example\" nil nil 1 .Values.certificate \"key\"",
+      "outcome": "deferred",
+      "scope": "Signing requires a concrete certificate/key record and native randomness/time; concrete output is deferred.",
+      "limitation": "runtime effect"
+    },
+    "get": {
+      "expression": "get (dict \"key\" .Values.text) \"key\"",
+      "outcome": "evaluated",
+      "scope": "Known dictionary keys; missing keys follow the modeled Go/Sprig lookup semantics.",
+      "limitation": "bounded support"
+    },
+    "getHostByName": {
+      "expression": "getHostByName \"localhost\"",
+      "outcome": "evaluated",
+      "scope": "Evaluates as empty only when the verified renderer disables DNS; enabled DNS remains external state.",
+      "limitation": "bounded support"
+    },
+    "gt": {
+      "expression": "gt 2 3",
+      "outcome": "evaluated",
+      "scope": "Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "has": {
+      "expression": "has .Values.text (list \"hello world\")",
+      "outcome": "evaluated",
+      "scope": "Membership over supported concrete string lists; sampled members do not establish a chart-authored enum.",
+      "limitation": "bounded support"
+    },
+    "hasKey": {
+      "expression": "hasKey (dict \"key\" .Values.text) \"key\"",
+      "outcome": "evaluated",
+      "scope": "Literal dictionary keys can establish a guarded allowlist; sampled keys cannot.",
+      "limitation": "bounded support"
+    },
+    "hasPrefix": {
+      "expression": "hasPrefix \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete string operands only; no type coercion is inferred.",
+      "limitation": "bounded support"
+    },
+    "hasSuffix": {
+      "expression": "hasSuffix \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete string operands only; no type coercion is inferred.",
+      "limitation": "bounded support"
+    },
+    "hello": {
+      "expression": "hello",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "html": {
+      "expression": "html .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "htmlDate": {
+      "expression": "htmlDate 0",
+      "outcome": "evaluated",
+      "scope": "Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent.",
+      "limitation": "bounded support"
+    },
+    "htmlDateInZone": {
+      "expression": "htmlDateInZone 0 \"UTC\"",
+      "outcome": "evaluated",
+      "scope": "Fixed dates and durations use native Go semantics. Operands that would implicitly read the clock are deferred; timezone context is renderer-dependent.",
+      "limitation": "bounded support"
+    },
+    "htpasswd": {
+      "expression": "htpasswd \"user\" \"password\"",
+      "outcome": "deferred",
+      "scope": "Password hashing uses randomness and/or expensive work; results stay with native Helm and cannot prove static equality.",
+      "limitation": "runtime effect"
+    },
+    "include": {
+      "expression": "include \"coverage.echo\" .",
+      "outcome": "evaluated",
+      "scope": "Known helpers and resolvable contexts; recursive calls obey compiler limits and unresolved code remains with Helm.",
+      "limitation": "bounded support"
+    },
+    "indent": {
+      "expression": "indent 2 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Known integer widths and concrete text bounded by max_string_chars; arbitrary width types remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "index": {
+      "expression": "index (list \"a\" .Values.text) 1",
+      "outcome": "evaluated",
+      "scope": "Known collection and supported index; out-of-range access remains a potential chart failure, not a rejection rule.",
+      "limitation": "bounded support"
+    },
+    "initial": {
+      "expression": "initial (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "initials": {
+      "expression": "initials .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "int": {
+      "expression": "int 12",
+      "outcome": "evaluated",
+      "scope": "Known integer operands within signed 64-bit bounds; other coercions remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "int64": {
+      "expression": "int64 12",
+      "outcome": "evaluated",
+      "scope": "Known integer operands within signed 64-bit bounds; other coercions remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "isAbs": {
+      "expression": "isAbs \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "join": {
+      "expression": "join \",\" (list \"a\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "js": {
+      "expression": "js .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "kebabcase": {
+      "expression": "kebabcase .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "keys": {
+      "expression": "keys (dict \"key\" .Values.text)",
+      "outcome": "symbolic",
+      "scope": "Returns symbolic unordered keys; membership can be proved without claiming one iteration order.",
+      "limitation": "bounded support"
+    },
+    "kindIs": {
+      "expression": "kindIs \"string\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Stable nonnumeric reflection kinds; raw numeric Go kinds require renderer context.",
+      "limitation": "bounded support"
+    },
+    "kindOf": {
+      "expression": "kindOf .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "last": {
+      "expression": "last (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "le": {
+      "expression": "le 2 3",
+      "outcome": "evaluated",
+      "scope": "Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "len": {
+      "expression": "len (list .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Known strings and containers only; input length bounds do not make an unknown value concrete.",
+      "limitation": "bounded support"
+    },
+    "list": {
+      "expression": "list .Values.text \"second\"",
+      "outcome": "evaluated",
+      "scope": "Discovery preserves element origins; unimplemented aliases remain unavailable to concrete evaluation.",
+      "limitation": "bounded support"
+    },
+    "lookup": {
+      "expression": "lookup \"v1\" \"Secret\" \"default\" \"example\"",
+      "outcome": "evaluated",
+      "scope": "Empty only under a verified offline renderer; live cluster state cannot justify a static rejection.",
+      "limitation": "bounded support"
+    },
+    "lower": {
+      "expression": "lower .Values.text",
+      "outcome": "evaluated",
+      "scope": "Reviewed ASCII case/whitespace rules; unsupported Unicode transformations remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "lt": {
+      "expression": "lt 2 3",
+      "outcome": "evaluated",
+      "scope": "Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "max": {
+      "expression": "max 2 3",
+      "outcome": "evaluated",
+      "scope": "Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "maxf": {
+      "expression": "maxf 2 3",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "merge": {
+      "expression": "merge (dict) (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mergeOverwrite": {
+      "expression": "mergeOverwrite (dict) (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "min": {
+      "expression": "min 2 3",
+      "outcome": "evaluated",
+      "scope": "Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "minf": {
+      "expression": "minf 2 3",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mod": {
+      "expression": "mod 5 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mul": {
+      "expression": "mul 2 3",
+      "outcome": "evaluated",
+      "scope": "Integer arithmetic is modeled where implemented; floating-point arithmetic and unimplemented aliases remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mulf": {
+      "expression": "mulf 2 3",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustAppend": {
+      "expression": "mustAppend (list \"first\") .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustChunk": {
+      "expression": "mustChunk 2 (list \"a\" \"b\" \"c\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustCompact": {
+      "expression": "mustCompact (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustDateModify": {
+      "expression": "mustDateModify \"1h\" (toDate \"2006-01-02\" \"2026-01-02\")",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "mustDeepCopy": {
+      "expression": "mustDeepCopy (dict \"key\" \"value\")",
+      "outcome": "evaluated",
+      "scope": "Native copying creates a fresh local map. Aliases to the copy share writes; the original input is unchanged. Modified replay snapshots defer instead of replaying stale data.",
+      "limitation": "bounded support"
+    },
+    "mustFirst": {
+      "expression": "mustFirst (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustFromJson": {
+      "expression": "mustFromJson \"{}\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustHas": {
+      "expression": "mustHas .Values.text (list \"hello world\")",
+      "outcome": "evaluated",
+      "scope": "Membership over supported concrete string lists; sampled members do not establish a chart-authored enum.",
+      "limitation": "bounded support"
+    },
+    "mustInitial": {
+      "expression": "mustInitial (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustLast": {
+      "expression": "mustLast (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustMerge": {
+      "expression": "mustMerge (dict) (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustMergeOverwrite": {
+      "expression": "mustMergeOverwrite (dict) (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Fresh local dictionaries and supported precedence; shared input mutation, cycles and unsupported nested merges remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustPrepend": {
+      "expression": "mustPrepend (list \"first\") .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustPush": {
+      "expression": "mustPush (list \"first\") .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustRegexFind": {
+      "expression": "mustRegexFind \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustRegexFindAll": {
+      "expression": "mustRegexFindAll \"l\" .Values.text -1",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustRegexMatch": {
+      "expression": "mustRegexMatch \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustRegexReplaceAll": {
+      "expression": "mustRegexReplaceAll \"hello\" .Values.text \"hi\"",
+      "outcome": "evaluated",
+      "scope": "Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract.",
+      "limitation": "bounded support"
+    },
+    "mustRegexReplaceAllLiteral": {
+      "expression": "mustRegexReplaceAllLiteral \"hello\" .Values.text \"hi\"",
+      "outcome": "evaluated",
+      "scope": "Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract.",
+      "limitation": "bounded support"
+    },
+    "mustRegexSplit": {
+      "expression": "mustRegexSplit \"l\" .Values.text -1",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustRest": {
+      "expression": "mustRest (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustReverse": {
+      "expression": "mustReverse (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustSlice": {
+      "expression": "mustSlice (list \"a\" \"b\") 0 1",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustToDate": {
+      "expression": "mustToDate \"2006-01-02\" \"2026-01-02\"",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "mustToDuration": {
+      "expression": "mustToDuration \"1h\"",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "mustToJson": {
+      "expression": "mustToJson (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustToPrettyJson": {
+      "expression": "mustToPrettyJson (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustToRawJson": {
+      "expression": "mustToRawJson (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustToToml": {
+      "expression": "mustToToml (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustToYaml": {
+      "expression": "mustToYaml (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustUniq": {
+      "expression": "mustUniq (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "mustWithout": {
+      "expression": "mustWithout (list \"a\" \"b\") \"a\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "must_date_modify": {
+      "expression": "must_date_modify \"1h\" (toDate \"2006-01-02\" \"2026-01-02\")",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "ne": {
+      "expression": "ne 2 3",
+      "outcome": "evaluated",
+      "scope": "Comparison is restricted to supported compatible types; renderer-specific numeric kinds can remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "nindent": {
+      "expression": "nindent 2 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Known integer widths and concrete text bounded by max_string_chars; arbitrary width types remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "nospace": {
+      "expression": "nospace .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "not": {
+      "expression": "not false",
+      "outcome": "evaluated",
+      "scope": "Known scalar and container emptiness; no claim about arbitrary Go objects.",
+      "limitation": "bounded support"
+    },
+    "now": {
+      "expression": "now",
+      "outcome": "deferred",
+      "scope": "The current clock is external to chart values and cannot establish a static constant.",
+      "limitation": "runtime effect"
+    },
+    "omit": {
+      "expression": "omit (dict \"key\" .Values.text) \"key\"",
+      "outcome": "evaluated",
+      "scope": "Supported string-key dictionaries with provenance-preserving field selection.",
+      "limitation": "bounded support"
+    },
+    "or": {
+      "expression": "or true false",
+      "outcome": "evaluated",
+      "scope": "Go short-circuit and/or are modeled; Sprig all/any do not yet have concrete emptiness handlers.",
+      "limitation": "bounded support"
+    },
+    "osBase": {
+      "expression": "osBase \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "osClean": {
+      "expression": "osClean \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "osDir": {
+      "expression": "osDir \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "osExt": {
+      "expression": "osExt \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "osIsAbs": {
+      "expression": "osIsAbs \"/a/b.txt\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "pick": {
+      "expression": "pick (dict \"key\" .Values.text) \"key\"",
+      "outcome": "evaluated",
+      "scope": "Supported string-key dictionaries with provenance-preserving field selection.",
+      "limitation": "bounded support"
+    },
+    "pluck": {
+      "expression": "pluck \"key\" (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "plural": {
+      "expression": "plural \"one\" \"many\" 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "prepend": {
+      "expression": "prepend (list \"first\") .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "print": {
+      "expression": "print .Values.port",
+      "outcome": "evaluated",
+      "scope": "Formatting preserves native Go types, spacing, flags and type-error diagnostics. Widths and precision are bounded before execution; symbolic key order is never fixed by sampling.",
+      "limitation": "bounded support"
+    },
+    "printf": {
+      "expression": "printf \"%s:%s\" \"host\" (print .Values.port)",
+      "outcome": "evaluated",
+      "scope": "Formatting preserves native Go types, spacing, flags and type-error diagnostics. Widths and precision are bounded before execution; symbolic key order is never fixed by sampling.",
+      "limitation": "bounded support"
+    },
+    "println": {
+      "expression": "println .Values.port",
+      "outcome": "evaluated",
+      "scope": "Formatting preserves native Go types, spacing, flags and type-error diagnostics. Widths and precision are bounded before execution; symbolic key order is never fixed by sampling.",
+      "limitation": "bounded support"
+    },
+    "push": {
+      "expression": "push (list \"first\") .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "quote": {
+      "expression": "quote .Values.text",
+      "outcome": "evaluated",
+      "scope": "Reviewed string/Boolean quoting; quote can use native Helm for concrete operands, while unsupported squote coercions remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "randAlpha": {
+      "expression": "randAlpha 8",
+      "outcome": "deferred",
+      "scope": "Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay.",
+      "limitation": "runtime effect"
+    },
+    "randAlphaNum": {
+      "expression": "randAlphaNum 8",
+      "outcome": "deferred",
+      "scope": "Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay.",
+      "limitation": "runtime effect"
+    },
+    "randAscii": {
+      "expression": "randAscii 8",
+      "outcome": "deferred",
+      "scope": "Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay.",
+      "limitation": "runtime effect"
+    },
+    "randBytes": {
+      "expression": "randBytes 8",
+      "outcome": "deferred",
+      "scope": "Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay.",
+      "limitation": "runtime effect"
+    },
+    "randInt": {
+      "expression": "randInt 0 10",
+      "outcome": "deferred",
+      "scope": "Random integers cannot prove static branches; native rendering owns the random draw.",
+      "limitation": "runtime effect"
+    },
+    "randNumeric": {
+      "expression": "randNumeric 8",
+      "outcome": "deferred",
+      "scope": "Random output cannot prove a static branch. Native rendering retains it; randAlphaNum also supports controlled sampling/replay.",
+      "limitation": "runtime effect"
+    },
+    "regexFind": {
+      "expression": "regexFind \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved.",
+      "limitation": "bounded support"
+    },
+    "regexFindAll": {
+      "expression": "regexFindAll \"l\" .Values.text -1",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "regexMatch": {
+      "expression": "regexMatch \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Native Go regular expressions within configured pattern/subject budgets; invalid required expressions stay unresolved.",
+      "limitation": "bounded support"
+    },
+    "regexQuoteMeta": {
+      "expression": "regexQuoteMeta .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "regexReplaceAll": {
+      "expression": "regexReplaceAll \"hello\" .Values.text \"hi\"",
+      "outcome": "evaluated",
+      "scope": "Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract.",
+      "limitation": "bounded support"
+    },
+    "regexReplaceAllLiteral": {
+      "expression": "regexReplaceAllLiteral \"hello\" .Values.text \"hi\"",
+      "outcome": "evaluated",
+      "scope": "Native Go replacement bounded before execution; replacement expansion and invalid patterns can exceed the supported contract.",
+      "limitation": "bounded support"
+    },
+    "regexSplit": {
+      "expression": "regexSplit \"l\" .Values.text -1",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "repeat": {
+      "expression": "repeat 2 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "replace": {
+      "expression": "replace \"hello\" \"hi\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete string replacement within configured output limits, including empty search strings.",
+      "limitation": "bounded support"
+    },
+    "required": {
+      "expression": "required \"coverage rejection\" \"\"",
+      "outcome": "rejection",
+      "scope": "Reject known empty operands; nonempty operands preserve their input origin.",
+      "limitation": "bounded support"
+    },
+    "rest": {
+      "expression": "rest (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "reverse": {
+      "expression": "reverse (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Collection shape tracking is separate from concrete slice operations; nil slices, equality and alias behavior bound support.",
+      "limitation": "bounded support"
+    },
+    "round": {
+      "expression": "round 1 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "semver": {
+      "expression": "semver \"1.2.3\"",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "semverCompare": {
+      "expression": "semverCompare \">=1.0.0\" \"1.2.3\"",
+      "outcome": "evaluated",
+      "scope": "Native Helm version comparison under configured input-length and invocation limits.",
+      "limitation": "bounded support"
+    },
+    "seq": {
+      "expression": "seq 1 3",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "set": {
+      "expression": "set (dict) \"key\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Only owned local maps may be mutated; shared values, alias escapes and cycles remain explicit barriers.",
+      "limitation": "bounded support"
+    },
+    "sha1sum": {
+      "expression": "sha1sum .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "sha256sum": {
+      "expression": "sha256sum .Values.text",
+      "outcome": "evaluated",
+      "scope": "Digest evaluation is implemented only for reviewed algorithms; other algorithms retain input origins without a digest proof.",
+      "limitation": "bounded support"
+    },
+    "sha512sum": {
+      "expression": "sha512sum .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "shuffle": {
+      "expression": "shuffle .Values.text",
+      "outcome": "deferred",
+      "scope": "Random permutations cannot prove static output equality; native rendering owns the shuffle.",
+      "limitation": "runtime effect"
+    },
+    "slice": {
+      "expression": "slice (list \"a\" \"b\") 0 1",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "snakecase": {
+      "expression": "snakecase .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "sortAlpha": {
+      "expression": "sortAlpha (list \"b\" \"a\")",
+      "outcome": "evaluated",
+      "scope": "Sort concrete string lists and symbolic dictionary keys; unsupported coercions remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "split": {
+      "expression": "split \" \" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete string splitting; map-style split retains its lexical-key iteration semantics.",
+      "limitation": "bounded support"
+    },
+    "splitList": {
+      "expression": "splitList \" \" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete string splitting; map-style split retains its lexical-key iteration semantics.",
+      "limitation": "bounded support"
+    },
+    "splitn": {
+      "expression": "splitn \" \" 2 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "squote": {
+      "expression": "squote .Values.text",
+      "outcome": "evaluated",
+      "scope": "Reviewed string/Boolean quoting; quote can use native Helm for concrete operands, while unsupported squote coercions remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "sub": {
+      "expression": "sub 5 2",
+      "outcome": "evaluated",
+      "scope": "Integer arithmetic is bounded; division, remainder and floating-point coercions need separate handlers.",
+      "limitation": "bounded support"
+    },
+    "subf": {
+      "expression": "subf 5 2",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "substr": {
+      "expression": "substr 0 3 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "swapcase": {
+      "expression": "swapcase .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "ternary": {
+      "expression": "ternary \"yes\" \"no\" true",
+      "outcome": "evaluated",
+      "scope": "Boolean selector only; both value arguments are evaluated and their effects must be retained.",
+      "limitation": "bounded support"
+    },
+    "title": {
+      "expression": "title .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "toDate": {
+      "expression": "toDate \"2006-01-02\" \"2026-01-02\"",
+      "outcome": "evaluated",
+      "scope": "Native record or named-type results retain a frozen operand recipe and Go type for subsequent calls, reflection and supported field access.",
+      "limitation": "bounded support"
+    },
+    "toDecimal": {
+      "expression": "toDecimal \"12\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "toJson": {
+      "expression": "toJson (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Implemented serializers use native Helm; alternate layouts, HTML escaping, TOML and must variants require separate adapters.",
+      "limitation": "bounded support"
+    },
+    "toPrettyJson": {
+      "expression": "toPrettyJson (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "toRawJson": {
+      "expression": "toRawJson (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "toString": {
+      "expression": "toString .Values.port",
+      "outcome": "evaluated",
+      "scope": "Known strings, Booleans and integers; other scalar/container coercions remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "toStrings": {
+      "expression": "toStrings (list \"a\" 2)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "toToml": {
+      "expression": "toToml (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "toYaml": {
+      "expression": "toYaml (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Implemented serializers use native Helm; alternate layouts, HTML escaping, TOML and must variants require separate adapters.",
+      "limitation": "bounded support"
+    },
+    "toYamlPretty": {
+      "expression": "toYamlPretty (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "tpl": {
+      "expression": "tpl \"{{ .Values.text }}\" .",
+      "outcome": "evaluated",
+      "scope": "Concrete template source and a resolvable context are recursively analyzed within step, byte and depth budgets.",
+      "limitation": "bounded support"
+    },
+    "trim": {
+      "expression": "trim .Values.text",
+      "outcome": "evaluated",
+      "scope": "Reviewed ASCII case/whitespace rules; unsupported Unicode transformations remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "trimAll": {
+      "expression": "trimAll \"x\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Reviewed ASCII trimAll character-set semantics; lowercase aliases need explicit evaluator dispatch.",
+      "limitation": "bounded support"
+    },
+    "trimPrefix": {
+      "expression": "trimPrefix \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Remove a concrete prefix/suffix without regex interpretation.",
+      "limitation": "bounded support"
+    },
+    "trimSuffix": {
+      "expression": "trimSuffix \"hello\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Remove a concrete prefix/suffix without regex interpretation.",
+      "limitation": "bounded support"
+    },
+    "trimall": {
+      "expression": "trimall \"x\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "trunc": {
+      "expression": "trunc 3 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Bounded ASCII byte truncation with supported signed literal/converted widths.",
+      "limitation": "bounded support"
+    },
+    "tuple": {
+      "expression": "tuple .Values.text \"second\"",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "typeIs": {
+      "expression": "typeIs \"string\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Supported stable types only; pointer dereferencing and renderer-specific type identity are not inferred.",
+      "limitation": "bounded support"
+    },
+    "typeIsLike": {
+      "expression": "typeIsLike \"string\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "typeOf": {
+      "expression": "typeOf .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "uniq": {
+      "expression": "uniq (list \"first\" \"second\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "unixEpoch": {
+      "expression": "unixEpoch (toDate \"2006-01-02\" \"2026-01-02\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "unset": {
+      "expression": "unset (dict \"key\" .Values.text) \"key\"",
+      "outcome": "evaluated",
+      "scope": "Only owned local maps may be mutated; shared values and alias escapes remain explicit barriers.",
+      "limitation": "bounded support"
+    },
+    "until": {
+      "expression": "until 3",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "untilStep": {
+      "expression": "untilStep 0 3 1",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "untitle": {
+      "expression": "untitle .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "upper": {
+      "expression": "upper .Values.text",
+      "outcome": "evaluated",
+      "scope": "Reviewed ASCII case/whitespace rules; unsupported Unicode transformations remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "urlJoin": {
+      "expression": "urlJoin (dict \"scheme\" \"https\" \"host\" \"example.org\" \"path\" \"/path\")",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "urlParse": {
+      "expression": "urlParse \"https://example.org/path\"",
+      "outcome": "evaluated",
+      "scope": "Native Helm parsing under a verified renderer; parsed field origins remain derived.",
+      "limitation": "bounded support"
+    },
+    "urlquery": {
+      "expression": "urlquery .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "uuidv4": {
+      "expression": "uuidv4",
+      "outcome": "deferred",
+      "scope": "Random UUID generation remains native and cannot justify a static branch or equality proof.",
+      "limitation": "runtime effect"
+    },
+    "values": {
+      "expression": "values (dict \"key\" .Values.text)",
+      "outcome": "evaluated",
+      "scope": "Empty or single-entry maps evaluate concretely. Multiple entries retain unspecified Go map order and remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "without": {
+      "expression": "without (list \"a\" \"b\") \"a\"",
+      "outcome": "evaluated",
+      "scope": "Concrete list removal is available only for implemented calls; equality and aliases bound the supported cases.",
+      "limitation": "bounded support"
+    },
+    "wrap": {
+      "expression": "wrap 8 .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    },
+    "wrapWith": {
+      "expression": "wrapWith 8 \"|\" .Values.text",
+      "outcome": "evaluated",
+      "scope": "Concrete evaluation uses the selected Helm binary, retaining native operand types and input origins. Invalid operands, uncertain ordering and compiler budget exhaustion remain unresolved.",
+      "limitation": "bounded support"
+    }
+  }
+}

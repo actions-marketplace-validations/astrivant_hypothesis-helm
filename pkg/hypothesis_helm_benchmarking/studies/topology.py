@@ -14,7 +14,6 @@ from textwrap import dedent
 from typing import NotRequired, TypedDict
 
 from hypothesis_helm_benchmarking.charts.fixture import FixtureWorkspace
-from hypothesis_helm_benchmarking.reporting.descriptions import describe
 
 __all__ = ("COLORS", "Graph", "GraphEdge", "GraphNode", "analyze", "main", "plot")
 
@@ -177,7 +176,8 @@ def plot(graph: Graph, output: Path, title: str) -> dict[str, object]:
 
     metrics, positions = analyze(graph)
     output.mkdir(parents=True, exist_ok=True)
-    figure, axis = plt.subplots(figsize=(16, 10))
+    # The figure is also embedded at half-page width; labels must survive that reduction.
+    figure, axis = plt.subplots(figsize=(8, 6.5))
     sparse = len(graph["nodes"]) <= 80
     segments = [[positions[edge["from"]], positions[edge["to"]]] for edge in graph["edges"]]
     if segments:
@@ -207,40 +207,44 @@ def plot(graph: Graph, output: Path, title: str) -> dict[str, object]:
     if sparse:
         for identifier, point in positions.items():
             label = identifier if len(identifier) <= 38 else identifier[:35] + "…"
-            axis.annotate(label, point, xytext=(6, 5), textcoords="offset points", fontsize=7, clip_on=True)
+            axis.annotate(label, point, xytext=(6, 5), textcoords="offset points", fontsize=12, clip_on=True)
     axis.set(
         xlim=(-0.3, max((point[0] for point in positions.values()), default=0) + (0.8 if sparse else 0.3)),
         ylim=(-1.08, 1.08),
-        xlabel="Longest directed dependency path from a source (edges)",
+        xlabel="Dependency depth (edges)",
         yticks=[],
     )
-    figure.suptitle(title)
+    figure.suptitle(title, fontsize=16)
     axis.set_title(
-        f"Directed dependency multigraph · {metrics['vertices']:,} vertices · "
-        f"{metrics['edges']:,} edges · {metrics['weak_components']:,} weak components"
+        rf"$|V|={metrics['vertices']:,}$   $|E|={metrics['edges']:,}$   $C={metrics['weak_components']:,}$",
+        fontsize=16,
     )
-    axis.legend(
+    axis.xaxis.label.set_fontsize(16)
+    axis.tick_params(labelsize=14)
+    figure.legend(
         handles=[
             Line2D([], [], marker="o", linestyle="none", color=color, label=f"{kind} ({kinds.get(kind, 0):,})")
             for kind, color in palette.items()
+            if kinds.get(kind, 0)
         ],
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.07),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.14),
         ncol=3,
+        fontsize=14,
     )
     figure.text(
         0.5,
         0.025,
         dedent(
             """
-            Every vertex and edge is drawn; parallel edges may overlap. Positions are layout coordinates.
-            Edges record potential references and baseline observations. Unknown access remains unresolved.
+            All vertices and connections are retained.
+            Connections indicate potential influence, not proven causality.
             """
         ).strip(),
         ha="center",
-        fontsize=9,
+        fontsize=12,
     )
-    figure.tight_layout(rect=(0, 0.09, 1, describe(figure, "topology")))
+    figure.tight_layout(rect=(0, 0.34, 1, 0.95))
     figure.savefig(output / "topology.png", dpi=170, facecolor="white")
     figure.savefig(output / "topology.svg", facecolor="white")
     plt.close(figure)

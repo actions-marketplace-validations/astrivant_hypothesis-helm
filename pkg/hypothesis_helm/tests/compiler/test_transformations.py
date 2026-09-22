@@ -22,6 +22,7 @@ from hypothesis_helm.compiler.passes.rejections import RejectionPolicy, matches_
 from hypothesis_helm.exceptions.compiler import Unknown
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.contracts import mapping
+from hypothesis_helm.tests.compiler.test_renderer_context import configured
 
 
 def test_yaml_aliases_and_merge_keys_preserve_coalesce_semantics() -> None:
@@ -75,6 +76,42 @@ def test_printf_raw_values_number_remains_unknown(transformed_chart: Chart) -> N
     assert contracts.predict(transformed_chart.defaults) is None
     assert any("explicit integer conversion" in str(note["reason"]) for note in contracts.fallbacks)
     render(transformed_chart, {})
+
+
+@pytest.mark.skipif(shutil.which("helm") is None, reason="requires Helm")
+@pytest.mark.parametrize("number", [0, -1, 27017, 10**6, 2**53 + 1, 2.5, 1e-6, True, None])
+@pytest.mark.parametrize(
+    "statement", ["print .Values.count", "print .Values.count .Values.count", 'printf "%s:%s" "host" (print .Values.count)']
+)
+def test_print_preserves_renderer_numeric_types(transformed_chart: Chart, number: object, statement: str) -> None:
+    """
+    Match raw chart-value formatting and adjacent-operand spacing with native Helm.
+
+    Args:
+        transformed_chart (Chart): Chart with a replaceable numeric value.
+        number (object): Values-file scalar, including precision and empty-value boundaries.
+        statement (str): Direct print or the numeric-port printf pattern.
+
+    Returns:
+        None: Results and input provenance survive formatting without guessing the Go numeric kind.
+    """
+    (transformed_chart.path / "templates/config.yaml").write_text(
+        dedent(f"""
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: formatting
+        data:
+          result: {{{{ {statement} | quote }}}}
+        """)
+    )
+    values = {**transformed_chart.defaults, "count": number}
+    evaluator = Evaluation(configured(transformed_chart), values, context={"Values": BoundValue(values, ())})
+    observed = evaluator.evaluate(expression(statement), "test", 1, Scope())
+    expected = mapping(render(transformed_chart, {"count": number})[0]["data"])["result"]
+    assert native(observed) == expected
+    if statement.startswith("print "):
+        assert inputs(observed) == {("count",): number}
 
 
 @pytest.fixture

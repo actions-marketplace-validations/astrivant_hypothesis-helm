@@ -26,6 +26,7 @@ from hypothesis_helm.compiler.asts.contract_values import (
     ContractText,
     DerivedValue,
     KeyList,
+    NativeValue,
     NilMap,
     NilSlice,
     UnorderedKeys,
@@ -36,7 +37,16 @@ from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference
 from hypothesis_helm.compiler.asts.templates import Node, lower, structure, walk
 from hypothesis_helm.compiler.asts.transformations import TransformedDomain, calculate, inputs
 from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE, runtime_dependency
-from hypothesis_helm.compiler.constants import INTEGER_RESULTS, MERGES, NATIVE_OPERATIONS, TEMPLATE_CALLS, TRANSFORMATIONS
+from hypothesis_helm.compiler.constants import (
+    INTEGER_RESULTS,
+    MERGES,
+    NATIVE_EXTENSIONS,
+    NATIVE_OPERATIONS,
+    NATIVE_RECORD_FIELDS,
+    NATIVE_TYPED_OPERATIONS,
+    TEMPLATE_CALLS,
+    TRANSFORMATIONS,
+)
 from hypothesis_helm.compiler.limits import active_limits, call_depth
 from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
 from hypothesis_helm.exceptions.compiler import LoopControl, Rejection, Unavailable, Unknown, UnsupportedTransformation
@@ -736,6 +746,9 @@ class Evaluation:
         """
         for index, key in enumerate(parts):
             current = self.context_value(current)
+            if isinstance(current, NativeValue) and current.go_kind in {"struct", "ptr"} and key in NATIVE_RECORD_FIELDS:
+                current = self._native_operation("_nativeField:" + key, [current])
+                continue
             if isinstance(current, FixedFields):
                 if key not in current.values:
                     raise Unknown(f"unsupported fixed context field: {key}")
@@ -879,7 +892,7 @@ class Evaluation:
                 raise Unknown(str(exc)) from exc
             self.contextual = True
             return result
-        if function in NATIVE_OPERATIONS and function != "quote" and self.contracts.renderer is not None:
+        if function in NATIVE_OPERATIONS and function not in {"quote", "print"} and self.contracts.renderer is not None:
             return self._native_operation(str(function), evaluated)
         if function in {"lookup", "getHostByName", "urlParse", "semverCompare"}:
             return self._renderer_call(function, evaluated)
@@ -889,12 +902,17 @@ class Evaluation:
             return self._template_string(evaluated, source, line)
         if function in {"fail", "required"}:
             return self._reject(function, evaluated, source, line)
+        if function in NATIVE_TYPED_OPERATIONS and self.contracts.renderer is not None:
+            from hypothesis_helm.compiler.asts.native_bindings import contains_native
+
+            if contains_native(evaluated, self.contracts.limits):
+                return self._native_operation(str(function), evaluated)
         if function in TRANSFORMATIONS:
             try:
                 result = calculate(str(function), tuple(evaluated), limits=self.contracts.limits)
             except UnsupportedTransformation as exc:
-                if function == "quote" and len(evaluated) == 1 and self.contracts.renderer is not None:
-                    return self._native_operation("quote", evaluated)
+                if function in NATIVE_EXTENSIONS | {"quote", "print"} and self.contracts.renderer is not None:
+                    return self._native_operation(str(function), evaluated)
                 raise Unknown(str(exc)) from exc
             self.transformed = True
             return DerivedValue(result, str(function), tuple(evaluated))
@@ -907,7 +925,14 @@ class Evaluation:
         if function in {"omit", "pick", "keys", "sortAlpha", "index", "get", "append", "without", "first", "reverse"}:
             return self._collection(function, evaluated)
         if function in {"join", "printf"}:
-            return self._format(function, evaluated)
+            try:
+                return self._format(function, evaluated)
+            except Unknown:
+                if self.contracts.renderer is not None:
+                    return self._native_operation(function, evaluated)
+                raise
+        if function in NATIVE_EXTENSIONS and self.contracts.renderer is not None:
+            return self._native_operation(str(function), evaluated)
         raise Unknown(runtime_dependency(str(function)) or f"unsupported function: {function}")
 
     def _atom(self, expr: str, variables: Scope) -> object:
@@ -934,12 +959,16 @@ class Evaluation:
             return expr == "true"
         if re.fullmatch(r"-?\d+", expr):
             return int(expr)
+        if re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+|\d+[eE][+-]?\d+)(?:[eE][+-]?\d+)?", expr):
+            return float(expr)
         if expr == "list":
             return ConstantList(())
         if expr == "dict":
             return self.local_maps.register(ConstantMap({}))
         if expr == "nil":
             return None
+        if expr in NATIVE_EXTENSIONS | {"print", "println"} and self.contracts.renderer is not None:
+            return self._native_operation(expr, [])
         raise Unknown(runtime_dependency(expr) or f"unsupported expression: {expr}")
 
     def _helper(self, function: str, arguments: list[object], source: str, line: int, variables: Scope, *, output_required: bool) -> object:
@@ -1047,7 +1076,7 @@ class Evaluation:
         Delegate concrete operations without turning observed output into a domain proof.
 
         Args:
-            function (str): Admitted regex or serialization function.
+            function (str): Reviewed deterministic builtin or bounded record-field access.
             evaluated (list[object]): Operands carrying their original input paths.
 
         Returns:
@@ -1058,12 +1087,15 @@ class Evaluation:
         self.contextual = self.transformed = True
         try:
             result = native_operations.evaluate(
-                function, evaluated, helm=renderer.helm, timeout=renderer.timeout, limits=self.contracts.limits
+                function, evaluated, helm=renderer.helm, timeout=renderer.timeout, limits=self.contracts.limits, typed=True
             )
         except (Unavailable, OSError, ValueError, TypeError, subprocess.SubprocessError, YAMLError) as exc:
             raise Unknown(str(exc) if isinstance(exc, Unavailable) else f"native {function} evaluation unavailable") from exc
-        derived = DerivedValue(result, function, tuple(evaluated))
-        return self.local_maps.register(derived) if function in {"fromYaml", "fromJson"} else derived
+        return (
+            self.local_maps.register(result)
+            if function in {"fromYaml", "fromJson", "fromToml", "mustFromJson", "deepCopy", "mustDeepCopy"}
+            else result
+        )
 
     def _context_method(self, function: object, evaluated: list[object], source: str, line: int, variables: Scope) -> object:
         """
@@ -1147,6 +1179,8 @@ class Evaluation:
             object: Supported result; unsupported calls raise Unknown.
         """
         args = [native(value) for value in evaluated]
+        if evaluated and isinstance(evaluated[0], NativeValue) and evaluated[0].go_type != "string":
+            raise Unknown("rejection messages require a native string, not a JSON representation of another Go type")
         if function == "fail" and len(args) == 1 and isinstance(args[0], str):
             text = evaluated[0] if isinstance(evaluated[0], ContractText) else None
             raise Rejection(
@@ -1574,7 +1608,12 @@ class Evaluation:
                         elif node.text.startswith("template "):
                             output.append(self.named_template(node.text, source, node.line, variables))
                         else:
-                            value = native(self.evaluate(expression(node.text), source, node.line, variables, output_required=strict))
+                            observed = self.evaluate(expression(node.text), source, node.line, variables, output_required=strict)
+                            # Go's template printing of a time, version or named
+                            # type need not match its JSON transport representation.
+                            if isinstance(observed, NativeValue):
+                                observed = self._native_operation("print", [observed])
+                            value = native(observed)
                             if type(value) not in (str, int, bool):
                                 raise Unknown("unsupported output type")
                             output.append(str(value).lower() if type(value) is bool else str(value))

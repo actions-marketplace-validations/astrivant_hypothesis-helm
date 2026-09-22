@@ -204,6 +204,8 @@ def test_public_pdf_links(tmp_path: Path) -> None:
     publication = Publication(tmp_path, "https://github.com/example/charts", "main")
     markdown, pdf = write_reports(report, tmp_path / "docs" / "report", publication=publication)
     uris = re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
+    # The framework attribution is a PDF footer, separate from report evidence.
+    uris = [uri for uri in uris if uri != b"https://github.com/HypothesisWorks/hypothesis/"]
     assert len(uris) == 5
     assert all(uri.startswith(b"https://github.com/example/charts/") for uri in uris)
     assert b"https://github.com/example/charts/blob/main/docs/saved%20inputs/values.json" in uris
@@ -268,6 +270,6 @@ def test_local_pdf_diagnostic_links(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     uris = re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
     assert evidence.resolve().as_uri().encode() in uris
     assert artifacts.resolve().as_uri().encode() in uris
-    assert all(uri.startswith(b"file:///") for uri in uris)
+    assert all(uri.startswith(b"file:///") or uri == b"https://github.com/HypothesisWorks/hypothesis/" for uri in uris)
     assert b"/Dest" in pdf.read_bytes()
     assert str(tmp_path) not in markdown.read_text()

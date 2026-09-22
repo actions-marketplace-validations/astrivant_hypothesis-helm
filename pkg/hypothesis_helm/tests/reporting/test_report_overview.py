@@ -8,6 +8,7 @@ import zlib
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from hypothesis_helm.reporting.documentation.contents import heading_inventory
 from hypothesis_helm.reporting.evidence.errors import deduplicate_errors
@@ -110,12 +111,17 @@ def test_grid_keeps_every_chart_in_report_order(tmp_path: Path) -> None:
     overview = summarize({"charts": charts})
     assert [cell.name for cell in overview.charts] == [chart["chart"] for chart in charts]
     rows, columns = grid_shape(len(charts))
-    assert rows * columns >= len(charts) and (rows - 1) * columns < len(charts)
+    assert rows == columns and rows * columns >= len(charts) > (rows - 1) ** 2
     links = write_overview(overview, tmp_path / "matrix.png")
     assert [cell.chart for cell in links] == list(range(150)) * 2
     assert len({cell.bounds for cell in links}) == len(links)
     assert all(0 <= left < right <= 1 and 0 <= bottom < top <= 1 for cell in links for left, bottom, right, top in [cell.bounds])
-    assert links[0].bounds[1] > links[150].bounds[3]
+    assert links[0].bounds[2] < links[150].bounds[0]
+    with Image.open(tmp_path / "matrix.png") as image:
+        width, height = image.size
+    for cell in links:
+        left, bottom, right, top = cell.bounds
+        assert (right - left) * width == pytest.approx((top - bottom) * height)
 
 
 def test_severity_uses_finding_kinds_without_concealing_incomplete_work() -> None:
@@ -157,7 +163,7 @@ def test_severity_uses_finding_kinds_without_concealing_incomplete_work() -> Non
 @pytest.mark.parametrize("chart_count", [0, 2, 45])
 def test_report_front_matter_and_internal_destinations(tmp_path: Path, chart_count: int) -> None:
     """
-    Reserve page one for contents and page two for both plots, even for large scans.
+    Reserve the cover and contents pages before the overview, even for large scans.
 
     Args:
         tmp_path (Path): Paired report destination.
@@ -180,19 +186,33 @@ def test_report_front_matter_and_internal_destinations(tmp_path: Path, chart_cou
     content = pdf.read_bytes()
     objects = dict(re.findall(rb"(\d+) 0 obj\s*(.*?)\s*endobj", content, re.DOTALL))
     pages = [(number, body) for number, body in objects.items() if b"/Type /Page\n" in body]
-    assert len(pages) >= 3
+    assert len(pages) >= 4
     # The header logo appears on every page; only the overview page has a second image.
     image_counts = [len(re.findall(rb"/FormXob\.[^\s]+ \d+ 0 R", body)) for _, body in pages]
     assert image_counts[0] == 1
-    assert image_counts[1] == 2
-    assert all(count == 1 for count in image_counts[2:])
+    assert image_counts[1] == 1
+    assert image_counts[2] == 2
+    assert all(count == 1 for count in image_counts[3:])
+    for index, (_, page) in enumerate(pages):
+        annotations = re.search(rb"/Annots \[(.*?)\]", page, re.DOTALL)
+        links = [objects[number] for number in re.findall(rb"(\d+) 0 R", annotations[1])] if annotations else []
+        assert any(b"/URI (https://github.com/HypothesisWorks/hypothesis/)" in link for link in links) == (index > 0)
     assert b"/Outlines" in content
     destinations = re.findall(rb"/Dest \[ (\d+) 0 R", content)
     assert set(destinations) <= {number for number, _ in pages}
-    assert pages[0][0] in destinations  # Footer links return to contents.
-    assert pages[1][0] in destinations  # Contents links to the overview.
+    assert pages[0][0] in destinations  # The title-page bookmark retains its own destination.
+    assert pages[1][0] in destinations  # Footer links return to contents.
+    assert pages[2][0] in destinations  # Contents links to the overview.
     chart_links = [body for body in objects.values() if re.search(rb"/Contents \(Chart ", body)]
     assert len(chart_links) == chart_count * 2
+    chart_outlines = [body for body in objects.values() if b"/Title (repeated/name)" in body]
+    for index, link in enumerate(chart_links):
+        # Both matrices must reach the specific scan section, even when many
+        # charts share a title and several sections occupy the same PDF page.
+        actual = re.search(rb"/Dest \[ ([^]]+)\]", link)
+        expected = re.search(rb"/Dest \[ ([^]]+)\]", chart_outlines[index % chart_count])
+        assert actual is not None and expected is not None
+        assert actual[1] == expected[1]
     assert "Overview cell: 01" in markdown.read_text() if chart_count else "Overview cell:" not in markdown.read_text()
     assert "[Overview](#overview)" in markdown.read_text()
     assert "![Chart severity and scan-time matrices](<report-overview.png>)" in markdown.read_text()

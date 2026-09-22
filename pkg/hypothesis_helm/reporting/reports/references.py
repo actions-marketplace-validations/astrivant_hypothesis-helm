@@ -87,7 +87,7 @@ def with_finding_reference(content: str) -> str:
     if observed:
         lines.extend(
             [
-                "HH codes identify finding categories. E001-style numbers identify individual diagnostics within this report.",
+                "HH codes identify finding categories. Numbered E entries, when present, identify recorded diagnostics.",
                 "Severities below are defaults; configured overrides are shown with the findings above.",
                 "",
             ]

@@ -2,12 +2,13 @@
 Keep chart source and artifact links portable without guessing missing provenance.
 """
 
+import re
 from pathlib import Path
 
 import pytest
 
 from hypothesis_helm.reporting.documentation.contents import heading_inventory, with_contents
-from hypothesis_helm.reporting.reports.links import chart_source_url, repository_url
+from hypothesis_helm.reporting.reports.links import chart_source_url, commit_url, repository_url
 from hypothesis_helm.reporting.reports.repository import chart_heading, write_reports
 
 
@@ -55,6 +56,7 @@ def test_chart_links_reject_credentials_and_invalid_urls(remote: str) -> None:
     """
     assert repository_url(remote) is None
     assert chart_source_url({"chart": "demo", "source_url": remote}, {"url": remote, "revision": "abc"}) is None
+    assert commit_url({"url": remote, "revision": "abc"}) is None
 
 
 def test_chart_links_preserve_declared_sources_and_artifact_fallback(tmp_path: Path) -> None:
@@ -106,9 +108,18 @@ def test_standalone_report_links_chart_code_in_markdown_and_pdf(tmp_path: Path) 
         "charts": [{"chart": "demo", "status": "passed", "artifacts": "/private/unpublished"}],
     }
     markdown, pdf = write_reports(report, tmp_path / "report", artifact_links=False)
+    assert markdown.read_text().startswith("# Scan results: github.com/example/charts\n")
+    assert b"/Title (Scan results: github.com/example/charts)" in pdf.read_bytes()
     expected = "https://github.com/example/charts/tree/abc123/demo"
     assert f"### [demo](<{expected}>)" in markdown.read_text()
     assert "[demo](#demo)" in markdown.read_text()
     assert f"/URI ({expected})".encode() in pdf.read_bytes()
+    objects = dict(re.findall(rb"(\d+) 0 obj\s*(.*?)\s*endobj", pdf.read_bytes(), re.DOTALL))
+    cover = next(body for body in objects.values() if b"/Type /Page\n" in body)
+    references = re.search(rb"/Annots \[(.*?)\]", cover, re.DOTALL)
+    assert references is not None
+    annotations = b"\n".join(objects[number] for number in re.findall(rb"(\d+) 0 R", references[1]))
+    assert b"/URI (https://github.com/example/charts)" in annotations
+    assert b"/URI (https://github.com/example/charts/commit/abc123)" in annotations
     assert "/private/unpublished" not in markdown.read_text()
     assert b"/private/unpublished" not in pdf.read_bytes()

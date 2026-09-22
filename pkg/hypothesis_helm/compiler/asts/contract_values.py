@@ -16,6 +16,7 @@ __all__ = (
     "ConstantMap",
     "ContractText",
     "DerivedValue",
+    "NativeValue",
     "KeyList",
     "NilMap",
     "NilSlice",
@@ -68,6 +69,26 @@ class DerivedValue:
     value: object
     function: str
     arguments: tuple[object, ...]
+
+
+@frozen
+class NativeValue(DerivedValue):
+    """
+    Preserve a deterministic Go result's type through a bounded native replay expression.
+
+    Attributes:
+        source (str): Compiler-built expression; input strings never become source code.
+        payload (str): Frozen JSON operands used at the time this result was computed.
+        snapshot (str): Original result, used to detect subsequent local mutations.
+        go_kind (str): Native reflection kind before JSON encoding.
+        go_type (str): Concrete type, including time.Time and named integer types.
+    """
+
+    source: str
+    payload: str
+    snapshot: str
+    go_kind: str
+    go_type: str
 
 
 @frozen

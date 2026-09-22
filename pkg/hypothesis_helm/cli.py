@@ -750,13 +750,15 @@ def main(argv: list[str] | None = None) -> int:
     """
     refresh_env()
     parser = argument_parser()
-    arguments = list(sys.argv[1:] if argv is None else argv)
+    invocation = list(sys.argv[1:] if argv is None else argv)
+    arguments = invocation.copy()
     for index, argument in enumerate(arguments):
         if argument == "--":
             break
         if argument == "--fail" and (index + 1 == len(arguments) or arguments[index + 1] not in LEVELS):
             arguments[index] = "--fail=info"
     args = parser.parse_args(arguments)
+    args.invocation = invocation
     if args.generate_config:
         if args.command is not None:
             parser.error("--generate-config cannot be combined with a command")

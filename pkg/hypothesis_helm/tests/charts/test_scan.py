@@ -3,6 +3,7 @@ Repository discovery, execution boundaries, and portable reports.
 """
 
 import json
+import shlex
 from argparse import Namespace
 from pathlib import Path
 from textwrap import dedent
@@ -149,7 +150,8 @@ def test_report_paths_and_pagination(tmp_path: Path) -> None:
     assert b"/Subtype /Image" in pdf.read_bytes()
     assert all(len(line) <= 140 for line in md.read_text().splitlines())
     assert pdf.read_bytes().startswith(b"%PDF-")
-    assert 4 <= pdf.read_bytes().count(b"/Type /Page\n") <= 5
+    # Cover, contents, and overview precede the summary, chart details, and reference appendices.
+    assert 4 <= pdf.read_bytes().count(b"/Type /Page\n") <= 7
     assert (tmp_path / "custom-overview.png").is_file()
     assert "Diagnostic shortened" in md.read_text()
     report["charts"] = [{"chart": f"demo-{index}", "status": "failed", "error": "failure"} for index in range(40)]
@@ -315,6 +317,10 @@ def test_scan_fail_flag(
     assert len(calls) == (1 if stopped else 2)
     assert report["scan_status"] == ("failed-early" if stopped else "completed")
     assert report["settings"]["fail"] is fail_fast
+    assert report["execution"]["argv"][-len(options) :] == options
+    assert shlex.split(report["execution"]["command"]) == report["execution"]["argv"]
+    assert report["execution"]["versions"]["hypothesis"]
+    assert report["execution"]["versions"]["hypothesis-helm"]
     assert report["unstarted_charts"] == int(stopped)
     assert report["charts"][0]["status"] == "missing-values"
     assert report["charts"][1]["status"] == outcome

@@ -11,14 +11,17 @@ from pathlib import Path
 from urllib.parse import quote
 
 from hypothesis_helm.reporting.console.progress import format_path
-from hypothesis_helm.reporting.documentation.contents import with_contents
-from hypothesis_helm.reporting.evidence.errors import deduplicate_errors
+from hypothesis_helm.reporting.documentation.contents import heading_inventory, with_contents
+from hypothesis_helm.reporting.evidence.errors import deduplicate_errors, numbered_diagnostic
 from hypothesis_helm.reporting.evidence.provenance import trace_run
 from hypothesis_helm.reporting.evidence.reproductions import input_summary
-from hypothesis_helm.reporting.reports.links import Publication, chart_source_url, publish_links, web_url
+from hypothesis_helm.reporting.reports.figures import study_figures
+from hypothesis_helm.reporting.reports.links import Publication, chart_source_url, commit_url, publish_links, repository_url, web_url
 from hypothesis_helm.reporting.reports.overview import summarize, write_overview
 from hypothesis_helm.reporting.reports.pdf import write_pdf
+from hypothesis_helm.reporting.reports.plot_reference import with_plot_reference, with_sensitivity_reference
 from hypothesis_helm.reporting.reports.references import with_finding_reference
+from hypothesis_helm.reporting.reports.topology import write_graph_overview
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 __all__ = ("HELM_DEBUG_HINT", "artifact_link", "chart_heading", "display_error", "wrap_markdown", "write_reports")
@@ -139,6 +142,28 @@ def display_error(error: object) -> str:
     )
 
 
+def _scan_title(report: dict[str, object]) -> str:
+    """
+    Identify the scanned source consistently in the report title and PDF headers.
+
+    Args:
+        report (dict[str, object]): Scan provenance and original target directory.
+
+    Returns:
+        str: Scan-results title naming the repository, package source, or local directory.
+    """
+    source = mapping(report.get("source", {}))
+    remote = repository_url(source.get("url")) or web_url(source.get("url"))
+    if remote:
+        identity = remote.removeprefix("https://").rstrip("/")
+        subdirectory = str(source.get("path", ".")).strip("/")
+        if subdirectory not in ("", "."):
+            identity += "/" + subdirectory
+    else:
+        identity = str(report["directory"])
+    return "Scan results: " + " ".join(identity.split())
+
+
 def write_reports(
     report: dict[str, object], stem: Path, *, publication: Publication | None = None, artifact_links: bool = True
 ) -> tuple[Path, Path]:
@@ -164,9 +189,15 @@ def write_reports(
     overview = summarize(report)
     figure = Path(f"{stem}-overview.png")
     overview_cells = write_overview(overview, figure)
+    studies = study_figures(report, markdown)
+    images: dict[str, Path] = {}
+    caption_kinds: dict[str, str] = {}
+    caption_references: dict[str, tuple[str, ...]] = {overview.caption: ("Overview matrices",)}
+    field_key_caption = "Sensitivity field key"
     settings = mapping(report["settings"])
+    title = _scan_title(report)
     lines = [
-        f"# {report.get('title', 'Helm chart scan')}",
+        f"# {title}",
         "",
         f"Directory: {report['directory']}",
         f"Started (Unix epoch): {report['started_epoch']}",
@@ -188,7 +219,7 @@ def write_reports(
         f"Filtering: {settings.get('filter', 'not recorded')} | Seed: {settings.get('seed', 'not recorded')} | "
         f"Traversal: {settings.get('traversal_strategy', 'not recorded')}",
         f"Chart timeout: {settings.get('chart_timeout_seconds', 'not recorded')} seconds | "
-        f"Workers: {settings.get('workers', 'not recorded')}",
+        f"Workers: {settings.get('workers', settings.get('jobs', 'not recorded'))}",
         "Complete settings are retained in the JSON report.",
         "",
     ]
@@ -198,11 +229,41 @@ def write_reports(
             f"Dependency preparation: {float(str(report['dependency_preparation_seconds'])):.2f} seconds (excluded from testing budgets)",
         ]
     timing_note = " (estimated from recorded timing)" if str(report["finish_time_source"]).startswith("derived") else ""
+    cover_details = [
+        ("Started (UTC)", str(report["started_at"]).replace("T", " ").removesuffix("+00:00")),
+        ("Finished (UTC)" + timing_note, str(report["finished_at"]).replace("T", " ").removesuffix("+00:00")),
+    ]
+    scan_source = mapping(report.get("source", {}))
+    revision = scan_source.get("revision")
+    if scan_source.get("kind") != "helm" and isinstance(revision, str) and revision.strip():
+        revision_url = commit_url(scan_source)
+        cover_details.append(("Source commit", artifact_link(revision, revision_url, markdown) if revision_url else revision))
+    # Read saved execution metadata only: the machine publishing a PDF may have newer dependencies installed.
+    execution = mapping(report.get("execution", {}))
+    versions = mapping(execution.get("versions", {}))
+    version_text = (
+        f"Hypothesis {versions.get('hypothesis') or 'not recorded'}; hypothesis-helm {versions.get('hypothesis-helm') or 'not recorded'}"
+    )
+    cover_details.append(("Versions", version_text))
+    working_directory = execution.get("working_directory")
+    if working_directory:
+        cover_details.append(("Working directory", str(working_directory)))
+    command = str(execution.get("command") or "Not recorded for this run")
+    cover_details.append(("Scan command", command))
     lines[4:4] = [
         f"Started (UTC): {report['started_at']}",
         f"Finished (UTC): {report['finished_at']}{timing_note}",
         f"Run fingerprint (SHA-256): `{report['run_hash']}`",
+        f"Versions: {version_text}",
     ]
+    if working_directory:
+        lines.extend([f"Command working directory: `{working_directory}`", ""])
+    # A fence longer than any literal backticks keeps unusual path names copyable without parsing them as Markdown.
+    if execution.get("command"):
+        fence = "`" * max(3, 1 + max((len(match[0]) for match in re.finditer(r"`+", command)), default=0))
+        lines.extend(["Scan command:", "", fence + "bash", command, fence, ""])
+    else:
+        lines.extend([f"Scan command: {command}", ""])
     summary = report.get("summary", [])
     if isinstance(summary, list):
         lines[2:2] = [str(line) for line in summary] + [""]
@@ -233,13 +294,62 @@ def write_reports(
                 "",
             ]
         )
+    # Start every report with the overview; optional structural plots follow
+    # before the detailed scan summary and individual chart sections.
+    front_matter = [
+        "## Overview",
+        "",
+        "!" + artifact_link("Chart severity and scan-time matrices", figure, markdown),
+        "",
+        overview.caption,
+        "",
+    ]
+    if studies.metrics:
+        label = "Published compiler graph invariants"
+        graph_image = Path(f"{stem}-topology.png")
+        graph_caption = write_graph_overview(studies.metrics, graph_image, len(sequence(report["charts"])))
+        images[label] = graph_image
+        caption_kinds[label] = "Graph structure metrics"
+        caption_references[graph_caption] = ("Graph structure metrics",)
+        front_matter.extend(
+            [
+                "## Graph structure",
+                "",
+                "!" + artifact_link(label, graph_image, markdown),
+                "",
+                graph_caption,
+                "",
+            ]
+        )
     lines.extend(["## Charts", ""])
     charts = report["charts"]
     assert isinstance(charts, list)
     for index, chart in enumerate(charts, 1):
         assert isinstance(chart, dict)
         heading = chart_heading(chart, mapping(report.get("source", {})), markdown, artifact_links=artifact_links)
-        lines.extend([heading, "", f"Overview cell: {index:02d}", ""])
+        lines.extend([heading, ""])
+        if chart["chart"] in studies.charts:
+            topology, sensitivity = studies.charts[str(chart["chart"])]
+            cells = []
+            for kind, image_path in (("Topology", topology), ("Sensitivity", sensitivity)):
+                label = f"{kind}: {chart['chart']}"
+                if image_path is None:
+                    cells.append(f"{kind} measurements unavailable.")
+                else:
+                    images[label] = image_path
+                    caption_kinds[label] = "Chart topology" if kind == "Topology" else "Field interactions"
+                    cells.append("!" + artifact_link(label, image_path, markdown))
+            lines.extend(
+                [
+                    "| Chart topology | Mutation sensitivity |",
+                    "| --- | --- |",
+                    f"| {cells[0]} | {cells[1]} |",
+                    "",
+                ]
+            )
+            if studies.sensitivity_fields.get(str(chart["chart"])):
+                lines.extend([field_key_caption, ""])
+        lines.extend([f"Overview cell: {index:02d}", ""])
         package = chart.get("package")
         if isinstance(package, dict):
             lines.extend(
@@ -255,6 +365,8 @@ def write_reports(
                 "",
             ]
         )
+        if chart.get("error") and not numbered_diagnostic(chart):
+            lines.extend(["Testing limitation: " + " ".join(display_error(chart["error"]).split()), ""])
         audit = mapping(chart.get("audit", {}))
         findings = [mapping(item) for item in [*sequence(audit.get("findings", [])), *sequence(audit.get("unresolved", []))]]
         if findings:
@@ -363,16 +475,23 @@ def write_reports(
             lines.extend([artifact_link("Review suggested suppressions (not applied)", suppressions["yaml"], markdown), ""])
         if artifacts and artifact_links:
             lines.extend([artifact_link("Chart artifacts", artifacts, markdown), ""])
-    lines[2:2] = [
-        "## Overview",
-        "",
-        "!" + artifact_link("Chart severity and scan-time matrices", figure, markdown),
-        "",
-        overview.caption,
-        "",
-        "## Scan summary",
-        "",
-    ]
+    lines[2:2] = [*front_matter, "## Scan summary", ""]
+    content, plot_targets = with_plot_reference(
+        "\n".join(lines), {kind for kinds in caption_references.values() for kind in kinds} | set(caption_kinds.values())
+    )
+    content, field_targets = with_sensitivity_reference(content, studies.sensitivity_fields)
+    lines = content.splitlines()
+    headings = {index: (level, label) for index, level, label, _ in heading_inventory(content)}
+    active_chart = ""
+    for index, line in enumerate(lines):
+        if index in headings:
+            level, label = headings[index]
+            active_chart = label if level == 3 else ""
+        if line in caption_references:
+            links = ", ".join(f"[{kind}](#{plot_targets[kind]})" for kind in caption_references[line])
+            lines[index] += f" Plot guide: {links}."
+        if line == field_key_caption and active_chart in field_targets:
+            lines[index] = f"[Sensitivity field key](#{field_targets[active_chart]})."
     lines = with_finding_reference("\n".join(lines)).splitlines()
     if publication is not None:
         fence = ""
@@ -385,5 +504,18 @@ def write_reports(
             elif not fence:
                 lines[index] = publish_links(line, markdown, publication)
     markdown.write_text(with_contents(wrap_markdown("\n".join(lines)), max_depth=3))
-    write_pdf("\n".join(lines), pdf, title=str(report.get("title", "Helm chart scan")), overview=figure, overview_cells=overview_cells)
+    write_pdf(
+        "\n".join(lines),
+        pdf,
+        title=title,
+        overview=figure,
+        overview_cells=overview_cells,
+        images=images,
+        caption_targets={
+            **{label: plot_targets[kind] for label, kind in caption_kinds.items()},
+            **{f"Sensitivity: {chart}": target for chart, target in field_targets.items()},
+        },
+        cover_details=tuple(cover_details),
+        cover_source_url=repository_url(scan_source.get("url")) or web_url(scan_source.get("url")),
+    )
     return markdown, pdf

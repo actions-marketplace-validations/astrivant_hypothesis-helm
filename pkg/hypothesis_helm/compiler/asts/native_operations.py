@@ -1,5 +1,5 @@
 """
-Evaluate bounded regex and serialization operations with the selected Helm's Go libraries.
+Evaluate bounded formatting, regex and serialization with the selected Helm's Go libraries.
 """
 
 from __future__ import annotations
@@ -14,8 +14,11 @@ from pathlib import Path
 from textwrap import dedent
 
 from hypothesis_helm.charts.values import yamlio
-from hypothesis_helm.compiler.asts.contract_values import NilMap, NilSlice, native
-from hypothesis_helm.compiler.constants import NATIVE_OPERATIONS
+from hypothesis_helm.compiler.asts.contract_values import NativeValue, NilMap, NilSlice, native
+from hypothesis_helm.compiler.asts.native_bindings import bind_operands
+from hypothesis_helm.compiler.asts.native_limits import admit
+from hypothesis_helm.compiler.constants import NATIVE_EXTENSIONS, NATIVE_OPERATIONS, NATIVE_RECORD_FIELDS, NATIVE_TYPED_OPERATIONS
+from hypothesis_helm.environment import env
 from hypothesis_helm.exceptions.compiler import Unavailable
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.contracts import mapping
@@ -82,7 +85,9 @@ def plain(value: object, limits: dict[str, int]) -> object:
 
 
 @lru_cache(maxsize=128)
-def probe(binary: str, stamp: int, timeout: float, operation: str, payload: str, max_chars: int, operands: tuple[str, ...]) -> object:
+def probe(
+    binary: str, stamp: int, timeout: float, operation: str, payload: str, max_chars: int, operands: tuple[str, ...], timezone: str
+) -> tuple[object, str, str]:
     """
     Run a fixed function call in Helm, keyed by executable identity, operands and budget.
 
@@ -94,14 +99,17 @@ def probe(binary: str, stamp: int, timeout: float, operation: str, payload: str,
         payload (str): Arguments encoded as JSON data, never template source.
         max_chars (int): Maximum serialized result before returning it through stdout.
         operands (tuple[str, ...]): Fixed adapter expressions preserving typed nil containers.
+        timezone (str): Captured TZ context, invalidating cached local-date operations when it changes.
 
     Returns:
-        object: Go-evaluated result, or an explicit unavailable-analysis error.
+        tuple[object, str, str]: Go-evaluated result, reflection kind and concrete type name.
     """
     call = operation + " " + " ".join(operands)
+    if operation.startswith("_nativeField:"):
+        call = "(" + operands[0] + ")." + operation.split(":", 1)[1]
     # Preserve decoded bytes across JSON transport. Invalid UTF-8 must become
     # unknown rather than silently replacing bytes and changing later checksums.
-    transport = " | b64enc" if operation == "b64dec" else ""
+    transport = " | b64enc" if operation in {"b64dec", "b32dec", "decryptAES", "substr", "trunc"} else ""
     with tempfile.TemporaryDirectory(prefix="helm-function-") as temporary:
         root = Path(temporary)
         (root / "templates").mkdir()
@@ -127,12 +135,14 @@ def probe(binary: str, stamp: int, timeout: float, operation: str, payload: str,
             data:
               result: {{{{ $result | quote }}}}
               kind: {{{{ $value | kindOf | quote }}}}
+              type: {{{{ $value | typeOf | quote }}}}
             """)
         )
         result = Processes().run(
             [binary, "template", "function-probe", str(root), "--values", str(root / "values.json")],
             capture_output=True,
             timeout=timeout,
+            env={**env, "TZ": timezone} if timezone else dict(env),
         )
         if result.returncode:
             raise Unavailable(f"native Helm {operation} evaluation failed or exceeded compiler.max_string_chars")
@@ -142,60 +152,18 @@ def probe(binary: str, stamp: int, timeout: float, operation: str, payload: str,
         data = mapping(documents[0]["data"])
         decoded = json.loads(str(data["result"]))
         if decoded is None and data["kind"] in {"map", "slice"}:
-            return NilMap() if data["kind"] == "map" else NilSlice()
-        if operation == "b64dec":
+            decoded = NilMap() if data["kind"] == "map" else NilSlice()
+        if transport:
             try:
-                return base64.b64decode(str(decoded), validate=True).decode("utf-8")
+                decoded = base64.b64decode(str(decoded), validate=True).decode("utf-8")
             except UnicodeError as exc:
-                raise Unavailable("Base64 result contains non-UTF-8 bytes; retain native Helm evaluation") from exc
-        return decoded
+                raise Unavailable("Native result contains non-UTF-8 bytes; retain native Helm evaluation") from exc
+        return decoded, str(data["kind"]), str(data["type"])
 
 
-def _bind(arguments: list[object], limits: dict[str, int]) -> tuple[str, tuple[str, ...]]:
+def evaluate(function: str, arguments: list[object], *, helm: str, timeout: float, limits: dict[str, int], typed: bool = False) -> object:
     """
-    Bind operands as data while reconstructing typed nils that JSON alone cannot preserve.
-
-    Args:
-        arguments (list[object]): Already bounded operands with provenance and nil markers.
-        limits (dict[str, int]): Compiler data bounds.
-
-    Returns:
-        tuple[str, tuple[str, ...]]: JSON payload and fixed data-access expressions.
-    """
-    values: list[object] = []
-
-    def bind(value: object) -> str:
-        """
-        Construct containers from fixed syntax; all caller-provided text stays in the values file.
-
-        Args:
-            value (object): Bounded operand or nested element.
-
-        Returns:
-            str: An adapter expression using only fixed constructors and integer data indexes.
-        """
-        value = native(value)
-        if isinstance(value, NilSlice):
-            return "(concat)"
-        if isinstance(value, NilMap):
-            return '(fromJson "null")'
-        if isinstance(value, dict):
-            entries = " ".join(bind(key) + " " + bind(item) for key, item in value.items())
-            return "(dict" + (" " + entries if entries else "") + ")"
-        if isinstance(value, list):
-            entries = " ".join(bind(item) for item in value)
-            return "(list" + (" " + entries if entries else "") + ")"
-        index = len(values)
-        values.append(plain(value, limits))
-        return f"(index .Values.arguments {index})"
-
-    operands = tuple(bind(value) for value in arguments)
-    return json.dumps({"arguments": values}, ensure_ascii=False, allow_nan=False), operands
-
-
-def evaluate(function: str, arguments: list[object], *, helm: str, timeout: float, limits: dict[str, int]) -> object:
-    """
-    Admit bounded inputs before invoking Go's regex engine or Helm's serializers.
+    Admit bounded inputs before invoking deterministic functions in the selected Helm binary.
 
     Args:
         function (str): Supported deterministic native operation.
@@ -203,6 +171,7 @@ def evaluate(function: str, arguments: list[object], *, helm: str, timeout: floa
         helm (str): Renderer executable selected by the executor.
         timeout (float): Same per-invocation deadline as native rendering.
         limits (dict[str, int]): Captured compiler limits for this chart.
+        typed (bool): Retain a replay recipe for native Go types that JSON cannot represent.
 
     Returns:
         object: Concrete native result with no mutable cache objects shared with a candidate.
@@ -210,32 +179,37 @@ def evaluate(function: str, arguments: list[object], *, helm: str, timeout: floa
     Raises:
         Unavailable: Operands or worst-case output exceed a budget, or Helm is unavailable.
     """
-    if function not in NATIVE_OPERATIONS or len(arguments) != NATIVE_OPERATIONS[function]:
+    arity = NATIVE_OPERATIONS.get(function)
+    field_access = function.startswith("_nativeField:") and function.split(":", 1)[1] in NATIVE_RECORD_FIELDS
+    if (
+        arity is None
+        and function not in NATIVE_EXTENSIONS | NATIVE_TYPED_OPERATIONS
+        and not field_access
+        or arity is not None
+        and arity >= 0
+        and len(arguments) != arity
+    ):
         raise Unavailable("unsupported native operation or operand count")
-    args = [plain(value, limits) for value in arguments]
-    if "Regex" in function or function.startswith("regex"):
-        if not all(isinstance(value, str) for value in args):
-            raise Unavailable("native regex requires string operands")
-        pattern, subject = str(args[0]), str(args[1])
-        if len(pattern) > limits["max_regex_pattern_chars"] or len(subject) > limits["max_regex_subject_chars"]:
-            raise Unavailable("regex exceeds compiler.max_regex_pattern_chars or compiler.max_regex_subject_chars")
-        if len(args) == 3:
-            replacement = str(args[2])
-            # Empty matches can insert once at every boundary; a capture expansion
-            # can repeat the entire subject. Bound allocation before calling Go.
-            expansion = len(replacement) * (max(1, len(subject)) if "$" in replacement and "Literal" not in function else 1)
-            if len(subject) + (len(subject) + 1) * expansion > limits["max_string_chars"]:
-                raise Unavailable("regex replacement may exceed compiler.max_string_chars")
-    if function in {"fromYaml", "fromJson", "b64dec"} and not isinstance(args[0], str):
-        raise Unavailable("native deserialization requires a string")
-    payload, operands = _bind(arguments, limits)
+    # Bound the combined argument tree, not each argument independently.
+    args = plain(arguments, limits)
+    assert isinstance(args, list)
+    admit(function, arguments, args, limits)
+    payload, operands = bind_operands(arguments, limits, formatting=True)
     if len(payload.encode()) + sum(map(len, operands)) > min(limits["max_context_bytes"], limits["max_string_chars"]):
         raise Unavailable("native operand payload exceeds compiler.max_context_bytes or compiler.max_string_chars")
     binary = shutil.which(helm)
     if binary is None:
         raise Unavailable("Helm is unavailable for native function evaluation")
-    result = probe(binary, Path(binary).stat().st_mtime_ns, timeout, function, payload, limits["max_string_chars"], operands)
+    result, go_kind, go_type = probe(
+        binary, Path(binary).stat().st_mtime_ns, timeout, function, payload, limits["max_string_chars"], operands, env.get("TZ", "")
+    )
     # Deserialized maps can be mutated locally; never return the cached instance.
-    if isinstance(result, NilMap | NilSlice):
-        return type(result)()
-    return plain(result, limits)
+    result = type(result)() if isinstance(result, NilMap | NilSlice) else plain(result, limits)
+    if not typed:
+        return result
+    source = function + " " + " ".join(operands)
+    if field_access:
+        source = "(" + operands[0] + ")." + function.split(":", 1)[1]
+    return NativeValue(
+        result, function, tuple(arguments), source, payload, json.dumps(plain(result, limits), sort_keys=True), go_kind, go_type
+    )

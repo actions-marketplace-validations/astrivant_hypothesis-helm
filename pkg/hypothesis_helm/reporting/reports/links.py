@@ -10,7 +10,18 @@ from urllib.parse import quote, unquote, urlsplit
 
 from attrs import frozen
 
-__all__ = ("CODE", "LINK", "Publication", "chart_source_url", "link_matches", "linked_prose", "publish_links", "repository_url", "web_url")
+__all__ = (
+    "CODE",
+    "LINK",
+    "Publication",
+    "chart_source_url",
+    "commit_url",
+    "link_matches",
+    "linked_prose",
+    "publish_links",
+    "repository_url",
+    "web_url",
+)
 
 
 LINK = re.compile(r"\[([^\]]+)\]\((?:<([^>]+)>|([^\s)]+))\)")
@@ -68,6 +79,25 @@ def repository_url(value: object) -> str | None:
     if parsed.hostname not in {"github.com", "gitlab.com", "bitbucket.org"} or parsed.query or parsed.fragment:
         return None
     return url.rstrip("/").removesuffix(".git")
+
+
+def commit_url(source: dict[str, object]) -> str | None:
+    """
+    Link a recorded Git revision using the repository host's commit route.
+
+    Args:
+        source (dict[str, object]): Recorded repository URL, source kind, and revision.
+
+    Returns:
+        str | None: Public commit URL, or no link when Git provenance is unavailable.
+    """
+    repository = repository_url(source.get("url")) if source.get("kind") != "helm" else None
+    revision = source.get("revision")
+    if repository is None or not isinstance(revision, str) or not revision.strip():
+        return None
+    host = urlsplit(repository).hostname
+    route = "-/commit" if host == "gitlab.com" else "commits" if host == "bitbucket.org" else "commit"
+    return f"{repository}/{route}/{quote(revision, safe='')}"
 
 
 def chart_source_url(chart: dict[str, object], source: dict[str, object]) -> str | None:

@@ -265,7 +265,13 @@ saves partial results and exits with **130**.
 `--report` writes `<directory-name>_<epoch>_report.md` and `.pdf` in the current
 `docs/reports/` directory. An explicit stem or either filename extension overrides both
 paths. Reusing an explicit output path replaces the previous report.
-The PDF opens with a clickable contents page, followed by one overview page containing
+The PDF title page records the scan's start and finish, source commit, Hypothesis and
+hypothesis-helm versions, and full shell-quoted scan command. The working directory
+is included so relative paths can be resolved. These details are captured during execution
+and retained in `scan.json`; republishing preserves them. Older runs without this metadata
+show “not recorded” rather than the versions installed when publishing the report.
+
+A clickable contents page follows, then one overview page containing
 two aligned matrices. Each cell represents one chart, in the same order as the chart sections.
 The first matrix uses the chart's highest observed finding category: red for violations,
 amber for warnings, and blue for diagnostics that need investigation. Green means no findings

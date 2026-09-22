@@ -20,6 +20,7 @@ IDENTITY_FIELDS = (
     "started_epoch",
     "finished_epoch",
     "settings",
+    "execution",
     "input_policy",
     "finding_policy",
     "seed",

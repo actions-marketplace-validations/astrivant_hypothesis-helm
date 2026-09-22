@@ -42,6 +42,7 @@ from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.reporting.evidence.errors import chart_errors, deduplicate_errors
+from hypothesis_helm.reporting.evidence.invocation import record_invocation
 from hypothesis_helm.reporting.evidence.provenance import trace_run
 from hypothesis_helm.reporting.reports.links import web_url
 from hypothesis_helm.reporting.reports.repository import write_reports
@@ -322,6 +323,7 @@ def scan(args: argparse.Namespace) -> int:
     if shutil.which(args.helm) is None:
         raise ValueError(f"Helm executable not found: {args.helm}")
     started = time.time()
+    args.execution = record_invocation(getattr(args, "invocation", None))
     scan_started = time.monotonic()
     args.scan_deadline = scan_started + args.scan_timeout if args.scan_timeout is not None else None
     with ExitStack() as scope:
@@ -361,6 +363,8 @@ def scan_checkout(args: argparse.Namespace, source: RepositorySource, started: f
     Returns:
         int: Scan status after all owned workers have been joined.
     """
+    if not hasattr(args, "execution"):
+        args.execution = record_invocation(getattr(args, "invocation", None))
     with SourceScope(source.location), Termination():
         return _scan_checkout(args, source, started, scan_started)
 
@@ -613,6 +617,7 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         "title": "Remote Helm chart scan" if source.remote else "Local Helm chart tests",
         "directory": source.location,
         "started_epoch": int(started),
+        "execution": args.execution,
         "elapsed_seconds": time.monotonic() - scan_started,
         "dependency_preparation_seconds": sum(float(str(record["dependency_preparation_seconds"])) for record in records),
         "testing_seconds": sum(float(str(record["testing_seconds"])) for record in records),

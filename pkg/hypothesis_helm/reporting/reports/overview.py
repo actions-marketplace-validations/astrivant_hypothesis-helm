@@ -204,7 +204,7 @@ def summarize(report: Mapping[str, object]) -> Overview:
 
 def grid_shape(count: int) -> tuple[int, int]:
     """
-    Arrange charts row by row in a bounded-width matrix without dropping any entries.
+    Arrange charts row by row in a square matrix without dropping any entries.
 
     Args:
         count (int): Number of chart records.
@@ -212,9 +212,8 @@ def grid_shape(count: int) -> tuple[int, int]:
     Returns:
         tuple[int, int]: Row and column counts, with at least one cell for an empty report.
     """
-    columns = min(12, max(1, math.ceil(math.sqrt(count * 2))))
-    columns = min(max(count, 1), columns)
-    return max(1, math.ceil(count / columns)), columns
+    side = max(1, math.ceil(math.sqrt(count)))
+    return side, side
 
 
 def write_overview(overview: Overview, destination: Path) -> tuple[CellLink, ...]:
@@ -234,10 +233,12 @@ def write_overview(overview: Overview, destination: Path) -> tuple[CellLink, ...
     from matplotlib.figure import Figure
     from matplotlib.patches import Patch, Rectangle
 
-    figure = Figure(figsize=(10, 9), dpi=240, facecolor="white")
+    figure = Figure(figsize=(10, 6.8), dpi=240, facecolor="white")
     FigureCanvasAgg(figure)
-    finding_axis = figure.add_axes((0.045, 0.56, 0.88, 0.33))
-    time_axis = figure.add_axes((0.045, 0.075, 0.88, 0.33))
+    # Place two square panels alongside each other to keep the overview on one
+    # PDF page. Blank trailing cells preserve square geometry for any chart count.
+    finding_axis = figure.add_axes((0.087, 0.302, 0.336, 0.496))
+    time_axis = figure.add_axes((0.577, 0.302, 0.336, 0.496))
     axes = (finding_axis, time_axis)
     rows, columns = grid_shape(len(overview.charts))
     seconds = [cell.seconds for cell in overview.charts if cell.seconds is not None]
@@ -245,15 +246,13 @@ def write_overview(overview: Overview, destination: Path) -> tuple[CellLink, ...
     normalize = Normalize(vmin=0, vmax=max(maximum, 1))
     colors = colormaps["Blues"]
     links = []
-    labels = [
-        ("Findings by chart", "Which charts have violations, warnings, or unresolved diagnostics?"),
-        (f"{overview.timing_label} by chart", "Which charts used the most time? Cells match the chart grid above."),
-    ]
-    for axis, (title, question) in zip(axes, labels, strict=True):
-        axis.set_title(title, loc="left", fontsize=14, weight="bold", pad=30)
-        axis.text(0, 1.035, question, transform=axis.transAxes, fontsize=9.5, color="#53616b")
+    labels = ["Findings by chart", f"{overview.timing_label} by chart"]
+    for axis, title, left in zip(axes, labels, (0.045, 0.535), strict=True):
+        # Titles retain their full column width while the squares are 20% smaller.
+        figure.text(left, 0.875, title, fontsize=14, weight="bold")
         axis.set_xlim(-0.5, columns - 0.5)
         axis.set_ylim(rows - 0.5, -0.5)
+        axis.set_aspect("equal", adjustable="box")
         axis.set_axis_off()
         if not overview.charts:
             axis.text(0.5, 0.5, "No chart results recorded", ha="center", va="center", transform=axis.transAxes)
@@ -271,10 +270,12 @@ def write_overview(overview: Overview, destination: Path) -> tuple[CellLink, ...
             number = str(index + 1).zfill(2)
             if is_findings:
                 name = " ".join(cell.name.rsplit("/", 1)[-1].split())
-                limit = 12 if columns >= 10 else 18
+                limit = max(7, int(65 / columns))
                 side = (limit - 3) // 2
                 name = name if len(name) <= limit else name[:side] + "..." + name[-side:]
-                text = f"{number}\n{name}" if len(overview.charts) <= 180 else number
+                # Large inventories use chart numbers, which remain readable
+                # and link to the full names in the report's chart sections.
+                text = f"{number}\n{name}" if len(overview.charts) <= 36 else number
             else:
                 value = "--" if cell.seconds is None else f"{cell.seconds:,.1f}s" if cell.seconds < 60 else f"{cell.seconds / 60:,.1f}m"
                 text = f"{number}\n{value}" if len(overview.charts) <= 180 else value
@@ -285,7 +286,7 @@ def write_overview(overview: Overview, destination: Path) -> tuple[CellLink, ...
                 ha="center",
                 va="center",
                 color="white" if dark else "#23313d",
-                fontsize=min(10, max(3, min(95 / columns, 85 / rows))),
+                fontsize=min(13, max(3, 110 / columns)) * 0.8,
                 linespacing=1.25,
                 parse_math=False,
             )
@@ -302,12 +303,14 @@ def write_overview(overview: Overview, destination: Path) -> tuple[CellLink, ...
             )
     handles = [Patch(facecolor=color, label=label, edgecolor="#bdc6ce") for label, color in LEVELS.values()]
     handles.append(Patch(facecolor="white", hatch="/", edgecolor="#697887", label="Testing unfinished / unavailable"))
-    figure.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.04, 0.548), ncol=4, frameon=False, fontsize=8.3)
+    figure.legend(handles=handles, loc="upper left", bbox_to_anchor=(0.04, 0.205), ncol=2, frameon=False, fontsize=8.3)
     if seconds:
         from matplotlib.cm import ScalarMappable
         from matplotlib.ticker import MaxNLocator
 
-        bar = figure.colorbar(ScalarMappable(norm=normalize, cmap=colors), cax=figure.add_axes((0.94, 0.075, 0.014, 0.33)))
+        bar = figure.colorbar(
+            ScalarMappable(norm=normalize, cmap=colors), cax=figure.add_axes((0.577, 0.20, 0.336, 0.025)), orientation="horizontal"
+        )
         bar.set_label("Seconds", fontsize=8)
         bar.ax.tick_params(labelsize=8, length=2)
         bar.locator = MaxNLocator(nbins=4)

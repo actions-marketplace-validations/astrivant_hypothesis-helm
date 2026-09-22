@@ -14,6 +14,7 @@ from collections import Counter
 from pathlib import Path
 from textwrap import dedent
 
+from hypothesis_helm.analysis.repository import prepare_figures
 from hypothesis_helm.charts.repositories.repository import local_provenance
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.execution.planning.traversal import SELECTION_ORDER
@@ -280,6 +281,15 @@ if previous_path.exists():
             archived_content = archived_content.replace(overview.name, archived_overview.name)
         archive.with_suffix(".md").write_text(archived_content)
         shutil.copyfile(previous_path.with_suffix(".pdf"), archive.with_suffix(".pdf"))
+# Chart-specific measurements are separate from the completed scan's findings
+# and timing. Save raw evidence beside the refresh, publishing only the plots.
+prepare_figures(
+    result,
+    output=Path("studies/chart-topologies"),
+    cache=run / "sensitivity",
+    source_root=Path(metadata["source"]),
+    repository=name,
+)
 markdown, _ = write_reports(result, Path("docs/reports") / name, artifact_links=False)
 markdown.write_text("\n".join(line.rstrip() for line in markdown.read_text().splitlines()) + "\n")
 (run / "scan.json").write_text(json.dumps(result, indent=2) + "\n")

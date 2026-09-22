@@ -12,7 +12,7 @@ from functools import lru_cache
 
 from attrs import frozen
 
-from hypothesis_helm.compiler.asts.contract_values import BoundValue, DerivedValue, NilSlice, native
+from hypothesis_helm.compiler.asts.contract_values import BoundValue, ContractText, DerivedValue, NilSlice, UnorderedKeys, native
 from hypothesis_helm.compiler.constants import (
     COLLECTION_TRANSFORMS,
     FORMAT_TRANSFORMS,
@@ -151,6 +151,8 @@ def _format(function: str, args: tuple[object, ...], limits: dict[str, int], *, 
         UnsupportedTransformation: Operand types, semantics or resource bounds cannot be established.
     """
     # Inspect original operand provenance before trusting integer formatting widths.
+    if function == "print" and any(isinstance(value, ContractText | UnorderedKeys) for value in arguments):
+        raise UnsupportedTransformation("print requires preserved symbolic ordering for unordered operands")
     if function == "squote" and all(value is None or isinstance(value, str | bool) for value in args):
         texts = [str(value).lower() if isinstance(value, bool) else str(value) for value in args if value is not None]
         if sum(len(value) + 3 for value in texts) - 1 > limits["max_string_chars"]:
