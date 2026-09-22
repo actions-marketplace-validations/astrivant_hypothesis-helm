@@ -448,7 +448,8 @@ their domains finite. Audits retain suppressed findings under `ignored_findings`
 HH2006 like other audit findings. See the [finding catalog](../rules/README.md#hh2006-opaque-object-schema).
 
 When a repository test cannot enumerate its input domain, it samples generated values for each selected path instead.
-Input filtering still applies. An explicit finite `--permutations` request requires a finite domain and cannot use that fallback.
+Input filtering still applies, including when `--permutations N` was requested. The warning and report identify the fallback;
+path sampling does not guarantee the requested N-way coverage. See [discovery and testing](../scanning/README.md#discovery-and-testing).
 
 ## Custom resources
 

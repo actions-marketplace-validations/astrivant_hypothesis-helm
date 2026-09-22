@@ -24,6 +24,7 @@ from hypothesis_helm.charts.repositories.cache import ChartCache
 from hypothesis_helm.charts.repositories.changes import comparison
 from hypothesis_helm.charts.repositories.registry import prepare_helm_source
 from hypothesis_helm.charts.repositories.repository import RepositorySource, local_provenance, remote_name
+from hypothesis_helm.charts.testing.coverage import require_attempts
 from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
@@ -218,22 +219,39 @@ def _exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> di
         return {"status": "unsupported-schema", "error": str(exc), "coverage": "lint only"}
     filtering: dict[str, object] = {"requested": args.filter, "applied": False}
     strength = args.permutations
+    coverage_fallback: dict[str, object] = {}
     try:
         factor_space(chart.schema, 10000)
     except NonFiniteSchema as exc:
         filtering["reason"] = f"Cannot enumerate the input domain: {exc}"
-        if strength is not None or any(
-            getattr(args, option, False) for option in ("trim", "trim_topology", "expand_failures", "prune_equivalent", "exhaustive_group")
-        ):
-            return {"status": "unsupported-schema", "error": str(exc), "coverage": "lint only"}
-        LOGGER.info("%s; using generated values per path%s", filtering["reason"], " with input filtering" if args.filter else "")
+        unavailable_options = [
+            "--trim-random" if option == "trim" else "--" + option.replace("_", "-")
+            for option in ("trim", "trim_topology", "expand_failures", "prune_equivalent", "exhaustive_group")
+            if getattr(args, option, False)
+        ]
+        # Open or unbounded domains still have useful path strategies. Keep the
+        # authored schema intact instead of inventing a finite acceptance contract.
+        coverage_fallback = {
+            "requested": "finite-interactions" if strength is not None or unavailable_options else "automatic",
+            "requested_permutations": strength,
+            "effective": "path-properties",
+            "reason": filtering["reason"],
+            "unavailable_options": unavailable_options,
+        }
+        LOGGER.warning(
+            "%s; using generated values per path%s. Requested interaction coverage is not guaranteed.%s",
+            filtering["reason"],
+            " with input filtering" if args.filter else "",
+            " Unavailable finite-plan options: " + ", ".join(unavailable_options) if unavailable_options else "",
+        )
+        strength = None
     else:
         strength = strength if strength is not None else DEFAULT_PERMUTATIONS
     if strength is None:
         traversal = args.traversal_strategy
         fallback: dict[str, object] = {}
         if traversal == "sensitivity-first":
-            # An omitted strength preserves automatic path sampling; it must not turn open schemas into skipped charts.
+            # Sensitivity ordering needs a finite plan; path testing retains seeded random traversal.
             traversal = "random"
             fallback = {"requested": args.traversal_strategy, "effective": traversal, "reason": filtering["reason"]}
             LOGGER.warning("sensitivity-first unavailable for %s: %s; using seeded random path traversal", path, filtering["reason"])
@@ -264,6 +282,7 @@ def _exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> di
         )
         return {
             **result,
+            "coverage_fallback": coverage_fallback,
             **({"traversal_fallback": fallback} if fallback else {}),
             "coverage": "unique discovered paths; time-bounded property testing",
             "schema_source": "declared" if has_schema else "inferred generation; no values schema",
@@ -554,6 +573,7 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
                     finally:
                         record["testing_seconds"] = time.monotonic() - testing_started
                     result.pop("chart", None)
+                    require_attempts(result)
                     record.update(result)
                     record["error_diagnostics"] = chart_errors(record, copy)
                     if result.get("status") == "interrupted":
@@ -596,6 +616,10 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
             failed_early = True
             LOGGER.info("Stopping scan after failure in %s (--fail)", record["chart"])
             break
+    attempts = sum(int(str(record.get("attempts") or 0)) for record in records)
+    no_tests = attempts == 0 and not any(record["status"] == "cached-pass" for record in records)
+    if no_tests:
+        LOGGER.error("No manifest test attempts were executed; this scan did not test any charts. See the recorded chart statuses.")
     for record in records:
         record.setdefault("dependency_preparation_seconds", 0.0)
         record.setdefault("testing_seconds", 0.0)
@@ -640,10 +664,13 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
         if timed_out
         else "failed-early"
         if failed_early
+        else "not-tested"
+        if no_tests
         else "completed",
         "discovery_complete": discovery_complete,
         "unstarted_charts": counts.get("pending", 0),
         "charts_discovered": len(records),
+        "attempts": attempts,
         "counts": counts,
         "charts": records,
         "git_comparison": changes,
@@ -723,8 +750,11 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
     if args.report is not None:
         stem = Path(args.report) if args.report else Path("docs/reports") / f"{source.name}_{int(started)}_report"
         if getattr(args, "max_mutations", None) is not None:
-            if interrupted or timed_out or failed_early or source.status != "ready":
-                report["figure_generation"] = {"status": "skipped", "reason": "Scan stopped before completing its chart queue"}
+            if interrupted or timed_out or failed_early or source.status != "ready" or no_tests:
+                report["figure_generation"] = {
+                    "status": "skipped",
+                    "reason": "No chart tests were executed" if no_tests else "Scan stopped before completing its chart queue",
+                }
             else:
                 from hypothesis_helm.analysis.scan_figures import enrich_scan
 

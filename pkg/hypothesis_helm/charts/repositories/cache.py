@@ -133,7 +133,8 @@ class ChartCache:
             and traversal.get("completed_paths", 0) == traversal.get("selected_paths", 0)
         )
         # A timeout without a finding is incomplete coverage, not a reusable successful scan.
-        outcome = "passed" if result.get("status") == "passed" and complete else "failed"
+        tested = int(str(result.get("attempts") or 0)) > 0
+        outcome = "passed" if result.get("status") == "passed" and complete and tested else "failed"
         try:
             merge_outcomes(self.path, self.baseline, {self.key: outcome})
         except OSError as exc:

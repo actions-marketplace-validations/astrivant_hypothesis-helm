@@ -158,6 +158,13 @@ by the seed.<sup>[\[1\]](../usage.md#interaction-coverage)</sup>
 values schema receive inferred path strategies from their values and template references.
 Library charts cannot be tested as standalone applications.
 
+If a finite plan cannot be constructed, `test` and `scan` still run generated path tests using the requested
+workers, example count, seed, and chart timeout. A warning and the report's `coverage_fallback` record explain
+why the requested interaction coverage was unavailable. This sampling does not guarantee N-way coverage;
+finite-only trimming, expansion, and grouping options are listed when they cannot apply.
+Preparation failures remain failures or incomplete results. A fresh execution cannot pass with zero manifest
+test attempts; verified cache reuse and empty shards remain explicit no-work outcomes.
+
 `--filter` applies topology trimming and failure expansion to supported finite
 charts. For non-finite charts it restricts generation to known schema, default, and
 template paths where analysis permits. Filtering precedes traversal. Each discovered
@@ -174,8 +181,8 @@ reaching the end of that list. Reports distinguish visited, completed, incomplet
 and remaining paths.<sup>[\[2\]](../execution/README.md#value-path-traversal)</sup>
 
 `sensitivity-first` uses the default pairwise coverage when `--permutations` is omitted.
-For a chart whose domain cannot be finitely enumerated, automatic scans warn and fall back to seeded random path
-testing; the report records the requested and effective strategies. Explicit `--permutations N` still requires a finite domain.
+For a chart whose domain cannot be finitely enumerated, scans warn and fall back to seeded random path
+testing, including when `--permutations N` is explicit. The report records the requested and effective strategies.
 
 Discovery also reads dependency conditions and tags from chart metadata, including
 controls absent from `values.yaml`, and inspects installed child charts under their

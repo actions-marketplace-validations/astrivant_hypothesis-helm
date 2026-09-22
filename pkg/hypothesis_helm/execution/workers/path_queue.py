@@ -21,6 +21,7 @@ from hypothesis_helm.compiler.passes.inputs import InputInventory
 from hypothesis_helm.compiler.passes.rejections import RejectionPolicy
 from hypothesis_helm.environment import env, refresh_env
 from hypothesis_helm.exceptions.execution import ChartUnavailable, TimeLimitReached
+from hypothesis_helm.execution.runtime.budget import execution_timer
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.runtime.signals import DeferredSignals, Termination
 from hypothesis_helm.reporting.console.logs import WorkerLogFormatter, WorkerLogs
@@ -122,6 +123,10 @@ def execute(context: dict[str, object], directory: Path, workers: int) -> list[d
     finally:
         with DeferredSignals():
             try:
+                if cancelled or interrupted:
+                    # Publish cancellation before signalling children, so their
+                    # shutdown handlers do not mistake cleanup for a user interrupt.
+                    (directory / "stop").touch()
                 # Each worker has the same deadline and owns Helm's separate process group.
                 # Let its timer unwind and join Helm before introducing another signal.
                 if cancelled and not failed_early:
@@ -168,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         argv (list[str] | None): Internal queue directory argument.
 
     Returns:
-        int: Zero after exhausting the queue or reaching its common deadline.
+        int: Zero after completion or coordinated shutdown, or 130 for an independent interrupt.
     """
     refresh_env()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -176,7 +181,24 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     directory = args.directory
     try:
-        return _run_queue(directory)
+        with Termination():
+            context = mapping(json.loads((directory / "context.json").read_text()))
+            remaining = float(str(context["deadline"])) - time.monotonic()
+            if remaining <= 0:
+                return 0
+            # Include worker preparation and strategy construction in the shared
+            # chart deadline, even before a candidate reaches the renderer.
+            with execution_timer(remaining):
+                return _run_queue(directory, context)
+    except TimeLimitReached:
+        # The coordinator recovers any claimed path without a completed result.
+        return 0
+    except KeyboardInterrupt:
+        if not (directory / "stop").exists():
+            (directory / "interrupted").touch()
+            (directory / "stop").touch()
+            return 130
+        return 0
     except ChartUnavailable as exc:
         save(
             directory / "execution-error.json",
@@ -186,12 +208,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
 
-def _run_queue(directory: Path) -> int:
+def _run_queue(directory: Path, context: dict[str, object]) -> int:
     """
     Process paths while retaining source ownership and reporting shared execution failures.
 
     Args:
         directory (Path): Queue with immutable input context and atomic ownership records.
+        context (dict[str, object]): Prepared inputs and shared deadline, read once by the worker entry point.
 
     Returns:
         int: Zero once this worker stops claiming paths.
@@ -199,7 +222,6 @@ def _run_queue(directory: Path) -> int:
     from hypothesis_helm.charts.testing.paths import GENERATION_ERRORS, path_strategy
     from hypothesis_helm.charts.testing.runner import check_chart
 
-    context = mapping(json.loads((directory / "context.json").read_text()))
     chart = Chart(Path(str(context["chart"])), mapping(context["schema"]), mapping(context["defaults"]))
     chart.require_source()
     if "input_domains" in context:

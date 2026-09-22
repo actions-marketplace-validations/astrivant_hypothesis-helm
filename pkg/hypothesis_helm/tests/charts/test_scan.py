@@ -733,7 +733,7 @@ def test_dependency_timing_accounting(
     assert report["testing_seconds"] == (0.5 if outcome == "passed" else 0)
     assert report["elapsed_seconds"] == report["dependency_preparation_seconds"] + report["testing_seconds"]
     assert remaining == ([2, 1.75] if outcome == "passed" else [])
-    assert report["scan_status"] == ("interrupted" if outcome == "interrupted" else "completed")
+    assert report["scan_status"] == ("interrupted" if outcome == "interrupted" else "completed" if outcome == "passed" else "not-tested")
 
 
 def test_scan_timeout_arguments() -> None:

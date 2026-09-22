@@ -15,6 +15,7 @@ from hypothesis_helm.reporting.documentation.contents import heading_inventory, 
 from hypothesis_helm.reporting.evidence.errors import deduplicate_errors, numbered_diagnostic
 from hypothesis_helm.reporting.evidence.provenance import trace_run
 from hypothesis_helm.reporting.evidence.reproductions import input_summary
+from hypothesis_helm.reporting.reports.audits import write_audit_data
 from hypothesis_helm.reporting.reports.figures import study_figures
 from hypothesis_helm.reporting.reports.links import LINK, Publication, chart_source_url, commit_url, publish_links, repository_url, web_url
 from hypothesis_helm.reporting.reports.overview import summarize, write_overview
@@ -245,6 +246,7 @@ def write_reports(
         f"Started (Unix epoch): {report['started_epoch']}",
         f"Elapsed (wall clock): {float(str(report['elapsed_seconds'])):.2f} seconds",
         f"Charts discovered: {report['charts_discovered']}",
+        f"Manifest test attempts: {sum(int(str(mapping(chart).get('attempts') or 0)) for chart in sequence(report['charts']))}",
         f"Scan status: {report.get('scan_status', 'not recorded')}",
         f"Discovery complete: {report.get('discovery_complete', 'not recorded')}",
         f"Unstarted charts: {report.get('unstarted_charts', 'not recorded')}",
@@ -409,6 +411,20 @@ def write_reports(
         )
         if chart.get("error") and not numbered_diagnostic(chart):
             lines.extend(["Testing limitation: " + " ".join(display_error(chart["error"]).split()), ""])
+        coverage_fallback = mapping(chart.get("coverage_fallback", {}))
+        if coverage_fallback:
+            strength = coverage_fallback.get("requested_permutations")
+            requested = f"Requested {strength}-way interaction coverage" if strength is not None else "Finite interaction coverage"
+            lines.extend(
+                [
+                    f"Coverage: generated path tests. {requested} was unavailable: {coverage_fallback['reason']}. "
+                    "The sampled paths do not establish N-way coverage.",
+                    "",
+                ]
+            )
+            unavailable_options = sequence(coverage_fallback.get("unavailable_options", []))
+            if unavailable_options:
+                lines.extend(["Unavailable finite-plan options: " + ", ".join(f"`{option}`" for option in unavailable_options) + ".", ""])
         fallback = mapping(chart.get("traversal_fallback", {}))
         if fallback:
             lines.extend(
@@ -420,7 +436,9 @@ def write_reports(
         audit = mapping(chart.get("audit", {}))
         findings = [mapping(item) for item in [*sequence(audit.get("findings", [])), *sequence(audit.get("unresolved", []))]]
         if findings:
-            lines.extend([f"Audit findings: {len(findings)}. Full paths and template references are retained in the JSON report.", ""])
+            audit_data = write_audit_data(report, chart, stem, index)
+            audit_link = artifact_link("JSON", audit_data, markdown)
+            lines.extend([f"Audit findings: {len(findings)}. Full paths and template references: {audit_link}.", ""])
             for observed_finding in findings[:6]:
                 path = tuple(str(part) for part in sequence(observed_finding.get("path", [])))
                 lines.append(
@@ -429,7 +447,7 @@ def write_reports(
                     f"{(' (' + str(observed_finding['severity']) + ')') if 'severity' in observed_finding else ''}"
                 )
             if len(findings) > 6:
-                lines.append(f"- {len(findings) - 6} additional audit findings in JSON.")
+                lines.append(f"- {len(findings) - 6} additional audit findings in {audit_link}.")
             lines.append("")
         sampling = chart.get("sampling")
         if isinstance(sampling, dict) and sampling.get("applied"):

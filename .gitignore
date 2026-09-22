@@ -33,6 +33,8 @@ generated-tests/
 !/docs/reports/**/*.pdf
 !/docs/reports/**/*.png
 !/docs/reports/**/*.svg
+# Complete audit findings linked from final reports, separate from ignored run data.
+!/docs/reports/*-data/*.audit.json.gz
 /docs/reports/**/*-runs/
 /docs/reports/**/runs/
 /docs/reports/**/cases/

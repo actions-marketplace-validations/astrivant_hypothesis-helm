@@ -301,7 +301,7 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     repository.add_argument(
         "--permutations",
         type=int,
-        help="finite interaction strength; default: automatic finite coverage or sampling",
+        help="finite interaction strength; non-finite charts fall back to path sampling",
     )
     repository.add_argument(
         "--filter",
@@ -428,7 +428,9 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     modes.add_argument("--paths", action="store_true", help="force generated per-path testing")
     modes.add_argument("--exhaustive", action="store_true", help="enumerate finite whole-chart inputs")
     modes.add_argument("--whole-chart", action="store_true", help="sample whole-chart inputs")
-    modes.add_argument("--permutations", type=int, metavar="N", help="cover every valid N-way finite interaction")
+    modes.add_argument(
+        "--permutations", type=int, metavar="N", help="cover valid N-way finite interactions; non-finite charts fall back to path sampling"
+    )
     filters = test.add_argument_group(
         "filtering",
         "Use --filter or the individual methods below; random trimming is independent.",
@@ -731,7 +733,8 @@ def local_discovery(args: argparse.Namespace) -> bool:
         or bool(env.get("HYPOTHESIS_HELM_BASE_REF"))
         or (not any(unsupported.values()) and len(discover_charts(args.chart)) > 1)
     )
-    if args.filter and not recursive:
+    finite_requested = args.filter or args.permutations is not None or args.traversal_strategy == "sensitivity-first"
+    if finite_requested and not recursive and not any(unsupported.values()):
         try:
             factor_space(Chart.load(args.chart).generation_schema(), args.max_cases)
         except NonFiniteSchema:
@@ -1254,6 +1257,9 @@ def main(argv: list[str] | None = None) -> int:
                 filter_rejections=args.filter,
                 fail_fast=args.fail,
             )
+            from hypothesis_helm.charts.testing.coverage import require_attempts
+
+            require_attempts(report)
             status = (
                 0 if report["status"] in ("passed", "dry-run", "ignored", "findings") else 124 if report["status"] == "time-limit" else 1
             )

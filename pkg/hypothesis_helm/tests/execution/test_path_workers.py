@@ -20,6 +20,7 @@ from hypothesis_helm.charts.testing.paths import check_paths
 from hypothesis_helm.cli import argument_parser
 from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.execution import TimeLimitReached
+from hypothesis_helm.execution.workers.path_queue import main as worker_main
 from hypothesis_helm.schemas.contracts import mapping, sequence
 
 
@@ -221,6 +222,85 @@ def test_deadline_stops_workers_and_helm_children(tmp_path: Path, monkeypatch: p
     for phase in sequence(result["phases"]):
         with pytest.raises(ProcessLookupError):
             os.kill(int(str(mapping(phase)["worker_pid"])), 0)
+    for log in (tmp_path / "results").rglob("worker-*.log"):
+        assert "Traceback (most recent call last)" not in log.read_text()
+
+
+@pytest.mark.parametrize("stop_signal", [signal.SIGINT, signal.SIGTERM])
+@pytest.mark.parametrize("coordinated", [False, True])
+def test_worker_interrupt_distinguishes_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop_signal: int, coordinated: bool
+) -> None:
+    """
+    Handle signals during worker preparation without reporting shutdown as a chart failure.
+
+    Args:
+        tmp_path (Path): Internal queue and cancellation markers.
+        monkeypatch (pytest.MonkeyPatch): Signal the worker while preparing chart analysis.
+        stop_signal (int): Interactive or CI termination signal.
+        coordinated (bool): Whether the coordinator already requested cleanup.
+
+    Returns:
+        None: Only an independent interrupt marks the entire queue as interrupted.
+    """
+    (tmp_path / "context.json").write_text(json.dumps({"deadline": time.monotonic() + 30}))
+    if coordinated:
+        (tmp_path / "stop").touch()
+
+    def interrupt(directory: Path, context: dict[str, object]) -> int:
+        """
+        Signal startup before the inner path loop installs any handlers.
+
+        Args:
+            directory (Path): Shared worker queue.
+            context (dict[str, object]): Prepared chart data.
+
+        Returns:
+            int: Unreachable when cancellation unwinds correctly.
+        """
+        signal.raise_signal(stop_signal)
+        pytest.fail("Worker ignored cancellation")
+
+    monkeypatch.setattr("hypothesis_helm.execution.workers.path_queue._run_queue", interrupt)
+    assert worker_main([str(tmp_path)]) == (0 if coordinated else 130)
+    assert (tmp_path / "stop").exists()
+    assert (tmp_path / "interrupted").exists() is not coordinated
+
+
+def test_worker_preparation_obeys_shared_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Bound worker preparation before a path is claimed without a spurious interruption.
+
+    Args:
+        tmp_path (Path): Queue with the chart's absolute deadline.
+        monkeypatch (pytest.MonkeyPatch): Replace preparation with a blocking operation.
+
+    Returns:
+        None: The worker exits normally at the deadline with no fabricated finding or path.
+    """
+    (tmp_path / "context.json").write_text(json.dumps({"deadline": time.monotonic() + 0.2}))
+
+    def prepare(directory: Path, context: dict[str, object]) -> int:
+        """
+        Model expensive worker-local analysis before the first queue claim.
+
+        Args:
+            directory (Path): Shared queue directory.
+            context (dict[str, object]): Prepared inputs.
+
+        Returns:
+            int: Error if the shared deadline fails to interrupt startup.
+        """
+        time.sleep(10)
+        return 1
+
+    monkeypatch.setattr("hypothesis_helm.execution.workers.path_queue._run_queue", prepare)
+    started = time.monotonic()
+    assert worker_main([str(tmp_path)]) == 0
+    assert time.monotonic() - started < 5
+    assert not (tmp_path / "interrupted").exists()
+    assert not (tmp_path / "execution-error.json").exists()
+    assert not list(tmp_path.glob("started-*.json"))
 
 
 def test_deadline_before_first_path_keeps_all_paths_unvisited(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

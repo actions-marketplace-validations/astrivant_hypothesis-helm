@@ -13,7 +13,10 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from hypothesis import strategies as st
+from hypothesis.strategies import DrawFn, SearchStrategy
 
+from hypothesis_helm.charts.model import Chart
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.execution.runtime.budget import parse_time_limit
@@ -130,6 +133,74 @@ def test_active_assertion_is_stopped_and_alarm_restored(monkeypatch: pytest.Monk
     assert report["attempted_iterations"] == 1
     assert report["completed_iterations"] == 0
     assert report["remaining_iterations"] == 24
+    assert signal.getsignal(signal.SIGALRM) == previous
+    assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
+
+
+@pytest.mark.parametrize("stage", ["construction", "draw"])
+def test_generation_obeys_execution_deadline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str) -> None:
+    """
+    Bound generation before the test body, retaining only actual render attempts.
+
+    Args:
+        tmp_path (Path): Partial execution evidence.
+        monkeypatch (pytest.MonkeyPatch): Replace rendering and install slow generation.
+        stage (str): Strategy construction or a lazy draw before property execution.
+
+    Returns:
+        None: Generation times out cleanly, preserves the baseline and restores the timer.
+    """
+    renderer = Mock(return_value=[{}])
+    monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", renderer)
+    entered = []
+
+    @st.composite
+    def slow_draw(draw: DrawFn) -> dict[str, object]:
+        """
+        Model expensive constraint canonicalization inside a path strategy.
+
+        Args:
+            draw (DrawFn): Hypothesis example generator.
+
+        Returns:
+            dict[str, object]: A candidate only if the execution timer fails to interrupt.
+        """
+        entered.append("draw")
+        time.sleep(10)
+        return {"replicas": draw(st.integers(min_value=1, max_value=3))}
+
+    def slow_strategy(chart: Chart) -> SearchStrategy[dict[str, object]]:
+        """
+        Model a schema strategy that blocks during its initial construction.
+
+        Args:
+            chart (Chart): Prepared input chart.
+
+        Returns:
+            SearchStrategy[dict[str, object]]: Defaults only if the timer fails to interrupt.
+        """
+        entered.append("construction")
+        time.sleep(10)
+        return st.just(chart.defaults)
+
+    if stage == "construction":
+        monkeypatch.setattr(Chart, "strategy", slow_strategy)
+    previous = signal.getsignal(signal.SIGALRM)
+    started = time.monotonic()
+    report = check_chart(
+        "examples/workload",
+        input_strategy=slow_draw() if stage == "draw" else None,
+        time_limit=0.2,
+        artifact_dir=tmp_path,
+    )
+    assert time.monotonic() - started < 5
+    assert entered == [stage]
+    assert report["status"] == report["stop_reason"] == "time-limit"
+    assert report["attempts"] == report["completed_iterations"] == renderer.call_count == 1
+    assert report["coverage_complete"] is False
+    assert "failure_type" not in report
+    assert not (tmp_path / "values.json").exists()
+    assert json.loads((tmp_path / "report.json").read_text()) == report
     assert signal.getsignal(signal.SIGALRM) == previous
     assert signal.getitimer(signal.ITIMER_REAL) == (0.0, 0.0)
 

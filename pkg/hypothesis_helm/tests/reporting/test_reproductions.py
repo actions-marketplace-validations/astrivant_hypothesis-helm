@@ -3,6 +3,8 @@ Verify chart-grouped diagnostics retain exact triggering paths and joint values.
 """
 
 import copy
+import gzip
+import json
 import re
 from pathlib import Path
 
@@ -13,6 +15,62 @@ from hypothesis_helm.reporting.evidence.reproductions import changed_values, fai
 from hypothesis_helm.reporting.reports.links import Publication, linked_prose, publish_links
 from hypothesis_helm.reporting.reports.repository import artifact_link, write_reports
 from hypothesis_helm.schemas.contracts import mapping, sequence
+
+
+@pytest.mark.parametrize("published", [False, True])
+def test_audit_json_links_have_complete_portable_data(tmp_path: Path, published: bool) -> None:
+    """
+    Make abbreviated audit summaries open the actual chart data in Markdown and PDF.
+
+    Args:
+        tmp_path (Path): Report publication directory, without any raw run artifacts.
+        published (bool): Whether attachments use public URLs or local report-relative paths.
+
+    Returns:
+        None: Both formats link existing, complete chart-specific JSON with the correct run identity.
+    """
+    findings = [
+        {"code": "HH2001", "path": [f"field{index}"], "references": [{"file": "templates/deployment.yaml", "line": index + 1}]}
+        for index in range(6)
+    ]
+    unresolved = [{"code": "HH2005", "path": [], "file": "templates/_helpers.tpl", "line": 10}]
+    report: dict[str, object] = {
+        "directory": "charts",
+        "started_epoch": 1,
+        "elapsed_seconds": 1,
+        "charts_discovered": 3,
+        "counts": {"passed": 3},
+        "settings": {},
+        "charts": [
+            {"chart": "one/demo", "status": "passed", "audit": {"findings": findings, "unresolved": unresolved}},
+            {"chart": "two/demo", "status": "passed", "audit": {"findings": findings[:1]}},
+            {"chart": "empty", "status": "passed", "audit": {}},
+        ],
+    }
+    directory = tmp_path / "reports with spaces"
+    publication = Publication(tmp_path, "https://github.com/example/reports", "main") if published else None
+    markdown, pdf = write_reports(report, directory / "scan.md", publication=publication, artifact_links=False)
+    data = directory / "scan-data" / "0001.audit.json.gz"
+    document = json.loads(gzip.decompress(data.read_bytes()))
+    assert document == {
+        "chart": "one/demo",
+        "run_hash": report["run_hash"],
+        "started_at": report["started_at"],
+        "finished_at": report["finished_at"],
+        "findings": findings,
+        "unresolved": unresolved,
+    }
+    other = json.loads(gzip.decompress((data.parent / "0002.audit.json.gz").read_bytes()))
+    assert other["chart"] == "two/demo"
+    assert other["findings"] == findings[:1]
+    assert len(list(data.parent.iterdir())) == 2
+    relative = "scan-data/0001.audit.json.gz"
+    target = publication.url(relative, markdown) if publication else relative
+    assert f"1 additional audit findings in [JSON](<{target}>)." in " ".join(markdown.read_text().split())
+    uri = target if publication else data.resolve().as_uri()
+    assert uri.encode() in re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
+    if published:
+        assert b"file:" not in pdf.read_bytes()
 
 
 def test_exact_input_paths_and_empty_values() -> None:

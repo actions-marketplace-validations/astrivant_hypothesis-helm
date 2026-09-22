@@ -92,10 +92,10 @@ sets the maximum number of changed paths in an analyzed group, independently of 
 `--permutations`; the default is the smaller of 2 and the requested permutation strength. Increasing it never authorizes
 analysis above the interaction order selected for bug testing.
 
-Sensitivity ordering still needs a finite input domain. With automatic coverage, recursive `test` and remote `scan`
+Sensitivity ordering still needs a finite input domain. Recursive `test` and remote `scan`
 use seeded random path testing for charts whose domains cannot be enumerated. They log this fallback and record its
-reason and effective traversal in the chart report. An explicit `--permutations N` continues to require finite coverage;
-it does not silently fall back. Saved suites and explicit `--paths`, `--whole-chart`, and `--exhaustive` modes cannot use
+reason and effective traversal in the chart report, including when `--permutations N` is explicit. Those generated path tests
+do not guarantee the requested N-way coverage. Saved suites and explicit `--paths`, `--whole-chart`, and `--exhaustive` modes cannot use
 `sensitivity-first`.
 
 Filtering and sampling select the configurations first. The scheduler then finds baseline-relative groups whose reference
@@ -138,6 +138,8 @@ share that chart's ordered queue of value paths. Each path is claimed once and
 receives up to **10 generated examples** by default (`--max-examples` overrides this).
 Workers share one `--chart-timeout` deadline. They stop and are joined before the next chart starts. Dependency
 preparation happens before testing and is excluded from this budget.
+The deadline includes input generation, even when satisfying schema constraints takes time before Helm can render.
+A path interrupted during generation is incomplete; it is neither a passed test nor a chart defect.
 
 `--jobs auto` uses the available CPU count for this repository path queue. Results
 record completed and interrupted paths separately; workers write isolated records
@@ -407,7 +409,7 @@ limits allow; unavailable stages are reported. Timing remains advisory and an
 unknown estimate never claims to fit. Explicit coverage settings remain unchanged,
 and actual runs enforce the execution limit regardless of the forecast.
 
-CLI execution interrupts active renders and assertions using a temporary timer.
+CLI execution interrupts input generation, active renders and assertions using a temporary timer.
 Library calls from a non-main thread, or applications that already own an alarm,
 instead stop between operations and cap Helm's timeout to the remaining budget;
 an in-flight custom callback in those cases must return before execution can stop.

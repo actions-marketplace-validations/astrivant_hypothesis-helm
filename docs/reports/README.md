@@ -12,6 +12,9 @@ Chart headings are larger than individual diagnostic headings. Finding codes lin
 with their meaning, default severity, and suggested action. The PDF appendix starts on a new page.
 Chart names link to the recorded Git revision or the source URL declared in `Chart.yaml`, falling back to run artifacts when available.
 Contents and overview links stay inside the report. Standalone reports omit links to unpublished artifacts.
+Each chart's audit summary links **JSON** to its complete findings, including paths and template references, in a compressed
+`<report>-data/*.audit.json.gz` attachment. Keep that directory with the report when sharing it; decompress the file to read the JSON.
+Published reports use public links to these attachments, which include the scan's run fingerprint and timestamps.
 From page two onward, the PDF includes a bottom-right link to the Hypothesis framework repository; page numbers are centered in the footer.
 Historical scans without a recorded commit link to their recorded upstream branch.
 

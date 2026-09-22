@@ -226,7 +226,10 @@ def test_chart_cache_validates_contents_and_completion(repository: Path, tmp_pat
     changes = comparison(repository, environment={})
     first = ChartCache.prepare(chart, chart, args, changes)
     assert not first.reusable
-    first.publish({"status": "passed"})
+    first.publish({"status": "passed", "attempts": 0})
+    first = ChartCache.prepare(chart, chart, args, changes)
+    assert not first.reusable
+    first.publish({"status": "passed", "attempts": 1})
     warm = ChartCache.prepare(chart, chart, args, changes)
     assert warm.reusable
     assert not ChartCache.prepare(chart, chart, args, {**changes, "status": "unavailable"}).reusable
@@ -235,13 +238,13 @@ def test_chart_cache_validates_contents_and_completion(repository: Path, tmp_pat
         warm.publish({"status": status})
         assert not ChartCache.prepare(chart, chart, args, changes).reusable
         warm = ChartCache.prepare(chart, chart, args, changes)
-        warm.publish({"status": "passed"})
+        warm.publish({"status": "passed", "attempts": 1})
         warm = ChartCache.prepare(chart, chart, args, changes)
         assert warm.reusable
-    warm.publish({"status": "passed", "traversal": {"remaining_paths": 1}})
+    warm.publish({"status": "passed", "attempts": 1, "traversal": {"remaining_paths": 1}})
     assert not ChartCache.prepare(chart, chart, args, changes).reusable
     warm = ChartCache.prepare(chart, chart, args, changes)
-    warm.publish({"status": "passed", "traversal": {"selected_paths": 7, "completed_paths": 7, "sampled_out_paths": 3}})
+    warm.publish({"status": "passed", "attempts": 8, "traversal": {"selected_paths": 7, "completed_paths": 7, "sampled_out_paths": 3}})
     assert ChartCache.prepare(chart, chart, args, changes).reusable
     args.seed = 1
     assert not ChartCache.prepare(chart, chart, args, changes).reusable
@@ -263,7 +266,7 @@ def test_chart_cache_validates_contents_and_completion(repository: Path, tmp_pat
     first_writer = ChartCache.prepare(chart, chart, args, changes)
     second_writer = ChartCache.prepare(chart, chart, args, changes)
     first_writer.publish({"status": "failed"})
-    second_writer.publish({"status": "passed"})
+    second_writer.publish({"status": "passed", "attempts": 1})
     assert not ChartCache.prepare(chart, chart, args, changes).reusable
 
 

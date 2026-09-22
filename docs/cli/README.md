@@ -244,8 +244,8 @@ options:
   --no-cache            disable completed chart-result caching
   --jobs, -j JOBS       path workers per chart; auto: available CPUs
   --permutations PERMUTATIONS
-                        finite interaction strength; default: automatic finite
-                        coverage or sampling
+                        finite interaction strength; non-finite charts fall back to
+                        path sampling
   --filter              filter finite charts with failure expansion; otherwise filter
                         generated inputs before path traversal
   --fail [{info,warning,error}]
@@ -634,7 +634,8 @@ options:
   --paths               force generated per-path testing
   --exhaustive          enumerate finite whole-chart inputs
   --whole-chart         sample whole-chart inputs
-  --permutations N      cover every valid N-way finite interaction
+  --permutations N      cover valid N-way finite interactions; non-finite charts fall
+                        back to path sampling
   --trim-random, --trim N
                         retain a seeded quarter of finite permutation cases per step;
                         default: 0

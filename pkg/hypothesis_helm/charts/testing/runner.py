@@ -46,6 +46,7 @@ from hypothesis_helm.execution.planning import DEFAULT_PERMUTATIONS
 from hypothesis_helm.execution.planning.sampling import DEFAULT_SAMPLING, Sampling
 from hypothesis_helm.execution.planning.sensitivity import SensitivityOrder, validate_order
 from hypothesis_helm.execution.planning.traversal import order_configurations, validate_strategy
+from hypothesis_helm.execution.runtime.budget import execution_timer
 from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.findings.policy import chart_rules
 from hypothesis_helm.findings.severity import attributes
@@ -880,7 +881,7 @@ def check_chart(
         report_multiple_bugs=False,
         suppress_health_check=(*configured_health, HealthCheck.filter_too_much) if policy is not None else configured_health,
     )
-    @given(values=input_strategy if input_strategy is not None else chart.strategy(), data=st.data())
+    @given(values=input_strategy if input_strategy is not None else st.deferred(lambda: chart.strategy()), data=st.data())
     def property_test(values: dict[str, object], data: DataObject) -> None:
         """
         Exercise a schema-generated candidate through the render contract.
@@ -915,7 +916,10 @@ def check_chart(
         )
 
     try:
-        property_test()
+        # Strategy construction and rejected draws happen before the property
+        # body. They consume the same budget as rendering and shrinking.
+        with execution_timer(remaining_time()):
+            property_test()
     except TimeLimitReached:
         return stopped_report()
     except KeyboardInterrupt as exc:
