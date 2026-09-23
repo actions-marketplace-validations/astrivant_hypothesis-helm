@@ -18,6 +18,7 @@ from hypothesis_helm.reporting.documentation.contents import heading_inventory
 from hypothesis_helm.reporting.reports.code import CODE_BACKGROUND, draw_code_block
 from hypothesis_helm.reporting.reports.links import linked_prose
 from hypothesis_helm.reporting.reports.overview import CellLink
+from hypothesis_helm.reporting.reports.tables import draw_table, read_table
 
 __all__ = ("write_pdf",)
 
@@ -257,22 +258,23 @@ def write_pdf(
     outline_levels: list[int] = []
     figure_page = False
 
-    def code_page() -> float:
+    def block_page() -> float:
         """
-        Continue a literal code block beneath the next page's normal header.
+        Continue a code block or table beneath the next page's normal header.
 
         Returns:
-            float: Top edge available for the continued code box.
+            float: Top edge available for the continued block.
         """
         canvas.showPage()
         return page_header() + 8
 
+    table_end = 0
     for index, line in enumerate(lines):
-        if index == heading:
+        if index == heading or index < table_end:
             continue
         if code_fence:
             if re.fullmatch(r" {0,3}" + re.escape(code_fence[0]) + "{" + str(len(code_fence)) + r",}\s*", line):
-                y = draw_code_block(canvas, "\n".join(code_lines), y + 8, code_page)
+                y = draw_code_block(canvas, "\n".join(code_lines), y + 8, block_page)
                 code_lines.clear()
                 code_fence = ""
             else:
@@ -284,6 +286,10 @@ def write_pdf(
             continue
         if not line.strip():
             y -= 4
+            continue
+        if table := read_table(lines, index):
+            y = draw_table(canvas, table, y + 8, block_page, pdf)
+            table_end = table.end
             continue
         if index in destinations:
             level, label, anchor = destinations[index]
@@ -386,5 +392,5 @@ def write_pdf(
         paragraph.drawOn(canvas, 36, y + 8 - height)
         y -= height
     if code_fence:
-        draw_code_block(canvas, "\n".join(code_lines), y + 8, code_page)
+        draw_code_block(canvas, "\n".join(code_lines), y + 8, block_page)
     canvas.save()

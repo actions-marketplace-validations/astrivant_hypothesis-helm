@@ -1885,7 +1885,7 @@ renders have no coordinate. Missing or unfinished measurements do not imply zero
 reference sample.
 
 | Color number | Chart | Measured / retained reference outputs |
-| --- | --- | --- |
+| :---: | :--- | ---: |
 | 01 | [bitnami/airflow](<#bitnamiairflow>) | Unavailable |
 | 02 | [bitnami/apache](<#bitnamiapache>) | 62 / 62 |
 | 03 | [bitnami/apisix](<#bitnamiapisix>) | Unavailable |

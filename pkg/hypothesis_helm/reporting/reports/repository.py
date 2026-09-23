@@ -563,7 +563,7 @@ def write_reports(
     details: dict[str, list[str]] = {}
     if pca_caption is not None:
         in_charts = False
-        key = ["| Color number | Chart | Measured / retained reference outputs |", "| --- | --- | --- |"]
+        key = ["| Color number | Chart | Measured / retained reference outputs |", "| :---: | :--- | ---: |"]
         positions = []
         for _, level, label, anchor in heading_inventory("\n".join(lines)):
             if level <= 2:
