@@ -433,8 +433,10 @@ and dynamic references; its generated tests may expose real chart failures.
 
 ## Live logs
 
-Local commands log progress at INFO and findings at WARNING, to stdout by default. Each finding includes the chart,
-values path, code and a short preview of the triggering overrides. The final counterexample is logged at WARNING after shrinking;
+Local commands log progress at INFO and findings at their configured severity: ERROR, WARNING or INFO, to stdout by default.
+With `--log-color`, errors appear in red and warnings in yellow. Severity overrides also apply to worker logs.
+Each finding includes the chart,
+values path, code and a short preview of the triggering overrides. The final counterexample uses the same severity after shrinking;
 full evidence remains in the report artifacts. Repeated shrink attempts do not repeat the same finding announcement.
 
 Use `--log-file ./logs/chart.log` to append logs to a file instead. For a JSON report on stdout, send logs elsewhere:

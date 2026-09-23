@@ -35,7 +35,7 @@ from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.execution.runtime.signals import Termination
 from hypothesis_helm.execution.suite import run_suite
 from hypothesis_helm.findings.generator import FindingGenerator
-from hypothesis_helm.findings.severity import LEVELS, audit_blocks
+from hypothesis_helm.findings.severity import LEVELS, audit_blocks, log_level
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.console.logs import LogFormatter
@@ -950,7 +950,8 @@ def main(argv: list[str] | None = None) -> int:
             finding_report = audit_findings(Chart.load(source))
             for item in [*sequence(finding_report.get("findings", [])), *sequence(finding_report.get("unresolved", []))]:
                 finding = mapping(item)
-                logger.warning(
+                logger.log(
+                    log_level(str(finding["severity"])),
                     "[%s] Audit finding: %s; path=%s; severity=%s",
                     finding["code"],
                     finding.get("message", finding.get("issue", "Unresolved value access")),

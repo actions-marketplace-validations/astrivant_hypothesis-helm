@@ -26,7 +26,8 @@ from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.workers.path_queue import execute
-from hypothesis_helm.reporting.console.logs import WORKER_PREFIX, FindingLog, WorkerLogFormatter, WorkerLogs
+from hypothesis_helm.findings.severity import ACTIVE_POLICY
+from hypothesis_helm.reporting.console.logs import WORKER_PREFIX, FindingLog, LogFormatter, WorkerLogFormatter, WorkerLogs
 from hypothesis_helm.rules import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import mapping, sequence
 from hypothesis_helm.tests import PROJECT_ROOT
@@ -34,8 +35,9 @@ from hypothesis_helm.tests.execution.test_path_workers import fixture_chart
 
 
 @pytest.mark.parametrize("fail", [False, True])
+@pytest.mark.parametrize("severity, priority", [(None, logging.WARNING), ("error", logging.ERROR), ("info", logging.INFO)])
 def test_audit_logs_source_locations_without_duplicates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, fail: bool
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, fail: bool, severity: str | None, priority: int
 ) -> None:
     """
     Show actionable template locations and retain fail-fast behavior for unresolved analysis.
@@ -43,21 +45,26 @@ def test_audit_logs_source_locations_without_duplicates(
     Args:
         tmp_path (Path): Isolated chart fixture.
         monkeypatch (pytest.MonkeyPatch): Deterministic audit and execution results.
-        caplog (pytest.LogCaptureFixture): Warning log capture.
+        caplog (pytest.LogCaptureFixture): Finding log capture.
         fail (bool): Whether the caller requests immediate failure.
+        severity (str | None): Recorded override, or the catalog default when absent.
+        priority (int): Expected logging level.
 
     Returns:
         None: Repeated diagnostics log once; source locations appear in both logs and fail-fast errors.
     """
     chart = fixture_chart(tmp_path)
-    finding = {"code": "HH2005", "file": "templates/worker.yaml", "line": 188, "message": "helper context is unresolved"}
+    finding: dict[str, object] = {"code": "HH2005", "file": "templates/worker.yaml", "line": 188, "message": "helper context is unresolved"}
+    if severity is not None:
+        finding["severity"] = severity
     monkeypatch.setattr(
         "hypothesis_helm.charts.repositories.scan.audit_findings", lambda chart: {"findings": [], "unresolved": [finding, finding]}
     )
     monkeypatch.setattr("hypothesis_helm.charts.repositories.scan._exercise_chart", lambda *args: {"status": "passed"})
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(priority):
         result = exercise_chart(chart.path, Namespace(fail=fail), tmp_path / "results")
     assert caplog.text.count("Audit finding:") == 1
+    assert caplog.records[0].levelno == priority
     assert "templates/worker.yaml:188" in caplog.text and "path=[]" not in caplog.text
     assert result["status"] == ("failed" if fail else "passed")
     if fail:
@@ -132,7 +139,7 @@ def test_observed_and_final_findings(tmp_path: Path, monkeypatch: pytest.MonkeyP
         raise RenderFailure("YAML parse error\nprivate raw manifest follows", code="HH1101")
 
     monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", fail)
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.ERROR):
         result = check_chart(
             chart,
             input_strategy=chart.strategy(),
@@ -144,7 +151,7 @@ def test_observed_and_final_findings(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert result["status"] == "failed"
     assert caplog.text.count("Finding observed:") == 1
     assert caplog.text.count("Counterexample recorded:") == 1
-    assert all(record.levelno == logging.WARNING for record in caplog.records)
+    assert all(record.levelno == logging.ERROR for record in caplog.records)
     assert "[HH1101]" in caplog.text and "$.value = 1" in caplog.text
     assert "private raw manifest" not in caplog.text
     monkeypatch.setenv(ENVIRONMENT, '["HH1101"]')
@@ -155,7 +162,37 @@ def test_observed_and_final_findings(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert "Finding observed:" not in caplog.text and "Counterexample recorded:" not in caplog.text
 
 
-@pytest.mark.parametrize("level", [logging.INFO, logging.WARNING])
+@pytest.mark.parametrize("severity, priority", [("info", logging.INFO), ("warning", logging.WARNING), ("error", logging.ERROR)])
+@pytest.mark.parametrize("recorded", [False, True])
+def test_finding_logs_use_effective_severity(caplog: pytest.LogCaptureFixture, severity: str, priority: int, recorded: bool) -> None:
+    """
+    Honor both active scoped overrides and severity recorded before a scope exited.
+
+    Args:
+        caplog (pytest.LogCaptureFixture): Console log records at the selected threshold.
+        severity (str): Effective finding severity.
+        priority (int): Expected Python logging level.
+        recorded (bool): Whether the caller supplies the earlier severity decision.
+
+    Returns:
+        None: Findings survive the matching log threshold and use the matching color label.
+    """
+    # A recorded decision must win even when the current scope would classify the code differently.
+    token = ACTIVE_POLICY.set({"severity": {"HH1101": "warning" if recorded else severity}})
+    try:
+        with caplog.at_level(priority):
+            FindingLog("example", {}).emit("Counterexample recorded", "HH1101", "invalid YAML", severity=severity if recorded else None)
+    finally:
+        ACTIVE_POLICY.reset(token)
+    assert len(caplog.records) == 1
+    record = caplog.records[0]
+    assert record.levelno == priority
+    assert record.__dict__["finding_severity"] == severity
+    color = {"info": "36", "warning": "33", "error": "31"}[severity]
+    assert LogFormatter(color=True).format(record).startswith(f"\033[{color}m[{severity.upper()}]\033[0m")
+
+
+@pytest.mark.parametrize("level", [logging.INFO, logging.WARNING, logging.ERROR])
 def test_incremental_worker_logs(tmp_path: Path, caplog: pytest.LogCaptureFixture, level: int) -> None:
     """
     Forward complete structured events once, excluding partial and raw diagnostic output.
@@ -170,6 +207,7 @@ def test_incremental_worker_logs(tmp_path: Path, caplog: pytest.LogCaptureFixtur
     """
     event = logging.LogRecord("hypothesis_helm.worker", level, "worker.py", 1, "found\na failure", (), None)
     event.finding_code = "HH1101"
+    event.finding_severity = logging.getLevelName(level).lower()
     encoded = WorkerLogFormatter().format(event) + "\n"
     first = tmp_path / "worker-0.log"
     first.write_text("raw traceback\n" + encoded[:20])
@@ -187,6 +225,7 @@ def test_incremental_worker_logs(tmp_path: Path, caplog: pytest.LogCaptureFixtur
     assert caplog.records[0].levelno == level
     assert caplog.records[0].getMessage() == "found\na failure"
     assert caplog.records[0].__dict__["finding_code"] == "HH1101"
+    assert caplog.records[0].__dict__["finding_severity"] == logging.getLevelName(level).lower()
 
 
 def test_worker_logs_arrive_before_exit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

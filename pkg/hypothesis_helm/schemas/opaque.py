@@ -5,6 +5,7 @@ Identify object domains whose schema supplies no field structure for generation.
 import logging
 from pathlib import Path
 
+from hypothesis_helm.findings.severity import ACTIVE_POLICY, for_paths, level, log_level
 from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.rules import ignored
 from hypothesis_helm.schemas.contracts import sequence
@@ -99,4 +100,5 @@ def warn_opaque(schema: dict[str, object], chart: str) -> None:
     for path in paths:
         if ignored("HH2006", chart=Path(chart), paths=(path,)):
             continue
-        LOGGER.warning("[HH2006] Opaque object: chart=%s; path=%s; %s", chart, format_path(path), MESSAGE)
+        severity = level("HH2006", settings=ACTIVE_POLICY.get() or for_paths(Path(chart), (path,)))
+        LOGGER.log(log_level(severity), "[HH2006] Opaque object: chart=%s; path=%s; %s", chart, format_path(path), MESSAGE)

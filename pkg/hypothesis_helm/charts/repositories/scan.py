@@ -39,7 +39,7 @@ from hypothesis_helm.execution.planning.sensitivity import validate_order
 from hypothesis_helm.execution.runtime.budget import execution_timer
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.execution.runtime.signals import Termination
-from hypothesis_helm.findings.severity import attributes, blocks, for_paths, level
+from hypothesis_helm.findings.severity import attributes, blocks, for_paths, level, log_level
 from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.reporting.console.progress import format_path
@@ -150,13 +150,15 @@ def exercise_chart(path: Path, args: argparse.Namespace, artifacts: Path) -> dic
         message = str(finding.get("message", finding.get("issue", "Unresolved value access")))
         identity = (str(finding["code"]), location, message)
         if identity not in seen:
-            LOGGER.warning(
+            severity = str(finding.get("severity", level(str(finding["code"]))))
+            LOGGER.log(
+                log_level(severity),
                 "[%s] Audit finding: chart=%s; %s; at=%s; severity=%s",
                 finding["code"],
                 name,
                 message,
                 location,
-                finding.get("severity", level(str(finding["code"]))),
+                severity,
             )
             seen.add(identity)
         if finding.get("fail_fast", args.fail and blocks(str(finding["code"]))):

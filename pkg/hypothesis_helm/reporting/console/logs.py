@@ -12,7 +12,7 @@ from ruamel.yaml.error import YAMLError
 
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.findings.catalog import CATALOG
-from hypothesis_helm.findings.severity import level
+from hypothesis_helm.findings.severity import level, log_level
 from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.reporting.evidence.reproductions import changed_values
 
@@ -163,7 +163,7 @@ class FindingLog:
             values (dict[str, object]): Actual overrides submitted to the failing check.
 
         Returns:
-            None: A bounded WARNING record is emitted immediately for each new code.
+            None: A bounded record at the finding's effective severity is emitted for each new code.
         """
         from hypothesis_helm.findings.suppressions import observe
 
@@ -186,9 +186,10 @@ class FindingLog:
         Returns:
             None: Logging does not change the check's outcome or its reproducing input.
         """
-        if not LOGGER.isEnabledFor(logging.WARNING):
-            return
         severity = level(code) if severity is None else severity
+        priority = log_level(severity)
+        if not LOGGER.isEnabledFor(priority):
+            return
         title = CATALOG[code].title if code in CATALOG else code
         diagnostic = diagnostic_line(message)
         selected = ", ".join(format_path(path) for path in self.paths) or "chart"
@@ -206,7 +207,8 @@ class FindingLog:
                     preview += f"; {len(changes) - 4} more changed paths"
             except (TypeError, ValueError):
                 preview = "input preview unavailable; see artifacts"
-        LOGGER.warning(
+        LOGGER.log(
+            priority,
             "%s: chart=%s; path=%s; [%s] %s; severity=%s; %s; %s%s",
             stage,
             self.chart,
@@ -248,7 +250,7 @@ class WorkerLogFormatter(logging.Formatter):
                 "message": record.getMessage(),
                 **{
                     key: record.__dict__[key]
-                    for key in ("chart", "finding_code", "value_paths", "diagnostic_key")
+                    for key in ("chart", "finding_code", "finding_severity", "value_paths", "diagnostic_key")
                     if key in record.__dict__
                 },
             }
@@ -311,5 +313,9 @@ class WorkerLogs:
                         level,
                         "%s",
                         record["message"],
-                        extra={key: record[key] for key in ("chart", "finding_code", "value_paths", "diagnostic_key") if key in record},
+                        extra={
+                            key: record[key]
+                            for key in ("chart", "finding_code", "finding_severity", "value_paths", "diagnostic_key")
+                            if key in record
+                        },
                     )

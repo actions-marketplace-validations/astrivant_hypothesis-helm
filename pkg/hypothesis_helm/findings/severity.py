@@ -2,6 +2,7 @@
 Classify CI impact and resolve inherited failure thresholds independently of suppression.
 """
 
+import logging
 import re
 import xml.etree.ElementTree as ET
 from contextvars import ContextVar
@@ -22,6 +23,7 @@ __all__ = (
     "junit_findings",
     "junit_stops",
     "level",
+    "log_level",
     "policy",
     "validate",
 )
@@ -29,6 +31,22 @@ __all__ = (
 
 LEVELS = {"info": 0, "warning": 1, "error": 2}
 ACTIVE_POLICY: ContextVar[dict[str, object] | None] = ContextVar("finding_severity", default=None)
+
+
+def log_level(severity: str) -> int:
+    """
+    Translate an effective finding severity into its matching Python logging level.
+
+    Args:
+        severity (str): Validated severity, including any chart or path overrides.
+
+    Returns:
+        int: Logging level for console, file and relayed worker messages.
+
+    Raises:
+        KeyError: The severity is not info, warning or error.
+    """
+    return {"info": logging.INFO, "warning": logging.WARNING, "error": logging.ERROR}[severity]
 
 
 def validate(value: object, *, partial: bool = False) -> dict[str, object]:

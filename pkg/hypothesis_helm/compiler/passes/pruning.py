@@ -471,16 +471,16 @@ class Pruner:
                 influences.update(output.influences)
         if reason is not None:
             from hypothesis_helm.exceptions.rendering import RenderFailure
-            from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths
+            from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths, log_level
             from hypothesis_helm.rules import ignored
 
             self.reasons[reason] = self.reasons.get(reason, 0) + 1
             if not ignored("HH2007"):
                 message = f"{self.chart}: {reason}; candidate retained for Helm rendering, not proved equivalent"
+                decision = attributes("HH2007", settings=ACTIVE_POLICY.get() or for_paths(self.chart))
                 if reason not in self.warned:
                     self.warned.add(reason)
-                    LOGGER.warning("[HH2007] Exact-equivalence analysis incomplete: %s", message)
-                decision = attributes("HH2007", settings=ACTIVE_POLICY.get() or for_paths(self.chart))
+                    LOGGER.log(log_level(str(decision["severity"])), "[HH2007] Exact-equivalence analysis incomplete: %s", message)
                 if decision.get("fail_fast", self.fail_fast and decision["blocking"]):
                     failure = RenderFailure(message, "HH2007")
                     failure.controls = decision

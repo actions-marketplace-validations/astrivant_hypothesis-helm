@@ -12,11 +12,60 @@ from pathlib import Path
 
 import pytest
 
+from hypothesis_helm.reporting.documentation.markup import code_block, inline_code
 from hypothesis_helm.reporting.evidence.errors import deduplicate_errors
 from hypothesis_helm.reporting.evidence.reproductions import changed_values, failing_input, input_summary
 from hypothesis_helm.reporting.reports.links import Publication, linked_prose, publish_links
 from hypothesis_helm.reporting.reports.repository import artifact_link, write_reports
 from hypothesis_helm.schemas.contracts import mapping, sequence
+
+
+def test_missing_paths_and_path_phases_use_code_formatting(tmp_path: Path) -> None:
+    """
+    Give missing override paths the same literal treatment as recorded values.
+
+    Args:
+        tmp_path (Path): Report destination.
+
+    Returns:
+        None: Long paths appear in code blocks, path phases use code spans, and original evidence is unchanged.
+    """
+    prefix = "$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution"
+    phase = prefix + "[*].preference"
+    missing = prefix + '["*"].preference'
+    chart: dict[str, object] = {
+        "chart": "demo",
+        "status": "failed",
+        "error": "[HH1101] Invalid YAML",
+        "phases": [
+            {
+                "phase": phase,
+                "status": "failed",
+                "error": "[HH1101] Invalid YAML",
+                "path": ["extraPodSpec", "affinity", "nodeAffinity", "preferredDuringSchedulingIgnoredDuringExecution", "*", "preference"],
+                "values": {},
+            }
+        ],
+    }
+    phases = copy.deepcopy(chart["phases"])
+    report: dict[str, object] = {
+        "directory": "charts",
+        "started_epoch": 1,
+        "elapsed_seconds": 1,
+        "charts_discovered": 1,
+        "counts": {"failed": 1},
+        "settings": {},
+        "charts": [chart],
+    }
+    markdown, _ = write_reports(report, tmp_path / "report", artifact_links=False)
+    text = markdown.read_text()
+    assert f"Phase: `{phase}`" in text
+    assert f"Absent from overrides:\n\n```text\n{missing}\n```\n\nDefaults may still apply." in text
+    assert f"Absent from overrides: {missing}" not in text
+    assert chart["phases"] == phases
+    unusual = '$["key`with```ticks"].value'
+    assert code_block(unusual) == ["````text", unusual, "````"]
+    assert inline_code(unusual) == f"````{unusual}````"
 
 
 @pytest.mark.parametrize(
@@ -330,8 +379,8 @@ def test_public_pdf_links(tmp_path: Path) -> None:
     publication = Publication(tmp_path, "https://github.com/example/charts", "main")
     markdown, pdf = write_reports(report, tmp_path / "docs" / "report", publication=publication)
     uris = re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
-    # The framework attribution is a PDF footer, separate from report evidence.
-    uris = [uri for uri in uris if uri != b"https://github.com/HypothesisWorks/hypothesis/"]
+    # The tool's repository link is a PDF footer, separate from report evidence.
+    uris = [uri for uri in uris if uri != b"https://github.com/astrivant/hypothesis-helm"]
     assert len(uris) == 5
     assert all(uri.startswith(b"https://github.com/example/charts/") for uri in uris)
     assert b"https://github.com/example/charts/blob/main/docs/saved%20inputs/values.json" in uris

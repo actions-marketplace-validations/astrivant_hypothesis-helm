@@ -3,6 +3,7 @@ Verify severity thresholds retain findings without suppressing tests or caching 
 """
 
 import json
+import logging
 import os
 from pathlib import Path
 from textwrap import dedent
@@ -280,13 +281,16 @@ def test_path_workers_continue_after_lower_findings(
     assert any(row["code"] == "HH1101" and row["severity"] == "warning" and row["blocking"] is False for row in diagnostics)
 
 
-def test_compiler_warning_threshold_retains_unknown_candidates(severity_chart: Chart, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_compiler_warning_threshold_retains_unknown_candidates(
+    severity_chart: Chart, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     """
     Keep unresolved expressions eligible for Helm instead of pruning them when their warning is nonfatal.
 
     Args:
         severity_chart (Chart): Chart with an added nondeterministic expression.
         monkeypatch (pytest.MonkeyPatch): Inherited severity and suppression settings.
+        caplog (pytest.LogCaptureFixture): Effective compiler diagnostic levels.
 
     Returns:
         None: Error-only thresholds retain unknowns; promoting the warning stops the analysis.
@@ -301,10 +305,13 @@ def test_compiler_warning_threshold_retains_unknown_candidates(severity_chart: C
     assert contracts.predict(severity_chart.defaults) is None
     assert contracts.incomplete_evaluations > 0
     assert any(row["severity"] == "warning" and row["blocking"] is False for row in contracts.fallbacks)
+    assert caplog.records[-1].levelno == logging.WARNING
+    caplog.clear()
     monkeypatch.setenv(ENVIRONMENT, json.dumps({"findings": {"fail_on": "error", "severity": {"HH2007": "error"}}}))
     refresh_env()
     with pytest.raises(RenderFailure, match="HH2007"):
         contracts.predict(severity_chart.defaults)
+    assert caplog.records[-1].levelno == logging.ERROR
 
 
 def test_warning_does_not_hide_a_later_error(severity_chart: Chart, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

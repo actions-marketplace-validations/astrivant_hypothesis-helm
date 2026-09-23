@@ -3,6 +3,7 @@ Verify severity inheritance across chart selectors, branches, workers and saved 
 """
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -207,13 +208,15 @@ def test_chart_threshold_applies_to_empty_baseline(
         },
     )
     (severity_chart.path / "templates/config.yaml").write_text("")
-    result = check_paths(
-        severity_chart, budget=45, max_examples=3, seed=0, helm="helm", timeout=5, artifacts=tmp_path / "reports", fail_fast=True
-    )
+    with caplog.at_level(logging.INFO):
+        result = check_paths(
+            severity_chart, budget=45, max_examples=3, seed=0, helm="helm", timeout=5, artifacts=tmp_path / "reports", fail_fast=True
+        )
     assert result["status"] == "findings"
     baseline = mapping(result["baseline"])
     assert baseline["severity"] == "info" and baseline["blocking"] is False
     recorded = next(record for record in caplog.records if "Baseline finding" in record.getMessage())
+    assert recorded.levelno == logging.INFO
     assert getattr(recorded, "finding_severity", None) == "info"
     traversal = mapping(result["traversal"])
     assert traversal["completed_paths"] == traversal["selected_paths"]

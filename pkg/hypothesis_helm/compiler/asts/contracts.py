@@ -537,10 +537,10 @@ class Contracts:
             observed (dict[str, object]): Values paths read before the analysis stopped.
 
         Returns:
-            None: A deduplicated diagnostic is retained and an enabled warning is logged.
+            None: A deduplicated diagnostic is retained and logged at its configured severity unless suppressed.
         """
         from hypothesis_helm.exceptions.rendering import RenderFailure
-        from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths
+        from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths, log_level
         from hypothesis_helm.rules import ignored
 
         source = getattr(error, "source", None) or source
@@ -566,7 +566,8 @@ class Contracts:
             if len(self.fallbacks) < self.limits["max_fallbacks"]:
                 self.fallbacks.append(record)
                 if not suppressed:
-                    LOGGER.warning(
+                    LOGGER.log(
+                        log_level(str(decision["severity"])),
                         "[HH2007] Compiler analysis incomplete: chart=%s; %s",
                         self.chart,
                         message,

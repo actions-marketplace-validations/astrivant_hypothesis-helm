@@ -12,6 +12,7 @@ from urllib.parse import quote, unquote
 
 from hypothesis_helm.reporting.console.progress import format_path
 from hypothesis_helm.reporting.documentation.contents import heading_inventory, with_contents
+from hypothesis_helm.reporting.documentation.markup import inline_code
 from hypothesis_helm.reporting.evidence.errors import deduplicate_errors, numbered_diagnostic
 from hypothesis_helm.reporting.evidence.provenance import trace_run
 from hypothesis_helm.reporting.evidence.reproductions import input_summary
@@ -533,7 +534,9 @@ def write_reports(
                     [fence + "text", *textwrap.wrap(content, width=140, break_long_words=False, break_on_hyphens=False), fence, ""]
                 )
             for occurrence in occurrences[:2]:
-                lines.extend([f"Status: {occurrence['status']} | Phase: {occurrence['phase']}", ""])
+                phase = str(occurrence["phase"])
+                phase_label = inline_code(phase) if phase.startswith("$") else phase
+                lines.extend([f"Status: {occurrence['status']} | Phase: {phase_label}", ""])
                 lines.extend(input_summary(mapping(occurrence["input"])))
                 lines.append("")
                 occurrence_artifacts = occurrence.get("artifacts")

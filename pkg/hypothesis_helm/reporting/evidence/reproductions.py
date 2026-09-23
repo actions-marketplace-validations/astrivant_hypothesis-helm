@@ -3,10 +3,11 @@ Present recorded failing inputs without inferring missing values or independent 
 """
 
 import json
-import re
 from collections.abc import Iterator
 
 from deepdiff import DeepDiff
+
+from hypothesis_helm.reporting.documentation.markup import code_block, inline_code
 
 __all__ = ("changed_values", "failing_input", "input_summary", "leaves", "value_path")
 
@@ -166,15 +167,15 @@ def input_summary(evidence: dict[str, object]) -> list[str]:
         if path in previous:
             old = json.dumps(previous[path], ensure_ascii=True)
             content += " (was " + (old[:120] + "... [value shortened]" if len(old) > 120 else old) + ")"
-        fence = "`" * (max((len(part) for part in re.findall(r"`+", content)), default=0) + 1)
-        lines.append(f"- {fence}{content}{fence}")
+        lines.append("- " + inline_code(content))
     if len(paths) > 6:
         lines.append(f"- {len(paths) - 6} more paths; see full input.")
     if not paths:
         lines.append("- No changed overrides." if isinstance(changes, dict) else "- No supplied value at the selected paths.")
     absent = evidence.get("absent_paths", [])
     if isinstance(absent, list) and absent:
-        lines.append("Absent from overrides: " + ", ".join(str(path) for path in absent[:6]) + ". Defaults may still apply.")
+        lines.extend(["", "Absent from overrides:", "", *code_block("\n".join(str(path) for path in absent[:6])), ""])
+        lines.append("Defaults may still apply.")
     randomness = evidence.get("random_inputs")
     if isinstance(randomness, dict) and randomness.get("replayable") is False:
         lines.extend(["", "Native renderer fallback; exact random replay unavailable: " + str(randomness.get("fallback_reason", ""))])
@@ -187,8 +188,7 @@ def input_summary(evidence: dict[str, object]) -> list[str]:
                 content = f"{draw['path']}: {draw['function']}; recorded native outcome SHA-256 {draw['checksum']}"
             else:
                 content = str(draw["path"]) + " = " + json.dumps(draw["value"], ensure_ascii=True)
-            fence = "`" * (max((len(part) for part in re.findall(r"`+", content)), default=0) + 1)
-            lines.append(f"- {fence}{content[:240]}{fence}")
+            lines.append("- " + inline_code(content[:240]))
         if len(draws) > 6:
             lines.append(f"- {len(draws) - 6} more draws; see random-inputs.json.")
     manifests = comparisons.get("manifests", {}) if isinstance(comparisons, dict) else {}
@@ -202,8 +202,7 @@ def input_summary(evidence: dict[str, object]) -> list[str]:
                 encoded = json.dumps(change[key], ensure_ascii=True) if key in change else "<absent>"
                 parts.append(encoded[:120] + "... [value shortened]" if len(encoded) > 120 else encoded)
             content = str(change["path"]) + ": " + " -> ".join(parts)
-            fence = "`" * (max((len(part) for part in re.findall(r"`+", content)), default=0) + 1)
-            lines.append(f"- {fence}{content}{fence}")
+            lines.append("- " + inline_code(content))
         if len(changes) > 6:
             lines.append(f"- {len(changes) - 6} more changes; see JSON artifacts.")
     return lines

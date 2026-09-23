@@ -310,12 +310,18 @@ Audit findings: 245. Full paths and template references:
 **Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
 including quoting and indentation.
 
-Status: failed | Phase: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[*].preference
+Status: failed | Phase: `$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[*].preference`
 
 Changed overrides (used together):
 - `$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution.__hypothesis_key__.preference = {}`
-Absent from overrides: $.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution["*"].preference. Defaults may
-still apply.
+
+Absent from overrides:
+
+```text
+$.extraPodSpec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution["*"].preference
+```
+
+Defaults may still apply.
 
 Renderer random inputs (replay tape in artifacts):
 
@@ -324,11 +330,18 @@ Renderer random inputs (replay tape in artifacts):
 **Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
 including quoting and indentation.
 
-Status: failed | Phase: $.extraPodSpec.initContainers[*].envFrom[*].configMapRef.name
+Status: failed | Phase: `$.extraPodSpec.initContainers[*].envFrom[*].configMapRef.name`
 
 Changed overrides (used together):
 - `$.extraPodSpec.initContainers.__hypothesis_key__.envFrom.__hypothesis_key__.configMapRef.name = null`
-Absent from overrides: $.extraPodSpec.initContainers["*"].envFrom["*"].configMapRef.name. Defaults may still apply.
+
+Absent from overrides:
+
+```text
+$.extraPodSpec.initContainers["*"].envFrom["*"].configMapRef.name
+```
+
+Defaults may still apply.
 
 Renderer random inputs (replay tape in artifacts):
 
@@ -437,7 +450,7 @@ Audit findings: 452. Full paths and template references:
 **Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
 including quoting and indentation.
 
-Status: failed | Phase: $.mysql.primary.extraPodSpec.containers
+Status: failed | Phase: `$.mysql.primary.extraPodSpec.containers`
 
 Changed overrides (used together):
 - `$.mysql.enabled = true (was false)`
@@ -450,12 +463,19 @@ Native renderer fallback; exact random replay unavailable: controlled renderer d
 **Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
 including quoting and indentation.
 
-Status: failed | Phase: $.mysql.primary.extraPodSpec.containers[*].lifecycle.postStart.exec.command
+Status: failed | Phase: `$.mysql.primary.extraPodSpec.containers[*].lifecycle.postStart.exec.command`
 
 Changed overrides (used together):
 - `$.mysql.enabled = true (was false)`
 - `$.mysql.primary.extraPodSpec.containers.__hypothesis_key__.lifecycle.postStart.exec.command = null`
-Absent from overrides: $.mysql.primary.extraPodSpec.containers["*"].lifecycle.postStart.exec.command. Defaults may still apply.
+
+Absent from overrides:
+
+```text
+$.mysql.primary.extraPodSpec.containers["*"].lifecycle.postStart.exec.command
+```
+
+Defaults may still apply.
 
 Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
 
@@ -464,7 +484,7 @@ Native renderer fallback; exact random replay unavailable: controlled renderer d
 **Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
 including quoting and indentation.
 
-Status: failed | Phase: $.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName
+Status: failed | Phase: `$.mysql.primary.extraPodSpec.securityContext.windowsOptions.runAsUserName`
 
 Changed overrides (used together):
 - `$.mysql.enabled = true (was false)`
@@ -477,12 +497,19 @@ Native renderer fallback; exact random replay unavailable: controlled renderer d
 **Invalid YAML in rendered output** (manifest / violation). Severity: **error**. Inspect the failing YAML and template interpolation,
 including quoting and indentation.
 
-Status: failed | Phase: $.mysql.primary.extraPodSpec.volumes[*].projected.sources[*].secret.items
+Status: failed | Phase: `$.mysql.primary.extraPodSpec.volumes[*].projected.sources[*].secret.items`
 
 Changed overrides (used together):
 - `$.mysql.enabled = true (was false)`
 - `$.mysql.primary.extraPodSpec.volumes.__hypothesis_key__.projected.sources.__hypothesis_key__.secret.items = null`
-Absent from overrides: $.mysql.primary.extraPodSpec.volumes["*"].projected.sources["*"].secret.items. Defaults may still apply.
+
+Absent from overrides:
+
+```text
+$.mysql.primary.extraPodSpec.volumes["*"].projected.sources["*"].secret.items
+```
+
+Defaults may still apply.
 
 Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
 
@@ -496,11 +523,18 @@ its values to the required type.
 unmarshal object into Go struct field .metadata.annotations.spec of type string
 ```
 
-Status: failed | Phase: $.commonAnnotations.spec.initContainers[*].lifecycle.preStop.httpGet.path
+Status: failed | Phase: `$.commonAnnotations.spec.initContainers[*].lifecycle.preStop.httpGet.path`
 
 Changed overrides (used together):
 - `$.commonAnnotations.spec.initContainers.__hypothesis_key__.lifecycle.preStop.httpGet.path = null`
-Absent from overrides: $.commonAnnotations.spec.initContainers["*"].lifecycle.preStop.httpGet.path. Defaults may still apply.
+
+Absent from overrides:
+
+```text
+$.commonAnnotations.spec.initContainers["*"].lifecycle.preStop.httpGet.path
+```
+
+Defaults may still apply.
 
 Native renderer fallback; exact random replay unavailable: controlled renderer does not support native effect: lookup
 
@@ -514,7 +548,7 @@ values schema.
 "argo-workflows/charts/mysql/templates/networkpolicy.yaml" at <$value.port>: nil pointer evaluating interface {}.port
 ```
 
-Status: failed | Phase: $.mysql.primary.service.extraPorts
+Status: failed | Phase: `$.mysql.primary.service.extraPorts`
 
 Changed overrides (used together):
 - `$.mysql.enabled = true (was false)`

@@ -22,7 +22,7 @@ from hypothesis_helm.reporting.reports.tables import draw_table, read_table
 
 __all__ = ("write_pdf",)
 
-_HYPOTHESIS_REPOSITORY = "https://github.com/HypothesisWorks/hypothesis/"
+_PROJECT_REPOSITORY = "https://github.com/astrivant/hypothesis-helm"
 
 
 def _panel_height(paths: list[Path], width: float, maximum: float = 440) -> float:
@@ -208,7 +208,7 @@ def write_pdf(
             canvas.setFillColorRGB(0.08, 0.35, 0.65)
             canvas.drawRightString(576, 24, "Hypothesis")
             canvas.linkURL(
-                _HYPOTHESIS_REPOSITORY,
+                _PROJECT_REPOSITORY,
                 (576 - canvas.stringWidth("Hypothesis", "Helvetica", 8), 22, 576, 34),
                 relative=0,
                 thickness=0,

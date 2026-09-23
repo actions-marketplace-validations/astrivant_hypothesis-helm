@@ -196,7 +196,7 @@ def test_report_front_matter_and_internal_destinations(tmp_path: Path, chart_cou
     for index, (_, page) in enumerate(pages):
         annotations = re.search(rb"/Annots \[(.*?)\]", page, re.DOTALL)
         links = [objects[number] for number in re.findall(rb"(\d+) 0 R", annotations[1])] if annotations else []
-        assert any(b"/URI (https://github.com/HypothesisWorks/hypothesis/)" in link for link in links) == (index > 0)
+        assert any(b"/URI (https://github.com/astrivant/hypothesis-helm)" in link for link in links) == (index > 0)
         assert any(re.search(rb"/Rect \[ 36 22 106 34 \]", link) for link in links) == (index > 1)
     assert b"/Outlines" in content
     destinations = re.findall(rb"/Dest \[ (\d+) 0 R", content)
