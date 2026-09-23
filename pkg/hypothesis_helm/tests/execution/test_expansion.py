@@ -19,6 +19,7 @@ from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.schemas.configuration.policy import ENVIRONMENT
 from hypothesis_helm.schemas.contracts import configuration_key, mapping, sequence
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.fixture
@@ -367,7 +368,7 @@ def test_expansion_cli_dry_run(expansion_chart: Chart, capsys: pytest.CaptureFix
         )
         == 0
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["status"] == "dry-run"
     assert report["failure_expansion"]["enabled"] is True
     assert report["failure_expansion"]["maximum_additional_iterations"] > 0
@@ -432,7 +433,7 @@ def test_filter_cli_expands_observed_failures(
         )
         == 1
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["failure_expansion"]["enabled"] is True
     assert report["failure_expansion"]["additional_executed"] == 3
     assert report["failed_iterations"] == 4

@@ -13,6 +13,7 @@ import pytest
 from hypothesis_helm.charts.repositories.scan import discover_charts
 from hypothesis_helm.cli import argument_parser, main
 from hypothesis_helm.reporting.reports.repository import wrap_markdown, write_reports
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -30,7 +31,7 @@ def test_scan_rejects_local_directories(tmp_path: Path, existing: bool, capsys: 
     """
     source = tmp_path if existing else tmp_path / "missing"
     assert main(["scan", "--log-file", "/dev/stderr", str(source), "--helm", "/usr/bin/true"]) == 2
-    error = json.loads(capsys.readouterr().out)["error"]
+    error = json.loads(result_text(capsys.readouterr().out))["error"]
     assert "use test" in error
 
 
@@ -233,7 +234,7 @@ def test_scan_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys:
         )
         == 2
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["counts"] == {"passed": 1, "baseline-only": 1}
     assert (tmp_path / "result.md").exists()
     assert (tmp_path / "result.pdf").exists()
@@ -311,7 +312,7 @@ def test_scan_fail_flag(
     if fail_fast:
         options.append("--fail")
     code = main(options)
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     stopped = fail_fast and outcome != "time-limit"
     assert code == (2 if outcome == "time-limit" else 1)
     assert len(calls) == (1 if stopped else 2)
@@ -353,7 +354,7 @@ def test_missing_values_single_and_recursive(tmp_path: Path, capsys: pytest.Capt
     first.mkdir()
     (first / "Chart.yaml").write_text("apiVersion: v2\nname: first\nversion: '1.0.0'\n")
     assert main(["test", "--log-file", "/dev/stderr", str(first), "--helm", "/usr/bin/true", "--artifact-dir", str(tmp_path / "out")]) == 1
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["counts"] == {"missing-values": 1}
     assert report["charts"][0]["result"] == "N/A"
     second = tmp_path / "second"
@@ -375,7 +376,7 @@ def test_missing_values_single_and_recursive(tmp_path: Path, capsys: pytest.Capt
         )
         == 1
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["counts"] == {"missing-values": 1, "failed": 1}
     assert report["charts"][1]["error"] == "[HH1107] chart rendered no resources"
     assert report["charts"][1]["baseline"]["code"] == "HH1107"
@@ -452,7 +453,7 @@ def test_values_override_and_dependency_build(tmp_path: Path, monkeypatch: pytes
         == 0
     )
     assert (tmp_path / "values.yaml").read_text() == "enabled: false\n"
-    assert json.loads(capsys.readouterr().out)["counts"] == {"passed": 1}
+    assert json.loads(result_text(capsys.readouterr().out))["counts"] == {"passed": 1}
 
 
 @pytest.mark.parametrize("returned", [False, True])
@@ -512,7 +513,7 @@ def test_interrupt_preserves_remaining_charts(
         )
         == 130
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["counts"] == {"interrupted": 1, "pending": 1}
     assert "pending" in (tmp_path / "partial.md").read_text()
     assert (tmp_path / "partial.pdf").exists()
@@ -574,7 +575,7 @@ def test_scan_timeout_pauses_for_dependencies(tmp_path: Path, capsys: pytest.Cap
         )
         == 124
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     # Chart shutdown is measured before Matplotlib/PDF publication, which is outside the scan budget.
     assert report["elapsed_seconds"] < 3
     assert report["counts"] == {"scan-timeout": 1, "pending": 1}
@@ -629,7 +630,7 @@ def test_timeout_during_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         )
         == 124
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["discovery_complete"] is False
     assert report["scan_status"] == "scan-timeout"
 
@@ -727,7 +728,7 @@ def test_dependency_timing_accounting(
             str(tmp_path / "out"),
         ]
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert code == {"passed": 0, "failed": 2, "timeout": 2, "interrupted": 130}[outcome]
     assert report["dependency_preparation_seconds"] == (4 if outcome == "interrupted" else 8)
     assert report["testing_seconds"] == (0.5 if outcome == "passed" else 0)
@@ -812,7 +813,7 @@ def test_scan_deadline_preserves_runner_statistics(
         )
         == 124
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["charts"][0]["status"] == "scan-timeout"
     assert report["charts"][0]["attempts"] == 3
     assert report["charts"][0]["completed_iterations"] == 2
@@ -892,7 +893,7 @@ def test_scan_filter_support(
         )
         == 0
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert called.get("trim_topology", 0) == (2 if finite else 0)
     assert called.get("expand_failures", False) is finite
     assert report["charts"][0]["filtering"]["applied"] is True

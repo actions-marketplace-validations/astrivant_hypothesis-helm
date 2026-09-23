@@ -316,9 +316,39 @@ not change the chart's test findings. Without `--max-mutations`, reporting reuse
 Generated panels go beside the report in `<stem>-figures/`; raw measurements remain in the run's
 artifact directory. `hypothesis-helm-report-figures` can also regenerate them from saved scan data.
 
+Reports also measure up to 64 reference configurations per tested chart for a shared output-space
+PCA comparison. **Graph structure** and **Output space** have separate appendix pages after the chart results;
+the scan summary starts on page 4, after the cover, contents, and overview. Size and connectivity plots stay stacked
+vertically in the graph appendix. Chart colors stay the same before and after selection, and both panels use one fitted
+coordinate system. The figure caption links to the chart color key and measurement details.
+
+Set `--pca-samples N` to change the reference size (`0` disables it), and `--pca-timeout 1m` to set
+its separate per-chart budget. These measurements do not consume the chart-testing timeout or add
+findings. They use schema-valid Boolean and integer changes around the baseline, not every possible
+output. Failed renders and unavailable measurements are excluded, not plotted as zero. Without
+trimming, both panels match. Finite selectors are replayed on this bounded sample; path scans use
+their saved selection inventory. See the report's **Output-space PCA** appendix for the limits of
+this comparison.
+
+To update an existing report without repeating its chart tests:
+
+```sh
+hypothesis-helm-report-figures path/to/scan.json --report docs/reports/charts \
+    --source-root ./charts --max-mutations 0 --pca-samples 64 --pca-timeout 1m
+```
+
+Use the source revision recorded in the scan. The original findings stay unchanged; enriched
+measurement data is saved under `.cache/report-figures/`.
+
 JSON statistics, lint/dependency logs, and failing values go under
 `.cache/hypothesis-helm/runs/` for local `test` and `.cache/hypothesis-helm/scans/` for remote `scan`;
 override that parent with `--artifact-dir`.
+
+When testing finishes, times out, or stops with Ctrl-C, the terminal prints a short summary and
+the location of the saved results. It does not dump the full JSON report. Read `scan.json` from
+that location for automation; single-chart tests save `report.json`. Interrupted scans retain
+completed results and exit with code 130. Explicit `-o json` or `-o yaml` still streams rendered
+manifests to stdout, with the terminal summary on stderr.
 
 Reports group failures by Helm chart. Each diagnostic appears once per chart,
 followed by up to two failing examples, with up to six paths and values per example.
@@ -377,9 +407,13 @@ If Helm accepts a predicted rejection or returns a different error, that require
 for automatic exclusion. Witness checks validate specific predictions; later exclusions
 rely on the supported compiler analysis described above.
 
-Published Bitnami and Prometheus reports use absolute GitHub links targeting `main`.
+Published reports use absolute GitHub links targeting `main`.
 PDF links are blue, underlined, and clickable, including links within paragraphs.
 Their destinations become available when the reports and retained artifacts are on `main`.
+
+YAML parser failures show their finding code, failure status, and triggering paths and values.
+Parser excerpts and library suppression advice remain in the saved run data, rather than the Markdown or PDF summary.
+This changes presentation only; duplicate-key validation stays enabled.
 
 Repeated errors share diagnostic IDs across charts and dependencies. Dependency
 template errors match by chart name, version, template contents, and terminal
@@ -419,6 +453,9 @@ Their values are still tested, and other findings remain enabled. Add comma-deli
 The [retained Bitnami scan](../reports/bitnami.md) includes one combined PDF and
 the findings and coverage status for each visited chart. Raw measurements and logs remain in the local run cache.
 
+Additional chart sources remain available in the repository's Git submodules for future scans.
+
+<!--
 The external chart sources are retained as submodules under
 `third_party/bitnami-charts` and `third_party/prometheus-community-helm-charts`.
 Initialize the Prometheus source with:
@@ -430,3 +467,4 @@ helm hypothesis test third_party/prometheus-community-helm-charts/charts --filte
 
 The [retained Prometheus Community scan](../reports/prometheus.md) includes all
 46 discovered charts, a combined PDF, and per-chart findings and reproducing values.
+-->

@@ -301,6 +301,7 @@ each chart's testing budget. External schema validation/kubesec checks are not e
 Repository refreshes use `--no-cache` to collect fresh results. Generated summary blocks
 in this README and the root README update counts, settings and report links from the new
 result files. Edit the surrounding prose freely; retain the `refresh:...` comment markers.
+Summaries enclosed in HTML comments remain hidden after refresh; remove the comments when ready to publish their links.
 
 Timed synthetic studies run sequentially to avoid CPU contention between measurements.
 The scaling study varies workers within each measurement to compare parallel execution.

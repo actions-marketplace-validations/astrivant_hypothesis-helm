@@ -17,6 +17,7 @@ from hypothesis_helm.compiler.asts.templates import fold, lex, lower, specialize
 from hypothesis_helm.compiler.passes.pruning import DistanceBounds, Pruner
 from hypothesis_helm.schemas.contracts import mapping, number, sequence
 from hypothesis_helm.schemas.model import ValuesModel
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.fixture
@@ -340,7 +341,7 @@ def test_pruning_dry_run_does_not_render_or_create_artifacts(
         )
         == 0
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["status"] == "dry-run"
     assert report["pruning"]["pruned_candidates"] == 0
     assert report["pruning"]["certificates"] == []

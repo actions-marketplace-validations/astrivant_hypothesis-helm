@@ -11,6 +11,7 @@ import pytest
 from hypothesis_helm.charts.repositories.repository import RepositorySource
 from hypothesis_helm.charts.testing.coverage import require_attempts
 from hypothesis_helm.cli import main
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.mark.parametrize("remote", [False, True])
@@ -87,7 +88,7 @@ def test_requested_permutations_still_execute_charts(
         == 0
     )
     output = capsys.readouterr()
-    report = json.loads(output.out)
+    report = json.loads(result_text(output.out))
     chart = report["charts"][0]
     assert chart["attempts"] == report["attempts"] == 3
     assert chart["status"] == "passed"
@@ -145,7 +146,7 @@ def test_single_chart_explicit_permutations_fall_back(
         )
         == 0
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert paths.call_args.kwargs["jobs"] == 8
     assert report["attempts"] == 2
     assert report["charts"][0]["coverage_fallback"]["unavailable_options"] == (
@@ -175,7 +176,7 @@ def test_scan_rejects_success_without_test_attempts(
     monkeypatch.chdir(tmp_path)
     assert main(["test", str(tmp_path), "--helm", "/usr/bin/true", "--log-file", "/dev/stderr"]) == 1
     output = capsys.readouterr()
-    report = json.loads(output.out)
+    report = json.loads(result_text(output.out))
     assert report["attempts"] == 0
     assert report["scan_status"] == "not-tested"
     assert report["charts"][0]["status"] == "error"

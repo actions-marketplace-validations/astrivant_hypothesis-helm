@@ -14,6 +14,7 @@ from hypothesis_helm.charts.repositories.repository import RepositorySource
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.reporting.reports.figures import SENSITIVITY_FIELDS_KEY
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.mark.parametrize("remote", [False, True])
@@ -105,7 +106,7 @@ def test_scan_measures_requested_fields_and_preserves_results(
         "30s",
     ]
     assert main(arguments) == 0
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     saved = next((tmp_path / "artifacts").glob("*/scan.json"))
     assert json.loads(saved.read_text()) == report
     assert report["counts"] == {"passed": 1}
@@ -114,6 +115,10 @@ def test_scan_measures_requested_fields_and_preserves_results(
     assert report["settings"]["chart_timeout_seconds"] == 120
     assert report["settings"]["scan_timeout_seconds"] is None
     assert report["figure_generation"]["time_limit_seconds_per_chart"] == 30
+    assert report["figure_generation"]["pca_sample_limit"] == 64
+    assert report["output_pca"]["reference_observations"] == 64
+    assert report["output_pca"]["charts_measured"] == 1
+    assert (tmp_path / "report-pca.png").is_file()
     evidence = json.loads((saved.parent / "figures/sensitivity.json").read_text())
     assert evidence["context"]["maximum_mutations"] == 48
     assert evidence["context"]["values"] == "alternate.yaml"
@@ -178,7 +183,7 @@ def test_figure_failure_keeps_scan_evidence(
         )
         == expected
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["counts"] == {"passed": 1}
     assert report["scan_status"] == "completed"
     assert report["figure_generation"]["status"] == status

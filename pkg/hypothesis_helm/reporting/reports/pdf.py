@@ -3,7 +3,6 @@ Render branded, paginated PDF reports while preserving links and input examples.
 """
 
 import re
-import textwrap
 from html import escape
 from importlib.resources import files
 from io import BytesIO
@@ -16,23 +15,23 @@ from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 from reportlab.platypus import Paragraph  # type: ignore[import-untyped]
 
 from hypothesis_helm.reporting.documentation.contents import heading_inventory
-from hypothesis_helm.reporting.reports.links import LINK, linked_prose
+from hypothesis_helm.reporting.reports.code import CODE_BACKGROUND, draw_code_block
+from hypothesis_helm.reporting.reports.links import linked_prose
 from hypothesis_helm.reporting.reports.overview import CellLink
-from hypothesis_helm.reporting.reports.plot_reference import PLOT_APPENDIX_TITLE, SENSITIVITY_APPENDIX_TITLE
-from hypothesis_helm.reporting.reports.references import APPENDIX_TITLE
 
 __all__ = ("write_pdf",)
 
 _HYPOTHESIS_REPOSITORY = "https://github.com/HypothesisWorks/hypothesis/"
 
 
-def _panel_height(paths: list[Path], width: float) -> float:
+def _panel_height(paths: list[Path], width: float, maximum: float = 440) -> float:
     """
     Reserve enough space for every image in a shared report row.
 
     Args:
         paths (list[Path]): Available images in the row.
         width (float): Width allocated to each image in PDF points.
+        maximum (float): Height ceiling; full-page overviews can use more space than chart panels.
 
     Returns:
         float: Largest scaled image height, capped to fit a page.
@@ -41,7 +40,7 @@ def _panel_height(paths: list[Path], width: float) -> float:
     for path in paths:
         with Image.open(path) as image:
             heights.append(width * image.height / image.width)
-    return min(440.0, max(heights, default=160.0))
+    return min(maximum, max(heights, default=160.0))
 
 
 def _report_image(path: Path, width: float, height: float) -> BytesIO:
@@ -105,14 +104,29 @@ def _cover(  # type: ignore[no-any-unimported]
     y -= 28
     for label, value in details:
         literal = label in {"Scan command", "Working directory"}
+        if literal:
+            caption = Paragraph(
+                escape(label), ParagraphStyle("cover-code-label", fontName="Helvetica", fontSize=10, leading=15, textColor="#53616b")
+            )
+            _, height = caption.wrap(504, 650)
+            caption.drawOn(canvas, 54, y - height)
+            y -= height + 8
         paragraph = Paragraph(
-            f'<font name="Helvetica" color="#53616b" size="10">{escape(label)}</font><br/>'
-            + (escape(value).replace("\n", "<br/>") if literal else linked_prose(value)),
-            ParagraphStyle("cover-detail", fontName="Courier" if literal else "Helvetica", fontSize=10 if literal else 12, leading=15),
+            escape(value).replace("\n", "<br/>")
+            if literal
+            else f'<font name="Helvetica" color="#53616b" size="10">{escape(label)}</font><br/>' + linked_prose(value),
+            ParagraphStyle(
+                "cover-detail",
+                fontName="Courier" if literal else "Helvetica",
+                fontSize=10 if literal else 12,
+                leading=15,
+                backColor=CODE_BACKGROUND if literal else None,
+                borderPadding=8 if literal else 0,
+            ),
         )
-        _, height = paragraph.wrap(504, 650)
-        paragraph.drawOn(canvas, 54, y - height)
-        y -= height + 12
+        _, height = paragraph.wrap(488 if literal else 504, 650)
+        paragraph.drawOn(canvas, 62 if literal else 54, y - height)
+        y -= height + (20 if literal else 12)
 
 
 def write_pdf(
@@ -238,22 +252,38 @@ def write_pdf(
     note.drawOn(canvas, 36, y - height - 12)
     canvas.showPage()
     y = page_header()
-    canvas.setFont("Courier", 8)
     code_fence = ""
+    code_lines: list[str] = []
     outline_levels: list[int] = []
     figure_page = False
+
+    def code_page() -> float:
+        """
+        Continue a literal code block beneath the next page's normal header.
+
+        Returns:
+            float: Top edge available for the continued code box.
+        """
+        canvas.showPage()
+        return page_header() + 8
+
     for index, line in enumerate(lines):
         if index == heading:
             continue
-        if not line.strip():
-            y -= 4
+        if code_fence:
+            if re.fullmatch(r" {0,3}" + re.escape(code_fence[0]) + "{" + str(len(code_fence)) + r",}\s*", line):
+                y = draw_code_block(canvas, "\n".join(code_lines), y + 8, code_page)
+                code_lines.clear()
+                code_fence = ""
+            else:
+                code_lines.append(line)
             continue
-        marker = re.match(r"^(`{3,})(.*)$", line)
-        if not code_fence and marker:
+        marker = re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line)
+        if marker:
             code_fence = marker[1]
             continue
-        if code_fence and re.fullmatch(re.escape(code_fence) + r"`*\s*", line):
-            code_fence = ""
+        if not line.strip():
+            y -= 4
             continue
         if index in destinations:
             level, label, anchor = destinations[index]
@@ -265,11 +295,7 @@ def write_pdf(
             # Keep the chart heading and both panels together using their
             # actual dimensions, including differently sized sensitivity panels.
             required = _panel_height(chart_panels, 264) + 121 if chart_panels else 120
-            if (
-                y < required
-                or (figure_page and level <= 2)
-                or (level == 2 and label in {APPENDIX_TITLE, PLOT_APPENDIX_TITLE, SENSITIVITY_APPENDIX_TITLE, "Graph structure"})
-            ):
+            if y < required or (figure_page and level <= 2) or (level == 2 and label.startswith("Appendix: ")):
                 canvas.showPage()
                 y = page_header()
                 figure_page = False
@@ -290,13 +316,13 @@ def write_pdf(
             paragraph.drawOn(canvas, 36, y + 11 - height)
             y -= height + 8
             continue
-        if not code_fence and line in {"| Chart topology | Mutation sensitivity |", "| --- | --- |"}:
+        if line in {"| Chart topology | Mutation sensitivity |", "| --- | --- |"}:
             continue
-        matches = list(re.finditer(r"!\[([^\]]+)\]\((?:<[^>]+>|[^)]+)\)", line)) if not code_fence else []
+        matches = list(re.finditer(r"!\[([^\]]+)\]\((?:<[^>]+>|[^)]+)\)", line))
         if matches and images and any(match[1] in images for match in matches):
             paired = line.startswith("|")
             width = 264.0 if paired else 540.0
-            height = _panel_height([images[match[1]] for match in matches if match[1] in images], width)
+            height = _panel_height([images[match[1]] for match in matches if match[1] in images], width, 440 if paired else 520)
             if y - height - 55 < 42:
                 canvas.showPage()
                 y = page_header()
@@ -323,10 +349,10 @@ def write_pdf(
                         canvas.setFont("Helvetica", 9)
                         canvas.drawString(36 + column * 276, y - 40, panel_text.strip())
             y -= height + 43
-            if any(match[1] == "Published compiler graph invariants" for match in matches):
+            if any(match[1] in {"Published compiler graph invariants", "Output-space PCA before and after selection"} for match in matches):
                 figure_page = True
             continue
-        if not code_fence and overview is not None and line.startswith("!["):
+        if overview is not None and line.startswith("!["):
             image = ImageReader(str(overview))
             width, height = image.getSize()
             scaled_height = 540 * height / width
@@ -352,24 +378,13 @@ def write_pdf(
             y -= scaled_height + 16
             figure_page = True
             continue
-        if not code_fence and LINK.search(line):
-            paragraph = Paragraph(linked_prose(line, document=pdf), ParagraphStyle("links", fontName="Courier", fontSize=8, leading=12))
-            _, height = paragraph.wrap(540, 708)
-            if y - height < 42:
-                canvas.showPage()
-                y = page_header()
-            paragraph.drawOn(canvas, 36, y + 8 - height)
-            y -= height
-            continue
-        if not code_fence:
-            line = re.sub(r"\[([^\]]+)\]\(<\1>\)", r"\1", line)
-            line = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r"\1 (\2)", line)
-            line = line.replace("**", "").replace("`", "")
-        for wrapped in textwrap.wrap(line, width=100) or [""]:
-            if y < 42:
-                canvas.showPage()
-                y = page_header()
-            canvas.setFont("Courier", 8)
-            canvas.drawString(36, y, wrapped.encode("latin-1", "backslashreplace").decode("latin-1"))
-            y -= 12
+        paragraph = Paragraph(linked_prose(line, document=pdf), ParagraphStyle("body", fontName="Helvetica", fontSize=9, leading=13))
+        _, height = paragraph.wrap(540, 708)
+        if y - height < 42:
+            canvas.showPage()
+            y = page_header()
+        paragraph.drawOn(canvas, 36, y + 8 - height)
+        y -= height
+    if code_fence:
+        draw_code_block(canvas, "\n".join(code_lines), y + 8, code_page)
     canvas.save()

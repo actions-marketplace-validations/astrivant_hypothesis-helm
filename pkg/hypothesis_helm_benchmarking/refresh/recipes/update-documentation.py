@@ -34,7 +34,10 @@ def replace_summary(text: str, name: str, replacement: str) -> str:
     before, rest = text.split(start)
     if end not in rest:
         raise ValueError(f"Reversed {name} summary markers")
-    _, after = rest.split(end)
+    previous, after = rest.split(end)
+    # Keep unpublished case studies hidden until their surrounding comments are removed.
+    if previous.strip().startswith("<!--") and previous.strip().endswith("-->"):
+        replacement = f"<!--\n{replacement.strip()}\n-->"
     return f"{before}{start}\n{replacement.strip()}\n{end}{after}"
 
 

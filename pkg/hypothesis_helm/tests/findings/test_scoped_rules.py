@@ -24,6 +24,7 @@ from hypothesis_helm.rules import ENVIRONMENT as RULE_ENVIRONMENT
 from hypothesis_helm.rules import ignored, may_check
 from hypothesis_helm.schemas.configuration.policy import ENVIRONMENT, load_policy
 from hypothesis_helm.schemas.contracts import mapping, sequence
+from hypothesis_helm.tests.fixtures.cli import result_text
 from hypothesis_helm.tests.generation.test_input_domains import fixture_chart
 
 
@@ -179,7 +180,7 @@ def test_fail_uses_scoped_audit_controls(tmp_path: Path, monkeypatch: pytest.Mon
             main(["audit", str(tmp_path), "--fail", "--config", str(policy), "--disable-codes", "HH2001", "--log-file", "/dev/stderr"])
             == expected
         )
-        report = json.loads(capsys.readouterr().out)
+        report = json.loads(result_text(capsys.readouterr().out))
         assert bool(report["findings"]) is bool(expected)
         assert report["ignored_findings"]
 
@@ -345,7 +346,7 @@ def test_scan_audit_findings_continue_or_fail_fast(
         str(tmp_path / "results"),
     ]
     assert main([*arguments, *(["--fail"] if fail else [])]) == (1 if fail else 0)
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert len(executed) == (0 if fail else 2)
     assert report["charts"][0]["audit"]["findings"]
     assert report["charts"][1]["status"] == ("pending" if fail else "passed")

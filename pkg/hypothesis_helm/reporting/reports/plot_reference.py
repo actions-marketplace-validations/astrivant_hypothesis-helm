@@ -28,21 +28,35 @@ DEFINITIONS = {
         "Blank cells are unmeasured, not zero. These measurements describe sampled changes, not all possible field values or bug counts."
     ),
     "Graph structure metrics": (
-        "Each point represents one chart with published graph measurements. The left panel compares vertices with connections. "
-        "The right counts independent loops after ignoring connection direction: connections minus vertices plus disconnected groups. "
+        "Each point represents one chart with published graph measurements. The upper panel compares vertices with connections. "
+        "The lower counts independent loops after ignoring connection direction: connections minus vertices plus disconnected groups. "
         "Parallel connections count separately. The axes compress large values while retaining zero. "
         "These counts describe graph structure, not execution loops, runtime or the number of defects."
+    ),
+    "Output-space PCA": (
+        "The panels pool bounded reference measurements from the charts in this report. Colors identify chart numbers in the key below. "
+        "Both panels use one PCA fit and identical axis limits; axis percentages show variance retained in the encoded features. "
+        "Resource identities, structure and typed field values enter 256 signed hash bins; numeric values use a signed log transform, "
+        "and bins are standardized before PCA. Hash collisions and projection can overlap distinct manifests. "
+        "One observation represents one measured configuration, including repeated outputs. "
+        "References use schema-valid Boolean flips, adjacent integers and joint changes from the supplied baseline; they do not enumerate "
+        "the full input or output space. Path scans use recorded retained properties. Finite trimming selectors are replayed on the "
+        "bounded reference, so their sampling floors apply to that reference size. Runtime rejection, equivalence reuse and failure "
+        "expansion are not reconstructed. Failed renders have no coordinate. "
+        "Missing or unfinished measurements do not imply zero variation. "
+        "With no trimming, the two panels show the same reference sample."
     ),
 }
 
 
-def with_plot_reference(content: str, kinds: set[str]) -> tuple[str, dict[str, str]]:
+def with_plot_reference(content: str, kinds: set[str], details: dict[str, list[str]] | None = None) -> tuple[str, dict[str, str]]:
     """
     Append only the definitions used by this report and resolve their actual anchors.
 
     Args:
         content (str): Report body before its appendices are added.
         kinds (set[str]): Plot definitions referenced by the report captions.
+        details (dict[str, list[str]] | None): Report-specific keys appended to their plot definition.
 
     Returns:
         tuple[str, dict[str, str]]: Expanded report and collision-safe destinations indexed by plot kind.
@@ -55,6 +69,7 @@ def with_plot_reference(content: str, kinds: set[str]) -> tuple[str, dict[str, s
     for kind, explanation in DEFINITIONS.items():
         if kind in kinds:
             lines.extend([f"### {kind}", "", explanation, ""])
+            lines.extend((details or {}).get(kind, []))
     content = "\n".join(lines)
     # A chart may share a name with a definition, so use the allocated anchor.
     targets = {label: anchor for index, level, label, anchor in heading_inventory(content) if index >= start and level == 3}

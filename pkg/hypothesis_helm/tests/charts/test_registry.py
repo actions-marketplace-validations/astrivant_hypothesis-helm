@@ -18,6 +18,7 @@ import pytest
 from hypothesis_helm.charts.repositories.registry import HelmTransport, prepare_helm_source, unpack_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 def chart_archive(name: str, version: str) -> bytes:
@@ -127,7 +128,7 @@ def test_helm_source_partial_reports(
             str(tmp_path / "report"),
         ]
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert code == {"none": 0, "download": 2, "timeout": 124, "interrupt": 130, "index": 1, "no-match": 1, "wrong-version": 2}[failure]
     assert report["charts_discovered"] == (0 if failure in {"index", "no-match"} else 2)
     assert report["source"]["inventory_complete"] is (failure not in {"index", "no-match"})
@@ -343,7 +344,7 @@ def test_real_helm_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
             )
             == 0
         )
-        report = json.loads(capsys.readouterr().out)
+        report = json.loads(result_text(capsys.readouterr().out))
         assert report["counts"] == {"passed": 1 if mode == "single" else 2}
         assert report["source"]["packages"][0]["version"] == ("1.0.0" if mode == "single" else "2.0.0")
         assert (config.read_bytes() if config.exists() else None) == before_config

@@ -21,6 +21,7 @@ from hypothesis_helm.findings.policy import candidate_paths, resolve_codes
 from hypothesis_helm.findings.suppressions import ENVIRONMENT, SuppressionCapture, observe, observed_paths
 from hypothesis_helm.schemas.configuration.policy import load_policy
 from hypothesis_helm.schemas.contracts import mapping, sequence
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 def rules(directory: Path) -> list[dict[str, object]]:
@@ -248,7 +249,7 @@ def test_audit_fail_fast_keeps_precise_paths(tmp_path: Path, capsys: pytest.Capt
         main(["audit", str(chart.path), "--fail", "--export-suppressions", "--artifact-dir", str(artifacts), "--log-file", "/dev/stderr"])
         == 1
     )
-    result = json.loads(capsys.readouterr().out)
+    result = json.loads(result_text(capsys.readouterr().out))
     proposals = rules(artifacts)
     assert len([row for row in proposals if row["ignored"] == ["HH2003"]]) == 8
     assert all(row["path"] != "$" for row in proposals)
@@ -316,7 +317,7 @@ def test_recursive_export_precedes_next_chart(
     if stop == "fail":
         arguments.append("--fail")
     assert main(arguments) == (130 if stop == "interrupt" else 1)
-    result = json.loads(capsys.readouterr().out)
+    result = json.loads(result_text(capsys.readouterr().out))
     assert len(visited) == {"continue": 3, "fail": 1, "interrupt": 2}[stop]
     for directory in visited:
         assert {row["path"] for row in rules(directory)} == {"$.key"}

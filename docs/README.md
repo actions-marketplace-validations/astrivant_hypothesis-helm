@@ -12,7 +12,7 @@ Run repository command examples from the checkout root unless stated otherwise.
 
 - [Getting started](getting-started/README.md): a first test, ten practical options, and reading the results.
 - [Bitnami scan report](reports/bitnami.md): combined PDF, per-chart findings, and retained data.
-- [Prometheus Community scan report](reports/prometheus.md): combined PDF, per-chart findings, and retained data.
+<!-- - [Prometheus Community scan report](reports/prometheus.md): combined PDF, per-chart findings, and retained data. -->
 - [Repository scanning](scanning/README.md): local testing, remote fetching, recursive discovery, and Markdown/PDF reports.
 - [Input inventory](inputs/README.md): missing fields, minimal values, input-to-output graphs, and output complexity scores.
 - [Architecture](architecture/README.md): input discovery, test generation, rendering, and validation.

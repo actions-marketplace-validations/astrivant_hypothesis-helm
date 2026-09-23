@@ -29,7 +29,7 @@ It is a run identifier, not a checksum of the PDF or proof that a scan completed
 Aggregated bundles retain separate artifact checksums for file integrity.
 
 - [Bitnami charts](bitnami.md) · [PDF](bitnami.pdf)
-- [Prometheus Community charts](prometheus.md) · [PDF](prometheus.pdf)
+<!-- - [Prometheus Community charts](prometheus.md) · [PDF](prometheus.pdf) -->
 - [Benchmark studies](../../studies/README.md)
 
 Worker files, raw measurements, generated chart copies and resume journals stay under `.cache/`.

@@ -10,6 +10,8 @@ from urllib.parse import quote, unquote, urlsplit
 
 from attrs import frozen
 
+from hypothesis_helm.reporting.reports.code import code_markup
+
 __all__ = (
     "CODE",
     "LINK",
@@ -201,21 +203,41 @@ def publish_links(line: str, report: Path, publication: Publication) -> str:
     return line
 
 
+def _inline_prose(line: str) -> str:
+    """
+    Format code spans separately so literal inputs never become prose markup.
+
+    Args:
+        line (str): A Markdown text segment outside link destinations.
+
+    Returns:
+        str: Escaped prose with bold emphasis and highlighted literal code.
+    """
+    parts = []
+    offset = 0
+    for match in CODE.finditer(line):
+        parts.append(re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", escape(line[offset : match.start()])))
+        parts.append(code_markup(match[2]))
+        offset = match.end()
+    parts.append(re.sub(r"\*\*([^*]+)\*\*", r"<b>\1</b>", escape(line[offset:])))
+    return "".join(parts)
+
+
 def linked_prose(line: str, *, document: Path | None = None) -> str:
     """
-    Convert Markdown links to visibly underlined, clickable ReportLab paragraph markup.
+    Convert Markdown links and code spans to safe, styled ReportLab paragraph markup.
 
     Args:
         line (str): Prose that may contain multiple inline links.
         document (Path | None): PDF location used to resolve local links into absolute file URLs.
 
     Returns:
-        str: XML-escaped paragraph content with blue underlined links.
+        str: XML-escaped paragraph content with blue underlined links and shaded inline code.
     """
     parts = []
     offset = 0
     for match in link_matches(line):
-        parts.append(escape(line[offset : match.start()]))
+        parts.append(_inline_prose(line[offset : match.start()]))
         target = match[2] or match[3]
         parsed = urlsplit(target)
         if document is not None and not parsed.scheme and not parsed.netloc and not target.startswith("#"):
@@ -225,7 +247,7 @@ def linked_prose(line: str, *, document: Path | None = None) -> str:
             if parsed.fragment:
                 target += "#" + parsed.fragment
         target = escape(target, quote=True)
-        parts.append(f'<link href="{target}" color="#1459a6"><u>{escape(match[1])}</u></link>')
+        parts.append(f'<link href="{target}" color="#1459a6"><u>{_inline_prose(match[1])}</u></link>')
         offset = match.end()
-    parts.append(escape(line[offset:]))
+    parts.append(_inline_prose(line[offset:]))
     return "".join(parts)

@@ -17,6 +17,7 @@ from hypothesis_helm.cli import main
 from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.integrations.incremental import main as ci_policy
 from hypothesis_helm.integrations.incremental import select_rerun
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 def commit(root: Path, filename: str, content: str, message: str = "Source update") -> str:
@@ -322,13 +323,13 @@ def test_recursive_cli_reuses_only_unchanged_completed_charts(
     assert len(visited) == 2
     capsys.readouterr()
     assert main(arguments) == 0
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["counts"] == {"cached-pass": 2}
     assert len(visited) == 2
     commit(repository, "a/values.yaml", "enabled: false\n")
     commit(repository, "a/values-minimal.yaml", "enabled: false\n", MINIMAL_TRAILER)
     assert main(arguments) == 0
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["git_comparison"]["base_ref"] == "HEAD~2"
     assert report["counts"] == {"passed": 1, "cached-pass": 1}
     assert len(visited) == 3

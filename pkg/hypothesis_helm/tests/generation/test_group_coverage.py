@@ -14,6 +14,7 @@ from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import json_value
 from hypothesis_helm.schemas.generation.combinations import plan_interactions
 from hypothesis_helm.schemas.generation.groups import ExhaustiveGroup, infer_groups, parse_group
+from hypothesis_helm.tests.fixtures.cli import result_text
 from hypothesis_helm.tests.generation.test_combinations import boolean_schema
 
 
@@ -183,7 +184,7 @@ def test_automatic_dry_run_is_read_only(tmp_path: Path, monkeypatch: pytest.Monk
     target = tmp_path / "reports"
     assert main(["test", "--log-file", "/dev/stderr", "examples/workload", "--dry-run", "--artifact-dir", str(target)]) == 0
     output = capsys.readouterr()
-    report = json.loads(output.out)
+    report = json.loads(result_text(output.out))
     assert report["status"] == "dry-run"
     assert report["coverage_strategy"] == "exhaustive"
     assert report["planned_cases"] == 23

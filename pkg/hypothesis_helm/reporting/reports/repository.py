@@ -19,6 +19,7 @@ from hypothesis_helm.reporting.reports.audits import write_audit_data
 from hypothesis_helm.reporting.reports.figures import study_figures
 from hypothesis_helm.reporting.reports.links import LINK, Publication, chart_source_url, commit_url, publish_links, repository_url, web_url
 from hypothesis_helm.reporting.reports.overview import summarize, write_overview
+from hypothesis_helm.reporting.reports.pca import PCA_LABEL, write_pca
 from hypothesis_helm.reporting.reports.pdf import write_pdf
 from hypothesis_helm.reporting.reports.plot_reference import with_plot_reference, with_sensitivity_reference
 from hypothesis_helm.reporting.reports.references import with_finding_reference
@@ -232,6 +233,8 @@ def write_reports(
     overview = summarize(report)
     figure = Path(f"{stem}-overview.png")
     overview_cells = write_overview(overview, figure)
+    pca_figure = Path(f"{stem}-pca.png")
+    pca_caption = write_pca(report, pca_figure)
     studies = study_figures(report, markdown)
     images: dict[str, Path] = {}
     caption_kinds: dict[str, str] = {}
@@ -332,14 +335,13 @@ def write_reports(
                 f"{counts['unique_errors']} distinct diagnostics across "
                 f"{counts['occurrences']} occurrences; {counts['duplicates']} repeats grouped.",
                 "Diagnostics and their triggering inputs are grouped under each chart below.",
-                "Up to two examples per diagnostic and six fields per example are shown. Long values and diagnostics are shortened.",
+                "Up to two examples per diagnostic, with six fields each. Long values are shortened; YAML parser details stay in run data.",
                 "Full inputs, diagnostics, and remaining cases are retained in local run data.",
                 "Selected fields identify the inputs varied by the test. Causal attribution requires further investigation.",
                 "",
             ]
         )
-    # Start every report with the overview; optional structural plots follow
-    # before the detailed scan summary and individual chart sections.
+    # Keep the overview up front; aggregate analyses belong after chart results.
     front_matter = [
         "## Overview",
         "",
@@ -348,6 +350,7 @@ def write_reports(
         overview.caption,
         "",
     ]
+    appendix_figures: list[str] = []
     if studies.metrics:
         label = "Published compiler graph invariants"
         graph_image = Path(f"{stem}-topology.png")
@@ -355,15 +358,22 @@ def write_reports(
         images[label] = graph_image
         caption_kinds[label] = "Graph structure metrics"
         caption_references[graph_caption] = ("Graph structure metrics",)
-        front_matter.extend(
+        appendix_figures.extend(
             [
-                "## Graph structure",
+                "## Appendix: graph structure",
                 "",
                 "!" + artifact_link(label, graph_image, markdown),
                 "",
                 graph_caption,
                 "",
             ]
+        )
+    if pca_caption is not None:
+        images[PCA_LABEL] = pca_figure
+        caption_kinds[PCA_LABEL] = "Output-space PCA"
+        caption_references[pca_caption] = ("Output-space PCA",)
+        appendix_figures.extend(
+            ["## Appendix: output space", "", "!" + artifact_link(PCA_LABEL, pca_figure, markdown), "", pca_caption, ""]
         )
     lines.extend(["## Charts", ""])
     charts = report["charts"]
@@ -511,15 +521,19 @@ def write_reports(
             source = group.get("source")
             if isinstance(source, dict):
                 lines.extend([f"Source: {source['name']} {source['version']} / {source['template']}", ""])
-            content = display_error(group["error"])
-            # Keep the terminal diagnostic, omitting long include stacks and subprocess logs.
-            content = " ".join(content.split())
-            if len(content) > 500:
-                content = "[Diagnostic shortened; full text in artifacts] ... " + content[-450:]
-            fence = "`" * max(3, max(map(len, re.findall(r"`+", content)), default=0) + 1)
-            lines.extend([fence + "text", *textwrap.wrap(content, width=140, break_long_words=False, break_on_hyphens=False), fence, ""])
+            # Parser exceptions repeat source excerpts and library advice. Their
+            # finding title identifies the failure; retain the full diagnostic
+            # in run data without printing it above the reproducing inputs.
+            if group.get("code") != "HH1101":
+                content = " ".join(display_error(group["error"]).split())
+                if len(content) > 500:
+                    content = "[Diagnostic shortened; full text in artifacts] ... " + content[-450:]
+                fence = "`" * max(3, max(map(len, re.findall(r"`+", content)), default=0) + 1)
+                lines.extend(
+                    [fence + "text", *textwrap.wrap(content, width=140, break_long_words=False, break_on_hyphens=False), fence, ""]
+                )
             for occurrence in occurrences[:2]:
-                lines.extend([f"Phase: {occurrence['phase']} | Status: {occurrence['status']}", ""])
+                lines.extend([f"Status: {occurrence['status']} | Phase: {occurrence['phase']}", ""])
                 lines.extend(input_summary(mapping(occurrence["input"])))
                 lines.append("")
                 occurrence_artifacts = occurrence.get("artifacts")
@@ -544,9 +558,29 @@ def write_reports(
             link = _public_artifact("Chart artifacts", artifacts, markdown, publication)
             if link:
                 lines.extend([link, ""])
+    lines.extend(appendix_figures)
     lines[2:2] = [*front_matter, "## Scan summary", ""]
+    details: dict[str, list[str]] = {}
+    if pca_caption is not None:
+        in_charts = False
+        key = ["| Color number | Chart | Measured / retained reference outputs |", "| --- | --- | --- |"]
+        positions = []
+        for _, level, label, anchor in heading_inventory("\n".join(lines)):
+            if level <= 2:
+                in_charts = level == 2 and label == "Charts"
+            elif in_charts and level == 3:
+                positions.append((label, anchor))
+        for index, (chart, (label, anchor)) in enumerate(zip(charts, positions, strict=True), 1):
+            reference = mapping(chart.get("output_space", {}))
+            observations = [mapping(row) for row in sequence(reference.get("observations", []))]
+            retained = sum(row.get("retained") is True for row in observations)
+            count = f"{len(observations)} / {retained}" if observations else "Unavailable"
+            if any(row.get("retained") is None for row in observations):
+                count = f"{len(observations)} / selection unavailable"
+            key.append(f"| {index:02d} | [{label}](#{anchor}) | {count} |")
+        details["Output-space PCA"] = [*key, ""]
     content, plot_targets = with_plot_reference(
-        "\n".join(lines), {kind for kinds in caption_references.values() for kind in kinds} | set(caption_kinds.values())
+        "\n".join(lines), {kind for kinds in caption_references.values() for kind in kinds} | set(caption_kinds.values()), details
     )
     content, field_targets = with_sensitivity_reference(content, studies.sensitivity_fields)
     lines = content.splitlines()

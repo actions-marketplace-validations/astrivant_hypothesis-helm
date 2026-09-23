@@ -14,6 +14,7 @@ from hypothesis_helm.charts.testing.runner import Chart, check_chart
 from hypothesis_helm.charts.values import yamlio
 from hypothesis_helm.cli import main
 from hypothesis_helm.compiler.passes.inputs import FieldCoverage, InputInventory
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.fixture
@@ -192,7 +193,7 @@ def test_audit_dump_without_schema(chart: Chart, capsys: pytest.CaptureFixture[s
     (chart.path / "values.schema.json").unlink()
     target = tmp_path / "dump.yaml"
     assert main(["audit", "--log-file", "/dev/stderr", str(chart.path), "--export-minimal-values", str(target)]) == 0
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["input_inventory"]["lower_bound_fields"] == 2
     assert report["minimal_values"]["yaml"] == str(target)
     assert yamlio.load_all(target.read_text())[0] == {}
@@ -220,7 +221,7 @@ def test_export_default_filename(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr("hypothesis_helm.compiler.passes.inputs.time.time", lambda: 1234567890)
     assert main(["audit", "--log-file", "/dev/stderr", str(chart.path), "--export-minimal-values"]) == 0
-    exported = json.loads(capsys.readouterr().out)["minimal_values"]
+    exported = json.loads(result_text(capsys.readouterr().out))["minimal_values"]
     target = Path(exported["yaml"])
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
     assert target.name == f"values-minimal-{digest}-1234567890.yaml"
@@ -268,7 +269,7 @@ def test_scan_exports_each_chart(
           name: child
     """)
     )
-    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", lambda *args: {"status": "passed"})
+    monkeypatch.setattr("hypothesis_helm.charts.repositories.scan.exercise_chart", lambda *args: {"status": "passed", "attempts": 1})
     output = tmp_path / "dumps"
     assert (
         main(
@@ -288,7 +289,7 @@ def test_scan_exports_each_chart(
         )
         == 0
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert len(report["charts"]) == 2
     if override:
         assert (output / "minimal.yaml").exists()
@@ -337,7 +338,7 @@ def test_scan_export_cannot_overwrite_original_values(chart: Chart, tmp_path: Pa
         )
         == 1
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert "must not overwrite source chart inputs" in report["charts"][0]["error"]
     assert source.read_bytes() == original
 

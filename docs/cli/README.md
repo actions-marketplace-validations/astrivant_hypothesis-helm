@@ -188,6 +188,7 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--no-cache] [--jobs JOBS] [--permutations PERMUTATIONS]
                             [--filter] [--fail [{info,warning,error}]] [--seed SEED]
                             [--build-dependencies | --no-build-dependencies]
+                            [--pca-samples N] [--pca-timeout PCA_TIMEOUT]
                             [--max-mutations N]
                             [--sensitivity-timeout SENSITIVITY_TIMEOUT]
                             [--filter-adaptive]
@@ -254,6 +255,11 @@ options:
   --seed SEED
   --build-dependencies, --no-build-dependencies
                         build locked dependencies in temporary chart copies
+  --pca-samples N       with --report, measure up to N reference configurations per
+                        chart for output PCA; 0 disables it (default: 64)
+  --pca-timeout PCA_TIMEOUT
+                        additional output-PCA measurement budget per chart with
+                        --report (default: 1m)
   --max-mutations N     with --report, measure sensitivity for up to N fields per
                         chart and all their pairs (opt-in)
   --sensitivity-timeout SENSITIVITY_TIMEOUT
@@ -560,7 +566,8 @@ options:
 <summary>helm hypothesis test</summary>
 
 ~~~text
-usage: helm hypothesis test [-h] [--report [PATH]] [--max-mutations N]
+usage: helm hypothesis test [-h] [--report [PATH]] [--pca-samples N]
+                            [--pca-timeout PCA_TIMEOUT] [--max-mutations N]
                             [--sensitivity-timeout SENSITIVITY_TIMEOUT]
                             [--values VALUES] [--chart-timeout CHART_TIMEOUT]
                             [--scan-timeout SCAN_TIMEOUT]
@@ -611,6 +618,11 @@ options:
   -h, --help            show this help message and exit
   --report [PATH]       write combined Markdown/PDF; default:
                         docs/reports/<dir>_<epoch>_report
+  --pca-samples N       with --report, measure up to N reference configurations per
+                        chart for output PCA; 0 disables it (default: 64)
+  --pca-timeout PCA_TIMEOUT
+                        additional output-PCA measurement budget per chart with
+                        --report (default: 1m)
   --max-mutations N     with --report, measure sensitivity for up to N fields per
                         chart and all their pairs (opt-in)
   --sensitivity-timeout SENSITIVITY_TIMEOUT

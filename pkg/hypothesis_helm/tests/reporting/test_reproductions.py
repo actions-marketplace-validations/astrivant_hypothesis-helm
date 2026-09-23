@@ -2,10 +2,12 @@
 Verify chart-grouped diagnostics retain exact triggering paths and joint values.
 """
 
+import base64
 import copy
 import gzip
 import json
 import re
+import zlib
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,71 @@ from hypothesis_helm.reporting.evidence.reproductions import changed_values, fai
 from hypothesis_helm.reporting.reports.links import Publication, linked_prose, publish_links
 from hypothesis_helm.reporting.reports.repository import artifact_link, write_reports
 from hypothesis_helm.schemas.contracts import mapping, sequence
+
+
+@pytest.mark.parametrize(
+    "diagnostic",
+    [
+        '[HH1101] while constructing a mapping\n  in "<unicode string>", line 1574, column 3:\n'
+        '    containers: ^ (line: 1574)\nfound duplicate key "containers"\n'
+        "To suppress this check see: https://yaml.dev/doc/ruamel.yaml/api/#Duplicate_keys",
+        "[HH1101] Error: YAML parse error on demo/templates/deployment.yaml: "
+        "error converting YAML to JSON: yaml: line 29: did not find expected ',' or ']'",
+    ],
+)
+def test_parser_diagnostics_stay_in_data_not_human_reports(tmp_path: Path, diagnostic: str) -> None:
+    """
+    Keep parser failures and inputs visible without repeating parser excerpts or suppression advice.
+
+    Args:
+        tmp_path (Path): Markdown and PDF report destination.
+        diagnostic (str): Detailed diagnostic from either the YAML parser or Helm.
+
+    Returns:
+        None: Human reports show the status and values; saved evidence and finding counts remain intact.
+    """
+    chart: dict[str, object] = {
+        "chart": "demo",
+        "status": "failed",
+        "error": diagnostic,
+        "path": ["extraPodSpec", "containers"],
+        "values": {"extraPodSpec": {"containers": []}},
+        "input_changes": {"$.extraPodSpec.containers": []},
+    }
+    report: dict[str, object] = {
+        "directory": "charts",
+        "started_epoch": 1,
+        "elapsed_seconds": 1,
+        "charts_discovered": 1,
+        "counts": {"failed": 1},
+        "settings": {},
+        "charts": [chart],
+    }
+    markdown, pdf = write_reports(report, tmp_path / "report", artifact_links=False)
+    text = markdown.read_text()
+    assert "HH1101" in text and "Invalid YAML in rendered output" in text
+    assert "Status: failed | Phase:" in text
+    assert "$.extraPodSpec.containers = []" in text
+    assert "```text" not in text
+    forbidden = ("To suppress this check", "Duplicate_keys", "containers: ^", "line 1574", "error converting YAML to JSON")
+    for fragment in forbidden:
+        assert fragment not in text
+    streams = []
+    for body in re.findall(rb"\d+ 0 obj\s*(.*?)\s*endobj", pdf.read_bytes(), re.DOTALL):
+        if b"/Subtype /Image" in body:
+            continue
+        if b"/Filter [ /ASCII85Decode /FlateDecode ]" in body and (match := re.search(rb"stream\s*\n(.*?)endstream", body, re.DOTALL)):
+            streams.append(zlib.decompress(base64.a85decode(match[1].strip(), adobe=True)))
+    drawn = b"\n".join(streams)
+    assert b"Status: failed" in drawn and b"$.extraPodSpec.containers" in drawn
+    for fragment in forbidden:
+        assert fragment.encode() not in drawn
+    assert report["counts"] == {"failed": 1}
+    assert mapping(report["error_summary"])["unique_errors"] == 1
+    group = mapping(sequence(report["error_groups"])[0])
+    assert group["code"] == "HH1101" and group["error"] == diagnostic
+    assert chart["error"] == diagnostic
+    assert mapping(mapping(sequence(group["occurrences"])[0])["input"])["changes"] == {"$.extraPodSpec.containers": []}
 
 
 @pytest.mark.parametrize("published", [False, True])

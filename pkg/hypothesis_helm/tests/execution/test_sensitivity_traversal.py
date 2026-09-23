@@ -15,6 +15,7 @@ from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.exceptions.execution import TimeLimitReached
 from hypothesis_helm.execution.planning.sensitivity import SensitivityOrder, mutations, validate_order
 from hypothesis_helm.schemas.contracts import configuration_key, mapping
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 def test_larger_groups_then_more_interactions() -> None:
@@ -379,7 +380,7 @@ def test_cli_uses_default_pairwise_coverage(
     assert len(calls) == 1
     assert calls[0]["permutations"] == 2
     assert calls[0]["traversal_strategy"] == "sensitivity-first"
-    output = json.loads(capsys.readouterr().out)
+    output = json.loads(result_text(capsys.readouterr().out))
     assert output["status"] == "passed" if mode == "single" else output["counts"] == {"passed": 1}
 
 

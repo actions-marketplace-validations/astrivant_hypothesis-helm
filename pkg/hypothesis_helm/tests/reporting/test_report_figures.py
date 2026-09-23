@@ -55,7 +55,7 @@ def test_unsupported_work_has_no_numbered_error(tmp_path: Path, historical: bool
 
 def test_diagram_pages_and_pairs_include_charts_without_errors(tmp_path: Path) -> None:
     """
-    Put graph invariants after the cover, contents, and overview, with chart panels below their headings.
+    Put aggregate graphs in an appendix while keeping chart panels below their headings.
 
     Args:
         tmp_path (Path): Project containing uniquely colored chart-specific images.
@@ -99,13 +99,18 @@ def test_diagram_pages_and_pairs_include_charts_without_errors(tmp_path: Path) -
     assert "1 of 1 report charts" in text
     objects = dict(re.findall(rb"(\d+) 0 obj\s*(.*?)\s*endobj", pdf.read_bytes(), re.DOTALL))
     pages = [(number, body) for number, body in objects.items() if b"/Type /Page\n" in body]
-    graph_outline = next(body for body in objects.values() if b"/Title (Graph structure)" in body)
-    assert b"/Dest [ " + pages[3][0] + b" 0 R" in graph_outline
+    graph_outline = next(body for body in objects.values() if b"/Title (Appendix: graph structure)" in body)
+    graph_page = next(index for index, (number, _) in enumerate(pages) if b"/Dest [ " + number + b" 0 R" in graph_outline)
+    assert graph_page > 3
+    assert text.index("Status: passed") < text.index("## Appendix: graph structure")
     images_per_page = [len(re.findall(rb"/FormXob\.[^\s]+ \d+ 0 R", body)) for _, body in pages]
-    assert images_per_page[:4] == [1, 1, 2, 2]  # Cover, contents, overview, and aggregate graph, each with its header logo.
+    assert images_per_page[:3] == [1, 1, 2]  # Cover, contents, and overview, each with its header logo.
+    assert images_per_page[graph_page] == 2
+    summary_outline = next(body for body in objects.values() if b"/Title (Scan summary)" in body)
+    assert b"/Dest [ " + pages[3][0] + b" 0 R" in summary_outline
     overview_outline = next(body for body in objects.values() if b"/Title (Overview)" in body)
     assert b"/Dest [ " + pages[2][0] + b" 0 R" in overview_outline
-    assert 3 in images_per_page[4:]  # The clean chart keeps both panels on the same page.
+    assert 3 in images_per_page[3:graph_page]  # The clean chart keeps both panels together before the appendices.
     chart_outline = next(body for body in objects.values() if b"/Title (vendor/clean)" in body)
     target = re.search(rb"/Dest \[ (\d+) 0 R", chart_outline)
     assert target is not None

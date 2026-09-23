@@ -393,7 +393,8 @@ def test_parallel_path_manifest_stream(tmp_path: Path, capfd: pytest.CaptureFixt
     resources = [json.loads(line) for line in output.out.splitlines()] if output_format == "json" else yamlio.load_all(output.out)
     assert len(resources) > 1
     assert all(isinstance(resource, dict) and resource["kind"] == "ConfigMap" for resource in resources)
-    assert "Testing path" in output.err and '"status": "passed"' in output.err
+    assert "Testing path" in output.err and "Scan completed" in output.err
+    assert '"status": "passed"' not in output.err
     assert output.err.count("Compiler input baseline:") == 1
     assert "[INFO]" not in output.out
     assert "\033[" not in output.out and "\033[" in output.err

@@ -22,6 +22,7 @@ from hypothesis_helm.execution.state.cache import fingerprint
 from hypothesis_helm.schemas.configuration.characters import character_sets
 from hypothesis_helm.schemas.configuration.policy import ENVIRONMENT, load_policy
 from hypothesis_helm.schemas.generation.strategies import schema_strategy, supported_generated_text
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.mark.parametrize("schema", [{}, {"type": "object", "minProperties": 1}, {"type": "array", "items": {}, "minItems": 1}])
@@ -271,6 +272,6 @@ def test_unicode_policy_reaches_path_workers(tmp_path: Path, capfd: pytest.Captu
         == 0
     )
     output = capfd.readouterr()
-    report = json.loads(output.out)
+    report = json.loads(result_text(output.out))
     assert report["settings"]["input_policy"]["character_sets"] == "unicode"
     assert report["charts"][0]["traversal"]["completed_paths"] == 2

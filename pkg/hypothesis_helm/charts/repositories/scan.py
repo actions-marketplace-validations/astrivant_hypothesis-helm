@@ -43,6 +43,7 @@ from hypothesis_helm.findings.severity import attributes, blocks, for_paths, lev
 from hypothesis_helm.findings.severity import policy as finding_policy
 from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.reporting.console.progress import format_path
+from hypothesis_helm.reporting.console.summary import print_summary
 from hypothesis_helm.reporting.evidence.errors import chart_errors, deduplicate_errors
 from hypothesis_helm.reporting.evidence.invocation import record_invocation
 from hypothesis_helm.reporting.evidence.provenance import trace_run
@@ -684,6 +685,10 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
             "jobs": getattr(args, "jobs", 1),
             "worker_model": "sequential charts, concurrent path properties",
             "filter": args.filter,
+            "filter_adaptive": getattr(args, "filter_adaptive", False),
+            "trim": getattr(args, "trim", 0),
+            "trim_topology": getattr(args, "trim_topology", 0),
+            "prune_equivalent": getattr(args, "prune_equivalent", False),
             "fail": args.fail,
             "export_suppressions": getattr(args, "export_suppressions", False),
             "permutations": args.permutations,
@@ -696,6 +701,8 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
             "sensitivity_order": getattr(args, "sensitivity_order", None),
             "report_max_mutations": getattr(args, "max_mutations", None),
             "report_sensitivity_timeout_seconds": getattr(args, "sensitivity_timeout", 180),
+            "report_pca_samples": getattr(args, "pca_samples", 64),
+            "report_pca_timeout_seconds": getattr(args, "pca_timeout", 60),
             "sampling": {
                 "percent": getattr(args, "sample_random", 100),
                 "minimum": getattr(args, "sample_min_cases", 128),
@@ -747,9 +754,10 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
     trace_run(report, finished_epoch=time.time())
     (output / "scan.json").write_text(json.dumps(report, indent=2) + "\n")
     figure_status = None
+    published: tuple[Path, ...] = ()
     if args.report is not None:
         stem = Path(args.report) if args.report else Path("docs/reports") / f"{source.name}_{int(started)}_report"
-        if getattr(args, "max_mutations", None) is not None:
+        if getattr(args, "max_mutations", None) is not None or getattr(args, "pca_samples", 64) > 0:
             if interrupted or timed_out or failed_early or source.status != "ready" or no_tests:
                 report["figure_generation"] = {
                     "status": "skipped",
@@ -761,8 +769,9 @@ def _scan_checkout(args: argparse.Namespace, source: RepositorySource, started: 
                 figure_status = enrich_scan(report, args, root=root, artifacts=output, stem=stem)
             # Save added evidence before PDF publication, retaining the original scan's timestamps and findings.
             (output / "scan.json").write_text(json.dumps(report, indent=2) + "\n")
-        write_reports(report, stem)
-    print(json.dumps(report, indent=2))
+        published = write_reports(report, stem)
+        (output / "scan.json").write_text(json.dumps(report, indent=2) + "\n")
+    print_summary(report, output / "scan.json", reports=published)
     if interrupted or figure_status == "interrupted":
         return 130
     if timed_out:

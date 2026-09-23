@@ -14,6 +14,7 @@ from ruamel.yaml.error import YAMLError
 from hypothesis_helm.cli import main
 from hypothesis_helm.reporting.evidence.errors import chart_errors, deduplicate_errors, template_source
 from hypothesis_helm.reporting.reports.repository import write_reports
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 def dependency(root: Path, *, version: str = "1.0.0", content: str = "shared template") -> Path:
@@ -228,7 +229,7 @@ def test_scan_dependency_deduplication(tmp_path: Path, monkeypatch: pytest.Monke
         )
         == 1
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert calls == ["first", "second"]
     assert report["counts"] == {"failed": 2, "skipped-library": 2}
     assert report["error_summary"] == {"unique_errors": 1, "occurrences": 2, "duplicates": 1}

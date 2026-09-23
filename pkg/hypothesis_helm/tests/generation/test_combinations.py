@@ -14,6 +14,7 @@ from hypothesis_helm.cli import main
 from hypothesis_helm.exceptions.schemas import NonFiniteSchema
 from hypothesis_helm.schemas.contracts import json_value
 from hypothesis_helm.schemas.generation.combinations import plan_interactions
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 def boolean_schema(count: int) -> dict[str, object]:
@@ -165,7 +166,7 @@ def test_cli_rejects_per_path_options(option: str, capsys: pytest.CaptureFixture
     if option in ("--match", "--jobs"):
         arguments.append("2")
     assert main(arguments) == 2
-    assert json.loads(capsys.readouterr().out)["status"] == "error"
+    assert json.loads(result_text(capsys.readouterr().out))["status"] == "error"
 
 
 def test_cli_interactions_and_failure_report(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
@@ -182,7 +183,7 @@ def test_cli_interactions_and_failure_report(monkeypatch: pytest.MonkeyPatch, ca
     """
     monkeypatch.setattr("hypothesis_helm.charts.testing.runner.render", lambda *args, **kwargs: [{}])
     assert main(["test", "--log-file", "/dev/stderr", "examples/workload", "--permutations", "2", "--shard", "none"]) == 0
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["mode"] == "permutations"
     assert report["coverage_complete"] is True
     assert report["attempts"] == report["planned_cases"] + 1

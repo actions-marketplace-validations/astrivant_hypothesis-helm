@@ -10,7 +10,6 @@
 - [Production validation](#production-validation)
 - [Guides](#guides)
 - [Case study: Bitnami charts](#case-study-bitnami-charts)
-- [Case study: Prometheus Community charts](#case-study-prometheus-community-charts)
 - [Development](#development)
 - [CLI help](#cli-help)
 - [Upstream schema shims](#upstream-schema-shims)
@@ -142,9 +141,14 @@ Test local charts or fetch remote charts, with Markdown/PDF summaries:
 ```sh
 helm hypothesis test ./charts --report
 helm hypothesis scan https://github.com/bitnami/charts.git --filter --report
+```
+
+<!--
+```sh
 helm hypothesis scan prometheus-community/prometheus --filter --report
 helm hypothesis scan prometheus-community --filter --report
 ```
+-->
 
 See [Repository scanning](docs/scanning/README.md) for authentication, public indexes, version selection, and dependency handling.
 
@@ -205,17 +209,23 @@ Read the [scan results](docs/reports/bitnami.md), download the
 The [chart topology catalog](<studies/chart-topologies/README.md>) includes
 directed dependency graphs and their mathematical measurements.
 
+<!--
 ## Case study: Prometheus Community charts
+-->
 
 <!-- refresh:prometheus:start -->
+<!--
 We scanned **46 Prometheus Community charts**, recording **56,756 test attempts**
 with `--filter`, **6 path workers per chart**, and a **5-minute budget per chart**.
 The reports distinguish test failures, blocked checks and incomplete coverage; chart bugs require triage.
 
 Read the [scan results](docs/reports/prometheus.md), download the
 [combined PDF](docs/reports/prometheus.pdf).
+-->
 <!-- refresh:prometheus:end -->
+<!--
 Its dependency graphs are also in the [topology catalog](<studies/chart-topologies/README.md>).
+-->
 
 ## Development
 
@@ -399,6 +409,7 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--no-cache] [--jobs JOBS] [--permutations PERMUTATIONS]
                             [--filter] [--fail [{info,warning,error}]] [--seed SEED]
                             [--build-dependencies | --no-build-dependencies]
+                            [--pca-samples N] [--pca-timeout PCA_TIMEOUT]
                             [--max-mutations N]
                             [--sensitivity-timeout SENSITIVITY_TIMEOUT]
                             [--filter-adaptive]
@@ -465,6 +476,11 @@ options:
   --seed SEED
   --build-dependencies, --no-build-dependencies
                         build locked dependencies in temporary chart copies
+  --pca-samples N       with --report, measure up to N reference configurations per
+                        chart for output PCA; 0 disables it (default: 64)
+  --pca-timeout PCA_TIMEOUT
+                        additional output-PCA measurement budget per chart with
+                        --report (default: 1m)
   --max-mutations N     with --report, measure sensitivity for up to N fields per
                         chart and all their pairs (opt-in)
   --sensitivity-timeout SENSITIVITY_TIMEOUT
@@ -763,7 +779,8 @@ options:
 <summary>helm hypothesis test</summary>
 
 ~~~text
-usage: helm hypothesis test [-h] [--report [PATH]] [--max-mutations N]
+usage: helm hypothesis test [-h] [--report [PATH]] [--pca-samples N]
+                            [--pca-timeout PCA_TIMEOUT] [--max-mutations N]
                             [--sensitivity-timeout SENSITIVITY_TIMEOUT]
                             [--values VALUES] [--chart-timeout CHART_TIMEOUT]
                             [--scan-timeout SCAN_TIMEOUT]
@@ -814,6 +831,11 @@ options:
   -h, --help            show this help message and exit
   --report [PATH]       write combined Markdown/PDF; default:
                         docs/reports/<dir>_<epoch>_report
+  --pca-samples N       with --report, measure up to N reference configurations per
+                        chart for output PCA; 0 disables it (default: 64)
+  --pca-timeout PCA_TIMEOUT
+                        additional output-PCA measurement budget per chart with
+                        --report (default: 1m)
   --max-mutations N     with --report, measure sensitivity for up to N fields per
                         chart and all their pairs (opt-in)
   --sensitivity-timeout SENSITIVITY_TIMEOUT

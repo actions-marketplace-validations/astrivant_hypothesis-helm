@@ -21,6 +21,7 @@ from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.cli import main
 from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.schemas.contracts import mapping, sequence
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.mark.parametrize(("value", "seconds"), [("180", 180), ("3m", 180), ("0.5h", 1800), ("0.01s", 0.01)])
@@ -240,7 +241,7 @@ def test_cli_stops_slow_helm(
         ]
     )
     assert status == 124
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["status"] == "time-limit"
     assert report["attempted_iterations"] == 1
     assert report["completed_iterations"] == 0

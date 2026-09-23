@@ -20,6 +20,7 @@ from hypothesis_helm.exceptions.execution import ChartUnavailable
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.schemas.generation.replay import Replay
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 def scheduler(chart: Chart, values: list[dict[str, object]], jobs: int = 3) -> ExhaustiveRenders:
@@ -306,10 +307,28 @@ def test_cli_stream_remains_parseable(tmp_path: Path, capfd: pytest.CaptureFixtu
 
     generate(tmp_path / "chart", input_complexity=4, output_bins=4)
     jobs = "8" if mode == "--exhaustive" else "1"
-    assert main(["test", str(tmp_path / "chart"), mode, "--jobs", jobs, "--shard", "none", "--output-format", output_format]) == 0
+    assert (
+        main(
+            [
+                "test",
+                str(tmp_path / "chart"),
+                mode,
+                "--jobs",
+                jobs,
+                "--shard",
+                "none",
+                "--output-format",
+                output_format,
+                "--artifact-dir",
+                str(tmp_path / "results"),
+            ]
+        )
+        == 0
+    )
     output = capfd.readouterr()
     resources = [json.loads(line) for line in output.out.splitlines()] if output_format == "json" else load_all(output.out)
     assert resources and all(isinstance(resource, dict) and resource["kind"] == "ConfigMap" for resource in resources)
-    assert '"status": "passed"' in output.err
+    assert "Test passed" in output.err
+    assert '"status": "passed"' not in output.err
     if mode == "--exhaustive":
-        assert '"workers": 8' in output.err
+        assert json.loads(result_text(output.err))["parallel_execution"]["workers"] == 8

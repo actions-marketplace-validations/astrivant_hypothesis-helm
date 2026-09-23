@@ -77,9 +77,10 @@ def write_graph_overview(rows: tuple[GraphMetrics, ...], destination: Path, tota
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
 
-    figure = Figure(figsize=(12, 5.5), layout="constrained")
+    # Stack the two views so each occupies about half of the report's graph page.
+    figure = Figure(figsize=(9, 8.5), layout="constrained")
     FigureCanvasAgg(figure)
-    axes = figure.subplots(1, 2)
+    axes = figure.subplots(2, 1)
     for rendered, label, marker, color in (
         (True, "Rendered baseline", "o", "#0072B2"),
         (False, "Static graph only", "D", "#D55E00"),
@@ -95,7 +96,7 @@ def write_graph_overview(rows: tuple[GraphMetrics, ...], destination: Path, tota
     axes[1].set(
         title="Graph connectivity",
         xlabel=r"Vertices $|V|$",
-        ylabel=r"Independent undirected cycles $|E| - |V| + C$",
+        ylabel="Independent undirected cycles\n" + r"$|E| - |V| + C$",
     )
     for axis in axes:
         # Symmetric-log axes retain literal zeroes instead of moving them to one.
@@ -109,12 +110,7 @@ def write_graph_overview(rows: tuple[GraphMetrics, ...], destination: Path, tota
         axis.yaxis.label.set_fontsize(14)
         axis.title.set_fontsize(15)
         axis.legend(fontsize=12)
-    figure.suptitle(f"Compiler graph structure: {len(rows)} of {total} report charts\nEach point is one chart in this report", fontsize=13)
+    figure.suptitle(f"Compiler graph structure: {len(rows)} of {total} report charts", fontsize=15)
     destination.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(destination, dpi=170)
-    return (
-        f"Published graph measurements are available for {len(rows)} of {total} report charts. "
-        "Vertices represent inputs, conditions, templates and manifest fields; edges connect them. "
-        "The right panel counts independent loops after ignoring edge direction; C is the number of disconnected groups. "
-        "Parallel edges count separately. These are structural measurements from the published chart diagrams, not bug counts."
-    )
+    return f"Published graph measurements are available for {len(rows)} of {total} report charts. Each point represents one chart."

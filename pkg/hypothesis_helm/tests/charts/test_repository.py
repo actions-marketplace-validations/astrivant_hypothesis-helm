@@ -15,6 +15,7 @@ import pytest
 from hypothesis_helm.charts.repositories.repository import local_provenance, remote_name, run_git
 from hypothesis_helm.cli import main
 from hypothesis_helm.environment import refresh_env
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 
 @pytest.mark.parametrize(
@@ -134,7 +135,7 @@ def test_remote_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: py
         )
         == 0
     )
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["directory"] == url
     assert report["source"] == {"url": url, "revision": revision, "checkout_status": "ready"}
     assert report["charts"][0]["chart"] == "nested/demo"
@@ -210,7 +211,7 @@ def test_checkout_failure_reports(
         arguments.extend(["--scan-timeout", "0.05s"])
     code = main(arguments)
     assert code == {"authentication": 1, "clone-timeout": 124, "scan-timeout": 124, "interrupted": 130}[failure]
-    report = json.loads(capsys.readouterr().out)
+    report = json.loads(result_text(capsys.readouterr().out))
     assert report["scan_status"] == ("clone-failed" if failure == "authentication" else failure)
     assert report["discovery_complete"] is False
     assert report["charts_discovered"] == 0

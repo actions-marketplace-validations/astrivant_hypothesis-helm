@@ -40,6 +40,7 @@ from hypothesis_helm.findings.suppressions import SuppressionCapture
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
 from hypothesis_helm.reporting.console.logs import LogFormatter
 from hypothesis_helm.reporting.console.output import MANIFEST_FD, MANIFEST_FORMAT
+from hypothesis_helm.reporting.console.summary import print_summary
 from hypothesis_helm.reporting.coverage.progressive import plot_progression
 from hypothesis_helm.reporting.evidence.changes import replay_file
 from hypothesis_helm.reporting.reports.shards import aggregate
@@ -388,6 +389,19 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
         "--report", nargs="?", const="", metavar="PATH", help="write combined Markdown/PDF; default: docs/reports/<dir>_<epoch>_report"
     )
     for command in (test, repository):
+        command.add_argument(
+            "--pca-samples",
+            type=int,
+            default=64,
+            metavar="N",
+            help="with --report, measure up to N reference configurations per chart for output PCA; 0 disables it (default: 64)",
+        )
+        command.add_argument(
+            "--pca-timeout",
+            type=parse_time_limit,
+            default=60,
+            help="additional output-PCA measurement budget per chart with --report (default: 1m)",
+        )
         command.add_argument(
             "--max-mutations",
             type=int,
@@ -776,6 +790,8 @@ def main(argv: list[str] | None = None) -> int:
             arguments[index] = "--fail=info"
     args = parser.parse_args(arguments)
     args.invocation = invocation
+    if getattr(args, "pca_samples", 0) < 0:
+        parser.error("--pca-samples must be nonnegative")
     if getattr(args, "max_mutations", None) is not None:
         if args.max_mutations < 1:
             parser.error("--max-mutations must be positive")
@@ -950,7 +966,14 @@ def main(argv: list[str] | None = None) -> int:
                     SuppressionCapture(destination, enabled=True).write(
                         finding_report, name=chart_identity(source), source=source_identity(source)
                     )
-                print(json.dumps(dict(finding_report, status="failed", reason="input audit findings (--fail)"), indent=2))
+                failure = dict(finding_report, status="failed", reason="input audit findings (--fail)")
+                if args.command == "test" and not args.dry_run:
+                    args.artifact_dir.mkdir(parents=True, exist_ok=True)
+                    artifact = args.artifact_dir / "audit.json"
+                    artifact.write_text(json.dumps(failure, indent=2) + "\n")
+                    print_summary(failure, artifact)
+                else:
+                    print(json.dumps(failure, indent=2))
                 return 1
         if args.command in ("test", "run"):
             if args.validate_schemas and may_check("HH1108") and not args.collect_only and not args.dry_run:
@@ -1261,7 +1284,13 @@ def main(argv: list[str] | None = None) -> int:
 
             require_attempts(report)
             status = (
-                0 if report["status"] in ("passed", "dry-run", "ignored", "findings") else 124 if report["status"] == "time-limit" else 1
+                0
+                if report["status"] in ("passed", "dry-run", "ignored", "findings")
+                else 130
+                if report["status"] == "interrupted"
+                else 124
+                if report["status"] == "time-limit"
+                else 1
             )
         if finding_report is not None:
             report["audit"] = finding_report
@@ -1276,7 +1305,13 @@ def main(argv: list[str] | None = None) -> int:
             report["topological_graph"] = topological_graph
         if capture.enabled and not getattr(args, "dry_run", False):
             capture.write(report, name=chart_identity(chart.path), source=source_identity(chart.path), defaults=chart.defaults)
-        print(json.dumps(report, indent=2))
+        if args.command == "test" and not args.dry_run:
+            artifact = args.artifact_dir / "report.json"
+            artifact.parent.mkdir(parents=True, exist_ok=True)
+            artifact.write_text(json.dumps(report, indent=2) + "\n")
+            print_summary(report, artifact)
+        else:
+            print(json.dumps(report, indent=2))
         return status
     except KeyboardInterrupt:
         logger.info("Testing interrupted")

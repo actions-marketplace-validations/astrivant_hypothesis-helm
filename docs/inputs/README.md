@@ -215,7 +215,8 @@ These graphs combine potential references with baseline observations.
 Opaque access remains explicitly unresolved.
 
 The [topology catalog](<../../studies/chart-topologies/README.md>) contains rendered
-graphs for the synthetic fixtures and the Bitnami and Prometheus chart collections.
+graphs for the synthetic fixtures and the Bitnami chart collection.
+<!-- Additional collection: Prometheus Community charts. -->
 
 ## Deterministic type constants
 

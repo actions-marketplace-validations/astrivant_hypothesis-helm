@@ -18,6 +18,7 @@ from pathlib import Path
 
 from jsonschema import validators
 
+from hypothesis_helm.analysis.reference import measure_reference
 from hypothesis_helm.analysis.sensitivity import Mutation, analyze
 from hypothesis_helm.charts.suites.runtime import RenderOptions
 from hypothesis_helm.charts.testing.rendering import render
@@ -89,6 +90,10 @@ def measure_chart(
     values_filename: Path = Path("values.yaml"),
     build_dependencies: bool = True,
     render_options: RenderOptions | None = None,
+    pca_samples: int = 0,
+    pca_seconds: float = 60,
+    scan_record: dict[str, object] | None = None,
+    scan_settings: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """
     Prepare a private source copy and compare only outputs with a repeatable baseline.
@@ -103,11 +108,16 @@ def measure_chart(
         values_filename (Path): Selected baseline, relative to the chart or an absolute filename.
         build_dependencies (bool): Whether to prepare locked dependencies in the private copy.
         render_options (RenderOptions | None): Scan renderer context and per-invocation timeout.
+        pca_samples (int): Additional reference configurations; zero disables output PCA measurements.
+        pca_seconds (float): Separate per-chart reference measurement budget.
+        scan_record (dict[str, object] | None): Recorded chart selection and artifacts.
+        scan_settings (dict[str, object] | None): Recorded trimming and sampling configuration.
 
     Returns:
         dict[str, object]: Actual measurements or an explicit reason measurements were unavailable.
     """
     empty: dict[str, object] = {"status": "unavailable", "mutations": [], "interactions": [], "sequence": [], "renders": 0}
+    reference = None
     options = render_options or RenderOptions(helm=helm)
     try:
         with tempfile.TemporaryDirectory(prefix="hypothesis-helm-sensitivity-") as temporary:
@@ -126,12 +136,12 @@ def measure_chart(
                     return {**empty, "reason": "Dependency preparation failed.", "diagnostic": prepared.stderr}
             chart = load_input_chart(target)
             validators.validator_for(chart.schema)(chart.schema).validate(json_value(chart.defaults))
-            selected = mutations(chart.defaults, chart.schema, limit, seed)
-            if not selected:
+            selected = mutations(chart.defaults, chart.schema, limit, seed) if limit else []
+            if not selected and not pca_samples:
                 return {**empty, "reason": "No schema-valid Boolean or integer mutations were available."}
             if renderer_policy(chart) != "native":
                 prepare_renderer(chart, helm, force=True, stopped=stopped)
-            deadline = time.monotonic() + seconds
+            deadline = time.monotonic() + (pca_seconds if pca_samples else seconds)
 
             def invoke(values: dict[str, object]) -> object:
                 """
@@ -168,6 +178,28 @@ def measure_chart(
                     "renders": 2,
                     "reason": "Repeated baseline renders differed; output changes cannot be attributed to inputs.",
                 }
+            if pca_samples:
+                reference = measure_reference(
+                    chart,
+                    mutations(chart.defaults, chart.schema, max(1, pca_samples - 1), seed),
+                    invoke,
+                    scan_record or {},
+                    scan_settings or {},
+                    limit=pca_samples,
+                    seconds=max(0.001, deadline - time.monotonic()),
+                )
+            if not selected:
+                return {
+                    **empty,
+                    "status": "not-requested" if not limit else "unavailable",
+                    "reason": "Sensitivity not requested" if not limit else "No schema-valid scalar changes were available",
+                    "output_space": reference,
+                    "baseline_verification_renders": 2,
+                }
+            # PCA has its own measurement budget and does not consume either
+            # the scan's test budget or the requested sensitivity budget.
+            if pca_samples:
+                deadline = time.monotonic() + seconds
             result = analyze(
                 chart.defaults,
                 chart.schema,
@@ -178,9 +210,11 @@ def measure_chart(
                 time_limit=max(0.001, deadline - time.monotonic()),
             )
             result["baseline_verification_renders"] = 2
+            if reference is not None:
+                result["output_space"] = reference
             return result
     except Exception as error:
-        return {**empty, "reason": str(error), "error_type": type(error).__name__}
+        return {**empty, "reason": str(error), "error_type": type(error).__name__, "output_space": reference}
 
 
 def _field_path(row: dict[str, object]) -> str:
@@ -303,6 +337,8 @@ def prepare_figures(
     build_dependencies: bool = True,
     render_options: RenderOptions | None = None,
     progress: Callable[[str], None] | None = None,
+    pca_samples: int = 64,
+    pca_seconds: float = 60,
 ) -> None:
     """
     Measure chart jobs concurrently and publish figures serially to avoid Matplotlib thread races.
@@ -323,13 +359,15 @@ def prepare_figures(
         build_dependencies (bool): Prepare dependencies before measuring each private copy.
         render_options (RenderOptions | None): Renderer settings inherited from an active scan.
         progress (Callable[[str], None] | None): Progress sink; default prints standalone command updates.
+        pca_samples (int): Reference sample ceiling per chart, or zero to skip PCA.
+        pca_seconds (float): Separate reference measurement deadline per chart.
 
     Returns:
         None: Each chart receives actual sensitivity evidence or an explicit unavailable panel.
     """
-    if jobs < 1 or limit < 1:
-        raise ValueError("jobs and mutation limit must be positive")
-    if not math.isfinite(seconds) or seconds <= 0:
+    if jobs < 1 or limit < 0 or pca_samples < 0 or not (limit or pca_samples):
+        raise ValueError("jobs must be positive; at least one nonnegative measurement limit must be enabled")
+    if not math.isfinite(seconds) or seconds <= 0 or not math.isfinite(pca_seconds) or pca_seconds <= 0:
         raise ValueError("measurement time must be finite and positive")
     source = mapping(report.get("source", {}))
     if verify_source and source.get("kind") == "git" and source.get("revision"):
@@ -346,6 +384,17 @@ def prepare_figures(
     try:
         for chart in charts:
             name = str(chart["chart"])
+            if chart.get("status") in {
+                "pending",
+                "cached-pass",
+                "skipped-library",
+                "missing-values",
+                "invalid-metadata",
+                "dependency-build-failed",
+            }:
+                if pca_samples:
+                    chart["output_space"] = {"status": "unavailable", "reason": "No fresh chart tests in this scan", "observations": []}
+                continue
             relative = Path(name)
             if relative.is_absolute() or ".." in relative.parts:
                 raise ValueError(f"Unsafe chart path: {name}")
@@ -362,6 +411,10 @@ def prepare_figures(
                     values_filename=values_filename,
                     build_dependencies=build_dependencies,
                     render_options=render_options,
+                    pca_samples=pca_samples,
+                    pca_seconds=pca_seconds,
+                    scan_record=chart,
+                    scan_settings=mapping(report.get("settings", {})),
                 )
             ] = chart
         for index, future in enumerate(as_completed(futures), 1):
@@ -380,18 +433,30 @@ def prepare_figures(
             directory = cache / name
             directory.mkdir(parents=True, exist_ok=True)
             (directory / "sensitivity.json").write_text(json.dumps(document, indent=2) + "\n")
+            if pca_samples:
+                chart["output_space"] = document.get("output_space") or {
+                    "status": "unavailable",
+                    "reason": document.get("reason", "No comparable baseline"),
+                    "observations": [],
+                }
             # Existing studies use bitnami/name and prometheus/name, while the
             # source checkouts use bitnami/name and charts/name respectively.
             source_path = Path(name)
             relative = Path(*source_path.parts[1:]) if source_path.parts and source_path.parts[0] in {repository, "charts"} else source_path
             study_path = Path(repository) / relative if repository else source_path
             destination = output / study_path / "sensitivity.png"
-            plot_panel(document, destination, name)
-            chart["report_figures"] = {**mapping(chart.get("report_figures", {})), "sensitivity": str(destination.resolve())}
+            chart["report_figures"] = mapping(chart.get("report_figures", {}))
+            if limit:
+                plot_panel(document, destination, name)
+                mapping(chart["report_figures"])["sensitivity"] = str(destination.resolve())
             topology = output / study_path / "topology.png"
             if topology.is_file():
                 mapping(chart["report_figures"])["topology"] = str(topology.resolve())
-            message = f"[{index}/{len(charts)}] {name}: {document['status']}; {document.get('renders', 0)} renders"
+            reference_count = mapping(chart.get("output_space", {})).get("measured", 0)
+            message = (
+                f"[{index}/{len(futures)}] {name}: {document['status']}; "
+                f"{document.get('renders', 0)} sensitivity renders; {reference_count} PCA observations"
+            )
             if progress is None:
                 print(message, flush=True)
             else:
@@ -423,6 +488,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jobs", type=int, default=6)
     parser.add_argument("--max-mutations", type=int, default=8)
     parser.add_argument("--time-limit", type=parse_time_limit, default=180)
+    parser.add_argument("--pca-samples", type=int, default=64, help="bounded reference configurations per chart; 0 disables PCA")
+    parser.add_argument(
+        "--pca-timeout", type=parse_time_limit, default=60, help="additional PCA measurement budget per chart (default: 1m)"
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--helm", default="helm")
     parser.add_argument("--repository", choices=("bitnami", "prometheus"), help="namespace used by the published topology study")
@@ -441,12 +510,14 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             helm=args.helm,
             repository=args.repository,
+            pca_samples=args.pca_samples,
+            pca_seconds=args.pca_timeout,
         )
     except KeyboardInterrupt:
         return 130
     enriched = args.cache / str(report["started_epoch"]) / "report.json"
     enriched.parent.mkdir(parents=True, exist_ok=True)
-    enriched.write_text(json.dumps(report, indent=2) + "\n")
     publication = Publication(Path.cwd(), args.publication_url, "main") if args.publication_url else None
     write_reports(report, args.report, publication=publication, artifact_links=False)
+    enriched.write_text(json.dumps(report, indent=2) + "\n")
     return 0
