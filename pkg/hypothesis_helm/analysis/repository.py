@@ -31,7 +31,7 @@ from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.execution.runtime.budget import parse_time_limit
 from hypothesis_helm.execution.runtime.processes import Processes
 from hypothesis_helm.reporting.console.progress import format_path
-from hypothesis_helm.reporting.reports.figures import SENSITIVITY_FIELDS_KEY
+from hypothesis_helm.reporting.reports.figures import SENSITIVITY_FIELDS_KEY, SENSITIVITY_PAIRS_KEY
 from hypothesis_helm.reporting.reports.links import Publication
 from hypothesis_helm.reporting.reports.repository import write_reports
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
@@ -244,7 +244,7 @@ def plot_panel(document: dict[str, object], destination: Path, title: str) -> No
         title (str): Exact chart identity.
 
     Returns:
-        None: An interaction heatmap with a numbered field key is written.
+        None: A heatmap with a numbered field key, or a compact absence message, is written.
     """
     import numpy as np
     from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -254,6 +254,17 @@ def plot_panel(document: dict[str, object], destination: Path, title: str) -> No
     # Embed the key in the PNG so republishing a report cannot pair these
     # numbers with a different run's paths or require a separate data file.
     fields = [_field_path(row) for row in rows]
+    pairs = [mapping(row) for row in sequence(document.get("interactions", [])) if "mixed_difference_l1" in mapping(row)]
+    metadata = {SENSITIVITY_FIELDS_KEY: json.dumps(fields), SENSITIVITY_PAIRS_KEY: str(len(pairs))}
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if not pairs:
+        # Reports replace this asset with ordinary text using the pair count.
+        # Direct image consumers also get a message without an empty plot frame.
+        figure = Figure(figsize=(8, 0.55))
+        FigureCanvasAgg(figure)
+        figure.text(0.5, 0.5, "No comparable pairs", ha="center", va="center", fontsize=16)
+        figure.savefig(destination, dpi=170, metadata=metadata)
+        return
     figure = Figure(figsize=(8, 6.5), layout="constrained")
     FigureCanvasAgg(figure)
     axis = figure.subplots()
@@ -262,26 +273,21 @@ def plot_panel(document: dict[str, object], destination: Path, title: str) -> No
     measured = sum("distance" in row for row in rows)
     positions = {str(row["name"]): index for index, row in enumerate(rows)}
     matrix = np.full((max(1, len(rows)), max(1, len(rows))), np.nan)
-    pairs = [mapping(row) for row in sequence(document.get("interactions", [])) if "mixed_difference_l1" in mapping(row)]
     for pair in pairs:
         a, b = [positions[str(name)] for name in sequence(pair["mutations"])]
         matrix[a, b] = matrix[b, a] = int(str(pair["mixed_difference_l1"]))
-    if pairs:
-        image = axis.imshow(
-            np.ma.masked_invalid(matrix),
-            origin="lower",
-            aspect="equal",
-            cmap="viridis",
-            vmin=0,
-            vmax=max(1, float(np.nanmax(matrix))),
-            extent=(0.5, len(rows) + 0.5, 0.5, len(rows) + 0.5),
-        )
-        colorbar = figure.colorbar(image, ax=axis, shrink=0.5)
-        colorbar.set_label(r"$\|\Delta_i\Delta_j f\|_1$", fontsize=16)
-        colorbar.ax.tick_params(labelsize=14)
-    else:
-        axis.text(0.5, 0.5, "No comparable\npairs", ha="center", va="center", fontsize=16, transform=axis.transAxes)
-        axis.set(xticks=[], yticks=[])
+    image = axis.imshow(
+        np.ma.masked_invalid(matrix),
+        origin="lower",
+        aspect="equal",
+        cmap="viridis",
+        vmin=0,
+        vmax=max(1, float(np.nanmax(matrix))),
+        extent=(0.5, len(rows) + 0.5, 0.5, len(rows) + 0.5),
+    )
+    colorbar = figure.colorbar(image, ax=axis, shrink=0.5)
+    colorbar.set_label(r"$\|\Delta_i\Delta_j f\|_1$", fontsize=16)
+    colorbar.ax.tick_params(labelsize=14)
     axis.set(
         title="Field interactions",
         xlabel="Field number (see caption)" if rows else "",
@@ -311,13 +317,11 @@ def plot_panel(document: dict[str, object], destination: Path, title: str) -> No
     axis.set_position(
         (position.x0 + position.width * 0.1, position.y0 + position.height * 0.1, position.width * 0.8, position.height * 0.8)
     )
-    if pairs:
-        bar_position = colorbar.ax.get_position()
-        colorbar.ax.set_position(
-            (axis.get_position().x1 + 0.025, bar_position.y0 + bar_position.height * 0.1, bar_position.width, bar_position.height * 0.8)
-        )
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    figure.savefig(destination, dpi=170, metadata={SENSITIVITY_FIELDS_KEY: json.dumps(fields)})
+    bar_position = colorbar.ax.get_position()
+    colorbar.ax.set_position(
+        (axis.get_position().x1 + 0.025, bar_position.y0 + bar_position.height * 0.1, bar_position.width, bar_position.height * 0.8)
+    )
+    figure.savefig(destination, dpi=170, metadata=metadata)
 
 
 def prepare_figures(

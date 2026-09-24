@@ -62,6 +62,15 @@ func TestOracleCommand(t *testing.T) {
 		{`{"profile":"pdb-count-or-percent","value":"100%"}
 {"profile":"pdb-count-or-percent","value":"101%"}
 `, "true\nfalse\n"},
+		{`{"profile":"port-number-or-name","value":"http"}
+{"profile":"port-number-or-name","value":"I\n&"}
+{"profile":"port-number-or-name","value":1}
+{"profile":"port-number-or-name","value":65536}
+{"profile":"port-number-or-name","value":"http--api"}
+{"profile":"port-number-or-name","value":null}
+{"profile":"port-number-or-name","value":true}
+{"profile":"port-number-or-name","value":"123"}
+`, "true\nfalse\ntrue\nfalse\nfalse\nfalse\nfalse\nfalse\n"},
 	} {
 		var output bytes.Buffer
 		if err := run([]string{"--oracle"}, strings.NewReader(test.input), &output, io.Discard); err != nil {

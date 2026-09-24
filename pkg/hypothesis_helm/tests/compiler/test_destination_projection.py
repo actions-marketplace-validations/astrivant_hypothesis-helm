@@ -62,6 +62,68 @@ def test_fallback_keeps_empty_input_and_constrains_selected_reference(tmp_path: 
     assert not validator.is_valid(json_value({**chart.defaults, "secretName": ">0"}))
 
 
+@pytest.mark.parametrize("collectors", [{}, {"cpu": True}, {"cpu": True, "memory": False}])
+def test_map_loop_preserves_later_configmap_destination(tmp_path: Path, collectors: dict[str, bool]) -> None:
+    """
+    Keep a helper-forwarded ConfigMap name constrained after a symbolic map loop.
+
+    Args:
+        tmp_path (Path): Independent chart with no vendor-specific names or bindings.
+        collectors (dict[str, bool]): Empty or nonempty map used by an optional container.
+
+    Returns:
+        None: Literal names obey the API contract, empty fallback survives, and maps remain maps.
+    """
+    chart = fixture_chart(tmp_path)
+    mapping(chart.schema["properties"]).update(
+        collectors={"type": "object", "additionalProperties": {"type": "boolean"}},
+        primary={"type": "object", "properties": {"existingConfigmap": {"type": "string"}}, "required": ["existingConfigmap"]},
+    )
+    chart.defaults.update(collectors=collectors, primary={"existingConfigmap": ""})
+    (tmp_path / "values.schema.json").write_text(json.dumps(chart.schema))
+    (tmp_path / "templates/_helpers.tpl").write_text(
+        dedent("""
+        {{- define "selected.configuration" -}}
+        {{- if .Values.primary.existingConfigmap -}}
+          {{- printf "%s" (tpl .Values.primary.existingConfigmap $) -}}
+        {{- else -}}default-configuration{{- end -}}
+        {{- end -}}
+        """)
+    )
+    (tmp_path / "templates/pod.yaml").write_text(
+        dedent("""
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: example
+        spec:
+          containers:
+            - name: app
+              image: example
+          {{- if .Values.enabled }}
+            - name: metrics
+              image: example
+              args:
+              {{- range $name, $enabled := .Values.collectors }}
+                - --{{ if not $enabled }}no-{{ end }}collector.{{ $name }}
+              {{- end }}
+          {{- end }}
+          volumes:
+            - name: configuration
+              configMap:
+                name: {{ include "selected.configuration" . }}
+        """).lstrip()
+    )
+    schema = chart.generation_schema()
+    validator = validators.validator_for(schema)(schema)
+    assert not any(rule["path"] == ["collectors"] for rule in chart.input_domains().rules)
+    for enabled, value in itertools.product((False, True), ("", "valid-name", "0", "'", ">0")):
+        candidate = {**chart.defaults, "enabled": enabled, "primary": {"existingConfigmap": value}}
+        assert validator.is_valid(json_value(candidate)) is (value in {"", "valid-name", "0"})
+        if shutil.which("helm") and value in {"", "valid-name"}:
+            assert render(chart, candidate)
+
+
 @pytest.mark.parametrize("enabled", [False, True])
 def test_branch_assignment_and_with_aliases(tmp_path: Path, enabled: bool) -> None:
     """

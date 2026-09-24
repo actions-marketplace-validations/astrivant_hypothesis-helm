@@ -34,6 +34,8 @@ BINDINGS = {
     "io.k8s.api.core.v1.SecretProjection/name": "dns1123-subdomain",
     "io.k8s.api.core.v1.ContainerPort/containerPort": "port-number",
     "io.k8s.api.core.v1.ServicePort/port": "port-number",
+    "io.k8s.api.core.v1.HTTPGetAction/port": "port-number-or-name",
+    "io.k8s.api.core.v1.TCPSocketAction/port": "port-number-or-name",
     "io.k8s.api.policy.v1.PodDisruptionBudgetSpec/minAvailable": "pdb-count-or-percent",
     "io.k8s.api.policy.v1.PodDisruptionBudgetSpec/maxUnavailable": "pdb-count-or-percent",
     "io.k8s.api.policy.v1beta1.PodDisruptionBudgetSpec/minAvailable": "pdb-count-or-percent",
@@ -100,6 +102,14 @@ def verify(binary: Path, profiles: dict[str, object], owner: Processes) -> dict[
             values.extend(f"{value}%" for value in range(103))
             values.extend(prefix + f"{value}%" for prefix in ("0", "00", "0" * 256) for value in (0, 1, 99, 100, 101))
             values.extend(chr(char) + "%" for char in range(128))
+        elif name == "port-number-or-name":
+            alternatives = sequence(schema["anyOf"])
+            numeric, text = (mapping(alternative) for alternative in alternatives)
+            lo, hi, length = int(str(numeric["minimum"])), int(str(numeric["maximum"])), int(str(text["maxLength"]))
+            values = [lo - 1, lo, hi, hi + 1, 1.5, None, True, {}, [], "", "http", "1-http", "123", "HTTP", "http--api", "-http", "http-"]
+            values.extend("a" * size for size in (length - 1, length, length + 1))
+            values.extend(prefix + chr(char) + suffix for prefix, suffix in (("", ""), ("h", ""), ("h", "p")) for char in range(128))
+            values.extend(["I\n&", "http\n", "http\r", "http\t", "é", "'", ">0"])
         elif schema.get("type") == "integer":
             lo, hi = int(str(schema["minimum"])), int(str(schema["maximum"]))
             values = [lo - 1, lo, lo + 1, hi - 1, hi, hi + 1, -1, 0]

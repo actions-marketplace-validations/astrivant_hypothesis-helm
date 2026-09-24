@@ -1018,6 +1018,10 @@ These are API schema shims, not chart-name exceptions. Each records its upstream
 rebuilds require review if that description changes. The Service enum shims also record the upstream defaulting
 reference and when they can be retired. Remove a shim once the upstream schema supplies the equivalent constraint.
 Other fields remain unconstrained where neither upstream data nor a reviewed supplement establishes their domain.
+`HTTPGetAction.port` and `TCPSocketAction.port` also need bounds absent from the JSON schemas. Catalog rebuilds derive
+their numeric range and port-name rules from Kubernetes' `IsValidPortNum` and `IsValidPortName` validators, then check
+boundary cases against the compiled Go functions. These rules apply to probes and lifecycle handlers across charts;
+they validate port syntax, not whether a named port exists in the target container.
 See [catalog rebuilding](docs/input-domains/README.md#rebuilding-the-catalog-before-release) for source verification and limits.
 
 ## License

@@ -182,7 +182,9 @@ def test_audit_json_links_have_complete_portable_data(tmp_path: Path, published:
     assert len(list(data.parent.iterdir())) == 2
     relative = "scan-data/0001.audit.json.gz"
     target = publication.url(relative, markdown) if publication else relative
-    assert f"1 additional audit findings in [JSON](<{target}>)." in " ".join(markdown.read_text().split())
+    assert f"Audit findings: 7. Full paths and template references: [JSON](<{target}>)." in " ".join(markdown.read_text().split())
+    assert "additional audit findings" not in markdown.read_text()
+    assert "at `$.field0`" not in markdown.read_text()
     uri = target if publication else data.resolve().as_uri()
     assert uri.encode() in re.findall(rb"/URI\s*\(([^)]+)\)", pdf.read_bytes())
     if published:

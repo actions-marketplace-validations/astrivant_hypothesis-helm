@@ -169,6 +169,21 @@ func profiles(root string) Record {
 		panic("unsupported port operand")
 	}
 	result["port-number"] = Record{"schema": Record{"type": "integer", "minimum": expression(lower.X, constants), "maximum": expression(upper.Y, constants)}, "function": "IsValidPortNum", "function_sha256": canonical(port)}
+	name := funcs["IsValidPortName"]
+	if name == nil || compiled["IsValidPortName"] == nil || canonical(name) != canonical(compiled["IsValidPortName"]) {
+		panic("source and oracle port-name validator differ")
+	}
+	_, core := declarations(filepath.Join(root, "pkg/apis/core/validation/validation.go"))
+	result["port-number-or-name"] = Record{
+		"schema": Record{"anyOf": []any{result["port-number"].(Record)["schema"], portNameDomain(constants, name)}},
+		"functions": Record{
+			"IsValidPortNum": canonical(port), "IsValidPortName": canonical(name),
+			"ValidatePortNumOrName":   canonical(core["ValidatePortNumOrName"]),
+			"validateHTTPGetAction":   canonical(core["validateHTTPGetAction"]),
+			"validateTCPSocketAction": canonical(core["validateTCPSocketAction"]),
+		},
+		"scope": "HTTP and TCP probe/lifecycle action ports; named-port existence is a separate API rule",
+	}
 	if funcs["IsValidPercent"] == nil || canonical(funcs["IsValidPercent"]) != canonical(compiled["IsValidPercent"]) {
 		panic("source and oracle percent validator differ")
 	}
@@ -190,6 +205,58 @@ func profiles(root string) Record {
 		"scope": "PDB replica counts and percentages; field exclusivity is a separate API rule",
 	}
 	return result
+}
+
+// portNameDomain translates the pinned port-name checks into a scalar schema.
+//
+// Args:
+//
+//	constants (map[string]ast.Expr): Source declarations for the two regular expressions.
+//	function (*ast.FuncDecl): IsValidPortName, already matched to the compiled oracle.
+//
+// Returns:
+//
+//	Record: Source-derived length and patterns, including letter and hyphen requirements.
+//
+// Panics:
+//
+//	The validator's guards no longer match the supported source structure.
+func portNameDomain(constants map[string]ast.Expr, function *ast.FuncDecl) Record {
+	if len(function.Body.List) != 7 {
+		panic("unsupported port-name validator")
+	}
+	limit := function.Body.List[1].(*ast.IfStmt).Cond.(*ast.BinaryExpr)
+	lengthCall, err := parser.ParseExpr("len(port)")
+	must(err)
+	if limit.Op != token.GTR || canonical(limit.X) != canonical(lengthCall) {
+		panic("unsupported port-name length guard")
+	}
+	// Refuse changed control flow instead of silently ignoring a new restriction.
+	for index, condition := range []string{
+		"!portNameCharsetRegex.MatchString(port)",
+		"!portNameOneLetterRegexp.MatchString(port)",
+		`strings.Contains(port, "--")`,
+		"len(port) > 0 && (port[0] == '-' || port[len(port)-1] == '-')",
+	} {
+		expected, err := parser.ParseExpr(condition)
+		must(err)
+		guard, ok := function.Body.List[index+2].(*ast.IfStmt)
+		if !ok || guard.Else != nil || canonical(guard.Cond) != canonical(expected) {
+			panic("unsupported port-name guard")
+		}
+	}
+	patterns := []any{}
+	for _, name := range []string{"portNameCharsetRegex", "portNameOneLetterRegexp"} {
+		call := constants[name].(*ast.CallExpr)
+		pattern := expression(call.Args[0], constants).(string)
+		if strings.HasSuffix(pattern, "$") {
+			// Python's dollar anchor also matches before a trailing newline; Go's does not.
+			pattern = strings.TrimSuffix(pattern, "$") + `(?![\s\S])`
+		}
+		patterns = append(patterns, Record{"pattern": pattern})
+	}
+	patterns = append(patterns, Record{"not": Record{"pattern": `--|^-|-(?![\s\S])`}})
+	return Record{"type": "string", "maxLength": expression(limit.Y, constants), "allOf": patterns}
 }
 
 // percentLimit extracts the accepted percentage ceiling from a supported guard.
@@ -380,6 +447,14 @@ func oracle(input io.Reader, output io.Writer) error {
 				valid = err == nil && percent <= 100
 			} else if json.Unmarshal(test.Value, &count) == nil && string(test.Value) != "null" {
 				valid = count >= 0
+			}
+		} else if test.Profile == "port-number-or-name" {
+			var number int32
+			var name string
+			if json.Unmarshal(test.Value, &name) == nil && string(test.Value) != "null" {
+				valid = len(validation.IsValidPortName(name)) == 0
+			} else if json.Unmarshal(test.Value, &number) == nil && string(test.Value) != "null" {
+				valid = len(validation.IsValidPortNum(int(number))) == 0
 			}
 		} else if test.Profile == "port-number" {
 			var value int

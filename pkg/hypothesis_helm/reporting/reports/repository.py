@@ -381,6 +381,9 @@ def write_reports(
     assert isinstance(charts, list)
     for index, chart in enumerate(charts, 1):
         assert isinstance(chart, dict)
+        has_failures = any(
+            mapping(occurrence)["chart"] == chart["chart"] for group in errors for occurrence in sequence(mapping(group)["occurrences"])
+        )
         heading = chart_heading(chart, mapping(report.get("source", {})), markdown, artifact_links=artifact_links, publication=publication)
         lines.extend([heading, ""])
         if chart["chart"] in studies.charts:
@@ -389,7 +392,8 @@ def write_reports(
             for kind, image_path in (("Topology", topology), ("Sensitivity", sensitivity)):
                 label = f"{kind}: {chart['chart']}"
                 if image_path is None:
-                    cells.append(f"{kind} measurements unavailable.")
+                    message = studies.sensitivity_messages.get(str(chart["chart"])) if kind == "Sensitivity" else None
+                    cells.append(message or f"{kind} measurements unavailable.")
                 else:
                     images[label] = image_path
                     caption_kinds[label] = "Chart topology" if kind == "Topology" else "Field interactions"
@@ -401,10 +405,12 @@ def write_reports(
                     f"| {cells[0]} | {cells[1]} |",
                     "",
                 ]
+                if topology or sensitivity
+                else [cells[0], "", cells[1], ""]
             )
             if studies.sensitivity_fields.get(str(chart["chart"])):
                 lines.extend([field_key_caption, ""])
-        lines.extend([f"Overview cell: {index:02d}", ""])
+        lines.extend([f"Overview cell: [{index:02d}](#overview)", ""])
         package = chart.get("package")
         if isinstance(package, dict):
             lines.extend(
@@ -420,10 +426,19 @@ def write_reports(
                 "",
             ]
         )
+        if not has_failures and chart.get("attempts"):
+            message = "No failing test cases were recorded."
+            if chart["status"] == "time-limit":
+                message += " The time limit was reached before testing finished."
+            elif chart["status"] == "interrupted":
+                message += " Testing was interrupted before it finished."
+            lines.extend([message, ""])
         if chart.get("error") and not numbered_diagnostic(chart):
             lines.extend(["Testing limitation: " + " ".join(display_error(chart["error"]).split()), ""])
         coverage_fallback = mapping(chart.get("coverage_fallback", {}))
-        if coverage_fallback:
+        if coverage_fallback and not has_failures:
+            lines.extend(["Coverage: sampled values paths; full interaction coverage was not established.", ""])
+        elif coverage_fallback:
             strength = coverage_fallback.get("requested_permutations")
             requested = f"Requested {strength}-way interaction coverage" if strength is not None else "Finite interaction coverage"
             lines.extend(
@@ -450,14 +465,14 @@ def write_reports(
             audit_data = write_audit_data(report, chart, stem, index)
             audit_link = artifact_link("JSON", audit_data, markdown)
             lines.extend([f"Audit findings: {len(findings)}. Full paths and template references: {audit_link}.", ""])
-            for observed_finding in findings[:6]:
+            for observed_finding in findings[:6] if has_failures else []:
                 path = tuple(str(part) for part in sequence(observed_finding.get("path", [])))
                 lines.append(
                     f"- `{observed_finding['code']}` at `{format_path(path)}`: "
                     f"{mapping(observed_finding.get('finding', {})).get('title', '')}"
                     f"{(' (' + str(observed_finding['severity']) + ')') if 'severity' in observed_finding else ''}"
                 )
-            if len(findings) > 6:
+            if has_failures and len(findings) > 6:
                 lines.append(f"- {len(findings) - 6} additional audit findings in {audit_link}.")
             lines.append("")
         sampling = chart.get("sampling")

@@ -204,9 +204,13 @@ def test_report_front_matter_and_internal_destinations(tmp_path: Path, chart_cou
     assert pages[0][0] in destinations  # The title-page bookmark retains its own destination.
     assert pages[1][0] in destinations  # Footer links return to contents.
     assert pages[2][0] in destinations  # Contents links to the overview.
+    overview_links = [body for body in objects.values() if b"/Subtype /Link" in body and b"/Dest [ " + pages[2][0] + b" 0 R" in body]
+    assert len(overview_links) == chart_count + 1  # Every chart number and the contents entry return to the overview.
     chart_links = [body for body in objects.values() if re.search(rb"/Contents \(Chart ", body)]
     assert len(chart_links) == chart_count * 2
     chart_outlines = [body for body in objects.values() if b"/Title (repeated/name)" in body]
+    chart_pages = [page for body in chart_outlines for page in re.findall(rb"/Dest \[ (\d+) 0 R", body)]
+    assert len(set(chart_pages)) == chart_count
     for index, link in enumerate(chart_links):
         # Both matrices must reach the specific scan section, even when many
         # charts share a title and several sections occupy the same PDF page.
@@ -214,7 +218,9 @@ def test_report_front_matter_and_internal_destinations(tmp_path: Path, chart_cou
         expected = re.search(rb"/Dest \[ ([^]]+)\]", chart_outlines[index % chart_count])
         assert actual is not None and expected is not None
         assert actual[1] == expected[1]
-    assert "Overview cell: 01" in markdown.read_text() if chart_count else "Overview cell:" not in markdown.read_text()
+    assert re.findall(r"Overview cell: \[(\d+)\]\(#overview\)", markdown.read_text()) == [
+        f"{index:02d}" for index in range(1, chart_count + 1)
+    ]
     assert "[Overview](#overview)" in markdown.read_text()
     assert "![Chart severity and scan-time matrices](<report-overview.png>)" in markdown.read_text()
     if chart_count > 1:

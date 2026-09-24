@@ -301,7 +301,15 @@ def write_pdf(
             # Keep the chart heading and both panels together using their
             # actual dimensions, including differently sized sensitivity panels.
             required = _panel_height(chart_panels, 264) + 121 if chart_panels else 120
-            if y < required or (figure_page and level <= 2) or (level == 2 and label.startswith("Appendix: ")):
+            # The Charts heading shares the first chart's page; later charts
+            # start fresh even when the preceding section leaves enough room.
+            new_chart = anchor in chart_anchors and anchor != chart_sections[0][1]
+            if (
+                y < required
+                or new_chart
+                or (figure_page and level <= 2)
+                or (level == 2 and (label == "Charts" or label.startswith("Appendix: ")))
+            ):
                 canvas.showPage()
                 y = page_header()
                 figure_page = False

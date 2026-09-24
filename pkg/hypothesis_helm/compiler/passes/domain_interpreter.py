@@ -303,13 +303,13 @@ class Interpreter:
 
         Args:
             node (Node): Range block whose runtime collection size is unknown.
-            values (object): Input array or supported local collection expression.
+            values (object): Input array, map or supported local collection expression.
             source (str): Template source for diagnostics.
             context (object): Dot context outside the loop.
             scope (Scope): Enclosing lexical bindings.
 
         Returns:
-            list[Piece]: Guarded representative output, without enumerating the array's values.
+            list[Piece]: Guarded representative output, without enumerating the collection's values.
 
         Raises:
             Unknown: Collection type, loop control or analysis budget is unsupported.
@@ -320,8 +320,13 @@ class Interpreter:
             kinds = {item.get("type") for item in _schema_nodes(self.schema, values.path, self.schema) if isinstance(item.get("type"), str)}
             if kinds == {"array"}:
                 candidates = (Member(Input((*values.path, "*"))),)
+            elif kinds == {"object"}:
+                # Keep the loop body's YAML structure even when keys are not enumerable.
+                # Map entries are opaque here: wildcard Input origins describe array
+                # elements and would incorrectly impose array constraints on this map.
+                candidates = (Member(Operation("map-entry", (values,))),)
         if candidates is None:
-            raise Unknown("projection range requires an array with established element origins")
+            raise Unknown("projection range requires an established array or map type")
         if len(candidates) > self.contracts.limits["max_range_items"]:
             raise Unknown("collection origins exceed compiler.max_range_items")
         binding = RANGE_ASSIGNMENT.fullmatch(node.text.removeprefix("range "))
