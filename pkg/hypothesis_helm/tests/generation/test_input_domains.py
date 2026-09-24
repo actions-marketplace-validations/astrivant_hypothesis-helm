@@ -281,16 +281,19 @@ def test_opaque_helpers_are_not_guessed(tmp_path: Path) -> None:
 
 def test_custom_schema_required_and_used(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    Require a custom API contract and reuse it for input domains and manifest validation.
+    Require custom API contracts in strict mode and reuse supplied contracts for validation.
 
     Args:
         tmp_path (Path): Configuration directory.
         monkeypatch (pytest.MonkeyPatch): Worker policy environment.
 
     Returns:
-        None: Missing or invalid custom schemas cannot produce a successful validation witness.
+        None: Missing contracts skip normally, strict mode rejects them, and supplied schemas always validate.
     """
     resource = {"apiVersion": "example.org/v1", "kind": "Widget", "metadata": {"name": "ok"}, "spec": {"size": 2}}
+    validate_resources([resource])
+    monkeypatch.setenv(ENVIRONMENT, json.dumps({"strict": True}))
+    refresh_env()
     with pytest.raises(RenderFailure, match="requires an explicit JSON schema"):
         validate_resources([resource])
     schema = {"type": "object", "properties": {"spec": {"type": "object", "properties": {"size": {"type": "integer", "minimum": 1}}}}}

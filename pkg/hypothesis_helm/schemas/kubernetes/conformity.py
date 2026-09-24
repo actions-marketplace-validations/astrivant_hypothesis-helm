@@ -255,7 +255,9 @@ def validate(manifests: str | Iterable[object], timeout: float, *, configuration
                 check(item)
             return
         try:
-            if validate_custom(resource):
+            # Unknown custom resources deliberately skip schema validation in
+            # ordinary mode; only built-ins proceed to the Kubernetes cache.
+            if validate_custom(resource) is not False:
                 return
             api, kind = str(resource.get("apiVersion", "")), str(resource.get("kind", ""))
             if not re.fullmatch(r"(?:[a-z0-9.-]+/)?[a-z0-9]+", api) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", kind):

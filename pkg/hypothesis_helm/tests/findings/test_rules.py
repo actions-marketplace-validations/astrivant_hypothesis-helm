@@ -20,6 +20,7 @@ from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.findings.generator import FindingGenerator
 from hypothesis_helm.rules import ENVIRONMENT, RULES, load_ignored
 from hypothesis_helm.tests import PROJECT_ROOT
+from hypothesis_helm.tests.fixtures.cli import result_text
 
 ROOT = PROJECT_ROOT
 
@@ -311,7 +312,7 @@ def test_native_workers_inherit_config(tmp_path: Path, capsys: pytest.CaptureFix
     if exhaustive:
         args.append("--exhaustive")
     assert main(args) == 1
-    before = json.loads(capsys.readouterr().out)
+    before = json.loads(result_text(capsys.readouterr().out))
     assert (before if exhaustive else before["charts"][0])["status"] == "failed"
     assert (
         main(
@@ -329,7 +330,7 @@ def test_native_workers_inherit_config(tmp_path: Path, capsys: pytest.CaptureFix
         )
         == 0
     )
-    after = json.loads(capsys.readouterr().out)
+    after = json.loads(result_text(capsys.readouterr().out))
     assert after["ignored_rules"] == ["HH1106", "HH1108", "HH2006"]
     assert (after if exhaustive else after["charts"][0])["status"] == "passed"
 

@@ -19,12 +19,14 @@ from hypothesis_helm.charts.suites.runtime import prepared_chart
 from hypothesis_helm.charts.testing.rendering import render, validate_resources
 from hypothesis_helm.charts.testing.runner import check_chart
 from hypothesis_helm.charts.values import yamlio
+from hypothesis_helm.cli import argument_parser
 from hypothesis_helm.environment import refresh_env
 from hypothesis_helm.exceptions.rendering import RenderFailure
 from hypothesis_helm.execution.state.render_hashes import RenderHashes
 from hypothesis_helm.schemas.configuration.policy import ENVIRONMENT, load_policy
 from hypothesis_helm.schemas.contracts import json_value, mapping
 from hypothesis_helm.schemas.kubernetes import conformity
+from hypothesis_helm.schemas.kubernetes.resources import strict_schemas, validate_custom
 from hypothesis_helm.tests import FIXTURES
 
 FIXTURE = FIXTURES / "polyad-gate"
@@ -128,26 +130,32 @@ def test_polyad_helpers_render_valid_resources(polyad_chart: Chart, delay: objec
 
 
 @pytest.mark.parametrize("identity", [None, "polyad.astrivant.com/v1beta1/Gate"])
-def test_crd_files_do_not_replace_explicit_resource_schemas(
-    polyad_chart: Chart, monkeypatch: pytest.MonkeyPatch, identity: str | None
+@pytest.mark.parametrize("strict", [False, True])
+def test_missing_custom_schemas_are_required_only_in_strict_mode(
+    polyad_chart: Chart, monkeypatch: pytest.MonkeyPatch, identity: str | None, strict: bool
 ) -> None:
     """
-    Reject missing and wrong-version contracts even when the chart bundles the CRD.
+    Skip unregistered custom schemas unless strict validation is requested.
 
     Args:
         polyad_chart (Chart): Chart containing both CRD definitions and custom-resource templates.
         monkeypatch (pytest.MonkeyPatch): Replace the supplied schema registration.
         identity (str | None): Missing registration or the wrong API version.
+        strict (bool): Whether an exact registered contract is mandatory.
 
     Returns:
-        None: Successful Helm rendering cannot hide a missing output contract.
+        None: Strict mode reports the missing contract; normal mode preserves the rendered resource.
     """
     schema = json.loads((polyad_chart.path / "schemas" / "gate.json").read_text())
-    monkeypatch.setenv(ENVIRONMENT, json.dumps({"resource_schemas": {identity: schema} if identity else {}}))
+    monkeypatch.setenv(ENVIRONMENT, json.dumps({"resource_schemas": {identity: schema} if identity else {}, "strict": strict}))
     refresh_env()
-    with pytest.raises(RenderFailure, match="requires an explicit JSON schema") as caught:
-        render(polyad_chart, {})
-    assert caught.value.code == "HH1108"
+    if strict:
+        with pytest.raises(RenderFailure, match="requires an explicit JSON schema") as caught:
+            render(polyad_chart, {})
+        assert caught.value.code == "HH1108"
+    else:
+        resources = render(polyad_chart, {})
+        assert resources and validate_custom(resources[0]) is None
 
 
 def test_custom_resource_constraints_guide_generated_values(polyad_chart: Chart, tmp_path: Path) -> None:
@@ -262,8 +270,8 @@ def test_saved_suite_preserves_custom_resource_schema(polyad_chart: Chart, tmp_p
         assert hashes.cache_hits == 1
         with pytest.raises(RenderFailure, match="HH1108"):
             validate_resources([{**resource, "spec": {"delaySeconds": -1}}])
-    with pytest.raises(RenderFailure, match="requires an explicit JSON schema"):
-        validate_resources([resource])
+    validate_resources([resource])
+    assert validate_custom(resource) is None
     snapshot = suite / "input-domains.json"
     document = json.loads(snapshot.read_text())
     document["resource_schemas"][IDENTITY]["properties"]["spec"]["properties"]["delaySeconds"]["minimum"] = 2
@@ -272,6 +280,99 @@ def test_saved_suite_preserves_custom_resource_schema(polyad_chart: Chart, tmp_p
         with pytest.raises(RenderFailure, match="HH1108"):
             render(prepared, {}, hashes=hashes)
     assert hashes.cache_hits == 1
+
+
+def test_strict_mode_survives_saved_suites_and_invalidates_render_reuse(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Preserve strict schema policy across workers, saved suites, and manifest cache entries.
+
+    Args:
+        tmp_path (Path): Direct chart and generated suite directory.
+        monkeypatch (pytest.MonkeyPatch): Switch the serialized worker policy between validation modes.
+
+    Returns:
+        None: Strict checks cannot reuse a schema-skipped render; explicit current settings override saved settings.
+    """
+    monkeypatch.setenv(ENVIRONMENT, "{}")
+    refresh_env()
+    chart = direct_chart(tmp_path / "chart")
+    hashes = RenderHashes()
+    assert len(render(chart, {}, hashes=hashes)) == 2
+    render(chart, {}, hashes=hashes)
+    assert hashes.cache_hits == 1
+    monkeypatch.setenv(ENVIRONMENT, json.dumps({"strict": True}))
+    refresh_env()
+    with pytest.raises(RenderFailure, match="requires an explicit JSON schema"):
+        render(chart, {}, hashes=hashes)
+    assert hashes.cache_hits == 1
+    suite = tmp_path / "suite"
+    generate_tests(chart, suite, max_examples=1)
+    assert json.loads((suite / "input-domains.json").read_text())["strict"] is True
+    monkeypatch.setenv(ENVIRONMENT, "{}")
+    refresh_env()
+    with prepared_chart(chart.path, suite) as prepared:
+        assert strict_schemas()
+        with pytest.raises(RenderFailure, match="requires an explicit JSON schema"):
+            render(prepared, {})
+    assert not strict_schemas()
+    monkeypatch.setenv(ENVIRONMENT, json.dumps({"strict": False}))
+    refresh_env()
+    with prepared_chart(chart.path, suite) as prepared:
+        assert not strict_schemas()
+        assert len(render(prepared, {})) == 2
+
+
+def test_schema_skips_leave_builtin_validation_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Skip unknown custom resources in lists without skipping neighboring built-in checks.
+
+    Args:
+        tmp_path (Path): Local Kubernetes schema cache fixture.
+        monkeypatch (pytest.MonkeyPatch): Select default or strict resource handling.
+
+    Returns:
+        None: Missing contracts skip normally, strict mode rejects them, and invalid ConfigMaps always fail.
+    """
+    custom = {"apiVersion": "grafana.integreatly.org/v1beta1", "kind": "Grafana", "metadata": {"name": "example"}}
+    builtin = {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "example"}, "data": {"ready": False}}
+    (tmp_path / "configmap-v1.json").write_text(
+        json.dumps({"type": "object", "properties": {"data": {"type": "object", "additionalProperties": {"type": "string"}}}})
+    )
+    configuration = json.dumps({"version": "1.35.0", "schemas": str(tmp_path)})
+    monkeypatch.setenv(ENVIRONMENT, "{}")
+    refresh_env()
+    validate_resources([custom])
+    conformity.validate([custom], 10, configuration=configuration)
+    with pytest.raises(AssertionError, match="ConfigMap.*ready"):
+        conformity.validate([{"apiVersion": "v1", "kind": "List", "items": [custom, builtin]}], 10, configuration=configuration)
+    monkeypatch.setenv(ENVIRONMENT, json.dumps({"strict": True}))
+    refresh_env()
+    with pytest.raises(AssertionError, match="requires an explicit JSON schema"):
+        conformity.validate([custom], 10, configuration=configuration)
+
+
+def test_strict_cli_and_configuration(tmp_path: Path) -> None:
+    """
+    Keep missing-schema strictness independent from severity-based fail-fast settings.
+
+    Args:
+        tmp_path (Path): User configuration directory.
+
+    Returns:
+        None: All execution modes accept the override and reject invalid configuration types.
+    """
+    parser = argument_parser()
+    for command in ("test", "scan", "run", "generate"):
+        for option, expected in (("--strict", True), ("--no-strict", False)):
+            assert parser.parse_args([command, "chart", option]).strict is expected
+        assert parser.parse_args([command, "chart"]).strict is None
+    config = tmp_path / "config.yaml"
+    config.write_text("strict: true\n")
+    assert load_policy(config)["strict"] is True
+    assert load_policy(config, strict=False)["strict"] is False
+    config.write_text('strict: "yes"\n')
+    with pytest.raises(ValueError, match="strict must be a Boolean"):
+        load_policy(config)
 
 
 @pytest.mark.parametrize("saved", [False, True])

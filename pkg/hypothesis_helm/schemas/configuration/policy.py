@@ -63,6 +63,7 @@ def configuration(config: Path | None) -> dict[str, object]:
         "ignored",
         "input_constraints",
         "resource_schemas",
+        "strict",
         "downstream_inputs",
         "yaml_parser",
         "compiler",
@@ -118,6 +119,7 @@ def load_policy(
     character_sets: str | None = None,
     max_examples: int | None = None,
     yaml_parser: str | None = None,
+    strict: bool | None = None,
 ) -> dict[str, object]:
     """
     Resolve chart-scoped restrictions and freeze supplied resource schemas for workers.
@@ -127,11 +129,16 @@ def load_policy(
         character_sets (str | None): Optional CLI override for the configured character domain.
         max_examples (int | None): Explicit CLI override for the global Hypothesis example budget.
         yaml_parser (str | None): Explicit CLI override for the manifest parser backend.
+        strict (bool | None): Explicit CLI override requiring schemas for every rendered custom resource.
 
     Returns:
         dict[str, object]: JSON-compatible policy with resource schema contents embedded.
     """
     document = configuration(config)
+    if "strict" in document and type(document["strict"]) is not bool:
+        raise ValueError("strict must be a Boolean")
+    # Preserve an absent override so saved suites can retain their recorded mode.
+    strict_policy = {"strict": strict if strict is not None else document["strict"]} if strict is not None or "strict" in document else {}
     parser_policy = (
         {"yaml_parser": validate_backend(yaml_parser if yaml_parser is not None else document["yaml_parser"])}
         if yaml_parser is not None or "yaml_parser" in document
@@ -224,6 +231,7 @@ def load_policy(
     return {
         **defaults,
         **parser_policy,
+        **strict_policy,
         "input_constraints": resolved,
         "resource_schemas": supplied,
         "downstream_inputs": document.get("downstream_inputs", True),

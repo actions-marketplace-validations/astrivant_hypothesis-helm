@@ -28,7 +28,7 @@ from hypothesis_helm.schemas.contracts import (
     sequence,
 )
 from hypothesis_helm.schemas.kubernetes.conformity import ENVIRONMENT, validate
-from hypothesis_helm.schemas.kubernetes.resources import resource_schemas
+from hypothesis_helm.schemas.kubernetes.resources import resource_schemas, strict_schemas
 
 __all__ = ("render", "render_output", "validate_resources")
 
@@ -262,7 +262,8 @@ def _render(
 
         context = json.dumps(
             {
-                "resource_contract": 1,
+                "resource_contract": 2,
+                "strict": strict_schemas(),
                 "yaml_parser": manifest_parsers.identity(),
                 "conformity": env.get(ENVIRONMENT),
                 "timeout": timeout,

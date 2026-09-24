@@ -351,24 +351,31 @@ def test_scan_audit_findings_continue_or_fail_fast(
     assert report["charts"][0]["audit"]["findings"]
     assert report["charts"][1]["status"] == ("pending" if fail else "passed")
     markdown, _ = write_reports(report, tmp_path / "report")
-    assert "HH2003" in markdown.read_text() and "Audit findings:" in markdown.read_text()
+    assert "Audit findings:" in markdown.read_text()
+    assert any(finding["code"] == "HH2003" for finding in report["charts"][0]["audit"]["findings"])
+    if fail:
+        assert "HH2003" in markdown.read_text()
 
 
 @pytest.mark.parametrize("command", ["audit", "generate", "test", "scan", "run"])
-def test_fail_replaces_strict(command: str) -> None:
+def test_strict_schema_policy_is_not_a_fail_alias(command: str) -> None:
     """
-    Expose one failure switch and reject the removed spelling.
+    Keep missing-schema requirements separate from the finding severity threshold.
 
     Args:
         command (str): Finding-producing CLI command.
 
     Returns:
-        None: --fail is accepted and --strict is an argument error.
+        None: --strict never enables fail-fast, and audit keeps only the finding switch.
     """
     assert argument_parser().parse_args([command, "chart", "--fail"]).fail
-    with pytest.raises(SystemExit) as error:
-        argument_parser().parse_args([command, "chart", "--strict"])
-    assert error.value.code == 2
+    if command == "audit":
+        with pytest.raises(SystemExit) as error:
+            argument_parser().parse_args([command, "chart", "--strict"])
+        assert error.value.code == 2
+    else:
+        args = argument_parser().parse_args([command, "chart", "--strict"])
+        assert args.strict and not args.fail
 
 
 @pytest.mark.parametrize("code", sorted(CATALOG))

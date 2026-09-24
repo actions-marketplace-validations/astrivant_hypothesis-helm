@@ -92,6 +92,7 @@ GENERATION_EXAMPLE = (
           phases: [generate]
           suppress_health_check: [too_slow, filter_too_much]
 
+    strict: false  # Require schemas for custom resources when true; otherwise skip those without a schema.
     # Whole-resource JSON schemas, relative to this configuration file.
     # Remove this entry until you supply the schema; it is required when present.
     resource_schemas:

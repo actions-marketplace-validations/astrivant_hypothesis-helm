@@ -571,6 +571,13 @@ def argument_parser(prog: str | None = None) -> argparse.ArgumentParser:
     schemas.add_argument("--schema-version", default="latest")
     schemas.add_argument("--schema-cache-dir", type=Path, default=Path("schemas"))
     schemas.add_argument("--schema-offline", action="store_true")
+    for command in (test, repository, run, generate):
+        command.add_argument(
+            "--strict",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="require schemas for custom resources; otherwise skip schema validation when their schema is missing",
+        )
     for command in (test, repository, run, exports):
         command.add_argument(
             "--validate-schemas", action="store_true", help="validate rendered resources against the local Kubernetes schema cache"
@@ -871,6 +878,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.config,
                 character_sets=args.character_sets,
                 yaml_parser=args.yaml_parser,
+                strict=getattr(args, "strict", None),
                 max_examples=args.max_examples if getattr(args, "max_examples_explicit", False) else None,
             )
             if args.renderer_policy is not None:

@@ -196,7 +196,8 @@ usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERS
                             [--sensitivity-order N] [--sample-random PERCENT]
                             [--sample-min-cases N]
                             [--traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}]
-                            [--validate-schemas] [--schema-version SCHEMA_VERSION]
+                            [--strict | --no-strict] [--validate-schemas]
+                            [--schema-version SCHEMA_VERSION]
                             [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
                             [--base-ref BASE_REF] [--output-format {json,yaml}]
                             [--export-suppressions]
@@ -280,6 +281,9 @@ options:
   --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
                         seeded random (default), linear, root-first, leaf-first, or
                         sensitivity-first (finite coverage defaults to pairs)
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
   --validate-schemas    validate rendered resources against the local Kubernetes
                         schema cache
   --schema-version SCHEMA_VERSION
@@ -334,6 +338,7 @@ options:
 
 ~~~text
 usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMPLES]
+                                [--strict | --no-strict]
                                 [--fail [{info,warning,error}]]
                                 [--export-topological-graph [FILENAME]]
                                 [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
@@ -356,6 +361,9 @@ options:
   -h, --help            show this help message and exit
   --output OUTPUT
   --max-examples MAX_EXAMPLES
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
   --fail [{info,warning,error}]
                         stop at this severity or higher and exit 1; bare flag: any
                         finding; lower findings remain reported
@@ -470,7 +478,8 @@ usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
                            [--artifact-dir ARTIFACT_DIR] [--sample-random PERCENT]
                            [--sample-min-cases N]
                            [--traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}]
-                           [--validate-schemas] [--schema-version SCHEMA_VERSION]
+                           [--strict | --no-strict] [--validate-schemas]
+                           [--schema-version SCHEMA_VERSION]
                            [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
                            [--dry-run] [--cache-dir CACHE_DIR]
                            [--disable-schema-caching] [--progress] [--run-id RUN_ID]
@@ -505,6 +514,9 @@ options:
   --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
                         seeded random (default), linear, root-first, leaf-first, or
                         sensitivity-first (finite coverage defaults to pairs)
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
   --validate-schemas    validate rendered resources against the local Kubernetes
                         schema cache
   --schema-version SCHEMA_VERSION
@@ -590,7 +602,8 @@ usage: helm hypothesis test [-h] [--report [PATH]] [--pca-samples N]
                             [--timeout TIMEOUT] [--helm HELM] [--release RELEASE]
                             [--namespace NAMESPACE] [--kube-version KUBE_VERSION]
                             [--allow-empty] [--artifact-dir ARTIFACT_DIR]
-                            [--validate-schemas] [--schema-version SCHEMA_VERSION]
+                            [--strict | --no-strict] [--validate-schemas]
+                            [--schema-version SCHEMA_VERSION]
                             [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
                             [--base-ref BASE_REF] [--dry-run] [--cache-dir CACHE_DIR]
                             [--disable-schema-caching] [--progress] [--run-id RUN_ID]
@@ -692,6 +705,9 @@ options:
   --kube-version KUBE_VERSION
   --allow-empty
   --artifact-dir ARTIFACT_DIR
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
   --validate-schemas    validate rendered resources against the local Kubernetes
                         schema cache
   --schema-version SCHEMA_VERSION

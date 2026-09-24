@@ -38,7 +38,7 @@ from hypothesis_helm.schemas.configuration.selectors import SourceScope, source_
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.dialects import DRAFT2020, dialect
 from hypothesis_helm.schemas.generation.strategies import schema_strategy
-from hypothesis_helm.schemas.kubernetes.resources import SUITE_RESOURCE_SCHEMAS
+from hypothesis_helm.schemas.kubernetes.resources import SUITE_RESOURCE_SCHEMAS, SUITE_STRICT_SCHEMAS
 
 __all__ = ("RenderOptions", "check_path", "path_values", "prepared_chart")
 
@@ -102,6 +102,8 @@ def prepared_chart(source: Path, generated: Path) -> Iterator[Chart]:
                 {**(SUITE_RESOURCE_SCHEMAS.get() or {}), **mapping(frozen.get("resource_schemas", {}))}
             )
             contracts.callback(SUITE_RESOURCE_SCHEMAS.reset, resource_token)
+            strict_token = SUITE_STRICT_SCHEMAS.set(bool(frozen.get("strict", False)))
+            contracts.callback(SUITE_STRICT_SCHEMAS.reset, strict_token)
             current = chart.input_domains()
             rules = [mapping(rule) for rule in sequence(frozen.get("constraints", []))]
             rules.extend(rule for rule in current.rules if rule not in rules)

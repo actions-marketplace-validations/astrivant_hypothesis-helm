@@ -16,10 +16,20 @@ from hypothesis_helm.schemas.configuration.policy import inherited_policy, inter
 from hypothesis_helm.schemas.contracts import json_value, mapping, sequence
 from hypothesis_helm.schemas.paths import dereference
 
-__all__ = ("cached_catalog", "catalog_domain", "collection_domain", "destination", "library", "resource_schemas", "validate_custom")
+__all__ = (
+    "cached_catalog",
+    "catalog_domain",
+    "collection_domain",
+    "destination",
+    "library",
+    "resource_schemas",
+    "strict_schemas",
+    "validate_custom",
+)
 
 
 SUITE_RESOURCE_SCHEMAS: ContextVar[dict[str, object] | None] = ContextVar("suite_resource_schemas", default=None)
+SUITE_STRICT_SCHEMAS: ContextVar[bool] = ContextVar("suite_strict_schemas", default=False)
 
 
 def collection_domain(node: dict[str, object], root: dict[str, object], depth: int = 0) -> dict[str, object]:
@@ -100,6 +110,16 @@ def resource_schemas() -> dict[str, object]:
         dict[str, object]: Schema registrations; current configuration overrides saved entries for the same identity.
     """
     return {**(SUITE_RESOURCE_SCHEMAS.get() or {}), **mapping(inherited_policy().get("resource_schemas", {}))}
+
+
+def strict_schemas() -> bool:
+    """
+    Resolve missing custom-schema handling from current configuration or a saved suite.
+
+    Returns:
+        bool: Require an exact custom resource schema when strict validation is selected.
+    """
+    return bool(inherited_policy().get("strict", SUITE_STRICT_SCHEMAS.get()))
 
 
 @lru_cache(maxsize=1)
@@ -202,15 +222,15 @@ def destination(identity: str, path: tuple[str, ...]) -> tuple[dict[str, object]
     return catalog_domain(catalog, identity, path) or mapping(record["schema"]), f"bundled:{catalog['version']}:{record_id}"
 
 
-def validate_custom(resource: dict[str, object]) -> bool:
+def validate_custom(resource: dict[str, object]) -> bool | None:
     """
-    Validate an explicitly supplied custom resource schema and reject missing custom contracts.
+    Validate supplied custom schemas, requiring missing contracts only in strict mode.
 
     Args:
         resource (dict[str, object]): Parsed manifest with apiVersion and kind.
 
     Returns:
-        bool: True for a supplied schema, false for a known built-in API; otherwise raise ValueError.
+        bool | None: True for a validated custom resource, false for a built-in API, or None when validation is skipped.
     """
     identity = f"{resource.get('apiVersion')}/{resource.get('kind')}"
     custom = resource_schemas()
@@ -222,5 +242,7 @@ def validate_custom(resource: dict[str, object]) -> bool:
     group = api.rsplit("/", 1)[0] if "/" in api else ""
     groups = {key.rsplit("/", 2)[0] for key in mapping(library()["resources"]) if key.count("/") == 2}
     if group and group not in groups:
-        raise ValueError(f"Custom resource {identity} requires an explicit JSON schema in resource_schemas")
+        if strict_schemas():
+            raise ValueError(f"Custom resource {identity} requires an explicit JSON schema in resource_schemas")
+        return None
     return False

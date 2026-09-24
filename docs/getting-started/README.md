@@ -57,6 +57,7 @@ helm hypothesis scan prometheus-community/prometheus --filter --chart-timeout 5m
 
 Choose either filtering mode. Worker counts are starting estimates.<sup>[\[1\]](../ci/resources.md)</sup>
 Schema validation works with both local `test` and remote `scan`; pin the target Kubernetes version and provide custom-resource schemas.
+Custom resources without a supplied schema skip schema validation; add `--strict` to report missing schemas as errors.
 See [validation setup](../usage.md#kubernetes-api-conformity) and [CRD requirements](../input-domains/README.md#custom-resources).
 
 ## What our tests suggest

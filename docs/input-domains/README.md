@@ -352,6 +352,7 @@ input_constraints:
       phases: [generate]
       suppress_health_check: [too_slow, filter_too_much]
 
+strict: false  # Require schemas for custom resources when true; otherwise skip those without a schema.
 # Whole-resource JSON schemas, relative to this configuration file.
 # Remove this entry until you supply the schema; it is required when present.
 resource_schemas:
@@ -453,8 +454,12 @@ path sampling does not guarantee the requested N-way coverage. See [discovery an
 
 ## Custom resources
 
-Custom resources require an explicitly supplied JSON Schema. A schema describing the values file is a different contract:
-it describes chart inputs, whereas a resource schema describes the rendered object.
+Custom resources without a supplied JSON Schema skip schema validation by default. Rendering and basic manifest checks still run;
+the resource is retained in streamed output. Supplied schemas are always checked, including without `--strict`.
+A schema describing the values file is a different contract: it describes chart inputs, whereas a resource schema describes the rendered object.
+
+Use `--strict` to report a missing custom-resource schema as `HH1108`. Use `--fail` as well to stop on the finding immediately.
+The configuration equivalent is `strict: true`; `--no-strict` overrides it for a run.
 
 ```yaml
 resource_schemas:
@@ -471,6 +476,7 @@ JSON Schema checking does not execute CRD CEL rules, admission webhooks or contr
 Saved suites embed these schemas in `input-domains.json`, so `run` can validate custom resources even when
 the original schema files are unavailable. An explicit current configuration overrides saved schemas for the same
 API version and kind. Changes to the effective schema invalidate cached manifest validation.
+Saved suites also record strictness. An explicit current `strict` setting overrides the saved setting; otherwise the saved setting applies.
 
 The [CRD integration tests](../../pkg/hypothesis_helm/tests/schemas/test_custom_resources.py) use a
 [pinned Polyad Gate chart fixture](../../pkg/hypothesis_helm/tests/fixtures/polyad-gate/README.md).

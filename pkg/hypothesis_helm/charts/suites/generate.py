@@ -26,7 +26,7 @@ from hypothesis_helm.schemas.configuration.selectors import source_identity
 from hypothesis_helm.schemas.configuration.settings import custom_text, hypothesis_parameters, settings_at
 from hypothesis_helm.schemas.contracts import json_value, mapping, number, sequence
 from hypothesis_helm.schemas.dialects import active, fragment
-from hypothesis_helm.schemas.kubernetes.resources import resource_schemas
+from hypothesis_helm.schemas.kubernetes.resources import resource_schemas, strict_schemas
 from hypothesis_helm.schemas.paths import ValuePath as ValuePath
 from hypothesis_helm.schemas.paths import dereference as dereference
 from hypothesis_helm.schemas.paths import enumerate_paths as enumerate_paths
@@ -485,7 +485,7 @@ def generate_tests(
     (output / "values.coalesced.yaml").write_text(yamlio.dump(model.values))
     (output / "values.inferred.schema.json").write_text(json.dumps(source_schema, indent=2) + "\n")
     (output / "input-domains.json").write_text(
-        json.dumps({**chart.input_domains().report(), "resource_schemas": resource_schemas()}, indent=2) + "\n"
+        json.dumps({**chart.input_domains().report(), "resource_schemas": resource_schemas(), "strict": strict_schemas()}, indent=2) + "\n"
     )
     inventory = {
         "input_domains": chart.input_domains().report(),

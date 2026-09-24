@@ -737,10 +737,11 @@ schema caching remains active. `--collect-only` does not fetch schemas or run th
 
 Validation runs inside each property worker, using local strict schemas that reject undeclared fields.
 Compiled validators are reused within that process. Invalid resources, unsupported API
-versions, and missing schemas fail the property and participate in Hypothesis shrinking.
-Custom resources require [explicit resource schemas](input-domains/README.md#custom-resources)
-beyond the upstream Kubernetes catalog. Supplied schemas validate those resources locally;
-The built-in validator checks native Kubernetes resources. Missing custom schemas fail validation.
+versions, and missing built-in schemas fail the property and participate in Hypothesis shrinking.
+Custom resources use [explicit resource schemas](input-domains/README.md#custom-resources)
+beyond the upstream Kubernetes catalog. Supplied schemas validate those resources locally.
+Custom resources without a supplied schema skip schema validation by default; `--strict` reports missing contracts as `HH1108`.
+Built-in resource validation continues in either mode. Add `--fail` to stop at the first unsuppressed finding.
 This checks API structure, not admission policies or live cluster behavior.
 Manifests still stream through `--output-format json` before validation,
 including failing examples.
