@@ -1,0 +1,1637 @@
+"""
+Evaluate explicit template rejection contracts without interpreting arbitrary Helm code.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+import subprocess
+import tarfile
+from functools import lru_cache
+from operator import eq, ge, gt, le, lt, ne
+from pathlib import Path
+
+from attrs import define, evolve, field, frozen
+from ruamel.yaml.error import YAMLError
+
+from hypothesis_helm.compiler.asts import native_operations
+from hypothesis_helm.compiler.asts.contract_maps import LocalMaps, dictionary, fresh_merge, merge_flat_sources
+from hypothesis_helm.compiler.asts.contract_scope import UNRESOLVED, Scope
+from hypothesis_helm.compiler.asts.contract_values import (
+    BoundValue,
+    ConstantList,
+    ConstantMap,
+    ContractText,
+    DerivedValue,
+    KeyList,
+    NativeValue,
+    NilMap,
+    NilSlice,
+    UnorderedKeys,
+    native,
+)
+from hypothesis_helm.compiler.asts.formatting import printf
+from hypothesis_helm.compiler.asts.renderer import APIVersions, ContextReference, FileSet, FixedFields, RendererContext
+from hypothesis_helm.compiler.asts.templates import Node, lower, structure, walk
+from hypothesis_helm.compiler.asts.transformations import TransformedDomain, calculate, inputs
+from hypothesis_helm.compiler.builtins import EFFECTS, MUTATIONS, NATIVE_STATE, runtime_dependency
+from hypothesis_helm.compiler.constants import (
+    INTEGER_RESULTS,
+    MERGES,
+    NATIVE_EXTENSIONS,
+    NATIVE_OPERATIONS,
+    NATIVE_RECORD_FIELDS,
+    NATIVE_TYPED_OPERATIONS,
+    TEMPLATE_CALLS,
+    TRANSFORMATIONS,
+)
+from hypothesis_helm.compiler.limits import active_limits, call_depth
+from hypothesis_helm.compiler.passes.dependencies import Dependencies, lookup
+from hypothesis_helm.exceptions.compiler import LoopControl, Rejection, Unavailable, Unknown, UnsupportedTransformation
+
+__all__ = (
+    "ASSIGNMENT",
+    "Contracts",
+    "Evaluation",
+    "FieldAccess",
+    "RANGE_ASSIGNMENT",
+    "TOKENS",
+    "calls",
+    "context_effects",
+    "declares_path",
+    "expression",
+    "tpl_nodes",
+)
+
+
+TOKENS = re.compile(r'\s*("(?:\\.|[^"\\])*"|`[^`]*`|[()|]|[^\s()|]+)')
+ASSIGNMENT = re.compile(r"(\$\w+)\s*(:=|=)\s*(.*)", re.DOTALL)
+RANGE_ASSIGNMENT = re.compile(r"(\$\w+)(?:\s*,\s*(\$\w+))?\s*(:=|=)\s*(.*)", re.DOTALL)
+LOGGER = logging.getLogger(__name__)
+
+
+def declares_path(schema: object, path: tuple[str, ...]) -> bool:
+    """
+    Preserve explicitly authored domains and ambiguous schema relationships.
+
+    Args:
+        schema (object): Original authored schema, before inference from values.
+        path (tuple[str, ...]): Field relative to this schema's chart.
+
+    Returns:
+        bool: A declaration or an unresolved schema relationship may constrain this field.
+    """
+    if not isinstance(schema, dict):
+        return schema is not True
+    if not path:
+        return True
+    if any(
+        key in schema
+        for key in (
+            "$ref",
+            "$dynamicRef",
+            "$recursiveRef",
+            "allOf",
+            "anyOf",
+            "oneOf",
+            "not",
+            "if",
+            "then",
+            "else",
+            "dependencies",
+            "dependentSchemas",
+            "dependentRequired",
+            "unevaluatedProperties",
+            "enum",
+            "const",
+        )
+    ):
+        return True
+    properties = schema.get("properties", {})
+    if not isinstance(properties, dict):
+        return True
+    if path[0] in properties:
+        return declares_path(properties[path[0]], path[1:])
+    if schema.get("patternProperties"):
+        return True
+    additional = schema.get("additionalProperties", True)
+    return declares_path(additional, path[1:]) if isinstance(additional, dict) else additional is not True
+
+
+@frozen
+class FieldAccess:
+    """
+    Select fields from a parenthesized expression without treating them as call arguments.
+
+    Attributes:
+        receiver (object): Expression producing the selected context.
+        fields (tuple[str, ...]): Consecutive dot-separated field names.
+    """
+
+    receiver: object
+    fields: tuple[str, ...]
+
+
+@lru_cache(maxsize=8192)
+def expression(source: str) -> object:
+    """
+    Parse prefix calls, parenthesized arguments, and pipelines into nested tuples.
+
+    Args:
+        source (str): One Go-template expression.
+
+    Returns:
+        object: Literal token or a nested call tuple.
+
+    Raises:
+        Unknown: Tokens or parentheses are malformed.
+    """
+    matches = list(TOKENS.finditer(source))
+    tokens = [match[1] for match in matches]
+    position = 0
+
+    def pipeline() -> object:
+        """
+        Parse calls until a parenthesis or the end of the expression.
+
+        Returns:
+            object: Nested expression with pipeline arguments appended last.
+        """
+        nonlocal position
+        result: object = None
+        while True:
+            parts: list[object] = []
+            while position < len(tokens) and tokens[position] not in (")", "|"):
+                token = tokens[position]
+                position += 1
+                if token == "(":
+                    item = pipeline()
+                    if position >= len(tokens) or tokens[position] != ")":
+                        raise Unknown("unbalanced expression")
+                    position += 1
+                    if (
+                        position < len(tokens)
+                        and matches[position - 1].end(1) == matches[position].start(1)
+                        and tokens[position].startswith(".")
+                    ):
+                        selector = tokens[position]
+                        if not re.fullmatch(r"(?:\.[A-Za-z_][A-Za-z_0-9]*)+", selector):
+                            raise Unknown("unsupported parenthesized field selector")
+                        item = FieldAccess(item, tuple(selector[1:].split(".")))
+                        position += 1
+                    parts.append(item)
+                else:
+                    parts.append(token)
+            if not parts:
+                raise Unknown("empty expression")
+            if result is not None:
+                parts.append(result)
+            result = parts[0] if len(parts) == 1 else tuple(parts)
+            if position >= len(tokens) or tokens[position] != "|":
+                return result
+            position += 1
+
+    result = pipeline()
+    if position != len(tokens):
+        raise Unknown("trailing expression")
+    return result
+
+
+def calls(expr: object) -> set[str]:
+    """
+    Traverse expression call nodes, ignoring string literals and comments.
+
+    Args:
+        expr (object): Parsed expression AST.
+
+    Returns:
+        set[str]: Function names and statically named helper-call edges.
+    """
+    if isinstance(expr, FieldAccess):
+        return calls(expr.receiver)
+    if isinstance(expr, str) and expr in NATIVE_STATE:
+        return {expr}
+    if not isinstance(expr, tuple) or not expr:
+        return set()
+    result = {str(expr[0])}
+    if expr[0] in {"include", "template", "block"} and len(expr) in {2, 3} and isinstance(expr[1], str) and expr[1].startswith('"'):
+        try:
+            result.add("include:" + json.loads(expr[1]))
+        except (ValueError, TypeError):
+            pass
+    if isinstance(expr[0], FieldAccess):
+        result.update(calls(expr[0]))
+    for argument in expr[1:]:
+        result.update(calls(argument))
+    return result
+
+
+def context_effects(nodes: tuple[Node, ...], *, inspect_fresh_merges: bool = False) -> bool:
+    """
+    Detect direct operations that could change the context of a later rejection.
+
+    Args:
+        nodes (tuple[Node, ...]): Statements preceding the candidate rejection.
+        inspect_fresh_merges (bool): Permit bounded evaluation of fresh destinations, while checking nested calls for mutations.
+
+    Returns:
+        bool: Mutation or dynamic evaluation prevents a supported local prediction.
+    """
+
+    def mutates(expr: object) -> bool:
+        """
+        Check every operand, exempting only the fresh merge operation itself.
+
+        Args:
+            expr (object): One expression tree, including parenthesized field selectors.
+
+        Returns:
+            bool: A write or dynamic call still requires an analysis barrier.
+        """
+        if isinstance(expr, FieldAccess):
+            return mutates(expr.receiver)
+        if not isinstance(expr, tuple) or not expr:
+            return isinstance(expr, str) and expr in MUTATIONS | {"call"}
+        if not (inspect_fresh_merges and fresh_merge(expr)) and str(expr[0]) in MUTATIONS | {"call"}:
+            return True
+        return isinstance(expr[0], FieldAccess) and mutates(expr[0]) or any(mutates(item) for item in expr[1:])
+
+    for node in walk(nodes):
+        if node.kind != "text":
+            assignment = ASSIGNMENT.fullmatch(node.text)
+            if mutates(expression(assignment[3] if assignment else node.text)):
+                return True
+    return False
+
+
+@lru_cache(maxsize=128)
+def tpl_nodes(text: str) -> tuple[Node, ...]:
+    """
+    Parse concrete tpl source without sharing mutable candidate state.
+
+    Args:
+        text (str): Already evaluated template string.
+
+    Returns:
+        tuple[Node, ...]: Immutable syntax nodes reused for identical strings.
+    """
+    return lower(text)
+
+
+@define
+class Contracts:
+    """
+    Hold parsed local helpers and root templates with explicit rejection sinks.
+
+    Attributes:
+        helpers (dict[str, tuple[str, tuple[Node, ...]]]): Unique local helper definitions.
+        roots (dict[str, tuple[Node, ...]]): Executed chart templates, excluding partials.
+        relevant (set[str]): Helpers transitively containing explicit rejection calls.
+        explicit_relevant (set[str]): Helpers with statically visible fail or required calls, excluding possible dynamic code.
+        diagnostics (list[str]): Unsupported or ambiguous source constructs.
+        ambiguous_helpers (set[str]): Conflicting definitions that invalidate only their callers.
+        dependencies (Dependencies): Child namespaces and activation conditions.
+        scopes (dict[str, tuple[str, ...]]): Values namespace for each root template.
+        schemas (dict[tuple[str, ...], object]): Original authored schemas indexed by chart namespace.
+        variable_uses (dict[str, set[str]]): Source-stable alias dependencies computed once per root template.
+        max_call_depth (int): Maximum nested helper calls for this chart's analysis.
+        chart (Path | None): Source chart used to resolve warning suppression.
+        renderer (RendererContext | None): Exact fixed render context, attached by the executor.
+        fallbacks (list[dict[str, object]]): Distinct unsupported evaluations, including suppressed warnings.
+        incomplete_evaluations (int): Incomplete predictions, including repeated inputs and repair probes.
+        fail_fast (bool): Stop on an unsuppressed compiler warning when requested by the executor.
+        templates (dict[str, tuple[Node, ...]]): All parsed template bodies for statically resolved filename includes.
+        limits (dict[str, int]): Resource budgets captured before evaluating candidates.
+    """
+
+    helpers: dict[str, tuple[str, tuple[Node, ...]]] = field(factory=dict)
+    roots: dict[str, tuple[Node, ...]] = field(factory=dict)
+    relevant: set[str] = field(factory=set)
+    explicit_relevant: set[str] = field(factory=set)
+    diagnostics: list[str] = field(factory=list)
+    ambiguous_helpers: set[str] = field(factory=set)
+    dependencies: Dependencies = field(factory=Dependencies)
+    scopes: dict[str, tuple[str, ...]] = field(factory=dict)
+    schemas: dict[tuple[str, ...], object] = field(factory=dict)
+    variable_uses: dict[str, set[str]] = field(factory=dict)
+    max_call_depth: int = field(factory=call_depth)
+    chart: Path | None = None
+    renderer: RendererContext | None = None
+    fallbacks: list[dict[str, object]] = field(factory=list)
+    incomplete_evaluations: int = 0
+    fail_fast: bool = False
+    templates: dict[str, tuple[Node, ...]] = field(factory=dict)
+    limits: dict[str, int] = field(factory=active_limits, kw_only=True)
+
+    def configure(self, *, helm: str, kube_version: str | None, timeout: float, release: str, namespace: str, fail_fast: bool) -> None:
+        """
+        Attach actual render settings while reusing chart-local native context across paths.
+
+        Args:
+            helm (str): The executor's Helm binary.
+            kube_version (str | None): The executor's Kubernetes capability override.
+            timeout (float): Deadline for context probes.
+            release (str): Fixed release name.
+            namespace (str): Fixed release namespace.
+            fail_fast (bool): Stop on an enabled incomplete-analysis warning.
+
+        Returns:
+            None: Subsequent predictions use matching native context and finding policy.
+        """
+        previous = self.renderer
+        if self.chart is not None and (
+            previous is None
+            or (previous.helm, previous.kube_version, previous.timeout, previous.release, previous.namespace)
+            != (helm, kube_version, timeout, release, namespace)
+        ):
+            self.renderer = RendererContext(
+                self.chart,
+                {node.path: node.name for node in self.dependencies.nodes},
+                helm,
+                kube_version,
+                timeout,
+                release,
+                namespace,
+                limits=self.limits,
+            )
+        self.fail_fast = fail_fast
+
+    @classmethod
+    def build(cls, chart: Path, dependencies: Dependencies | None = None) -> Contracts:
+        """
+        Parse local helpers conservatively; duplicate definitions remain unresolved.
+
+        Args:
+            chart (Path): Prepared chart directory.
+            dependencies (Dependencies | None): Already discovered children to reuse without reopening archives.
+
+        Returns:
+            Contracts: Immutable source nodes with explicit unsupported-source diagnostics.
+        """
+        limits = dict(dependencies.limits) if dependencies is not None else active_limits(chart)
+        result = cls(
+            dependencies=dependencies if dependencies is not None else Dependencies.build(chart),
+            chart=chart,
+            limits=limits,
+            max_call_depth=limits["max_call_depth"],
+        )
+        if (chart / "values.schema.json").is_file():
+            result.schemas[()] = json.loads((chart / "values.schema.json").read_text())
+        duplicates: set[str] = set()
+        sources: list[tuple[str, tuple[Node, ...], tuple[str, ...]]] = []
+        for path in sorted((chart / "templates").rglob("*")):
+            if not path.is_file():
+                continue
+            source = path.relative_to(chart).as_posix()
+            try:
+                nodes = lower(path.read_text())
+            except (ValueError, UnicodeError, RecursionError) as exc:
+                result.diagnostics.append(f"{source}: {exc}")
+                continue
+            sources.append((source, nodes, ()))
+        for dependency in result.dependencies.nodes:
+            sources.extend((source, nodes, dependency.path) for source, nodes in dependency.syntax)
+            if dependency.declared_schema:
+                result.schemas[dependency.path] = dependency.schema
+        for source, nodes, scope in sources:
+            result.templates[source] = nodes
+            result.scopes[source] = scope
+            for node in walk(nodes):
+                match = re.match(r'(?:define|block)\s+"([^"\\]+)"(?:\s|$)', node.text) if node.kind == "opaque" else None
+                if match:
+                    name = match[1]
+                    if name in result.helpers and structure(result.helpers[name][1]) != structure(node.children):
+                        duplicates.add(name)
+                    result.helpers[name] = (source, node.children)
+            if not Path(source).name.startswith("_"):
+                result.roots[source] = tuple(node for node in nodes if not node.text.startswith("define "))
+                result.scopes[source] = scope
+        for name in duplicates:
+            result.helpers.pop(name, None)
+        result.ambiguous_helpers = duplicates
+        # An ambiguous call can reject or mutate its context. Keep its callers in
+        # the analysis and stop that call chain, without disabling other roots.
+        result.relevant.update(duplicates)
+        result.explicit_relevant.update(duplicates)
+        for _ in range(len(result.helpers) + 1):
+            previous = (set(result.relevant), set(result.explicit_relevant))
+            for name, (_, nodes) in result.helpers.items():
+                if result.interesting(nodes):
+                    result.relevant.add(name)
+                if result.interesting(nodes, dynamic=False):
+                    result.explicit_relevant.add(name)
+            if (result.relevant, result.explicit_relevant) == previous:
+                break
+        result.roots = {name: nodes for name, nodes in result.roots.items() if result.interesting(nodes)}
+        result.variable_uses = {name: result.variables(nodes) for name, nodes in result.roots.items()}
+        return result
+
+    def interesting(self, nodes: tuple[Node, ...], *, dynamic: bool = True) -> bool:
+        """
+        Locate explicit rejection expressions or calls into relevant helpers.
+
+        Args:
+            nodes (tuple[Node, ...]): Current template region.
+            dynamic (bool): Include operations that may conceal runtime rejection behavior.
+
+        Returns:
+            bool: Whether the region may execute a recognized rejection contract.
+        """
+        for node in walk(nodes):
+            if node.kind == "text":
+                continue
+            assignment = ASSIGNMENT.fullmatch(node.text)
+            try:
+                found = calls(expression(assignment[3] if assignment else node.text))
+            except (Unknown, RecursionError):
+                continue
+            relevant = self.relevant if dynamic else self.explicit_relevant
+            if (
+                found & {"fail", "required"}
+                or (dynamic and found & (EFFECTS["dynamic-code"] | NATIVE_STATE))
+                or any("include:" + name in found for name in relevant)
+            ):
+                return True
+        return False
+
+    def predict(self, values: dict[str, object]) -> Rejection | None:
+        """
+        Evaluate supported contracts; unknown expressions never establish a rejection.
+
+        Args:
+            values (dict[str, object]): Effective coalesced Helm values.
+
+        Returns:
+            Rejection | None: Evaluated rejection, or no established rejection.
+        """
+        if self.diagnostics:
+            self.incomplete_evaluations += 1
+            for diagnostic in self.diagnostics:
+                self.fallback(Unknown(diagnostic), "chart sources", {})
+            return None
+        effective = self.dependencies.context({}, values)
+        states = self.dependencies.states({}, values)
+        incomplete = False
+        for source, nodes in self.roots.items():
+            scope = self.scopes.get(source, ())
+            if scope and states.get(scope) is not True:
+                continue
+            local = lookup(effective, scope)
+            if not isinstance(local, dict):
+                continue
+            context: dict[str, object] = {
+                "Values": BoundValue(local, scope),
+                "Capabilities": ContextReference(self.renderer, "Capabilities"),
+                "Files": ContextReference(self.renderer, "Files", scope),
+                "Chart": ContextReference(self.renderer, "Chart", scope),
+                "Template": ContextReference(self.renderer, "Template", scope, source),
+            }
+            if self.renderer is not None:
+                context["Release"] = {
+                    "Name": self.renderer.release,
+                    "Namespace": self.renderer.namespace,
+                    "IsInstall": True,
+                    "IsUpgrade": False,
+                    "Revision": 1,
+                    "Service": "Helm",
+                }
+            evaluator = Evaluation(self, effective, context=context, scope=scope, needed=self.variable_uses[source])
+            try:
+                evaluator.visit(nodes, source, Scope({"$": evaluator.context}), strict=False)
+                incomplete |= evaluator.incomplete
+            except Rejection as rejection:
+                if incomplete:
+                    rejection = evolve(rejection, contextual=True)
+                inferred_paths = {
+                    *(tuple(name.removeprefix("$.").split(".")) for name in rejection.enums),
+                    *(path for domain in rejection.transformed_domains for path in inputs(domain.expression)),
+                }
+                declared = (
+                    any(
+                        path[: len(namespace)] == namespace and declares_path(schema, path[len(namespace) :])
+                        for path in inferred_paths
+                        for namespace, schema in self.schemas.items()
+                    )
+                    if inferred_paths
+                    else any(scope[: len(namespace)] == namespace for namespace in self.schemas)
+                )
+                if declared:
+                    return evolve(rejection, declared_schema=True)
+                return rejection
+            except (Unknown, TypeError, KeyError, IndexError, OverflowError, RecursionError) as exc:
+                incomplete = True
+                self.fallback(exc, source, evaluator.inputs)
+        if incomplete:
+            self.incomplete_evaluations += 1
+        return None
+
+    def fallback(self, error: Exception, source: str, observed: dict[str, object]) -> None:
+        """
+        Explain incomplete analysis before rendering, without excluding the candidate.
+
+        Args:
+            error (Exception): Unsupported evaluator operation with optional source coordinates.
+            source (str): Root template when no more precise location is available.
+            observed (dict[str, object]): Values paths read before the analysis stopped.
+
+        Returns:
+            None: A deduplicated diagnostic is retained and logged at its configured severity unless suppressed.
+        """
+        from hypothesis_helm.exceptions.rendering import RenderFailure
+        from hypothesis_helm.findings.severity import ACTIVE_POLICY, attributes, for_paths, log_level
+        from hypothesis_helm.rules import ignored
+
+        source = getattr(error, "source", None) or source
+        line = getattr(error, "line", 0)
+        reason = str(error) if isinstance(error, Unknown) else f"unsupported evaluator operation ({type(error).__name__})"
+        paths = tuple(tuple(path.removeprefix("$.").split(".")) for path in observed)
+        settings = ACTIVE_POLICY.get()
+        if settings is None and self.chart is not None:
+            settings = for_paths(self.chart, paths)
+        decision = attributes("HH2007", settings=settings)
+        suppressed = ignored("HH2007", chart=self.chart, paths=paths)
+        record: dict[str, object] = {
+            "code": "HH2007",
+            **decision,
+            "source": source,
+            "line": line,
+            "reason": reason,
+            "suppressed": suppressed,
+            "action": "defer unsupported analysis to native Helm; no exclusion based on this result",
+        }
+        message = f"{source}:{line}: {reason}; affected expressions retained for Helm rendering; no pruning based on this result"
+        if record not in self.fallbacks:
+            if len(self.fallbacks) < self.limits["max_fallbacks"]:
+                self.fallbacks.append(record)
+                if not suppressed:
+                    LOGGER.log(
+                        log_level(str(decision["severity"])),
+                        "[HH2007] Compiler analysis incomplete: chart=%s; %s",
+                        self.chart,
+                        message,
+                        extra={"diagnostic_key": json.dumps([str(self.chart), source, line, reason])},
+                    )
+        if not suppressed and decision.get("fail_fast", self.fail_fast and decision["blocking"]):
+            failure = RenderFailure(message, "HH2007")
+            failure.controls = decision
+            raise failure
+
+    def variables(self, nodes: tuple[Node, ...]) -> set[str]:
+        """
+        Find aliases that can affect a rejection through assignments or enclosing guards.
+
+        Args:
+            nodes (tuple[Node, ...]): Complete root template before candidate evaluation.
+
+        Returns:
+            set[str]: Conservative variable dependencies, including shadowed names.
+        """
+        needed: set[str] = set()
+        assignments: list[tuple[set[str], set[str]]] = []
+
+        def names(text: str) -> set[str]:
+            """
+            Collect lexical variable references while ignoring quoted text.
+
+            Args:
+                text (str): Template action or pipeline.
+
+            Returns:
+                set[str]: Referenced variable names.
+            """
+            return {token.split(".")[0].rstrip(",") for token in TOKENS.findall(text) if token.startswith("$")}
+
+        def visit(items: tuple[Node, ...], guards: set[str]) -> None:
+            """
+            Retain the control dependencies of each variable definition.
+
+            Args:
+                items (tuple[Node, ...]): Current lexical block.
+                guards (set[str]): Variables controlling entry into this block.
+
+            Returns:
+                None: Dependency edges and rejection roots are collected.
+            """
+            for node in items:
+                if node.kind == "text":
+                    continue
+                references = names(node.text)
+                if self.interesting((node,)):
+                    needed.update(references | guards)
+                text = node.text.split(" ", 1)[1] if node.text.startswith(("with ", "range ")) else node.text
+                binding = RANGE_ASSIGNMENT.fullmatch(text)
+                if binding:
+                    assigned = {name for name in (binding[1], binding[2]) if name}
+                    assignments.append((assigned, names(binding[4]) | guards))
+                visit(node.children, guards | references)
+                visit(node.otherwise, guards | references)
+
+        visit(nodes, set())
+        for _ in range(len(assignments) + 1):
+            previous = set(needed)
+            for assigned, sources in assignments:
+                if assigned & needed:
+                    needed.update(sources)
+            if needed == previous:
+                break
+        return needed
+
+
+@define
+class Evaluation:
+    """
+    Evaluate a closed validator subset with candidate-local variables and evidence.
+
+    Attributes:
+        contracts (Contracts): Parsed source and helper definitions.
+        values (dict[str, object]): Effective chart input.
+        inputs (dict[str, object]): Inspected concrete values paths.
+        conditions (list[str]): Conditions traversed by the validator.
+        depth (int): Bounded helper recursion depth.
+        context (object): Current helper argument; dollar and dot reset together at each include.
+        enums (dict[str, tuple[str, ...]]): Literal allowlists observed on active rejecting conditions.
+        scope (tuple[str, ...]): Chart namespace retained across helper context changes.
+        steps (int): Statements and iterations consumed by this bounded analysis.
+        loops (int): Active lexical ranges in the current template invocation.
+        needed (set[str]): Root aliases that can influence an explicit rejection.
+        transformed_domains (list[TransformedDomain]): Branch-local transformed membership observations.
+        transformed (bool): Whether this prediction used modeled transformations.
+        contextual (bool): Whether this prediction depends on native context or concrete tpl evaluation.
+        incomplete (bool): An unrelated root output was left to Helm; later predictions require native verification.
+        declared_globals (bool): A forwarded global read is constrained by an authored dependency schema.
+        local_maps (LocalMaps): Candidate-local map ownership and invalidated literal-key evidence.
+    """
+
+    contracts: Contracts
+    values: dict[str, object]
+    inputs: dict[str, object] = field(factory=dict)
+    conditions: list[str] = field(factory=list)
+    depth: int = 0
+    context: object = None
+    enums: dict[str, tuple[str, ...]] = field(factory=dict)
+    scope: tuple[str, ...] = ()
+    steps: int = 0
+    loops: int = 0
+    needed: set[str] = field(factory=set)
+    transformed_domains: list[TransformedDomain] = field(factory=list)
+    transformed: bool = False
+    contextual: bool = False
+    incomplete: bool = False
+    declared_globals: bool = False
+    local_maps: LocalMaps = field(factory=LocalMaps)
+
+    def context_value(self, value: object) -> object:
+        """
+        Resolve deferred native data while preserving explicit analysis uncertainty.
+
+        Args:
+            value (object): Current context value or a lazy native reference.
+
+        Returns:
+            object: Loaded fixed context, or the unchanged ordinary value.
+        """
+        if not isinstance(value, ContextReference):
+            return value
+        self.contextual = True
+        try:
+            return value.value()
+        except (Unavailable, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, tarfile.TarError, YAMLError) as exc:
+            raise Unknown(str(exc) if isinstance(exc, Unavailable) else f"native context unavailable ({type(exc).__name__})") from exc
+
+    def resolve(self, expression: str, variables: Scope) -> object:
+        """
+        Resolve dot, dollar and lexical aliases while retaining the original values path.
+
+        Args:
+            expression (str): Direct context or variable access.
+            variables (Scope): Current lexical bindings, including the template root dollar.
+
+        Returns:
+            object: Literal or path-bound candidate value.
+
+        Raises:
+            Unknown: Lookup requires an unsupported context, field name or parent.
+        """
+        context = self.context
+        if expression == ".":
+            return context
+        parts = expression.split(".")
+        head = parts.pop(0)
+        if head == "":
+            current = context
+        else:
+            current = variables.lookup(head)
+            if isinstance(current, Unknown):
+                cause = Unknown(str(current))
+                cause.source, cause.line = current.source, current.line
+                raise cause
+            if current is UNRESOLVED:
+                raise Unknown(f"unbound variable: {head}")
+        return self.select(current, tuple(parts))
+
+    def select(self, current: object, parts: tuple[str, ...]) -> object:
+        """
+        Follow a field chain with the same provenance rules for direct and parenthesized access.
+
+        Args:
+            current (object): Resolved receiver, including candidate-bound values and native context.
+            parts (tuple[str, ...]): Fields to select from the receiver.
+
+        Returns:
+            object: Selected value retaining input provenance.
+
+        Raises:
+            Unknown: A field or its receiver is outside the supported context model.
+        """
+        for index, key in enumerate(parts):
+            current = self.context_value(current)
+            if isinstance(current, NativeValue) and current.go_kind in {"struct", "ptr"} and key in NATIVE_RECORD_FIELDS:
+                current = self._native_operation("_nativeField:" + key, [current])
+                continue
+            if isinstance(current, FixedFields):
+                if key not in current.values:
+                    raise Unknown(f"unsupported fixed context field: {key}")
+                current = current.values[key]
+                continue
+            container = native(current)
+            # Each parenthesized selector restarts Go's field-chain evaluation.
+            # A nil receiver at its start propagates nil; a missing intermediate
+            # receiver in an uninterrupted chain must still remain unresolved.
+            if container is None and index == 0:
+                return current
+            if not isinstance(container, dict) or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", key):
+                raise Unknown("unsupported context lookup")
+            if key not in container and index != len(parts) - 1:
+                raise Unknown("missing parent context lookup")
+            current = (
+                BoundValue(container.get(key), (*current.path, key))
+                if isinstance(current, BoundValue)
+                else DerivedValue(container.get(key), "_field", (current, key))
+                if isinstance(current, DerivedValue)
+                else container.get(key)
+            )
+        if isinstance(current, BoundValue):
+            current = self.observe(current)
+        return self.context_value(current)
+
+    def observe(self, value: BoundValue) -> BoundValue:
+        """
+        Attribute forwarded scalar globals to the highest-priority ancestor supplying that field.
+
+        Args:
+            value (BoundValue): Logical field read from an effective dependency context.
+
+        Returns:
+            BoundValue: Actual input origin, or a deferred aggregate whose members may have different origins.
+
+        Raises:
+            Unknown: Global origin cannot be established without interpreting incompatible parent containers.
+        """
+        path = value.path
+        namespace = next(
+            (node.path for node in self.contracts.dependencies.nodes if path[: len(node.path) + 1] == (*node.path, "global")), None
+        )
+        if namespace is not None:
+            # Dependency coalescing remains native-verified for every predicted rejection.
+            self.contextual = True
+            self.declared_globals |= any(
+                path[: len(scope)] == scope and declares_path(schema, path[len(scope) :])
+                for scope, schema in self.contracts.schemas.items()
+            )
+            if isinstance(value.value, dict):
+                # A merged map has no single writable origin. Resolve each selected
+                # member later; whole-map observations can still be checked by Helm.
+                return value
+            suffix = path[len(namespace) + 1 :]
+            for depth in range(len(namespace) + 1):
+                origin = (*namespace[:depth], "global")
+                container = lookup(self.values, origin)
+                if not isinstance(container, dict):
+                    continue
+                for key in suffix:
+                    if not isinstance(container, dict):
+                        raise Unknown("forwarded global has incompatible ancestor containers")
+                    if key not in container:
+                        break
+                    container = container[key]
+                else:
+                    supplied, observed = native(container), native(value.value)
+                    if type(supplied) is not type(observed) or supplied != observed:
+                        raise Unknown("forwarded global value differs from its candidate origin")
+                    value = BoundValue(value.value, (*origin, *suffix))
+                    break
+            else:
+                if value.value is not None:
+                    raise Unknown("forwarded global input origin is absent")
+                # A missing optional leaf is a known nil, not an unknown supplied
+                # value. Native verification still checks dependency coalescing.
+        if value.path:
+            self.inputs["$." + ".".join(value.path)] = value.value
+        return value
+
+    def evaluate(self, expr: object, source: str, line: int, variables: Scope, *, output_required: bool = True) -> object:
+        """
+        Evaluate supported expressions using Helm-compatible scalar and string semantics.
+
+        Args:
+            expr (object): Parsed expression tree.
+            source (str): Template filename for diagnostics.
+            line (int): Template line for diagnostics.
+            variables (Scope): Lexically visible local bindings.
+            output_required (bool): Preserve full output when an expression consumes it, rather than only visiting rejection effects.
+
+        Returns:
+            object: Evaluated scalar, list, or helper output.
+
+        Raises:
+            Unknown: An expression, conversion, context, or function is unsupported.
+            Rejection: An explicit fail or required call rejects this input.
+        """
+        if isinstance(expr, FieldAccess):
+            return self.select(self.evaluate(expr.receiver, source, line, variables), expr.fields)
+        if isinstance(expr, str):
+            return self._atom(expr, variables)
+        if not isinstance(expr, tuple) or not expr:
+            raise Unknown("invalid expression")
+        function, *arguments = expr
+        if not output_required and function in {"quote", "indent", "nindent"} and arguments:
+            # Only the surrounding manifest consumes this text. Evaluate helper
+            # rejection effects without implementing their YAML serialization.
+            # Skipped formatting errors still require a native check per candidate.
+            for argument in arguments[:-1]:
+                self.evaluate(argument, source, line, variables)
+            self.contextual = True
+            self.evaluate(arguments[-1], source, line, variables, output_required=False)
+            return ""
+        # Helper and Boolean calls control evaluation of their arguments.
+        if function in TEMPLATE_CALLS:
+            return self._helper(str(function), arguments, source, line, variables, output_required=output_required)
+        if function in ("and", "or"):
+            if not arguments:
+                raise Unknown("empty boolean call")
+            result: object = None
+            for argument in arguments:
+                result = self.evaluate(argument, source, line, variables)
+                if bool(native(result)) == (function == "or"):
+                    break
+            return result
+        evaluated = [self.evaluate(argument, source, line, variables) for argument in arguments]
+        args = [native(value) for value in evaluated]
+        if fresh_merge(expr):
+            try:
+                merged = merge_flat_sources(evaluated[1:], self.contracts.limits["max_range_items"])
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
+            self.transformed = True
+            return self.local_maps.register(merged)
+        if function in MERGES | {"set", "unset"}:
+            try:
+                result = self.local_maps.apply(str(function), evaluated, self.contracts.limits["max_range_items"])
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
+            self.contextual = True
+            return result
+        if function in NATIVE_OPERATIONS and function not in {"quote", "print"} and self.contracts.renderer is not None:
+            return self._native_operation(str(function), evaluated)
+        if function in {"lookup", "getHostByName", "urlParse", "semverCompare"}:
+            return self._renderer_call(function, evaluated)
+        if isinstance(function, FieldAccess) or (isinstance(function, str) and function.startswith((".", "$")) and ("." in function)):
+            return self._context_method(function, evaluated, source, line, variables)
+        if function == "tpl" and len(args) == 2:
+            return self._template_string(evaluated, source, line)
+        if function in {"fail", "required"}:
+            return self._reject(function, evaluated, source, line)
+        if function in NATIVE_TYPED_OPERATIONS and self.contracts.renderer is not None:
+            from hypothesis_helm.compiler.asts.native_bindings import contains_native
+
+            if contains_native(evaluated, self.contracts.limits):
+                return self._native_operation(str(function), evaluated)
+        if function in TRANSFORMATIONS:
+            try:
+                result = calculate(str(function), tuple(evaluated), limits=self.contracts.limits)
+            except UnsupportedTransformation as exc:
+                if function in NATIVE_EXTENSIONS | {"quote", "print"} and self.contracts.renderer is not None:
+                    return self._native_operation(str(function), evaluated)
+                raise Unknown(str(exc)) from exc
+            self.transformed = True
+            return DerivedValue(result, str(function), tuple(evaluated))
+        if function in {"not", "empty", "eq", "ne", "lt", "le", "gt", "ge", "int", "len", "typeIs"}:
+            return self._predicate(function, evaluated)
+        if function in {"list", "dict"}:
+            return self._construct(function, evaluated, arguments)
+        if function in {"hasKey", "has", "mustHas"}:
+            return self._membership(function, evaluated)
+        if function in {"omit", "pick", "keys", "sortAlpha", "index", "get", "append", "without", "first", "reverse"}:
+            return self._collection(function, evaluated)
+        if function in {"join", "printf"}:
+            try:
+                return self._format(function, evaluated)
+            except Unknown:
+                if self.contracts.renderer is not None:
+                    return self._native_operation(function, evaluated)
+                raise
+        if function in NATIVE_EXTENSIONS and self.contracts.renderer is not None:
+            return self._native_operation(str(function), evaluated)
+        raise Unknown(runtime_dependency(str(function)) or f"unsupported function: {function}")
+
+    def _atom(self, expr: str, variables: Scope) -> object:
+        """
+        Read a literal or resolve its lexical context without invoking a function.
+
+        Args:
+            expr (str): Literal or selector token.
+            variables (Scope): Current lexical bindings.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        if expr.startswith((".", "$")):
+            return self.resolve(expr, variables)
+        if expr.startswith('"'):
+            try:
+                return json.loads(expr)
+            except ValueError as exc:
+                raise Unknown("unsupported quoted literal") from exc
+        if expr.startswith("`") and expr.endswith("`"):
+            return expr[1:-1]
+        if expr in ("true", "false"):
+            return expr == "true"
+        if re.fullmatch(r"-?\d+", expr):
+            return int(expr)
+        if re.fullmatch(r"-?(?:\d+\.\d*|\d*\.\d+|\d+[eE][+-]?\d+)(?:[eE][+-]?\d+)?", expr):
+            return float(expr)
+        if expr == "list":
+            return ConstantList(())
+        if expr == "dict":
+            return self.local_maps.register(ConstantMap({}))
+        if expr == "nil":
+            return None
+        if expr in NATIVE_EXTENSIONS | {"print", "println"} and self.contracts.renderer is not None:
+            return self._native_operation(expr, [])
+        raise Unknown(runtime_dependency(expr) or f"unsupported expression: {expr}")
+
+    def _helper(self, function: str, arguments: list[object], source: str, line: int, variables: Scope, *, output_required: bool) -> object:
+        """
+        Enter a helper with its own root and restore all caller state afterward.
+
+        Args:
+            function (str): Helm helper invocation name.
+            arguments (list[object]): Unevaluated helper name and context expressions.
+            source (str): Caller source filename.
+            line (int): Caller line number.
+            variables (Scope): Current lexical bindings.
+            output_required (bool): Whether the caller consumes the helper output.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        # Helpers reset loop depth and dollar-root; finally restores them even after rejection.
+        if len(arguments) not in ({2} if function == "include" else {1, 2}):
+            raise Unknown("include requires a name and context")
+        name = native(self.evaluate(arguments[0], source, line, variables))
+        if isinstance(name, str) and name in self.contracts.ambiguous_helpers:
+            raise Unknown(f"conflicting helper definitions: {name}")
+        helper = self.contracts.helpers.get(name) if isinstance(name, str) else None
+        if helper is None and isinstance(name, str) and self.contracts.renderer is not None:
+            states = self.contracts.dependencies.states({}, self.values)
+            for template_source, body in self.contracts.templates.items():
+                scope = self.contracts.scopes[template_source]
+                if scope and states.get(scope) is not True:
+                    continue
+                try:
+                    template = self.contracts.renderer.template_context(scope, template_source)
+                except (Unavailable, OSError, ValueError, KeyError, subprocess.SubprocessError, tarfile.TarError) as exc:
+                    raise Unknown("native template filename is unavailable") from exc
+                if template["Name"] == name:
+                    helper = (template_source, body)
+                    self.contextual = True
+                    break
+        if helper is None:
+            raise Unknown("unknown or ambiguous helper")
+        if self.depth >= self.contracts.max_call_depth:
+            raise Unknown(f"helper call depth exceeds compiler limit {self.contracts.max_call_depth}")
+        helper_source, nodes = helper
+        context = self.evaluate(arguments[1], source, line, variables) if len(arguments) == 2 else None
+        previous_context = self.context
+        previous_loops = self.loops
+        previous_needed = self.needed
+        self.context = context
+        self.loops = 0
+        if not output_required:
+            self.needed = self.contracts.variables(nodes)
+            self.contextual = True
+        self.depth += 1
+        try:
+            return self.visit(nodes, helper_source, Scope({"$": context}), strict=output_required)
+        finally:
+            self.depth -= 1
+            self.context = previous_context
+            self.loops = previous_loops
+            self.needed = previous_needed
+
+    def _renderer_call(self, function: object, evaluated: list[object]) -> object:
+        """
+        Evaluate only external operations fixed by the verified renderer context.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if function == "lookup" and len(args) == 4 and all(isinstance(value, str) for value in args):
+            if self.contracts.renderer is not None and self.contracts.renderer.offline:
+                self.contextual = True
+                return ConstantMap({})
+            raise Unknown("lookup requires a verified offline renderer context; cluster contents remain external")
+        if function == "getHostByName" and len(args) == 1 and isinstance(args[0], str):
+            if self.contracts.renderer is not None and not self.contracts.renderer.enable_dns:
+                self.contextual = True
+                return ""
+            raise Unknown("DNS is external unless disabled by the verified renderer context")
+        if function == "urlParse" and len(args) == 1 and isinstance(args[0], str):
+            if self.contracts.renderer is None:
+                raise Unknown("urlParse requires the fixed Helm renderer context")
+            self.contextual = True
+            try:
+                result = self.contracts.renderer.url_parse(args[0])
+            except (Unavailable, OSError, ValueError, subprocess.SubprocessError, YAMLError) as exc:
+                raise Unknown(str(exc) if isinstance(exc, Unavailable) else "native URL parsing is unavailable") from exc
+            return DerivedValue(result, "urlParse", tuple(evaluated))
+        if function == "semverCompare" and len(args) == 2 and all(isinstance(value, str) for value in args):
+            if self.contracts.renderer is None:
+                raise Unknown("semverCompare requires the fixed Helm renderer context")
+            self.contextual = True
+            try:
+                return self.contracts.renderer.semver_compare(str(args[0]), str(args[1]))
+            except (Unavailable, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, YAMLError) as exc:
+                raise Unknown(str(exc) if isinstance(exc, Unavailable) else "native version comparison unavailable") from exc
+        raise Unknown(f"unsupported function: {function}")
+
+    def _native_operation(self, function: str, evaluated: list[object]) -> object:
+        """
+        Delegate concrete operations without turning observed output into a domain proof.
+
+        Args:
+            function (str): Reviewed deterministic builtin or bounded record-field access.
+            evaluated (list[object]): Operands carrying their original input paths.
+
+        Returns:
+            object: Derived output; fresh parsed maps may be mutated locally.
+        """
+        renderer = self.contracts.renderer
+        assert renderer is not None
+        self.contextual = self.transformed = True
+        try:
+            result = native_operations.evaluate(
+                function, evaluated, helm=renderer.helm, timeout=renderer.timeout, limits=self.contracts.limits, typed=True
+            )
+        except (Unavailable, OSError, ValueError, TypeError, subprocess.SubprocessError, YAMLError) as exc:
+            raise Unknown(str(exc) if isinstance(exc, Unavailable) else f"native {function} evaluation unavailable") from exc
+        return (
+            self.local_maps.register(result)
+            if function in {"fromYaml", "fromJson", "fromToml", "mustFromJson", "deepCopy", "mustDeepCopy"}
+            else result
+        )
+
+    def _context_method(self, function: object, evaluated: list[object], source: str, line: int, variables: Scope) -> object:
+        """
+        Resolve explicit capability and chart-file methods on their typed receivers.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+            source (str): Caller source filename.
+            line (int): Caller source line.
+            variables (Scope): Current lexical bindings.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if isinstance(function, FieldAccess):
+            method = function.fields[-1]
+            target = self.select(self.evaluate(function.receiver, source, line, variables), function.fields[:-1])
+        else:
+            receiver, method = str(function).rsplit(".", 1)
+            target = self.resolve(receiver, variables)
+        if isinstance(target, APIVersions) and method == "Has" and len(args) == 1 and isinstance(args[0], str):
+            self.contextual = True
+            return args[0] in target.versions
+        if isinstance(target, FileSet) and method in {"Get", "Lines"} and len(args) == 1 and isinstance(args[0], str):
+            self.contextual = True
+            try:
+                file_text = target.get(args[0])
+            except Unavailable as exc:
+                raise Unknown(str(exc)) from exc
+            return file_text if method == "Get" else ConstantList(tuple(file_text.removesuffix("\n").split("\n")) if file_text else ())
+        raise Unknown(f"unsupported context method: {method}")
+
+    def _template_string(self, evaluated: list[object], source: str, line: int) -> object:
+        """
+        Analyze bounded concrete tpl code using its own lexical root.
+
+        Args:
+            evaluated (list[object]): Concrete template text and its invocation context.
+            source (str): Caller source filename.
+            line (int): Caller source line.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if not isinstance(args[0], str):
+            raise Unknown("tpl requires a concrete string")
+        if self.depth >= self.contracts.max_call_depth:
+            raise Unknown(f"tpl call depth exceeds compiler limit {self.contracts.max_call_depth}")
+        if len(args[0].encode("utf-8")) > self.contracts.limits["max_template_bytes"]:
+            raise Unknown(f"tpl source exceeds compiler.max_template_bytes={self.contracts.limits['max_template_bytes']}")
+        try:
+            nodes = tpl_nodes(args[0])
+        except (ValueError, RecursionError) as exc:
+            raise Unknown("tpl source cannot be parsed by the compiler") from exc
+        if any(node.kind == "opaque" and node.text.startswith(("define ", "block ")) for node in walk(nodes)):
+            raise Unknown("tpl-local template definitions require native Helm evaluation")
+        previous_context, previous_loops = self.context, self.loops
+        self.context, self.loops = evaluated[1], 0
+        self.depth += 1
+        self.contextual = True
+        try:
+            return self.visit(nodes, f"{source}:{line} (tpl)", Scope({"$": self.context}), strict=True)
+        finally:
+            self.context, self.loops = previous_context, previous_loops
+            self.depth -= 1
+
+    def _reject(self, function: object, evaluated: list[object], source: str, line: int) -> object:
+        """
+        Record explicit fail and required contracts with the evidence accumulated so far.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+            source (str): Rejecting template filename.
+            line (int): Rejecting template line.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if evaluated and isinstance(evaluated[0], NativeValue) and evaluated[0].go_type != "string":
+            raise Unknown("rejection messages require a native string, not a JSON representation of another Go type")
+        if function == "fail" and len(args) == 1 and isinstance(args[0], str):
+            text = evaluated[0] if isinstance(evaluated[0], ContractText) else None
+            raise Rejection(
+                source,
+                line,
+                args[0],
+                dict(self.inputs),
+                tuple(self.conditions),
+                dict(self.enums),
+                text,
+                declared_schema=self.declared_globals,
+                transformed_domains=tuple(self.transformed_domains),
+                transformed=self.transformed,
+                contextual=self.contextual,
+            )
+        if function == "required" and len(args) == 2 and isinstance(args[0], str):
+            # Helm's required accepts false and zero; only nil and empty strings reject.
+            if args[1] is None or args[1] == "":
+                raise Rejection(
+                    source,
+                    line,
+                    args[0],
+                    dict(self.inputs),
+                    tuple(self.conditions),
+                    declared_schema=self.declared_globals,
+                    transformed_domains=tuple(self.transformed_domains),
+                    transformed=self.transformed,
+                    contextual=self.contextual,
+                )
+            return evaluated[1]
+        raise Unknown(f"unsupported function: {function}")
+
+    def _predicate(self, function: object, evaluated: list[object]) -> object:
+        """
+        Evaluate scalar predicates without coercing incompatible Go types.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if function == "typeIs" and len(args) == 2 and args[0] in ("string", "bool"):
+            # String/bool identity is stable across Helm values loaders. Numeric
+            # type names still require native reflection rather than Python types.
+            return isinstance(args[1], str if args[0] == "string" else bool)
+        if function in ("not", "empty") and len(args) == 1:
+            return not bool(args[0])
+        if function in ("eq", "ne", "lt", "le", "gt", "ge") and len(args) == 2:
+            first, second = args
+            if function in {"eq", "ne"} and (first is None or second is None):
+                other = second if first is None else first
+                if other is None or type(other) in (str, bool, int) or isinstance(other, NilMap | NilSlice):
+                    equal = other is None or isinstance(other, NilMap | NilSlice)
+                    return equal if function == "eq" else not equal
+            if type(first) is not type(second) or type(first) not in (str, bool, int):
+                raise Unknown("unsupported comparison types")
+            if type(first) is bool and function not in ("eq", "ne"):
+                raise Unknown("ordered Boolean comparison")
+            assert isinstance(first, str | int) and isinstance(second, str | int)
+            return {"eq": eq, "ne": ne, "lt": lt, "le": le, "gt": gt, "ge": ge}[str(function)](first, second)
+        if function == "int" and len(args) == 1 and type(args[0]) is int:
+            return evaluated[0]
+        if function == "len" and len(args) == 1 and isinstance(args[0], str | list | dict):
+            return len(args[0].encode("utf-8")) if isinstance(args[0], str) else len(args[0])
+        raise Unknown(f"unsupported function: {function}")
+
+    def _construct(self, function: object, evaluated: list[object], arguments: list[object]) -> object:
+        """
+        Build lists and dictionaries while distinguishing constant keys from sampled keys.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+            arguments (list[object]): Original expressions used to recognize literal entries.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if function == "list":
+            if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments):
+                return ConstantList(tuple(str(value) for value in args))
+            return evaluated
+        if function == "dict":
+            try:
+                entries = dictionary(tuple(evaluated))
+            except UnsupportedTransformation as exc:
+                raise Unknown(str(exc)) from exc
+            if all(isinstance(item, str) and item.startswith(('"', "`")) for item in arguments[::2]):
+                return self.local_maps.register(ConstantMap(entries))
+            return self.local_maps.register(entries)
+        raise Unknown(f"unsupported function: {function}")
+
+    def _membership(self, function: object, evaluated: list[object]) -> object:
+        """
+        Derive allowlists only from literal collections whose membership rejects an input.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        # A sampled collection cannot prove the chart accepts only these observed values.
+        if function == "hasKey" and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
+            present = args[1] in args[0]
+            literal = isinstance(evaluated[0], ConstantMap) and id(args[0]) not in self.local_maps.changed
+            if not present and literal and isinstance(evaluated[1], BoundValue):
+                self.enums["$." + ".".join(evaluated[1].path)] = tuple(sorted(args[0]))
+            if not present and literal and isinstance(evaluated[1], DerivedValue):
+                self.transformed_domains.append(TransformedDomain(evaluated[1], tuple(sorted(args[0]))))
+            return present
+        if function in ("has", "mustHas") and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], list):
+            members = [native(item) for item in args[1]]
+            if not all(isinstance(item, str) for item in members):
+                raise Unknown("membership requires a string list")
+            present = args[0] in members
+            if not present and isinstance(evaluated[0], BoundValue) and isinstance(evaluated[1], ConstantList):
+                self.enums["$." + ".".join(evaluated[0].path)] = tuple(sorted(set(evaluated[1].values)))
+            if not present and isinstance(evaluated[0], DerivedValue) and isinstance(evaluated[1], ConstantList):
+                self.transformed_domains.append(TransformedDomain(evaluated[0], tuple(sorted(set(evaluated[1].values)))))
+            return present
+        raise Unknown(f"unsupported function: {function}")
+
+    def _collection(self, function: object, evaluated: list[object]) -> object:
+        """
+        Keep source provenance through supported collection operations.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if function in {"first", "reverse"} and len(args) == 1 and isinstance(args[0], list):
+            if len(args[0]) > self.contracts.limits["max_range_items"]:
+                raise Unknown("list operation exceeds compiler.max_range_items")
+            if isinstance(evaluated[0], UnorderedKeys):
+                raise Unknown("list selection from unsorted map keys has nondeterministic order")
+            if function == "reverse":
+                return DerivedValue(list(reversed(args[0])), "reverse", tuple(evaluated))
+            return DerivedValue(args[0][0] if args[0] else None, "first", tuple(evaluated))
+        if function in {"omit", "pick"} and args and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[1:]):
+            if not all(isinstance(key, str) for key in args[0]):
+                raise Unknown("omit requires string-key maps")
+            if len(args[0]) > self.contracts.limits["max_range_items"]:
+                raise Unknown(f"omit exceeds compiler.max_range_items={self.contracts.limits['max_range_items']}")
+            source_map = evaluated[0]
+            kept = {key: value for key, value in args[0].items() if (key in args[1:]) == (function == "pick")}
+            if isinstance(source_map, ConstantMap) and id(args[0]) not in self.local_maps.changed:
+                return self.local_maps.register(ConstantMap(kept))
+            if isinstance(source_map, BoundValue | DerivedValue):
+                kept = {
+                    key: BoundValue(value, (*source_map.path, key))
+                    if isinstance(source_map, BoundValue) and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9-]*", key)
+                    else DerivedValue(value, "_field", (source_map, key))
+                    for key, value in kept.items()
+                }
+            self.transformed = True
+            return self.local_maps.register(kept)
+        if function == "keys" and len(args) == 1 and isinstance(args[0], dict) and all(isinstance(key, str) for key in args[0]):
+            return UnorderedKeys(tuple(args[0]))
+        if function == "sortAlpha" and len(args) == 1 and isinstance(args[0], list) and all(isinstance(item, str) for item in args[0]):
+            return sorted(args[0])
+        if function in ("index", "get") and len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], str):
+            if isinstance(evaluated[0], BoundValue):
+                path = (*evaluated[0].path, args[1])
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9-]*", args[1]):
+                    raise Unknown("input key cannot be represented by a dotted contract path")
+                value = args[0].get(args[1], "" if function == "get" else None)
+                return self.observe(BoundValue(value, path))
+            if isinstance(evaluated[0], DerivedValue):
+                return DerivedValue(
+                    args[0].get(args[1], "" if function == "get" else None),
+                    "_get" if function == "get" else "_field",
+                    (evaluated[0], args[1]),
+                )
+            return args[0].get(args[1], "" if function == "get" else None)
+        if function == "index" and len(args) == 2 and isinstance(args[0], list) and type(args[1]) is int:
+            if not (type(evaluated[1]) is int or isinstance(evaluated[1], DerivedValue) and evaluated[1].function in INTEGER_RESULTS):
+                raise Unknown("list index requires a literal or explicitly converted integer")
+            position = args[1]
+            if not 0 <= position < len(args[0]):
+                origins = ", ".join("$." + ".".join(path) for path in inputs(evaluated[0]))
+                bounds = (
+                    f"index {position} must be nonnegative"
+                    if position < 0
+                    else f"index {position} requires at least {position + 1} list elements; got {len(args[0])}"
+                )
+                raise Unknown(
+                    bounds
+                    + (f"; derived from {origins}" if origins else "")
+                    + "; this is a potential template failure, not an explicit input rejection"
+                )
+            return DerivedValue(args[0][position], "_index", tuple(evaluated))
+        if function == "append" and len(args) == 2 and isinstance(args[0], list):
+            return [*args[0], args[1]]
+        if function == "without" and args and isinstance(args[0], list):
+            return [item for item in args[0] if item not in args[1:]]
+        raise Unknown(f"unsupported function: {function}")
+
+    def _format(self, function: object, evaluated: list[object]) -> object:
+        """
+        Preserve unordered key evidence while formatting explicit rejection messages.
+
+        Args:
+            function (object): Function name or context selector.
+            evaluated (list[object]): Operands retaining source provenance.
+
+        Returns:
+            object: Supported result; unsupported calls raise Unknown.
+        """
+        args = [native(value) for value in evaluated]
+        if function == "join" and len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], list):
+            if all(isinstance(item, str) for item in args[1]):
+                if isinstance(evaluated[1], UnorderedKeys):
+                    return ContractText((KeyList(args[0], evaluated[1].values),))
+                return args[0].join(args[1])
+        if function == "printf" and args and isinstance(args[0], str):
+            result = printf(args[0], evaluated[1:], max_chars=self.contracts.limits["max_string_chars"])
+            self.transformed = True
+            return result
+        raise Unknown(f"unsupported function: {function}")
+
+    def pipeline(self, text: str, source: str, line: int, variables: Scope) -> object:
+        """
+        Evaluate a pipeline and its optional declaration or assignment.
+
+        Args:
+            text (str): Pipeline, optionally prefixed by a variable binding.
+            source (str): Source filename.
+            line (int): Source line number.
+            variables (Scope): Lexical scope receiving the binding.
+
+        Returns:
+            object: Pipeline result, retaining input provenance.
+        """
+        assignment = ASSIGNMENT.fullmatch(text)
+        value = self.evaluate(expression(assignment[3] if assignment else text), source, line, variables)
+        if assignment:
+            variables.bind(assignment[1], value, assign=assignment[2] == "=")
+        return value
+
+    def named_template(self, text: str, source: str, line: int, variables: Scope) -> str:
+        """
+        Invoke a statically named template with a separately parsed argument pipeline.
+
+        Args:
+            text (str): Template or block action including its quoted name.
+            source (str): Source filename.
+            line (int): Source line number.
+            variables (Scope): Caller bindings used only to evaluate the argument.
+
+        Returns:
+            str: Supported helper output; the callee receives a fresh variable scope.
+        """
+        match = re.fullmatch(r'(?:template|block)\s+("(?:[^"\\]|\\.)*"|`[^`]*`)(?:\s+(.*))?', text, re.DOTALL)
+        if match is None:
+            raise Unknown("template requires a literal name")
+        argument = expression(match[2]) if match[2] else "nil"
+        result = self.evaluate(("template", match[1], argument), source, line, variables)
+        if not isinstance(result, str):
+            raise Unknown("unsupported template output")
+        return result
+
+    def control(self, node: Node, source: str, variables: Scope, *, strict: bool) -> str:
+        """
+        Evaluate an if or with block with lexical declarations and restored dot.
+
+        Args:
+            node (Node): Conditional or opaque with node.
+            source (str): Source filename.
+            variables (Scope): Enclosing scope, shared by assignments but not declarations.
+            strict (bool): Require complete helper text when assembling a message.
+
+        Returns:
+            str: Text produced by the selected branch.
+        """
+        local = Scope(parent=variables)
+        text = node.text if node.kind == "if" else node.text.removeprefix("with ")
+        previous_context, previous_enums = self.context, dict(self.enums)
+        previous_domains = list(self.transformed_domains)
+        try:
+            condition = self.pipeline(text, source, node.line, local)
+            enabled = bool(native(condition))
+            self.conditions.append(f"{source}:{node.line}: {text} => {enabled}")
+            if node.kind == "opaque" and enabled:
+                self.context = condition
+            return self.visit(node.children if enabled else node.otherwise, source, local, strict=strict)
+        finally:
+            self.context, self.enums = previous_context, previous_enums
+            self.transformed_domains = previous_domains
+
+    def iteration(self, node: Node, source: str, variables: Scope, *, strict: bool) -> str:
+        """
+        Follow finite list or string-key map ranges within a shared statement budget.
+
+        Args:
+            node (Node): Opaque range node retaining its body and empty branch.
+            source (str): Source filename.
+            variables (Scope): Enclosing lexical environment.
+            strict (bool): Require complete helper output when assembling messages.
+
+        Returns:
+            str: Concatenated iterations or the empty-range branch.
+        """
+        local = Scope(parent=variables)
+        text = node.text.removeprefix("range ")
+        binding = RANGE_ASSIGNMENT.fullmatch(text)
+        value = self.evaluate(expression(binding[4] if binding else text), source, node.line, local)
+        collection = native(value)
+        if isinstance(value, UnorderedKeys):
+            raise Unknown("range over unsorted keys has nondeterministic order")
+        if collection is None:
+            collection = []
+        if not isinstance(collection, list | dict) or (isinstance(collection, dict) and not all(isinstance(k, str) for k in collection)):
+            raise Unknown("range requires a finite list or string-key map")
+        if len(collection) > self.contracts.limits["max_range_items"]:
+            raise Unknown(f"range exceeds compiler.max_range_items={self.contracts.limits['max_range_items']}")
+        names = [name for name in (binding[1], binding[2]) if name] if binding else []
+        if binding:
+            for name in names:
+                local.bind(name, value, assign=binding[3] == "=")
+        if not collection:
+            return self.visit(node.otherwise, source, local, strict=strict)
+        previous_context, previous_enums = self.context, dict(self.enums)
+        previous_domains = list(self.transformed_domains)
+        output: list[str] = []
+        self.loops += 1
+        try:
+            keys = sorted(collection) if isinstance(collection, dict) else range(len(collection))
+            for key in keys:
+                self.steps += 1
+                if self.steps > self.contracts.limits["max_steps"]:
+                    raise Unknown(f"contract analysis statement budget exceeded: compiler.max_steps={self.contracts.limits['max_steps']}")
+                element = collection[key]
+                # Map fields retain editable paths. List members retain the collection's
+                # already-recorded evidence without inventing a dotted numeric field.
+                if isinstance(value, BoundValue) and isinstance(key, str) and re.fullmatch(r"[A-Za-z_][A-Za-z_0-9-]*", key):
+                    element = BoundValue(element, (*value.path, key))
+                if binding:
+                    for name, item in zip(names, [key, element] if len(names) == 2 else [element], strict=True):
+                        local.bind(name, item, assign=binding[3] == "=")
+                self.context, self.enums = element, dict(previous_enums)
+                self.transformed_domains = list(previous_domains)
+                try:
+                    output.append(self.visit(node.children, source, Scope(parent=local), strict=strict))
+                except LoopControl as jump:
+                    output.append(jump.output)
+                    if jump.action == "break":
+                        break
+        finally:
+            self.loops -= 1
+            self.context, self.enums = previous_context, previous_enums
+            self.transformed_domains = previous_domains
+        return "".join(output)
+
+    def visit(self, nodes: tuple[Node, ...], source: str, variables: Scope, *, strict: bool) -> str:
+        """
+        Execute bounded validator control flow, leaving unsupported operations unresolved.
+
+        Args:
+            nodes (tuple[Node, ...]): Template region to evaluate.
+            source (str): Template filename for diagnostics.
+            variables (Scope): Lexical bindings; child blocks retain enclosing assignment ownership.
+            strict (bool): Require every helper statement; root output is outside the contract.
+
+        Returns:
+            str: Exact supported helper text, including whitespace.
+
+        Raises:
+            Unknown: An executed validator construct cannot be interpreted.
+        """
+        output: list[str] = []
+        try:
+            for node in nodes:
+                self.steps += 1
+                if self.steps > self.contracts.limits["max_steps"]:
+                    raise Unknown(f"contract analysis statement budget exceeded: compiler.max_steps={self.contracts.limits['max_steps']}")
+                if node.kind == "text":
+                    output.append(node.text)
+                    continue
+                # Definitions were registered while building Contracts. Including
+                # their file does not execute a declaration's body a second time.
+                if node.kind == "opaque" and node.text.startswith("define "):
+                    continue
+                try:
+                    assignment = ASSIGNMENT.fullmatch(node.text)
+                    if not strict and not self.contracts.interesting((node,)):
+                        has_bindings = False
+                        for item in walk((node,)):
+                            text = item.text.split(" ", 1)[1] if item.text.startswith(("range ", "with ")) else item.text
+                            binding = RANGE_ASSIGNMENT.fullmatch(text)
+                            if binding and {binding[1], binding[2]} & self.needed:
+                                has_bindings = True
+                        has_jumps = any(item.text in {"break", "continue"} for item in walk((node,)))
+                        if not has_bindings and not has_jumps and not context_effects((node,)):
+                            continue
+                    if node.kind == "if" or (node.kind == "opaque" and node.text.startswith("with ")):
+                        output.append(self.control(node, source, variables, strict=strict))
+                    elif node.kind == "opaque" and node.text.startswith("range "):
+                        output.append(self.iteration(node, source, variables, strict=strict))
+                    elif node.kind == "opaque" and node.text.startswith("block "):
+                        output.append(self.named_template(node.text, source, node.line, variables))
+                    elif node.kind == "emit":
+                        # Evaluation checks map ownership before each write. Unknown
+                        # effects still abort the root through the barrier below.
+                        if assignment:
+                            try:
+                                self.pipeline(node.text, source, node.line, variables)
+                            except Unknown as exc:
+                                variables.bind(assignment[1], exc, assign=assignment[2] == "=")
+                                raise
+                        elif node.text in {"break", "continue"}:
+                            if not self.loops:
+                                raise Unknown("loop control outside a range")
+                            raise LoopControl(node.text)
+                        elif node.text.startswith("template "):
+                            output.append(self.named_template(node.text, source, node.line, variables))
+                        else:
+                            observed = self.evaluate(expression(node.text), source, node.line, variables, output_required=strict)
+                            # Go's template printing of a time, version or named
+                            # type need not match its JSON transport representation.
+                            if isinstance(observed, NativeValue):
+                                observed = self._native_operation("print", [observed])
+                            value = native(observed)
+                            if type(value) not in (str, int, bool):
+                                raise Unknown("unsupported output type")
+                            output.append(str(value).lower() if type(value) is bool else str(value))
+                    else:
+                        raise Unknown("unsupported control flow")
+                except Unknown as exc:
+                    if exc.source is None:
+                        exc.source, exc.line = source, node.line
+                    if strict or context_effects((node,)) or self.contracts.interesting((node,), dynamic=False):
+                        raise
+                    self.incomplete = self.contextual = True
+                    self.contracts.fallback(exc, source, self.inputs)
+        except LoopControl as jump:
+            jump.output = "".join(output) + jump.output
+            raise
+        except Unknown as exc:
+            if exc.source is None:
+                exc.source, exc.line = source, node.line
+            raise
+        return "".join(output)

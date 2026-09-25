@@ -1,0 +1,179 @@
+"""
+Generate structured findings and public catalog views from observed evidence.
+"""
+
+import json
+import re
+from collections.abc import Iterator
+
+from attrs import frozen
+
+from hypothesis_helm.findings.catalog import CATALOG, Rule
+from hypothesis_helm.findings.configuration import GENERATION_EXAMPLE
+from hypothesis_helm.findings.severity import attributes
+
+__all__ = ("Finding", "FindingGenerator")
+
+
+@frozen
+class Finding:
+    """
+    Retain the classified observation without requiring a Python exception.
+
+    Attributes:
+        rule (Rule): Definition of the observed condition.
+        evidence (str): Original diagnostic supporting the classification.
+    """
+
+    rule: Rule
+    evidence: str
+
+    def record(self) -> dict[str, object]:
+        """
+        Serialize the observation for audit and chart reports.
+
+        Returns:
+            dict[str, object]: Classification, evidence and suggested action.
+        """
+        return {
+            "code": self.rule.code,
+            "title": self.rule.title,
+            "category": self.rule.category,
+            "kind": self.rule.kind,
+            **attributes(self.rule.code),
+            "evidence": self.evidence,
+            "remediation": self.rule.remediation,
+        }
+
+
+class FindingGenerator:
+    """
+    Create findings and generate catalog views from one shared definition library.
+    """
+
+    @staticmethod
+    def create(code: str, evidence: str) -> Finding:
+        """
+        Attach catalog meaning to an explicitly detected condition.
+
+        Args:
+            code (str): Known condition identifier supplied by its detector.
+            evidence (str): Diagnostic, path or observed output supporting it.
+
+        Returns:
+            Finding: Structured finding; unknown codes raise KeyError.
+        """
+        return Finding(CATALOG[code], evidence)
+
+    @classmethod
+    def helm(cls, diagnostic: str) -> Finding:
+        """
+        Classify recognized Helm diagnostics without guessing from exception types.
+
+        Args:
+            diagnostic (str): Stderr from an unsuccessful Helm template invocation.
+
+        Returns:
+            Finding: A specific observed violation, or an unclassified diagnostic.
+        """
+        # User-authored fail/required messages can contain arbitrary text, including
+        # wording from this catalog. Do not classify them as Go evaluation errors.
+        if re.search(r"error calling (?:fail|required):|execution error at \(", diagnostic):
+            return cls.create("HH1001", diagnostic)
+        if re.search(r"(?:^|\n)(?:Error: )?YAML parse error on .+: error converting YAML to JSON:", diagnostic):
+            return cls.create("HH1101", diagnostic)
+        if re.search(r"(?:^|\n)(?:Error: )?YAML parse error on .+: error unmarshaling JSON:.*json: cannot unmarshal ", diagnostic):
+            if re.search(r"into Go value of type (?:\w+\.)?SimpleHead\b", diagnostic):
+                return cls.create("HH1102", diagnostic)
+            return cls.create("HH1109", diagnostic)
+        if re.search(r"executing .+ at <[^\n]+>:\s+nil pointer evaluating ", diagnostic):
+            return cls.create("HH3001", diagnostic)
+        if re.search(
+            r"executing .+ at <[^\n]+>:\s+"
+            r"(?:wrong type for value; expected .+; got |can't evaluate field .+ in type |range can't iterate over )",
+            diagnostic,
+        ):
+            return cls.create("HH3002", diagnostic)
+        if re.search(r'(?:error calling include: template: |template: )no template "[^"\n]+" associated with template ', diagnostic):
+            return cls.create("HH3003", diagnostic)
+        return cls.create("HH1001", diagnostic)
+
+    @staticmethod
+    def definitions() -> Iterator[dict[str, object]]:
+        """
+        Iterate over the catalog without creating findings or raising failures.
+
+        Returns:
+            Iterator[dict[str, object]]: Rule descriptions and their evidence requirements.
+
+        Yields:
+            dict[str, object]: One rule definition, in stable catalog order.
+        """
+        for rule in CATALOG.values():
+            yield {
+                "code": rule.code,
+                "title": rule.title,
+                "category": rule.category,
+                "kind": rule.kind,
+                "severity": rule.severity,
+                "detection": rule.detection,
+                "example": rule.example,
+                "remediation": rule.remediation,
+            }
+
+    @classmethod
+    def render(cls, format: str = "text") -> str:
+        """
+        Generate a CLI listing, JSON catalog, commented policy or Markdown reference.
+
+        Args:
+            format (str): One of text, json, config or markdown.
+
+        Returns:
+            str: Deterministic catalog output with a trailing newline.
+        """
+        if format == "json":
+            return json.dumps(list(cls.definitions()), indent=2) + "\n"
+        if format == "config":
+            lines = [
+                "# Generated by: helm hypothesis --generate-config",
+                "# HH2006 is ignored by default. Uncomment other codes to ignore those conditions.",
+                "# Diagnostics describe execution or analysis limits, not established chart defects.",
+                "# See docs/rules/README.md for detection criteria and examples.",
+                "ignored:",
+            ]
+            for category in ("unclassified", "manifest", "execution", "values", "analysis", "template"):
+                lines.extend(["", f"  # {category.capitalize()}"])
+                lines.extend(
+                    f"  {'' if rule.code == 'HH2006' else '# '}- {rule.code}  # {rule.title}"
+                    for rule in CATALOG.values()
+                    if rule.category == category
+                )
+            lines.extend(["", "# Complete optional configuration; see docs/input-domains/README.md."])
+            lines.extend(f"# {line}".rstrip() for line in GENERATION_EXAMPLE.splitlines())
+            return "\n".join(lines) + "\n"
+        if format == "markdown":
+            lines = ["| Code | Finding | Category | Kind | Severity |", "| --- | --- | --- | --- | --- |"]
+            for rule in CATALOG.values():
+                lines.append(f"| `{rule.code}` | {rule.title} | {rule.category} | {rule.kind} | {rule.severity} |")
+            for rule in CATALOG.values():
+                lines.extend(
+                    [
+                        "",
+                        f"### {rule.code}: {rule.title}",
+                        "",
+                        f"Detected when: {rule.detection}",
+                        "",
+                        f"Default severity: **{rule.severity}**.",
+                        "",
+                        f"Example: {rule.example}",
+                        "",
+                        f"Suggested action: {rule.remediation}",
+                    ]
+                )
+            return "\n".join(lines) + "\n"
+        if format == "text":
+            return (
+                "\n".join(f"{rule.code}  [{rule.severity}; {rule.category}/{rule.kind}] {rule.title}" for rule in CATALOG.values()) + "\n"
+            )
+        raise ValueError(f"Unknown catalog format: {format}")

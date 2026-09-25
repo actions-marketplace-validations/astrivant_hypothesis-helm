@@ -1,0 +1,42 @@
+[project]
+name = "hypothesis-helm-benchmarking"
+version = "0.1.0"
+description = "Reproducible Helm chart studies, performance plots, and repository refreshes"
+authors = [{name = "Emma Doyle"}]
+license = "GPL-3.0-only"
+readme = "README.md"
+requires-python = ">=3.13,<4.0"
+dependencies = [
+    "hypothesis-helm>=0.1.0,<0.2.0",
+    "matplotlib>=3.10,<4",
+    "numpy>=2,<3",
+]
+
+[project.urls]
+Repository = "https://github.com/astrivant/hypothesis-helm"
+
+[project.optional-dependencies]
+symbolic = ["pysr>=1.5,<2"]
+
+[project.scripts]
+hypothesis-helm-benchmark = "hypothesis_helm_benchmarking.cli:main"
+hypothesis-helm-refresh = "hypothesis_helm_benchmarking.refresh.cli:main"
+
+[tool.setuptools]
+package-dir = {hypothesis_helm_benchmarking = "."}
+packages = [
+    "hypothesis_helm_benchmarking",
+    "hypothesis_helm_benchmarking.analysis",
+    "hypothesis_helm_benchmarking.charts",
+    "hypothesis_helm_benchmarking.execution",
+    "hypothesis_helm_benchmarking.refresh",
+    "hypothesis_helm_benchmarking.reporting",
+    "hypothesis_helm_benchmarking.studies",
+]
+
+[tool.setuptools.package-data]
+hypothesis_helm_benchmarking = ["assets/**/*", "refresh/recipes/*", "scripts/*.sh"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"

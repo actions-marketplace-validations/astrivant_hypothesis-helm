@@ -4,11 +4,15 @@ Property-based tests for Helm charts.
 
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from hypothesis_helm.charts.generate import coalesce, generate_tests
-    from hypothesis_helm.charts.runner import Chart, check_chart
+from hypothesis_helm.environment import env, refresh_env, set_env
 
-__all__ = ["Chart", "check_chart", "coalesce", "generate_tests"]
+if TYPE_CHECKING:
+    from hypothesis_helm.charts.model import Chart
+    from hypothesis_helm.charts.suites.generate import coalesce, generate_tests
+    from hypothesis_helm.charts.testing.runner import check_chart
+
+# This facade is deliberately small; dependency types belong to their own packages.
+__all__ = ["Chart", "check_chart", "coalesce", "env", "generate_tests", "refresh_env", "set_env"]
 
 
 def __getattr__(name: str) -> object:
@@ -23,8 +27,9 @@ def __getattr__(name: str) -> object:
     """
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    from hypothesis_helm.charts.generate import coalesce, generate_tests
-    from hypothesis_helm.charts.runner import Chart, check_chart
+    from hypothesis_helm.charts.model import Chart
+    from hypothesis_helm.charts.suites.generate import coalesce, generate_tests
+    from hypothesis_helm.charts.testing.runner import check_chart
 
     exports: dict[str, object] = {
         "Chart": Chart,
@@ -32,5 +37,6 @@ def __getattr__(name: str) -> object:
         "coalesce": coalesce,
         "generate_tests": generate_tests,
     }
+    # Resolve once, then let later imports use ordinary module attribute lookup.
     globals().update(exports)
     return exports[name]

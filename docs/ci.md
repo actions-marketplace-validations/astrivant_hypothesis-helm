@@ -1,5 +1,27 @@
 # CI integration
 
+<!-- toc:start -->
+**Table of contents**
+
+- [Provider detection](#provider-detection)
+- [GitHub Action](#github-action)
+  - [Inputs](#inputs)
+  - [Publishing](#publishing)
+- [CircleCI and GitLab](#circleci-and-gitlab)
+- [Caching installed binaries](#caching-installed-binaries)
+- [Persisting path outcomes](#persisting-path-outcomes)
+- [Kubernetes API schema validation](#kubernetes-api-schema-validation)
+- [Optional Kubesec scans](#optional-kubesec-scans)
+  - [Minimal values and aggregation](#minimal-values-and-aggregation)
+<!-- toc:end -->
+
+Use `--filter-adaptive` on MRs/PRs, `--filter` on `main`, and an unfiltered exhaustive search before tagging.
+See the [recommended workflow](coverage.md#development-stages) for commands and release coverage requirements.
+
+For cached property tests, use `--rerun all` to refresh results for every selected test.
+This does not turn a filtered run into an exhaustive search. See the [release check and cache retention
+policy](coverage.md#release-checks); tag the commit whose exhaustive coverage you reviewed.
+
 `helm hypothesis test` and `helm hypothesis run` default to `--shard auto`.
 Parallel pipeline jobs automatically select a deterministic partition, while
 each runner keeps its own `--jobs auto` worker controller.
@@ -34,7 +56,7 @@ bridge them in the workflow yourself:
 The default `auto` mode runs the full suite locally when no coordinates exist.
 `--shard 2/4` overrides detection; `--shard none` disables it, including in
 parallel CI jobs. Incomplete, invalid, or conflicting provider coordinates fail
-with a setup error rather than silently running the wrong partition. Use
+with a setup error before partition execution. Use
 `--shard none` for whole-chart or exhaustive modes in parallel CI jobs.
 
 All shards must use the same revision, selection, shard total, and seed. Keep
@@ -52,7 +74,7 @@ tests and reports by default, including after a test failure. Failures still fai
 the action. Chart dependencies must already be available; add a dependency-build
 step for charts that require one.
 
-After publishing a release tag, callers can use:
+Callers can reference the remote action directly:
 
 ```yaml
 name: Helm properties
@@ -68,15 +90,45 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
-      - uses: astrivant/hypothesis-helm@v0.1.0 # Publish this tag before using it.
+      - uses: astrivant/hypothesis-helm@main # Use a published commit or tag to pin a version.
         id: hypothesis
         with:
           chart: helm/my-chart
+          schema-version: '1.35.0'
+          kubesec: 'false' # set true to install and run security scanning
+          kubesec-jobs: auto
           job-index: ${{ strategy.job-index }}
           job-total: ${{ strategy.job-total }}
           jobs: auto
           max-examples: '50'
           seed: '42'
+          run-id: ${{ github.run_id }}-${{ github.run_attempt }}
+  report:
+    needs: chart
+    if: ${{ always() && needs.chart.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install 'git+https://github.com/astrivant/hypothesis-helm.git@main'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: hypothesis-helm-chart-*
+          path: downloaded
+      - name: Write final report
+        env:
+          HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          cat downloaded/*/report.json | hypothesis-helm aggregate \
+              --shards 4 --run-id "$HH_RUN_ID" --output-dir docs/reports/final
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: hypothesis-helm-final
+          path: docs/reports/final/
+          if-no-files-found: error
+          retention-days: 30
 ```
 
 No shard calculation is required in shell. The matrix values create four jobs;
@@ -100,11 +152,12 @@ or versions and want full coverage for each combination, pass an explicit
 | `seed` | `0` | Hypothesis seed |
 | `timeout` | `30` | Seconds per Helm render |
 | `match` | Empty | Keyword selection before partitioning |
-| `artifact-dir` | `reports/hypothesis-helm` | Root for generated tests and reports |
+| `artifact-dir` | `.cache/hypothesis-helm/runs` | Root for generated tests and reports |
 | `upload-artifacts` | `true` | Upload the resulting directory |
 | `artifact-name` | `hypothesis-helm` | Upload prefix; job and shard IDs are appended |
+| `artifact-retention-days` | `30` | Report retention, subject to repository policy; independent of cache lifetime |
 | `python-version` | `3.13` | Python version, at least 3.13 |
-| `helm-version` | `v3.19.0` | Helm 3 version |
+| `helm-version` | `v4.3.0` | Helm 4 version |
 
 Outputs are `report-dir`, `junit-path`, `manifest-path`, `shard`, and
 `exit-code`. Files may be incomplete after cancellation or setup failure.
@@ -113,9 +166,9 @@ the artifact root. Each directory includes `manifests.jsonl` for downstream
 validation. Set `upload-artifacts: 'false'` to handle outputs in your workflow.
 Give repeated action invocations distinct artifact roots and name prefixes.
 
-The checked-in [action workflow](../.github/workflows/action.yml) exercises the
-local action with a three-job matrix. It uses `uses: ./`, so it can run before
-any release is published.
+The [Chart tests and security workflow](../.github/workflows/chart-validation.yml) exercises the
+local action with three shards for each of two Kubernetes versions. It runs on PRs, pushes to `main`,
+manual dispatch and release verification. It uses `uses: ./`, so it can run before any release is published.
 
 ### Publishing
 
@@ -128,41 +181,26 @@ any release is published.
 
 No release or tag is created by the action itself.
 
-## CircleCI
+## CircleCI and GitLab
 
-Once Helm and the plugin are installed, set job parallelism and run the ordinary
-command. CircleCI supplies the coordinates; no arithmetic or manual shard flag
-is needed:
+Use the [copyable remote examples](ci/README.md). CircleCI imports the
+[URL orb](../ci/circleci.yml); GitLab uses `include: remote` with the
+[shared job](../ci/gitlab.yml). Both install the plugin and validators, prepare
+cached schemas, and preserve per-shard artifacts.
+Both provide a downstream aggregation job that verifies every shard, including
+idle shards, and writes the final PDF, Markdown, JSON, and JUnit bundle.
 
-```yaml
-parallelism: 4
-steps:
-  # Checkout and install Helm plus the plugin first.
-  - run: helm hypothesis test ./chart --seed 42
-  - store_test_results:
-      path: reports/hypothesis-helm
-  - store_artifacts:
-      path: reports/hypothesis-helm
-```
+CircleCI detects its node coordinates automatically. The GitLab version/shard
+matrix passes explicit indices so each Kubernetes version covers the whole suite.
 
-## GitLab CI
+## Caching installed binaries
 
-Use a runner image with Helm and the plugin installed:
-
-```yaml
-helm-properties:
-  parallel: 4
-  script:
-    - helm hypothesis test ./chart --seed 42
-  artifacts:
-    when: always
-    paths:
-      - reports/hypothesis-helm/
-    reports:
-      junit: reports/hypothesis-helm/shards/*/junit.xml
-```
-
-GitLab's one-based node index maps directly to the shard index.
+The GitHub Action caches Helm and optional Kubesec binaries by tool,
+version, operating system and architecture. Set `binary-cache: 'false'` to disable
+both persistence and reuse. This is separate from `cache`, which controls test
+outcomes, and `schema-cache`, which controls Kubernetes schemas. Preinstalled
+validator overrides are unchanged. The shared GitLab and CircleCI definitions
+also cache release binaries by default.<sup>[\[1\]](ci/README.md#binary-downloads-and-caching)</sup>
 
 ## Persisting path outcomes
 
@@ -172,7 +210,10 @@ provider's cache facility. Save it even when tests fail so failed path results s
 Use a distinct outer cache key per runner environment and shard; the framework uses
 content-derived keys inside that directory. Restore a previous run's directory to
 reuse its results. Local cache entries are also included in uploaded report artifacts
-when using the default cache location.
+when using the default cache location and the upload includes hidden files. Use the
+[release-check example](ci/README.md#github-actions) for explicit outcome cache
+restore/save and a 30-day snapshot fallback. Provider cache retention differs from
+artifact retention; see [retention between sprints](ci/README.md#retention-between-sprints).
 
 CI still tests the full selection by default. Set `rerun: failed` explicitly to retry
 only failed or incomplete paths from a compatible cache. Previously passing paths
@@ -182,13 +223,11 @@ nor remote cache provisioning is required for the local disk cache.
 
 ## Kubernetes API schema validation
 
-The action exposes `kubeconform: 'true'`, `schema-version: 'latest'`,
-`schema-cache-dir`, `schema-offline: 'false'`, and `kubeconform-binary` inputs.
-The action installs kubeconform by default (`kubeconform-version: v0.7.0`); the
-binary input can point to a preinstalled executable. API validation defaults to
-enabled. Git must be available on the runner. Pin `schema-version` for reproducibility.
+The action exposes `schema-validation: 'true'`, `schema-version: 'latest'`, `schema-cache-dir`, and `schema-offline: 'false'`.
+API validation runs in Python and is enabled by default in the action. Git must be available on the runner.
+Pin `schema-version` for reproducibility. No separate API validator binary is installed.
 Restore/save the entire schema cache directory (default
-`.cache/hypothesis-helm/schemas`) with your provider's cache facility. Set
+`schemas`) with your provider's cache facility. Set
 `schema-offline: 'true'` only after those schemas have been cached. Each matrix shard
 then validates locally, without downloading schemas for individual test cases.
 
@@ -201,8 +240,64 @@ prefix restoration; this allows `latest` to refresh instead of freezing an immut
 CI cache entry forever. Set `schema-cache: 'false'` to opt out of remote persistence.
 The repository's own Action workflow explicitly uses validation and this cache.
 
-The CircleCI reference orb prepares and saves schemas before running properties.
-The GitLab README job uses `cache:when: always`. Neither requires putting schemas
+The CircleCI URL orb prepares and saves schemas before running properties.
+The GitLab shared job uses `cache:when: always`. Neither requires putting schemas
 inside the report directory. `helm hypothesis schemas --schema-version latest
---schema-cache-dir .cache/hypothesis-helm/schemas` can prepare the cache independently
+--schema-cache-dir schemas` can prepare the cache independently
 without generating or running tests.
+
+## Optional Kubesec scans
+
+Set `kubesec: 'true'` to install Kubesec v2.14.2 and GNU Parallel. `kubesec-jobs: auto`
+uses the logical CPUs available to the job; set a positive integer to override it.
+Scans consume the current shard's manifest stream and retain separate job logs,
+security reports, and resource counts for each validator. The action exposes `kubesec-report-dir`
+and `kubesec-exit-code`; either test or scanner failure fails the action.
+
+Set `kubesec-score-minimum: '5'` to raise the default floor of `0`. Every resource
+must be valid and score at least that minimum. Scanner errors always fail, even
+when the returned score meets the floor. Scores equal to the floor pass.
+
+Each shard saves `summary.json`, `summary.md`, `junit.xml`, and `details.jsonl`
+alongside the raw scanner output. Summaries count failed resources, invalid
+manifests, scores below the floor, failed checks, missing checks, scanner errors,
+critical rules and advisories. They also show the observed minimum, mean and
+maximum scores. GitHub displays the Markdown in the job summary; all providers
+receive a concise terminal summary. These count generated resource attempts:
+two different inputs rendering the same resource name remain separate attempts.
+
+The [shared examples](ci/README.md#kubesec-score-gate) aggregate security results
+across shards, check run identity and schema consistency, and publish separate
+security JUnit results. A resource failing both validity and score contributes
+two failed checks but only one failed resource.
+
+Kubesec and the built-in schema validator share the prepared local schema snapshot. Schema cache
+restore/save also runs when only Kubesec is enabled. Preparation refreshes the
+catalog once unless `schema-offline: 'true'`; validators then use local files.
+See [CI examples](ci/README.md) for installation and version/shard matrices.
+
+When adding a Kubernetes-version matrix, keep shard indices local to each version
+(e.g. `matrix.shard` and `job-total: '3'`). `strategy.job-total` counts both axes and
+would partition each version's tests incorrectly. Include the version in artifact
+names as well as schema-cache keys.
+
+For optional Linux RAM-backed schema staging, see [memory-backed schemas](ci/README.md#memory-backed-schemas).
+
+With `kubesec: true`, supported workloads receive schema and security validation
+through Kubesec; remaining resources go to the built-in schema validator. This routing also applies
+when the separate `schema-validation` input is false. Security runs force `--rerun all`
+to produce the manifests needed for validation. Validator failures fail the job
+and appear in scan artifacts. Helm JUnit records the Helm tests.
+
+### Minimal values and aggregation
+
+| Input | Default | Purpose |
+| --- | --- | --- |
+| `run-id` | empty | Common pipeline and attempt identity for shard aggregation. |
+| `export-minimal-values` | `false` | Export deterministic concrete values after tests. |
+| `commit-minimal-values` | `false` | Export and commit the YAML and matching `.proof` files. |
+| `minimal-values-filename` | `values-minimal.yaml` | Basename written inside each discovered chart. |
+| `minimal-values-timeout` | `30s` | Search budget per chart. |
+
+See the [piped aggregation and export examples](ci/README.md). Commit-back runs
+only in shard 1 (or an unsharded job) and requires branch write permission.

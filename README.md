@@ -1,487 +1,1054 @@
 # Hypothesis
 
-<img src="img/logos/logo-transparent.png" alt="Astrivant logo" width="25%" />
-
-Hypothesis turns Helm chart schemas and template references into executable Python
-property tests, which can then be validated against the control plane's API. 
-It discovers undocumented values, generates inputs from their types
-and constraints, and renders the chart to expose configuration failures and reduce
-them to reproducible examples. Run the suite directly through Helm, with optional
-manifest streaming for Kubernetes schema and security validation.
-
+<!-- toc:start -->
 **Table of contents**
 
-- [Hypothesis](#hypothesis)
-  - [Install](#install)
-  - [Quick Start](#quick-start)
-  - [Architecture](#architecture)
-    - [Worked example: `$.replicas` to validated Deployments](#worked-example-replicas-to-validated-deployments)
-  - [Parallel execution](#parallel-execution)
-    - [Runtime estimates](#runtime-estimates)
-  - [Distributed sharding](#distributed-sharding)
-  - [CI and GitHub Action](#ci-and-github-action)
-    - [CircleCI inline orb](#circleci-inline-orb)
-    - [GitLab CI job](#gitlab-ci-job)
-  - [Repository map](#repository-map)
-  - [Development](#development)
-  - [Documentation](#documentation)
-  - [License](#license)
+- [Install](#install)
+- [Examples: failures hidden by defaults](#examples-failures-hidden-by-defaults)
+- [Audit, test, or scan?](#audit-test-or-scan)
+  - [Quick start](#quick-start)
+- [Production validation](#production-validation)
+- [Guides](#guides)
+- [Case study: Bitnami charts](#case-study-bitnami-charts)
+- [Development](#development)
+- [CLI help](#cli-help)
+- [Upstream schema shims](#upstream-schema-shims)
+- [License](#license)
+- [Citation](#citation)
+<!-- toc:end -->
+
+Test Helm charts with automatically generated `values.yaml` inputs. Built on Python's
+Hypothesis<sup>[\[1\]](https://github.com/HypothesisWorks/hypothesis/)</sup> testing framework, this tool
+generates inputs from declared or inferred types<sup>[\[2\]](docs/inputs/README.md#declared-and-inferred-types)</sup>,
+renders your charts with Helm, and
+checks for failures. When a property-based test fails, Hypothesis simplifies the input
+to a small example you can reproduce. Filtering skips redundant renders, while optional
+sampling techniques reduce the number of inputs tested so you can cover more charts within your
+time budget.
+
+[![Failing inputs found, Helm renders and runtime with exact-equivalence pruning](<studies/error-surface/errors-found-fast.png>)](<studies/error-surface/README.md>)
+
+Find failing inputs without rendering the same output over and over. With `--prune-equivalent`, every input still gets checked;
+equivalent configurations reuse a rendered manifest. [See the synthetic error study and its exploratory timings](<studies/error-surface/README.md>).
+
+- Audit templates, values schemas, and missing defaults.
+- Generate a minimal values schema.
+- Choose permutation coverage, with exhaustive testing for small finite spaces.
+- Traverse unique value paths randomly with a reproducible seed, or choose linear, root-first, or leaf-first order.
+- Skip provably equivalent renders or opt into [calibrated sampling](docs/adaptive-filtering/README.md) to reduce test volume.
+- Recognize explicit configuration requirements with `--filter`, test dependent settings together, and report rejections separately.
+- Discover dependency activation controls and exercise child settings with their subchart enabled, including aliases and nested dependencies.
+- Show changed values and manifest fields in failure reports, with verified JSON replay of saved changes.
+- Preview coverage and runtime estimates; set execution budgets and shard tests across workers.
+- Test local chart trees or scan remote Git and authenticated Helm repositories; build dependencies and export Markdown/PDF reports.
+- Validate Kubernetes API schemas from a versioned local cache, with optional
+  [Kubesec](https://github.com/controlplaneio/kubesec) security checks in CI.
 
 ## Install
 
-Requires Helm 3 and Python 3.13+. The plugin installs its Python dependencies,
-including the test runner, automatically.
+Requires Helm 4 and Python 3.13+.
+
+Install the Helm plugin and verify that it is available:
 
 ```sh
 PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm
+helm hypothesis --help
 ```
 
-To install from a local checkout:
+To install from a local checkout instead, run these commands from the project root:
 
 ```sh
 PYTHON=python3.13 helm plugin install .
+helm hypothesis --help
 ```
 
-## Quick Start
-
-Test a chart using its values schema and template references:
+Then, if you want the optional benchmark tools, install them with pip:
 
 ```sh
-helm hypothesis test ./path/to/chart
+pip install "hypothesis-helm[benchmarking]"
+hypothesis-helm-benchmark --help
 ```
 
-Audit values, configure test generation, or rerun a saved suite:
+See [Benchmarking](docs/benchmarking/README.md) for chart generation and plot commands.
+Browse the [flame graphs](<studies/flamegraphs/README.md>) to see time spent in Python calls during a scaling smoke test.
+The [configurable stress chart](pkg/hypothesis_helm_benchmarking/assets/chart) combines known defects and topology
+controls in one fixture; its [guide](docs/benchmarking/fixture.md) explains how to reduce them one step at a time.
+See [random sampling results](<studies/sampling/README.md>) for the measured
+tradeoff between sample size and known defect discovery.
+To rerun all project checks, benchmarks, plots, and repository reports, see the
+[full refresh command](docs/benchmarking/README.md#reproduce-the-full-project-run).
+
+## Examples: failures hidden by defaults
+
+A ConfigMap template containing `banner: {{ .Values.banner }}` works with the default
+`banner: Ready`. But `banner: "Release: ready"` produces `banner: Release: ready`,
+which is invalid YAML. Hypothesis can find this by generating inputs and rendering
+the chart locally. Fix it with `banner: {{ .Values.banner | quote }}`.
+
+The same idea applies beyond quoting:
+
+- **Optional branches:** A feature is disabled by default. Enabling it reaches a template
+  branch that reads a missing nested value and fails. Disabled subcharts can hide failures this way too.
+- **Boundary values:** The schema allows an empty list, but the template always reads its
+  first item. The populated default works; an empty list causes rendering to fail.
+- **Interacting settings:** Two switches each work on their own. Enabling both reaches a
+  shared branch that passes the wrong type to a template function. Testing each switch
+  separately misses it.
+
+## Audit, test, or scan?
+
+| Command | Use it for | What it does |
+| --- | --- | --- |
+| `audit ./chart` | Understanding one chart's input contract. | Statically compares values, schema, and template references. Reports missing defaults, undocumented fields, unresolved access, and potential output complexity as JSON. Renders only when an export option requests verification or output observation. |
+| `test PATH` | Testing a local chart or directory of charts. | Discovers local charts recursively, generates inputs, renders them with Helm, and records failures. `--report` writes combined Markdown/PDF results. |
+| `scan SOURCE` | Testing charts fetched from remote repositories. | Fetches a Git repository, Helm repository/chart, public Helm index, or OCI chart, then discovers and tests its charts. Local paths use `test`. |
+
+`test` and `scan` infer input-generation strategies when a chart has no values schema.
+Recursive testing builds dependencies in isolated copies; single-chart suite controls
+use dependencies already available in the chart. `audit` also works without a schema. `--filter` restricts
+generation before traversal. Skipped charts and incomplete coverage remain explicit.
+
+The audit's [complexity score](docs/inputs/README.md#potential-output-complexity) describes the largest
+manifest tree across the allowed values, including resources disabled by defaults. Unsupported or oversized
+input spaces have an unknown maximum, with any supported evidence reported separately.
+
+Use `--export-minimal-values` to save example values with validation status, or
+`--export-topological-graph` to inspect the input-to-output map. See
+[verification and field inventory](docs/inputs/README.md).
+
+### Quick start
 
 ```sh
-helm hypothesis audit ./path/to/chart
-helm hypothesis test ./path/to/chart --strict
-helm hypothesis test ./path/to/chart --max-examples 50 --seed 42
-helm hypothesis test ./path/to/chart --match replicas
-helm hypothesis generate ./path/to/chart --output generated-tests
-helm hypothesis run generated-tests
+helm hypothesis test ./chart
 ```
 
-`test` generates a Python property per values path, executes the suite inside the
-plugin environment, and returns its exit status. Generated source, values,
-schemas, JUnit results and a run report stay in `reports/hypothesis-helm` by default.
-Use `--artifact-dir` to choose a different location. Tests default to `--jobs auto`,
-which adjusts concurrency using PID throughput feedback. Set `--jobs N` for a fixed
-worker count or `--jobs 1` to run serially.
+Audit values, choose interaction coverage, or preview a run:
 
-Add `--output json` (or `-o json`) to `test` or `run` to stream rendered
-manifests as JSON Lines, with progress and test reports on stderr. See
-[streaming to Kubeconform and Kubesec](docs/usage.md#stream-rendered-manifests)
-for a pipeline that validates each resource as it arrives.
+```sh
+helm hypothesis audit ./chart
+helm hypothesis test ./chart --permutations 2
+helm hypothesis test ./chart --dry-run
+```
 
-`--strict` requires all schema-declared and template-referenced configurable fields
-to exist in the original `values.yaml`, including optional fields and values with
-template fallbacks. Missing fields fail preflight; coalesced defaults and cached
-passes do not satisfy it. See [strict source values](docs/usage.md#strict-source-values).
+Small supported finite spaces are enumerated automatically. Larger finite spaces
+use pairwise coverage; unsupported domains use per-path property tests. Reports
+are written under `docs/reports/` when `--report` is supplied; generated test artifacts stay in `.cache/hypothesis-helm/runs/`.
 
-Each generated suite includes Python tests, coalesced YAML, an inferred schema,
-and a path/strategy inventory. Source charts remain unchanged. Inferred contracts
-and unresolved template constructs need review; sampled tests do not prove
-complete template branch coverage or totality.
+See [Getting started](docs/getting-started/README.md) for ten practical testing options and how to read the results.
 
-## Architecture
+Test local charts or fetch remote charts, with Markdown/PDF summaries:
+
+```sh
+helm hypothesis test ./charts --report
+helm hypothesis scan https://github.com/bitnami/charts.git --filter --report
+```
+
+<!--
+```sh
+helm hypothesis scan prometheus-community/prometheus --filter --report
+helm hypothesis scan prometheus-community --filter --report
+```
+-->
+
+See [Repository scanning](docs/scanning/README.md) for authentication, public indexes, version selection, and dependency handling.
+
+## Production validation
+
+For large production deployments, catch inexpensive failures before committing cluster resources.
+Use hypothesis-helm's built-in schema validation and enable Kubesec for security checks.
+Build confidence through successive checks, then promote the tested release:
 
 ```mermaid
-flowchart LR
-    Values[values.yaml] --> Coalesce[Round-trip YAML coalescing]
-    Templates[Helm templates] --> AST[Template action AST]
-    AST --> Coalesce
-    Schema[values.schema.json] --> Paths[Schema path enumeration]
-    Coalesce --> Paths
-    Paths --> Strategies[Typed Hypothesis strategies]
-    Strategies --> Tests[Generated Python tests]
-    Tests --> Helm[Temporary chart rendering]
-    Helm --> Assertions[Resource assertions and counterexamples]
+flowchart TD
+    tests["hypothesis-helm + Kubesec<br/>Generated inputs, cached API schemas and security checks"]
+    admission["Server-side dry-run<br/>vcluster or staging cluster"]
+    staging["Deploy to staging<br/>Rollout, smoke and integration tests"]
+    production["Promote the tested release to production<br/>Monitor rollout and application health"]
+    tests -->|Checks pass and coverage reviewed| admission
+    admission -->|API accepts the candidate| staging
+    staging -->|Runtime checks pass| production
 ```
 
-### Worked example: `$.replicas` to validated Deployments
+Cost and operational impact increase down the graph. Any failed gate blocks promotion.
+Test generated values broadly, then use the intended release configuration for the cluster stages.
+Each gate adds evidence about the release configuration and its behavior in the target environment.
+See the [production promotion guide](docs/ci/README.md#production-promotion) for what each gate establishes.
 
-Start with [`examples/workload/values.yaml`](examples/workload/values.yaml):
-`replicas: 1`. Its [schema](examples/workload/values.schema.json) declares an
-integer between `0` and `5`, inclusive. The [template](examples/workload/templates/resource.yaml)
-reads that lever directly:
+## Guides
 
-```yaml
-spec:
-  replicas: {{ .Values.replicas }}
-```
+- [Input domains](docs/input-domains/README.md): constrain generated values using destination schemas or chart-specific policies.
 
-Discovery resolves `.Values.replicas` to `$.replicas`. Coalescing keeps the existing
-value `1` and its documented constraints; nothing needs to be inferred for this
-path. The integer bounds select `st.integers(min_value=0, max_value=5)`.
+Disable selected checks with [stable rule codes and an ignore file](docs/rules/README.md).
+The [root configuration](.hypothesis-helm.yaml) lists every code and ignores opaque-object warnings (`HH2006`).
+Generate the same template with `helm hypothesis --generate-config > .hypothesis-helm.yaml`.
 
-From this repository, with Helm, the plugin, Git, and
-[kubeconform](https://github.com/yannh/kubeconform) installed, run:
-
-```sh
-mkdir -p reports
-helm hypothesis test examples/workload \
-  --match replicas --max-examples 6 --seed 0 --shard none --rerun all \
-  --kubeconform --schema-version 1.35.0 \
-  --schema-cache-dir .cache/hypothesis-helm/schemas \
-  --artifact-dir reports/replicas --output json > reports/replicas.jsonl
-```
-
-The command prepares the cached Kubernetes schemas and writes
-`reports/replicas/test_chart_values.py`. Its replica property contains the following
-code (imports, fixture, and docstring omitted):
-
-```python
-@pytest.mark.hypothesis_helm_path(('replicas',))
-@settings(max_examples=6, deadline=None, suppress_health_check=[HealthCheck.too_slow])
-@given(value=st.integers(min_value=0, max_value=5), data=st.data())
-def test_replicas_fc55c2d623(chart: Chart, value: object, data: DataObject) -> None:
-    check_path(chart, ('replicas',), value, data, options=OPTIONS)
-```
-
-For a draw of `3`, `check_path` replaces `replicas` in a copy of the coalesced
-values, leaving `image.repository: nginx` and `image.tag: stable`. It checks that
-this complete input satisfies the values schema, then runs `helm template` against
-a temporary chart. The resulting Deployment has `spec.replicas: 3` and image
-`nginx:stable`. The resource is emitted as one JSON line and validated against the
-cached Kubernetes 1.35.0 Deployment schema. A rendering or validation error fails
-the property; Hypothesis then tries to reduce the failing input.
-
-The amount of work is concrete:
-
-| Stage | Work generated | Why |
-| --- | --- | --- |
-| Generate the suite | **4 Python property tests** | Paths are `$.replicas`, `$.image`, `$.image.repository`, and `$.image.tag`; object containers also receive a property. |
-| Select tests | **1 property** | `--match replicas` filters execution after generation; it does not reduce the generated suite. |
-| Execute this example | **6 successful inputs, 6 Helm renders, 6 kubeconform invocations** | The verified run exercised each integer from `0` through `5`, with a six-example budget and valid unchanged sibling values. |
-| Produce results | **6 Deployment JSON lines; 1 passing JUnit test case** | This chart emits one Deployment per render. JUnit counts the property, not its individual Hypothesis examples. |
-
-`--rerun all` makes the command execute even if the path passed previously. Six
-renders is the observed successful result for this example, not a general promise
-of `--max-examples 6`: rejected inputs, failure replay, and shrinking can change the
-work. Removing `--match` runs all four properties, each with its own example budget;
-it does not enumerate the `6 × 2 × 2 = 24` whole-chart combinations. Progress and
-ETA count completed properties, so this selected run finishes at **1/1**, not **6/6**.
-
-## Parallel execution
-
-The unit of parallel work is a generated property for a values path. Each property
-can render and validate its own inputs without depending on another property's
-results, allowing the suite to execute properties concurrently.
-
-1. **Collect and dispatch:** Pytest identifies the selected properties. A thread
-   pool dispatches each queued property into a separate pytest process, isolating
-   fixtures, Hypothesis state, and temporary chart files. Input generation and
-   counterexample shrinking remain sequential within each property.
-2. **Measure and adjust:** With `--jobs auto`, each completion feeds a throughput
-   measurement. A PID controller uses measured changes in throughput to adjust
-   active concurrency, starting at the available CPU count and probing up to four
-   times that count, bounded by the number of selected tests. Measurement windows
-   smooth timing noise; reducing concurrency lets active tests finish.
-3. **Aggregate results:** The parent merges JUnit results and exit statuses, while
-   synchronized manifest writes keep each JSON record intact. Completion order
-   can vary without changing how individual properties are evaluated.
-
-Custom tests must preserve this independence: shared mutable files or external
-resources can introduce interference. Process and fixture startup add overhead,
-so small suites may benefit less from parallelism. Automatic tuning seeks higher
-throughput within its bounds; it does not guarantee a global optimum. Use
-`--jobs N` for fixed concurrency or `--jobs 1` for serial execution. The explicit
-whole-chart and exhaustive modes remain serial.
-
-### Runtime estimates
-
-**Expect the first execution to take substantially longer than a cached local
-rerun.** The tool traverses the complete schema and discovered values-path tree to
-generate properties, then executes every selected property because no successful
-results are cached yet. Without filters or sharding, that means the full generated
-suite, with repeated Helm renders and optional kubeconform validation for each
-property's examples. A cold schema cache also requires the initial Git fetch and
-sparse checkout.
-
-Later `test` invocations still discover paths and generate the suite; the main
-saving comes from skipping compatible cached successes. CI defaults, `--rerun all`,
-and changes that invalidate the cache execute the full selection again. Traversing
-all paths does not mean exhaustively testing every possible values combination.
-
-Use `--dry-run` to estimate work from the current cache before executing tests:
-
-```sh
-helm hypothesis test examples/workload --match replicas --max-examples 6 \
-  --seed 0 --shard none --dry-run
-```
-
-Example output for a local run with a cold cache (paths and explanatory notes
-omitted):
-
-```json
-{
-  "status": "dry-run",
-  "cache_hit": false,
-  "rerun": "failed",
-  "selected_properties": 1,
-  "scheduled_properties": 1,
-  "reused_properties": 0,
-  "successful_example_budget": 6,
-  "worker_limit": 1,
-  "properties": [
-    {
-      "test": "test_chart_values.py::test_replicas_fc55c2d623",
-      "cached_outcome": null,
-      "action": "run",
-      "max_examples": 6
-    }
-  ],
-  "estimated_seconds": null
-}
-```
-
-`estimated_seconds: null` means there is no reliable duration estimate before
-execution. After a compatible passing run, the local plan instead reports
-`cache_hit: true`, `scheduled_properties: 0`, `reused_properties: 1`, and
-`successful_example_budget: 0`; the property's action becomes `reuse`.
-
-Each cached run also records a base64-encoded values structure, retaining keys and
-array positions while replacing scalar leaves with `null`. Reports and `--dry-run`
-expose `values_structure` with the comparison status and added or removed paths.
-Scalar changes still invalidate cached test results independently of this marker.
-
-For PR/MR comparisons, restore the main branch's path cache and pass
-`--disable-schema-caching --cache-dir .cache/hypothesis-helm/results`. This reads
-its structure baseline without replacing it; only main-branch jobs should publish
-updates to that shared baseline. The GitHub Action exposes the same option as
-`disable-schema-caching: 'true'`. This flag controls the values structure marker;
-kubeconform's downloaded Kubernetes schemas retain their existing cache behavior.
-See [structure baselines](docs/usage.md#values-structure-baselines) for cache layout
-and CI requirements.
-
-Result caches are grouped under `<cache-dir>/<sha256(seed)>/`, with a separate
-suite fingerprint per entry. `--dry-run` looks up the same seed-specific entries
-as execution.
-
-The JSON plan lists selected, scheduled, and reused properties, plus the total
-successful-example budget. With a cold cache, this selection schedules one
-property with a budget of six. With a compatible cached success, a local rerun
-schedules zero; `--rerun all` or CI defaults schedule it again. Match the original
-run's artifact directory, validation options, seed, and budget when inspecting its
-cache. `--kubeconform` also reports schema-cache availability without fetching
-schemas; an online refresh may change the predicted result-cache hit. See
-[cache-aware dry runs](docs/usage.md#cache-aware-dry-runs) for details.
-
-
-`helm hypothesis test ./chart --progress` explicitly enables a live progress bar
-on stderr, including when output is redirected. It also works with
-`helm hypothesis run`; JSON manifests remain on stdout.
-
-The progress bar shows a live ETA based on completed properties. It starts unknown
-and updates as measurements arrive; JUnit reports record each property's duration.
-Schema types alone cannot predict runtime: Helm branches and resource counts,
-Hypothesis input rejection and shrinking, and runner contention all affect cost.
-`--max-examples` is a sampling budget, not an exact render count. Treat the ETA as a
-rough estimate, particularly while automatic worker concurrency changes or a failing
-property is shrinking. No reliable time estimate is claimed before tests execute.
-
-## Distributed sharding
-
-Use `--shard INDEX/TOTAL` to split a suite across independent instances. Each
-shard retains its own `--jobs auto` controller and worker pool, providing
-parallelism both across runners and within each runner. For example, launch
-these commands on three separate runners:
-
-```sh
-helm hypothesis test ./chart --shard 1/3 --jobs auto
-helm hypothesis test ./chart --shard 2/3 --jobs auto
-helm hypothesis test ./chart --shard 3/3 --jobs auto
-```
-
-Shards use a stable hash of each property identifier, after `--match` filtering.
-Running every shard against the same suite and selection covers each property
-exactly once. Reports and generated files are isolated under
-`reports/hypothesis-helm/shards/INDEX-of-TOTAL/`. Saved suites also support
-`helm hypothesis run generated-tests --shard 1/3`.
-
-Each runner reports its own status; CI must require all shards to succeed.
-Worker limits apply per instance, so use fixed `--jobs N` budgets when several
-instances share a host. See [sharding](docs/usage.md#distributed-sharding) for
-artifact handling, empty partitions, and reproducibility requirements.
-
-## CI and GitHub Action
-
-`--shard auto` is the default. CircleCI and GitLab parallel jobs are detected
-from their node environment variables; local and single-job runs use the full
-suite. Use `--shard INDEX/TOTAL` to override detection or `--shard none` to
-disable it.
-
-The repository includes a [GitHub Action](action.yml) that installs the tool and
-kubeconform, validates against cached Kubernetes schemas by default, and uploads
-per-shard reports and manifests. `schema-version` defaults to `latest`, and
-`schema-cache-dir` defaults to `.cache/hypothesis-helm/schemas`, outside `reports/`.
-The action restores schemas before testing and saves updates even when tests fail;
-set `schema-cache: 'false'` to disable remote cache persistence or
-`kubeconform: 'false'` to disable API validation. A supplied `kubeconform-binary`
-path uses that executable instead of installing one. For a GitHub
-matrix, pass `strategy.job-index` and `strategy.job-total` through the action's
-`job-index` and `job-total` inputs; GitHub does not export these automatically
-as environment variables.
-
-See [CI integration](docs/ci.md) for provider examples, action inputs and outputs,
-and publishing steps. The [local action workflow](.github/workflows/action.yml)
-can verify the action before it is released.
-
-### CircleCI inline orb
-
-[`.circleci/config.yml`](.circleci/config.yml) defines the reference-only
-`hypothesis-helm` inline orb. Its `test` command runs the installed plugin;
-its `test-chart` job checks out the repository, installs Helm, kubeconform and the
-local plugin, restores and refreshes the schema cache, runs the command, and uploads
-JUnit results and JSON manifests. It saves schemas before testing so failed tests
-do not prevent the next run from reusing them. The repository's
-workflows do not invoke this job.
-
-After copying the orb's `orbs:` definition into your configuration, you could
-invoke it with this workflow fragment:
-
-```yaml
-# Example only; the inline orb definition must also be present in this config.
-workflows:
-  chart-properties:
-    jobs:
-      - hypothesis-helm/test-chart:
-          chart: examples/workload
-          plugin-path: .
-          parallelism: 3
-          jobs: auto
-          max-examples: 50
-          seed: 0
-          artifact-dir: reports/hypothesis-helm
-          schema-version: latest
-          schema-cache-dir: .cache/hypothesis-helm/schemas
-```
-
-`plugin-path` points to a checkout of this plugin. The job defaults to Python 3.13,
-Helm 3.19.0, one CircleCI node, automatic worker concurrency, and 100 examples per
-property. With `parallelism: 3`, the tool reads `CIRCLE_NODE_INDEX` and
-`CIRCLE_NODE_TOTAL` to assign shards. The command uses `--rerun all` so every
-assigned path runs in CI. To reuse only the command in an existing job, call
-`hypothesis-helm/test` after installing Helm and the plugin; it accepts the same
-chart, worker, example, seed, artifact, and schema parameters. It requires kubeconform
-as well. `schema-version` defaults to `latest`; use an exact version such as `1.35.0`
-to select another Kubernetes release. The sparse checkout and immutable snapshots
-live in `schema-cache-dir`, separate from reports.
-
-### GitLab CI job
-
-Add this job to `.gitlab-ci.yml` for a Linux amd64 Docker runner. Adjust
-`HELM_CHART` to the chart in your repository. GitLab's [`parallel` jobs](https://docs.gitlab.com/ci/yaml/#parallel)
-provide `CI_NODE_INDEX` and `CI_NODE_TOTAL`, which the tool detects automatically.
-
-```yaml
-helm-properties:
-  image: python:3.13-slim
-  stage: test
-  parallel: 3
-  variables:
-    HELM_VERSION: v3.19.0
-    HELM_CHART: ./chart
-    KUBECONFORM_VERSION: v0.7.0
-    K8S_VERSION: latest
-    SCHEMA_CACHE_DIR: .cache/hypothesis-helm/schemas
-  cache:
-    key: "helm-schemas-v1-linux-amd64-${K8S_VERSION}-${CI_NODE_INDEX}"
-    paths:
-      - .cache/hypothesis-helm/schemas/
-    policy: pull-push
-    when: always
-  before_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends ca-certificates curl git
-    - |
-      curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" \
-        -o /tmp/helm.tar.gz
-      tar -xzf /tmp/helm.tar.gz -C /tmp
-      install /tmp/linux-amd64/helm /usr/local/bin/helm
-      curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
-        -o /tmp/kubeconform.tar.gz
-      tar -xzf /tmp/kubeconform.tar.gz -C /tmp kubeconform
-      install /tmp/kubeconform /usr/local/bin/kubeconform
-    - PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm
-  script:
-    - mkdir -p reports/hypothesis-helm
-    - |
-      helm hypothesis test "$HELM_CHART" \
-        --shard auto --jobs auto --max-examples 50 --seed 0 --rerun all \
-        --kubeconform --schema-version "$K8S_VERSION" \
-        --schema-cache-dir "$SCHEMA_CACHE_DIR" \
-        --artifact-dir reports/hypothesis-helm --output json \
-        > "reports/hypothesis-helm/manifests-${CI_NODE_INDEX}.jsonl"
-  artifacts:
-    when: always
-    name: "helm-properties-${CI_NODE_INDEX}"
-    paths:
-      - reports/hypothesis-helm/
-    reports:
-      junit: reports/hypothesis-helm/shards/*/junit.xml
-```
-
-Set `K8S_VERSION` to an exact release or leave it at `latest`. If changing
-`SCHEMA_CACHE_DIR`, change `cache.paths` to match. The example restores and saves
-schemas on both successful and failed runs, with independent cache keys per shard.
-A cache miss downloads the selected schemas from GitHub through sparse checkout;
-a hit still refreshes the catalog so `latest` can advance.
-
-Each node runs its own adaptive worker pool and reports its own exit status.
-JUnit reports live under `shards/INDEX-of-TOTAL/`; the example also preserves
-manifests and diagnostics when tests fail. Pin the plugin installation with
-`--version <git-tag-or-commit>` when adopting the example in a release pipeline.
-
-## Repository map
-
-| Location | Responsibility |
+| Guide | Contents |
 | --- | --- |
-| [`pkg/hypothesis_helm/`](pkg/hypothesis_helm/) | CLI and public API; implementation grouped under charts, schemas, execution, reporting, and integrations. |
-| [`pkg/hypothesis_helm/tests/`](pkg/hypothesis_helm/tests/) | Unit tests and real Helm integration tests. |
-| [`examples/`](examples/) | Small charts and a checked-in generated workload suite. |
-| [`scripts/`](scripts/) | Project interpreter, validation command and Helm plugin hooks. |
-| [`action.yml`](action.yml) | GitHub Action with automatic CI sharding and artifact uploads. |
-| [`plugin.yaml`](plugin.yaml) | Installable Helm plugin manifest. |
-| [`.circleci/`](.circleci/) | Python checks, Helm integration and package build verification. |
-| [`.github/settings.yml`](.github/settings.yml) | Declarative repository settings. |
-| [`docs/`](docs/) | Development setup, CLI behavior and testing limitations. |
+| [Architecture](docs/architecture/README.md) | Input discovery, test generation, rendering, and validation. |
+| [Compiler](docs/compiler/README.md) | Pass flow, syntax trees, and illustrated compiler decisions. |
+| [Execution](docs/execution/README.md) | Parallel workers, sharding, estimates, and time limits. |
+| [Choosing test coverage](docs/coverage.md) | Filtering modes, worker counts, and release checks. |
+| [CI examples](docs/ci/README.md) | GitHub Action, CircleCI, and GitLab setup. |
+| [Benchmarking](docs/benchmarking/README.md) | Local shard commands, chart generation, and measured plots. |
+| [CLI reference](docs/cli/README.md) | Generated command and option reference. |
+| [Development](docs/development.md) | Contributor setup, checks, and repository map. |
+
+[All documentation](docs/README.md) includes detailed behavior and the
+[exact-equivalence pruning contract](docs/safe-pruning.md).
+
+## Case study: Bitnami charts
+
+<!-- refresh:bitnami:start -->
+We scanned **115 Bitnami charts**, recording **336,009 test attempts**
+with `--filter`, **6 path workers per chart**, and a **5-minute budget per chart**.
+The reports distinguish test failures, blocked checks and incomplete coverage; chart bugs require triage.
+
+Read the [scan results](docs/reports/bitnami.md), download the
+[combined PDF](docs/reports/bitnami.pdf).
+<!-- refresh:bitnami:end -->
+The [chart topology catalog](<studies/chart-topologies/README.md>) includes
+directed dependency graphs and their mathematical measurements.
+
+<!--
+## Case study: Prometheus Community charts
+-->
+
+<!-- refresh:prometheus:start -->
+<!--
+We scanned **46 Prometheus Community charts**, recording **56,756 test attempts**
+with `--filter`, **6 path workers per chart**, and a **5-minute budget per chart**.
+The reports distinguish test failures, blocked checks and incomplete coverage; chart bugs require triage.
+
+Read the [scan results](docs/reports/prometheus.md), download the
+[combined PDF](docs/reports/prometheus.pdf).
+-->
+<!-- refresh:prometheus:end -->
+<!--
+Its dependency graphs are also in the [topology catalog](<studies/chart-topologies/README.md>).
+-->
 
 ## Development
 
-The project follows Astrivant's Python tooling: a Poetry-managed local virtualenv,
-strict mypy, Ruff with a 100-column Google-docstring convention, pydocstyle,
-pydoclint, pre-commit and CircleCI. Tests live beside the package and use pytest
-for Hypothesis integration and generated suites.
+See [dependency maintenance](docs/dependencies.md) for version pins, nested Go modules, source catalogs and upgrade checks.
 
-Contributor setup and repository checks are documented in
-[Development](docs/development.md). End users only need the Helm commands above.
-CircleCI exercises the same chart-testing workflow and builds the package.
+```sh
+env -u VIRTUAL_ENV -u PYENV_VERSION -u PYENV_VIRTUAL_ENV poetry install
+bash scripts/check.sh
+```
 
-## Documentation
+The check command runs pytest in parallel, automatically choosing the worker count from
+the runner's CPU count. CI and the full benchmark refresh use the same command.
+Set `PYTEST_WORKERS=2` to choose a fixed count, or use
+`bash scripts/check.sh -n 0` for serial execution. To run only tests in parallel:
 
-- [CI integration and GitHub Action](docs/ci.md): provider detection, matrix jobs, artifacts, and publishing.
-- [Helm command reference](docs/usage.md): chart testing, saved suites, coalescing,
-  strategy selection, rendering contracts and Astrivant integration.
-- [Development](docs/development.md): contributor setup and repository tooling.
-- [Generated workload suite](examples/generated-workload/test_chart_values.py):
-  a concrete example of emitted Python properties.
-- [Astrivant observation](examples/astrivant-observation.md): a previously found
-  mismatch between an open JSON Schema and Helm's accepted inputs.
+```sh
+bash scripts/project-run.sh pytest -n auto --dist worksteal
+```
+
+Shell scripts use four-space indentation, including scripts embedded in CI YAML.
+Pre-commit and `scripts/check.sh` enforce shfmt formatting and ShellCheck;
+see [shell checks](docs/development.md#shell-checks) for the local commands.
+
+## CLI help
+
+Full command help, generated from the current CLI with cogapp. For field-level settings, see the
+[complete configuration example](docs/input-domains/README.md#complete-configuration-example).
+Use `--log-color auto` for colored severity labels in a terminal, or `--log-color` to force color.
+Logs remain plain by default. Rendered manifests streamed with `-o json` or `-o yaml` remain uncolored.
+
+<!-- [[[cog
+import cog
+from hypothesis_helm.reporting.documentation.cli_reference import help_markdown
+cog.out(help_markdown(headings=False))
+]]] -->
+<details>
+<summary>helm hypothesis</summary>
+
+~~~text
+usage: helm hypothesis [-h] [--generate-config]
+                       {rules,replay-changes,aggregate,export-minimal-values,scan,generate,audit,run,test,schemas} ...
+
+Audit and property-test Helm chart values.
+
+positional arguments:
+  {rules,replay-changes,aggregate,export-minimal-values,scan,generate,audit,run,test,schemas}
+    rules               list classified chart findings and diagnostics
+    replay-changes      verify and replay saved values or manifest changes
+    aggregate           verify piped shard reports and write one final report
+    export-minimal-values
+                        write example values beside each discovered chart
+    scan                fetch and test charts from remote Git or Helm repositories
+    generate            generate one typed Python property test per values path
+    audit               discover value references and schema gaps
+    run                 run a saved generated Python suite
+    test                discover and test local charts recursively
+    schemas             prepare the sparse Kubernetes schema cache
+
+options:
+  -h, --help            show this help message and exit
+  --generate-config     print the default .hypothesis-helm.yaml template to stdout and
+                        exit
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis rules</summary>
+
+~~~text
+usage: helm hypothesis rules [-h] [--format {text,json,config,markdown}]
+
+List the finding codes used to report chart defects, schema gaps, and testing
+limitations. Use these codes to configure which findings to ignore.
+
+options:
+  -h, --help            show this help message and exit
+  --format {text,json,config,markdown}
+                        catalog output format
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis replay-changes</summary>
+
+~~~text
+usage: helm hypothesis replay-changes [-h] [--section {overrides,values,manifests}]
+                                      [--baseline BASELINE] [--output OUTPUT]
+                                      record
+
+Reconstruct the overrides, values, or manifests saved with a failing test case. Verify
+the baseline and replay the recorded changes to produce JSON.
+
+positional arguments:
+  record                changes.json from a failing case
+
+options:
+  -h, --help            show this help message and exit
+  --section {overrides,values,manifests}
+  --baseline BASELINE   baseline JSON file; overrides default to an empty map
+  --output OUTPUT       write reconstructed JSON to this file; default: stdout
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis aggregate</summary>
+
+~~~text
+usage: helm hypothesis aggregate [-h] --shards SHARDS --run-id RUN_ID
+                                 [--output-dir OUTPUT_DIR]
+                                 [reports ...]
+
+Combine reports from parallel CI shards into one Markdown and PDF report. Check that
+the inputs belong to the requested run and account for the expected shards.
+
+positional arguments:
+  reports               JSON files or artifact roots; default: stdin
+
+options:
+  -h, --help            show this help message and exit
+  --shards SHARDS
+  --run-id RUN_ID       identifier shared by this run's shards
+  --output-dir OUTPUT_DIR
+                        new report directory; default: docs/reports/aggregate
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis export-minimal-values</summary>
+
+~~~text
+usage: helm hypothesis export-minimal-values [-h] [--filename FILENAME] [--helm HELM]
+                                             [--timeout TIMEOUT]
+                                             [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
+                                             [--files-list FILES_LIST]
+                                             [--validate-schemas]
+                                             [--schema-version SCHEMA_VERSION]
+                                             [--schema-cache-dir SCHEMA_CACHE_DIR]
+                                             [--schema-offline]
+                                             source
+
+Create an example minimal values file beside each chart found in a local directory.
+Also save a verification record describing what was checked and any remaining
+limitations.
+
+positional arguments:
+  source
+
+options:
+  -h, --help            show this help message and exit
+  --filename FILENAME   YAML basename only
+  --helm HELM
+  --timeout TIMEOUT
+  --minimal-values-timeout MINIMAL_VALUES_TIMEOUT
+  --files-list FILES_LIST
+                        write NUL-delimited exported YAML and proof paths
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
+  --schema-version SCHEMA_VERSION
+                        Kubernetes schema version: latest or X.Y.Z
+  --schema-cache-dir SCHEMA_CACHE_DIR
+  --schema-offline      reuse cached schemas without network access
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis scan</summary>
+
+~~~text
+usage: helm hypothesis scan [-h] [--helm-repository] [--chart-version CHART_VERSION]
+                            [--clone-timeout CLONE_TIMEOUT] [--report [PATH]]
+                            [--artifact-dir ARTIFACT_DIR] [--helm HELM]
+                            [--values VALUES] [--timeout TIMEOUT]
+                            [--chart-timeout CHART_TIMEOUT]
+                            [--scan-timeout SCAN_TIMEOUT]
+                            [--max-examples MAX_EXAMPLES] [--cache-dir CACHE_DIR]
+                            [--no-cache] [--jobs JOBS] [--permutations PERMUTATIONS]
+                            [--filter] [--fail [{info,warning,error}]] [--seed SEED]
+                            [--build-dependencies | --no-build-dependencies]
+                            [--pca-samples N] [--pca-timeout PCA_TIMEOUT]
+                            [--max-mutations N]
+                            [--sensitivity-timeout SENSITIVITY_TIMEOUT]
+                            [--filter-adaptive]
+                            [--sampling-calibration SAMPLING_CALIBRATION]
+                            [--sensitivity-order N] [--sample-random PERCENT]
+                            [--sample-min-cases N]
+                            [--traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}]
+                            [--strict | --no-strict] [--validate-schemas]
+                            [--schema-version SCHEMA_VERSION]
+                            [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
+                            [--base-ref BASE_REF] [--output-format {json,yaml}]
+                            [--export-suppressions]
+                            [--export-topological-graph [FILENAME]]
+                            [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
+                            [--export-minimal-values [FILENAME]]
+                            [--log-color [{auto,always,never}]] [--log-file PATH]
+                            [--config CONFIG] [--character-sets {ascii,unicode}]
+                            [--renderer-policy {auto,native,strict}]
+                            [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
+                            [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                            SOURCE
+
+Fetch charts from a remote Git repository, Helm repository, or OCI chart reference,
+then test generated values and report findings for each chart. Use test for charts
+already on disk.
+
+positional arguments:
+  SOURCE                Git URL, Helm repo[/chart], public index.yaml URL, or OCI
+                        chart; local paths use test
+
+options:
+  -h, --help            show this help message and exit
+  --helm-repository     interpret SOURCE as a Helm repository name or HTTP(S) base URL
+  --chart-version CHART_VERSION
+                        Helm chart version or constraint; default: latest stable
+                        release per chart
+  --clone-timeout, --source-timeout CLONE_TIMEOUT
+                        Git checkout or Helm source preparation budget, also bounded
+                        by --scan-timeout (default: 3m)
+  --report [PATH]       write Markdown and PDF; default:
+                        docs/reports/<dir>_<epoch>_report
+  --artifact-dir ARTIFACT_DIR
+  --helm HELM
+  --values VALUES       baseline file relative to each chart, or an absolute path
+  --timeout TIMEOUT     seconds per Helm lint, render, or dependency build
+  --chart-timeout, --time-limit CHART_TIMEOUT
+                        property-test execution budget per chart (default: 3m)
+  --scan-timeout SCAN_TIMEOUT
+                        scan budget excluding dependency preparation; default:
+                        unlimited
+  --max-examples MAX_EXAMPLES
+  --cache-dir CACHE_DIR
+                        completed chart-result cache; default: .cache/hypothesis-
+                        helm/charts
+  --no-cache            disable completed chart-result caching
+  --jobs, -j JOBS       path workers per chart; auto: available CPUs
+  --permutations PERMUTATIONS
+                        finite interaction strength; non-finite charts fall back to
+                        path sampling
+  --filter              filter finite charts with failure expansion; otherwise filter
+                        generated inputs before path traversal
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
+  --seed SEED
+  --build-dependencies, --no-build-dependencies
+                        build locked dependencies in temporary chart copies
+  --pca-samples N       with --report, measure up to N reference configurations per
+                        chart for output PCA; 0 disables it (default: 64)
+  --pca-timeout PCA_TIMEOUT
+                        additional output-PCA measurement budget per chart with
+                        --report (default: 1m)
+  --max-mutations N     with --report, measure sensitivity for up to N fields per
+                        chart and all their pairs (opt-in)
+  --sensitivity-timeout SENSITIVITY_TIMEOUT
+                        additional sensitivity measurement budget per chart with
+                        --max-mutations (default: 3m)
+  --filter-adaptive     enable --filter and retain 70% subject to measured topology
+                        sample floors; unmatched charts keep all filtered cases
+  --sampling-calibration SAMPLING_CALIBRATION
+                        override the packaged adaptive-sampling calibration JSON
+  --sensitivity-order N
+                        maximum measured interaction order for sensitivity-first;
+                        1..permutations, default: min(2, permutations)
+  --sample-random PERCENT
+                        retain this percentage after filtering; default: 100
+                        (disabled); recall depends on selected inputs
+  --sample-min-cases N  retain at least N eligible cases, or all when fewer exist
+                        (default: 128)
+  --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
+                        seeded random (default), linear, root-first, leaf-first, or
+                        sensitivity-first (finite coverage defaults to pairs)
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
+  --schema-version SCHEMA_VERSION
+                        Kubernetes schema version: latest or X.Y.Z
+  --schema-cache-dir SCHEMA_CACHE_DIR
+  --schema-offline      reuse cached schemas without network access
+  --base-ref BASE_REF   Git comparison ref for repository tests; overrides CI target
+                        or previous trunk commit
+  --output-format, -o {json,yaml}
+                        stream rendered manifests as JSON lines or YAML documents on
+                        stdout; logs and reports go to stderr
+  --export-suppressions
+                        write categorized suppressions.yaml in each chart's artifacts
+                        after testing; review before applying
+  --export-topological-graph [FILENAME]
+                        export input references, control flow and observed manifests
+                        as JSON and DOT
+  --minimal-values-timeout MINIMAL_VALUES_TIMEOUT
+                        verification and minimization budget for values export
+                        (default: 30s)
+  --export-minimal-values [FILENAME]
+                        export example values with validation status and missing
+                        fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
+                        separate files per chart)
+  --log-color [{auto,always,never}]
+                        color log severity labels; bare flag: always; auto: terminals
+                        unless NO_COLOR is set; default: never
+  --log-file PATH       append logs to PATH; default: stdout (-), or stderr when
+                        streaming manifests
+  --config CONFIG       finding and input-domain policy YAML; default: .hypothesis-
+                        helm.yaml in the working directory
+  --character-sets {ascii,unicode}
+                        generated text alphabet; overrides config; default: ascii
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
+  --ignore CODE         disable one built-in check; repeat to add codes
+  --disable-codes CODE[,CODE...]
+                        disable comma-delimited finding codes; adds to --ignore and
+                        the config file; repeatable
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis generate</summary>
+
+~~~text
+usage: helm hypothesis generate [-h] [--output OUTPUT] [--max-examples MAX_EXAMPLES]
+                                [--strict | --no-strict]
+                                [--fail [{info,warning,error}]]
+                                [--export-topological-graph [FILENAME]]
+                                [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
+                                [--export-minimal-values [FILENAME]]
+                                [--log-color [{auto,always,never}]] [--log-file PATH]
+                                [--config CONFIG] [--character-sets {ascii,unicode}]
+                                [--renderer-policy {auto,native,strict}]
+                                [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
+                                [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                                chart
+
+Create a reusable Python property-test suite for a local chart, with one test per
+values path. Input types come from the chart schema or are inferred from its values;
+execute the saved suite with run.
+
+positional arguments:
+  chart
+
+options:
+  -h, --help            show this help message and exit
+  --output OUTPUT
+  --max-examples MAX_EXAMPLES
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
+  --export-topological-graph [FILENAME]
+                        export input references, control flow and observed manifests
+                        as JSON and DOT
+  --minimal-values-timeout MINIMAL_VALUES_TIMEOUT
+                        verification and minimization budget for values export
+                        (default: 30s)
+  --export-minimal-values [FILENAME]
+                        export example values with validation status and missing
+                        fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
+                        separate files per chart)
+  --log-color [{auto,always,never}]
+                        color log severity labels; bare flag: always; auto: terminals
+                        unless NO_COLOR is set; default: never
+  --log-file PATH       append logs to PATH; default: stdout (-), or stderr when
+                        streaming manifests
+  --config CONFIG       finding and input-domain policy YAML; default: .hypothesis-
+                        helm.yaml in the working directory
+  --character-sets {ascii,unicode}
+                        generated text alphabet; overrides config; default: ascii
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
+  --ignore CODE         disable one built-in check; repeat to add codes
+  --disable-codes CODE[,CODE...]
+                        disable comma-delimited finding codes; adds to --ignore and
+                        the config file; repeatable
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis audit</summary>
+
+~~~text
+usage: helm hypothesis audit [-h] [--fail [{info,warning,error}]]
+                             [--artifact-dir ARTIFACT_DIR] [--export-suppressions]
+                             [--export-topological-graph [FILENAME]]
+                             [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
+                             [--export-minimal-values [FILENAME]]
+                             [--log-color [{auto,always,never}]] [--log-file PATH]
+                             [--config CONFIG] [--character-sets {ascii,unicode}]
+                             [--renderer-policy {auto,native,strict}]
+                             [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
+                             [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                             chart
+
+Inspect a local chart's values, schema, and template references to identify missing
+types, undocumented paths, and limits on what can be analyzed. Use this to understand
+the input space before testing.
+
+positional arguments:
+  chart
+
+options:
+  -h, --help            show this help message and exit
+  --fail [{info,warning,error}]
+                        fail on audit findings at this severity or higher; bare flag:
+                        any finding
+  --artifact-dir ARTIFACT_DIR
+                        audit export directory
+  --export-suppressions
+                        write categorized suppressions.yaml in each chart's artifacts
+                        after testing; review before applying
+  --export-topological-graph [FILENAME]
+                        export input references, control flow and observed manifests
+                        as JSON and DOT
+  --minimal-values-timeout MINIMAL_VALUES_TIMEOUT
+                        verification and minimization budget for values export
+                        (default: 30s)
+  --export-minimal-values [FILENAME]
+                        export example values with validation status and missing
+                        fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
+                        separate files per chart)
+  --log-color [{auto,always,never}]
+                        color log severity labels; bare flag: always; auto: terminals
+                        unless NO_COLOR is set; default: never
+  --log-file PATH       append logs to PATH; default: stdout (-), or stderr when
+                        streaming manifests
+  --config CONFIG       finding and input-domain policy YAML; default: .hypothesis-
+                        helm.yaml in the working directory
+  --character-sets {ascii,unicode}
+                        generated text alphabet; overrides config; default: ascii
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
+  --ignore CODE         disable one built-in check; repeat to add codes
+  --disable-codes CODE[,CODE...]
+                        disable comma-delimited finding codes; adds to --ignore and
+                        the config file; repeatable
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis run</summary>
+
+~~~text
+usage: helm hypothesis run [-h] [--seed SEED] [--match MATCH] [--collect-only]
+                           [--artifact-dir ARTIFACT_DIR] [--sample-random PERCENT]
+                           [--sample-min-cases N]
+                           [--traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}]
+                           [--strict | --no-strict] [--validate-schemas]
+                           [--schema-version SCHEMA_VERSION]
+                           [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
+                           [--dry-run] [--cache-dir CACHE_DIR]
+                           [--disable-schema-caching] [--progress] [--run-id RUN_ID]
+                           [--no-cache] [--rerun {auto,all,failed}] [--shard SHARD]
+                           [--jobs JOBS] [--output-format {json,yaml}]
+                           [--export-suppressions] [--fail [{info,warning,error}]]
+                           [--log-color [{auto,always,never}]] [--log-file PATH]
+                           [--config CONFIG] [--character-sets {ascii,unicode}]
+                           [--renderer-policy {auto,native,strict}]
+                           [--yaml-parser {ruamel,ruamel-safe,pyyaml}] [--ignore CODE]
+                           [--disable-codes CODE[,CODE...]]
+                           suite
+
+Execute a property-test suite previously created by generate. Generate values for its
+selected paths, render the chart, and record any findings.
+
+positional arguments:
+  suite
+
+options:
+  -h, --help            show this help message and exit
+  --seed SEED
+  --match MATCH         select tests by value-path keyword
+  --collect-only
+  --artifact-dir ARTIFACT_DIR
+                        report directory for a saved suite
+  --sample-random PERCENT
+                        retain this percentage after filtering; default: 100
+                        (disabled); recall depends on selected inputs
+  --sample-min-cases N  retain at least N eligible cases, or all when fewer exist
+                        (default: 128)
+  --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
+                        seeded random (default), linear, root-first, leaf-first, or
+                        sensitivity-first (finite coverage defaults to pairs)
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
+  --schema-version SCHEMA_VERSION
+                        Kubernetes schema version: latest or X.Y.Z
+  --schema-cache-dir SCHEMA_CACHE_DIR
+  --schema-offline      reuse cached schemas without network access
+  --dry-run             plot coverage and forecast filtering or cached property work
+                        without execution
+  --cache-dir CACHE_DIR
+                        persistent path-result cache directory
+  --disable-schema-caching
+                        compare values structure against the cached baseline without
+                        updating it
+  --progress            force a live progress bar on stderr, including redirected
+                        output
+  --run-id RUN_ID       common identifier for shards merged into one report
+  --no-cache            disable path-result caching
+  --rerun {auto,all,failed}
+                        auto: rerun failures locally; run all paths in CI
+  --shard SHARD         auto (default): detect CI node; INDEX/TOTAL: explicit shard;
+                        none: disable
+  --jobs, -j JOBS       workers per chart; auto: CPU count for repository/exhaustive
+                        tests, PID tuning for suites; 1: serial
+  --output-format, -o {json,yaml}
+                        stream rendered manifests as JSON lines or YAML documents on
+                        stdout; logs and reports go to stderr
+  --export-suppressions
+                        write categorized suppressions.yaml in each chart's artifacts
+                        after testing; review before applying
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
+  --log-color [{auto,always,never}]
+                        color log severity labels; bare flag: always; auto: terminals
+                        unless NO_COLOR is set; default: never
+  --log-file PATH       append logs to PATH; default: stdout (-), or stderr when
+                        streaming manifests
+  --config CONFIG       finding and input-domain policy YAML; default: .hypothesis-
+                        helm.yaml in the working directory
+  --character-sets {ascii,unicode}
+                        generated text alphabet; overrides config; default: ascii
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
+  --ignore CODE         disable one built-in check; repeat to add codes
+  --disable-codes CODE[,CODE...]
+                        disable comma-delimited finding codes; adds to --ignore and
+                        the config file; repeatable
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis test</summary>
+
+~~~text
+usage: helm hypothesis test [-h] [--report [PATH]] [--pca-samples N]
+                            [--pca-timeout PCA_TIMEOUT] [--max-mutations N]
+                            [--sensitivity-timeout SENSITIVITY_TIMEOUT]
+                            [--values VALUES] [--chart-timeout CHART_TIMEOUT]
+                            [--scan-timeout SCAN_TIMEOUT]
+                            [--build-dependencies | --no-build-dependencies]
+                            [--fail [{info,warning,error}]]
+                            [--max-examples MAX_EXAMPLES] [--time-limit DURATION]
+                            [--paths | --exhaustive | --whole-chart |
+                            --permutations N] [--filter] [--trim-random N]
+                            [--trim-topology N] [--expand-failures]
+                            [--prune-equivalent] [--match MATCH] [--collect-only]
+                            [--max-cases MAX_CASES] [--max-candidates MAX_CANDIDATES]
+                            [--exhaustive-threshold EXHAUSTIVE_THRESHOLD]
+                            [--exhaustive-group PATH,PATH] [--no-infer-groups]
+                            [--max-group-cases MAX_GROUP_CASES] [--seed SEED]
+                            [--filter-adaptive]
+                            [--sampling-calibration SAMPLING_CALIBRATION]
+                            [--sensitivity-order N] [--sample-random PERCENT]
+                            [--sample-min-cases N]
+                            [--traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}]
+                            [--timeout TIMEOUT] [--helm HELM] [--release RELEASE]
+                            [--namespace NAMESPACE] [--kube-version KUBE_VERSION]
+                            [--allow-empty] [--artifact-dir ARTIFACT_DIR]
+                            [--strict | --no-strict] [--validate-schemas]
+                            [--schema-version SCHEMA_VERSION]
+                            [--schema-cache-dir SCHEMA_CACHE_DIR] [--schema-offline]
+                            [--base-ref BASE_REF] [--dry-run] [--cache-dir CACHE_DIR]
+                            [--disable-schema-caching] [--progress] [--run-id RUN_ID]
+                            [--no-cache] [--rerun {auto,all,failed}] [--shard SHARD]
+                            [--jobs JOBS] [--output-format {json,yaml}]
+                            [--export-suppressions]
+                            [--export-topological-graph [FILENAME]]
+                            [--minimal-values-timeout MINIMAL_VALUES_TIMEOUT]
+                            [--export-minimal-values [FILENAME]]
+                            [--log-color [{auto,always,never}]] [--log-file PATH]
+                            [--config CONFIG] [--character-sets {ascii,unicode}]
+                            [--renderer-policy {auto,native,strict}]
+                            [--yaml-parser {ruamel,ruamel-safe,pyyaml}]
+                            [--ignore CODE] [--disable-codes CODE[,CODE...]]
+                            [chart]
+
+Test a local chart or recursively discover charts in a local directory. Generate
+values, render the charts, and report findings with the inputs that triggered them.
+
+positional arguments:
+  chart                 local chart or directory containing charts (default: current
+                        directory)
+
+options:
+  -h, --help            show this help message and exit
+  --report [PATH]       write combined Markdown/PDF; default:
+                        docs/reports/<dir>_<epoch>_report
+  --pca-samples N       with --report, measure up to N reference configurations per
+                        chart for output PCA; 0 disables it (default: 64)
+  --pca-timeout PCA_TIMEOUT
+                        additional output-PCA measurement budget per chart with
+                        --report (default: 1m)
+  --max-mutations N     with --report, measure sensitivity for up to N fields per
+                        chart and all their pairs (opt-in)
+  --sensitivity-timeout SENSITIVITY_TIMEOUT
+                        additional sensitivity measurement budget per chart with
+                        --max-mutations (default: 3m)
+  --values VALUES       baseline file relative to each chart, or an absolute path
+  --chart-timeout CHART_TIMEOUT
+                        property-test budget per discovered chart (default: 3m)
+  --scan-timeout SCAN_TIMEOUT
+                        total local discovery/testing budget, excluding dependency
+                        preparation
+  --build-dependencies, --no-build-dependencies
+                        build dependencies in isolated copies
+  --fail [{info,warning,error}]
+                        stop at this severity or higher and exit 1; bare flag: any
+                        finding; lower findings remain reported
+  --max-examples MAX_EXAMPLES
+  --time-limit DURATION
+                        whole-chart execution budget, e.g. 30s or 3m (default: 3m);
+                        excludes planning
+  --paths               force generated per-path testing
+  --exhaustive          enumerate finite whole-chart inputs
+  --whole-chart         sample whole-chart inputs
+  --permutations N      cover valid N-way finite interactions; non-finite charts fall
+                        back to path sampling
+  --trim-random, --trim N
+                        retain a seeded quarter of finite permutation cases per step;
+                        default: 0
+  --prune-equivalent    skip Helm only for proved output equivalence to a successful
+                        render
+  --match MATCH         select generated tests by value-path keyword
+  --collect-only        generate and list tests
+  --max-cases MAX_CASES
+                        bound exhaustive domains or permutation suites and factor
+                        domains
+  --max-candidates MAX_CANDIDATES
+                        bound permutation planning work
+  --exhaustive-threshold EXHAUSTIVE_THRESHOLD
+                        enumerate finite spaces smaller than this count; 0 disables
+                        promotion
+  --exhaustive-group PATH,PATH
+                        require exhaustive coverage of a group of value paths or
+                        containers; repeatable
+  --no-infer-groups     disable inferred exhaustive groups
+  --max-group-cases MAX_GROUP_CASES
+                        bound automatically inferred group domains
+  --seed SEED
+  --filter-adaptive     enable --filter and retain 70% subject to measured topology
+                        sample floors; unmatched charts keep all filtered cases
+  --sampling-calibration SAMPLING_CALIBRATION
+                        override the packaged adaptive-sampling calibration JSON
+  --sensitivity-order N
+                        maximum measured interaction order for sensitivity-first;
+                        1..permutations, default: min(2, permutations)
+  --sample-random PERCENT
+                        retain this percentage after filtering; default: 100
+                        (disabled); recall depends on selected inputs
+  --sample-min-cases N  retain at least N eligible cases, or all when fewer exist
+                        (default: 128)
+  --traversal-strategy {random,linear,root-first,leaf-first,sensitivity-first}
+                        seeded random (default), linear, root-first, leaf-first, or
+                        sensitivity-first (finite coverage defaults to pairs)
+  --timeout TIMEOUT
+  --helm HELM
+  --release RELEASE
+  --namespace NAMESPACE
+  --kube-version KUBE_VERSION
+  --allow-empty
+  --artifact-dir ARTIFACT_DIR
+  --strict, --no-strict
+                        require schemas for custom resources; otherwise skip schema
+                        validation when their schema is missing
+  --validate-schemas    validate rendered resources against the local Kubernetes
+                        schema cache
+  --schema-version SCHEMA_VERSION
+                        Kubernetes schema version: latest or X.Y.Z
+  --schema-cache-dir SCHEMA_CACHE_DIR
+  --schema-offline      reuse cached schemas without network access
+  --base-ref BASE_REF   Git comparison ref for repository tests; overrides CI target
+                        or previous trunk commit
+  --dry-run             plot coverage and forecast filtering or cached property work
+                        without execution
+  --cache-dir CACHE_DIR
+                        persistent path-result cache directory
+  --disable-schema-caching
+                        compare values structure against the cached baseline without
+                        updating it
+  --progress            force a live progress bar on stderr, including redirected
+                        output
+  --run-id RUN_ID       common identifier for shards merged into one report
+  --no-cache            disable path-result caching
+  --rerun {auto,all,failed}
+                        auto: rerun failures locally; run all paths in CI
+  --shard SHARD         auto (default): detect CI node; INDEX/TOTAL: explicit shard;
+                        none: disable
+  --jobs, -j JOBS       workers per chart; auto: CPU count for repository/exhaustive
+                        tests, PID tuning for suites; 1: serial
+  --output-format, -o {json,yaml}
+                        stream rendered manifests as JSON lines or YAML documents on
+                        stdout; logs and reports go to stderr
+  --export-suppressions
+                        write categorized suppressions.yaml in each chart's artifacts
+                        after testing; review before applying
+  --export-topological-graph [FILENAME]
+                        export input references, control flow and observed manifests
+                        as JSON and DOT
+  --minimal-values-timeout MINIMAL_VALUES_TIMEOUT
+                        verification and minimization budget for values export
+                        (default: 30s)
+  --export-minimal-values [FILENAME]
+                        export example values with validation status and missing
+                        fields; default: values-minimal-<checksum>-<epoch>.yaml (scan:
+                        separate files per chart)
+  --log-color [{auto,always,never}]
+                        color log severity labels; bare flag: always; auto: terminals
+                        unless NO_COLOR is set; default: never
+  --log-file PATH       append logs to PATH; default: stdout (-), or stderr when
+                        streaming manifests
+  --config CONFIG       finding and input-domain policy YAML; default: .hypothesis-
+                        helm.yaml in the working directory
+  --character-sets {ascii,unicode}
+                        generated text alphabet; overrides config; default: ascii
+  --renderer-policy {auto,native,strict}
+                        auto controls supported random inputs with visible native
+                        fallback (default); native uses Helm; strict requires replay
+  --yaml-parser {ruamel,ruamel-safe,pyyaml}
+                        manifest parser backend; overrides yaml_parser in config;
+                        default: ruamel, or the saved suite's parser
+  --ignore CODE         disable one built-in check; repeat to add codes
+  --disable-codes CODE[,CODE...]
+                        disable comma-delimited finding codes; adds to --ignore and
+                        the config file; repeatable
+
+filtering:
+  Use --filter or the individual methods below; random trimming is independent.
+
+  --filter              enable --trim-topology 2 and --expand-failures
+  --trim-topology N     thin symbolic output/branch regions; retain representatives
+                        and unknowns; combines with --trim-random
+  --expand-failures     test omitted members of failed symbolic regions within the
+                        execution budget
+~~~
+
+</details>
+
+<details>
+<summary>helm hypothesis schemas</summary>
+
+~~~text
+usage: helm hypothesis schemas [-h] [--schema-version SCHEMA_VERSION]
+                               [--schema-cache-dir SCHEMA_CACHE_DIR]
+                               [--schema-offline]
+
+Prepare a local cache of Kubernetes API schemas for built-in manifest validation.
+Select a Kubernetes version to download, or use --schema-offline to reuse schemas
+already cached.
+
+options:
+  -h, --help            show this help message and exit
+  --schema-version SCHEMA_VERSION
+  --schema-cache-dir SCHEMA_CACHE_DIR
+  --schema-offline
+~~~
+
+</details>
+<!-- [[[end]]] -->
+
+## Upstream schema shims
+
+Some Kubernetes rules are enforced by Go validators or described in prose but are missing from the published JSON schemas.
+Catalog rebuilds apply these [reviewed supplements](pkg/hypothesis_helm_catalog/data/reviewed-domains.json) to exact API fields:
+
+| API field | Supplement |
+| --- | --- |
+| `ServiceSpec.type`, `ServiceSpec.sessionAffinity` | Allowed enums; empty and null values retain Kubernetes defaulting. |
+| `ServicePort.protocol`, `PodSpec.restartPolicy` | Documented enum values. |
+| `ContainerPort.containerPort` | Port range, 1-65535. |
+| `DeploymentSpec.replicas` | Nonnegative replica count. |
+| `SecretVolumeSource.secretName`, `SecretKeySelector.name` | Secret-name syntax and length. |
+| `VolumeMount.mountPath` | Nonempty path, preserving Windows and Unix forms. |
+
+These are API schema shims, not chart-name exceptions. Each records its upstream reference and description;
+rebuilds require review if that description changes. The Service enum shims also record the upstream defaulting
+reference and when they can be retired. Remove a shim once the upstream schema supplies the equivalent constraint.
+Other fields remain unconstrained where neither upstream data nor a reviewed supplement establishes their domain.
+`HTTPGetAction.port` and `TCPSocketAction.port` also need bounds absent from the JSON schemas. Catalog rebuilds derive
+their numeric range and port-name rules from Kubernetes' `IsValidPortNum` and `IsValidPortName` validators, then check
+boundary cases against the compiled Go functions. These rules apply to probes and lifecycle handlers across charts;
+they validate port syntax, not whether a named port exists in the target container.
+See [catalog rebuilding](docs/input-domains/README.md#rebuilding-the-catalog-before-release) for source verification and limits.
 
 ## License
 
 [GNU General Public License v3.0 only](LICENSE).
 
-Local reruns reuse successful path results and retry failures by default. CI runs
-continue to test the full selection. Use `--rerun all` for a fresh run,
-`--cache-dir .cache/hypothesis-helm` to choose a persistent cache, or `--no-cache`
-to disable it. See [persistent path results](docs/usage.md#persistent-path-results)
-and [CI cache setup](docs/ci.md#persisting-path-outcomes).
+## Citation
 
-Enable optional Kubernetes API schema validation using
-[kubeconform](https://github.com/yannh/kubeconform) with
-`helm hypothesis test ./chart --kubeconform --schema-version 1.35.0`.
-The version defaults to the latest published stable schemas; strict schemas are
-cached through a sparse Git checkout for offline and parallel reuse.
-See [API conformity setup](docs/usage.md#kubernetes-api-conformity).
+This project builds on [Hypothesis](https://github.com/HypothesisWorks/hypothesis/),
+the property-based testing framework for Python. Its authors recommend the following
+paper in their [citation guidance](https://github.com/HypothesisWorks/hypothesis/blob/master/CITATION.cff):
+
+MacIver et al. (2019). [Hypothesis: A new approach to property-based testing](https://doi.org/10.21105/joss.01891).
+*Journal of Open Source Software*, 4(43), 1891.

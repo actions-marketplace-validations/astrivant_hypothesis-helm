@@ -1,0 +1,9 @@
+enabled: true
+global: {}
+variables:
+  delay: 1
+maxTplPasses: 4
+gates:
+  wait:
+    spec:
+      delaySeconds: 1

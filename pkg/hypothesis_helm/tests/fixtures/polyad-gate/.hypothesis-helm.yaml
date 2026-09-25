@@ -1,0 +1,2 @@
+resource_schemas:
+  polyad.astrivant.com/v1alpha1/Gate: schemas/gate.json

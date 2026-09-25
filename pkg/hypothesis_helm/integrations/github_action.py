@@ -2,13 +2,18 @@
 Run the composite GitHub Action through the Helm command and export artifact paths.
 """
 
-import os
 import sys
 import uuid
 from pathlib import Path
 
-from hypothesis_helm.execution.processes import Processes
+from hypothesis_helm.environment import env, refresh_env
+from hypothesis_helm.execution.runtime.processes import Processes
+from hypothesis_helm.integrations.incremental import select_rerun
+from hypothesis_helm.integrations.kubesec import scan
 from hypothesis_helm.integrations.sharding import parse_shard_option, resolve_shard
+from hypothesis_helm.schemas.kubernetes.conformity import prepare
+
+__all__ = ("main", "write_outputs")
 
 
 def write_outputs(values: dict[str, str]) -> None:
@@ -21,7 +26,7 @@ def write_outputs(values: dict[str, str]) -> None:
     Returns:
         None: GitHub receives the action's result and artifact locations.
     """
-    destination = os.environ.get("GITHUB_OUTPUT")
+    destination = env.get("GITHUB_OUTPUT")
     if destination is not None:
         with Path(destination).open("a") as stream:
             for key, value in values.items():
@@ -31,18 +36,17 @@ def write_outputs(values: dict[str, str]) -> None:
 
 def main() -> int:
     """
-    Translate action inputs into a Helm invocation while preserving failure status.
+    Run the explicit Bash command while preserving shard outputs and failure status.
 
     Returns:
         int: Helm exit status, including 130 on interruption.
     """
+    refresh_env()
     status = 2
     outputs: dict[str, str] = {}
     try:
-        shard, source = resolve_shard(
-            parse_shard_option(os.environ.get("HH_SHARD", "auto")), os.environ
-        )
-        root = Path(os.environ.get("HH_ARTIFACT_DIR", "reports/hypothesis-helm")).resolve()
+        shard, source = resolve_shard(parse_shard_option(env.get("HH_SHARD", "auto")), env)
+        root = Path(env.get("HH_ARTIFACT_DIR", ".cache/hypothesis-helm/runs")).resolve()
         results = root / "shards" / shard.name if shard is not None else root
         results.mkdir(parents=True, exist_ok=True)
         manifests = results / "manifests.jsonl"
@@ -54,60 +58,80 @@ def main() -> int:
             "shard-id": shard.name if shard is not None else "unsharded",
             "shard-source": source,
         }
-        command = [
-            "helm",
-            "hypothesis",
-            "test",
-            str(Path(os.environ.get("HH_CHART", ".")).resolve()),
-            "--shard",
-            outputs["shard"],
-            "--jobs",
-            os.environ.get("HH_JOBS", "auto"),
-            "--max-examples",
-            os.environ.get("HH_MAX_EXAMPLES", "100"),
-            "--seed",
-            os.environ.get("HH_SEED", "0"),
-            "--timeout",
-            os.environ.get("HH_TIMEOUT", "30"),
-            "--artifact-dir",
-            str(root),
-            "--output",
-            "json",
-        ]
-        command += ["--rerun", os.environ.get("HH_RERUN", "auto")]
-        cache_dir = os.environ.get("HH_CACHE_DIR")
-        if cache_dir:
-            command += ["--cache-dir", cache_dir]
-        if os.environ.get("HH_DISABLE_SCHEMA_CACHING", "false").lower() == "true":
-            command.append("--disable-schema-caching")
-        if os.environ.get("HH_CACHE", "true").lower() == "false":
-            command.append("--no-cache")
-        if os.environ.get("HH_KUBECONFORM", "true").lower() == "true":
-            command += [
-                "--kubeconform",
-                "--schema-version",
-                os.environ.get("HH_SCHEMA_VERSION", "latest"),
-                "--schema-cache-dir",
-                os.environ.get("HH_SCHEMA_CACHE_DIR", ".cache/hypothesis-helm/schemas"),
-                "--kubeconform-binary",
-                os.environ.get("HH_KUBECONFORM_BINARY", "kubeconform"),
-            ]
-            if os.environ.get("HH_SCHEMA_OFFLINE", "false").lower() == "true":
-                command.append("--schema-offline")
-        match = os.environ.get("HH_MATCH")
-        if match:
-            command += ["--match", match]
+        security = env.get("HH_KUBESEC", "false").lower() == "true"
+        score_minimum = int(env.get("HH_KUBESEC_SCORE_MINIMUM", "0")) if security else 0
+        if score_minimum < 0:
+            raise ValueError("Kubesec score minimum must be nonnegative")
+        incremental = env.get("HH_INCREMENTAL", "false").lower() == "true"
+        rerun = select_rerun(
+            Path(env.get("HH_CHART", ".")),
+            incremental=incremental,
+            rerun=env.get("HH_RERUN", "auto"),
+            base_ref=env.get("HH_BASE_REF") or None,
+            report=results / "git-comparison.json",
+        )
+        environment = dict(env)
+        if incremental:
+            # The comparison has already been resolved here. Forwarding this setting would
+            # select recursive CLI execution, which cannot own a generated-suite shard.
+            environment.pop("HYPOTHESIS_HELM_BASE_REF", None)
         with manifests.open("w") as stream:
             # Give the Helm parent time to stop its own pytest process groups.
-            result = Processes(interrupt_grace=5.0).run(
-                command, cwd=Path.cwd(), env=dict(os.environ), stdout=stream
+            result = Processes(interrupt_grace=10.0).run(
+                ["bash", str(Path(__file__).with_suffix(".sh"))],
+                cwd=Path.cwd(),
+                env={
+                    **environment,
+                    **{
+                        key: value.lower()
+                        for key, value in environment.items()
+                        if key
+                        in {
+                            "HH_KUBESEC",
+                            "HH_VALIDATE_SCHEMAS",
+                            "HH_CACHE",
+                            "HH_SCHEMA_OFFLINE",
+                            "HH_DISABLE_SCHEMA_CACHING",
+                        }
+                    },
+                    "HH_ARTIFACT_DIR": str(root),
+                    "HH_RESULT_DIR": str(results),
+                    "HH_RESOLVED_SHARD": outputs["shard"],
+                    "HH_RERUN": rerun,
+                },
+                stdout=stream,
             )
         status = result.returncode if result.returncode >= 0 else 130
+        if security and status != 130:
+            configuration = prepare(
+                Path(env.get("HH_SCHEMA_CACHE_DIR", "schemas")),
+                env.get("HH_SCHEMA_VERSION", "latest"),
+                offline=True,
+            )
+            security_status = scan(
+                manifests,
+                root / "kubesec",
+                configuration,
+                jobs=env.get("HH_KUBESEC_JOBS", "auto"),
+                executable=env.get("HH_KUBESEC_BINARY", "kubesec"),
+                shard=shard,
+                pre_sharded=True,
+                validate_rest=True,
+                score_minimum=score_minimum,
+                run_id=env.get("HH_RUN_ID", ""),
+            )
+            security_dir = root / "kubesec"
+            if shard:
+                security_dir = security_dir / "shards" / shard.name
+            outputs["kubesec-report-dir"] = str(security_dir)
+            outputs["kubesec-exit-code"] = str(security_status)
+            status = status or security_status
     except KeyboardInterrupt:
         print("Testing interrupted", file=sys.stderr)
         status = 130
     except Exception as exc:
         print(f"Action setup failed: {exc}", file=sys.stderr)
+        status = status or 2
     finally:
         outputs["exit-code"] = str(status)
         write_outputs(outputs)

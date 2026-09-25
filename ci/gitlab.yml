@@ -1,0 +1,184 @@
+# Remote include: test every version/shard, then publish one verified report per version.
+variables:
+  SHARD_TOTAL: "3"
+  SAMPLE_RANDOM: "100"
+  SAMPLE_MIN_CASES: "128"
+  HYPOTHESIS_HELM_REF: main
+  KUBESEC_ENABLED: 'false' # opt in to security scanning
+  KUBESEC_SCORE_MINIMUM: "0"
+  GIT_DEPTH: "0"
+  HH_INCREMENTAL: 'true'
+  HH_RERUN: auto
+  HH_CACHE: 'true'
+  HH_CACHE_DIR: .cache/hypothesis-helm/outcomes
+helm-properties:
+  image: python:3.13-slim
+  stage: test
+  parallel:
+    matrix:
+      - K8S_VERSION: ['1.34.0', '1.35.0']
+        SHARD_INDEX: ['1', '2', '3']
+  variables:
+    HELM_VERSION: v4.3.0
+    HELM_CHART: ./chart
+    KUBESEC_VERSION: v2.14.2
+    KUBESEC_JOBS: auto
+    HYPOTHESIS_HELM_SCHEMA_MEMORY_DIR: "" # Optional: /dev/shm/helm-schemas
+    SCHEMA_CACHE_DIR: schemas
+  cache:
+    - key: "helm-outcomes-v2-linux-amd64-${CI_JOB_NAME_SLUG}-${K8S_VERSION}-${SHARD_INDEX}-of-${SHARD_TOTAL}"
+      paths:
+        - ${HH_CACHE_DIR}/
+      policy: pull-push
+      when: always
+    - key: "hh-binary-v1-linux-amd64-helm-${HELM_VERSION}-exact"
+      paths:
+        - .cache/hypothesis-helm/binaries/helm-${HELM_VERSION}-linux-amd64/
+      policy: pull-push
+      when: always
+    - key: "hh-binary-v1-linux-amd64-kubesec-${KUBESEC_VERSION}-exact"
+      paths:
+        - .cache/hypothesis-helm/binaries/kubesec-${KUBESEC_VERSION}-linux-amd64/
+      policy: pull-push
+      when: always
+    - key: "helm-schemas-v2-linux-amd64-${K8S_VERSION}-${SHARD_INDEX}"
+      paths:
+        - schemas/
+      policy: pull-push
+      when: always
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates curl git
+    - |
+      set -eu
+      platform=linux
+      architecture=amd64
+      binary_dir=".cache/hypothesis-helm/binaries/helm-${HELM_VERSION}-${platform}-${architecture}"
+      if [ ! -x "$binary_dir/helm" ]; then
+          download_dir="$(mktemp -d)"
+          curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+          tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" "${platform}-${architecture}/helm"
+          mkdir -p "$binary_dir"
+          install "$download_dir/${platform}-${architecture}/helm" "$binary_dir/helm.pending"
+          mv "$binary_dir/helm.pending" "$binary_dir/helm"
+          rm -rf "$download_dir"
+      fi
+      install "$binary_dir/helm" /usr/local/bin/helm
+      if [ "$KUBESEC_ENABLED" = "true" ]; then
+          apt-get install -y --no-install-recommends parallel
+          binary_dir=".cache/hypothesis-helm/binaries/kubesec-${KUBESEC_VERSION}-${platform}-${architecture}"
+          if [ ! -x "$binary_dir/kubesec" ]; then
+              download_dir="$(mktemp -d)"
+              curl -fsSL "https://github.com/controlplaneio/kubesec/releases/download/${KUBESEC_VERSION}/kubesec_${platform}_${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+              tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" kubesec
+              mkdir -p "$binary_dir"
+              install "$download_dir/kubesec" "$binary_dir/kubesec.pending"
+              mv "$binary_dir/kubesec.pending" "$binary_dir/kubesec"
+              rm -rf "$download_dir"
+          fi
+          install "$binary_dir/kubesec" /usr/local/bin/kubesec
+      fi
+    - PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm --version "$HYPOTHESIS_HELM_REF"
+    - helm hypothesis schemas --schema-version "$K8S_VERSION" --schema-cache-dir "$SCHEMA_CACHE_DIR"
+  script:
+    - export HH_ARTIFACT_DIR=".cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}"
+    - mkdir -p "$HH_ARTIFACT_DIR"
+    - |
+      policy_cli="$(helm env HELM_PLUGINS)/hypothesis/.plugin-venv/bin/hypothesis-helm-ci-policy"
+      rerun="$("$policy_cli" "$HELM_CHART" \
+          --incremental "${HH_INCREMENTAL:-true}" --rerun "${HH_RERUN:-auto}" \
+          ${HH_BASE_REF:+--base-ref "$HH_BASE_REF"} --report "$HH_ARTIFACT_DIR/git-comparison.json")"
+      # The policy has resolved this ref; do not switch the sharded CLI to recursive execution.
+      unset HYPOTHESIS_HELM_BASE_REF
+      disable_cache=
+      if [ "${HH_CACHE:-true}" = "false" ]; then disable_cache=1; fi
+      test_status=0
+      if [ "$KUBESEC_ENABLED" = "true" ]; then
+          helm hypothesis test "$HELM_CHART" \
+              --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
+              --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun "$rerun" \
+              --cache-dir "${HH_CACHE_DIR:-.cache/hypothesis-helm/outcomes}" ${disable_cache:+--no-cache} \
+              --sample-random "$SAMPLE_RANDOM" --sample-min-cases "$SAMPLE_MIN_CASES" \
+              --schema-version "$K8S_VERSION" \
+              --schema-cache-dir "$SCHEMA_CACHE_DIR" --schema-offline \
+              --artifact-dir "$HH_ARTIFACT_DIR" --output json \
+              >"$HH_ARTIFACT_DIR/manifests.jsonl" || test_status=$?
+      else
+          helm hypothesis test "$HELM_CHART" \
+              --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
+              --shard "$SHARD_INDEX/$SHARD_TOTAL" --jobs auto --max-examples 50 --seed 0 --rerun "$rerun" \
+              --cache-dir "${HH_CACHE_DIR:-.cache/hypothesis-helm/outcomes}" ${disable_cache:+--no-cache} \
+              --sample-random "$SAMPLE_RANDOM" --sample-min-cases "$SAMPLE_MIN_CASES" \
+              --validate-schemas --schema-version "$K8S_VERSION" \
+              --schema-cache-dir "$SCHEMA_CACHE_DIR" --schema-offline \
+              --artifact-dir "$HH_ARTIFACT_DIR" --output json \
+              >"$HH_ARTIFACT_DIR/manifests.jsonl" || test_status=$?
+      fi
+      if [ "$KUBESEC_ENABLED" = "true" ]; then
+          kubesec_cli="$(helm env HELM_PLUGINS)/hypothesis/.plugin-venv/bin/hypothesis-helm-kubesec"
+          scan_status=0
+          "$kubesec_cli" \
+              "$HH_ARTIFACT_DIR/manifests.jsonl" \
+              --output "$HH_ARTIFACT_DIR/kubesec" --jobs "$KUBESEC_JOBS" \
+              --score-minimum "${KUBESEC_SCORE_MINIMUM:-0}" --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
+              --shard "$SHARD_INDEX/$SHARD_TOTAL" --pre-sharded --validate-rest \
+              --schema-version "$K8S_VERSION" --schema-cache-dir "$SCHEMA_CACHE_DIR" \
+              --schema-offline || scan_status=$?
+          if [ "$test_status" -eq 0 ]; then
+              test_status=$scan_status
+          fi
+      fi
+      exit "$test_status"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    name: "helm-properties-${K8S_VERSION}-${SHARD_INDEX}"
+    paths:
+      - .cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}/
+    reports:
+      junit:
+        - .cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}/shards/*/junit.xml
+        - .cache/hypothesis-helm/runs/${K8S_VERSION}/${SHARD_INDEX}/kubesec/shards/*/junit.xml
+
+helm-report:
+  image: python:3.13-slim
+  stage: test
+  when: always
+  needs:
+    - job: helm-properties
+      artifacts: true
+  parallel:
+    matrix:
+      - K8S_VERSION: ['1.34.0', '1.35.0']
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends ca-certificates git
+    - pip install "git+https://github.com/astrivant/hypothesis-helm.git@${HYPOTHESIS_HELM_REF}"
+  script:
+    - |
+      aggregate_status=0
+      cat .cache/hypothesis-helm/runs/"$K8S_VERSION"/*/shards/*/report.json |
+          hypothesis-helm aggregate --shards "$SHARD_TOTAL" \
+              --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
+              --output-dir "docs/reports/final/${K8S_VERSION}" || aggregate_status=$?
+      if [ "${KUBESEC_ENABLED:-false}" = "true" ]; then
+          security_status=0
+          hypothesis-helm-kubesec ".cache/hypothesis-helm/runs/${K8S_VERSION}" --aggregate \
+              --shards "$SHARD_TOTAL" --run-id "${CI_PIPELINE_ID}-${K8S_VERSION}" \
+              --schema-version "$K8S_VERSION" --score-minimum "${KUBESEC_SCORE_MINIMUM:-0}" \
+              --output "docs/reports/final/${K8S_VERSION}/kubesec" || security_status=$?
+          if [ "$aggregate_status" -eq 0 ]; then
+              aggregate_status=$security_status
+          fi
+      fi
+      exit "$aggregate_status"
+  artifacts:
+    when: always
+    expire_in: 30 days
+    name: "helm-final-${K8S_VERSION}"
+    paths:
+      - docs/reports/final/${K8S_VERSION}/
+    reports:
+      junit:
+        - docs/reports/final/${K8S_VERSION}/junit.xml
+        - docs/reports/final/${K8S_VERSION}/kubesec/junit.xml

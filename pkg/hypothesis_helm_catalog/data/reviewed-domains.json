@@ -1,0 +1,162 @@
+[
+  {
+    "id": "containerport.containerPort",
+    "type_field": "io.k8s.api.core.v1.ContainerPort/containerPort",
+    "file": "containerport.json",
+    "path": [
+      "containerPort"
+    ],
+    "description": "Number of port to expose on the pod's IP address. This must be a valid port number, 0 < x < 65536.",
+    "schema": {
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "reference": "https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#ports"
+  },
+  {
+    "id": "secretvolumesource.secretName",
+    "type_field": "io.k8s.api.core.v1.SecretVolumeSource/secretName",
+    "file": "secretvolumesource.json",
+    "path": [
+      "secretName"
+    ],
+    "description": "secretName is the name of the secret in the pod's namespace to use. More info: https://kubernetes.io/docs/concepts/storage/volumes#secret",
+    "schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(?![\\s\\S])",
+      "maxLength": 253
+    },
+    "reference": "https://kubernetes.io/docs/concepts/configuration/secret/#constraints-on-secret-names-and-data"
+  },
+  {
+    "id": "secretkeyselector.name",
+    "type_field": "io.k8s.api.core.v1.SecretKeySelector/name",
+    "file": "secretkeyselector.json",
+    "path": [
+      "name"
+    ],
+    "description": "Name of the referent. This field is effectively required, but due to backwards compatibility is allowed to be empty. Instances of this type with an empty value here are almost certainly wrong. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names",
+    "schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*(?![\\s\\S])",
+      "maxLength": 253
+    },
+    "reference": "https://kubernetes.io/docs/concepts/configuration/secret/#constraints-on-secret-names-and-data"
+  },
+  {
+    "id": "deploymentspec.replicas",
+    "type_field": "io.k8s.api.apps.v1.DeploymentSpec/replicas",
+    "file": "deploymentspec.json",
+    "path": [
+      "replicas"
+    ],
+    "description": "Number of desired pods. This is a pointer to distinguish between explicit zero and not specified. Defaults to 1.",
+    "schema": {
+      "minimum": 0
+    },
+    "reference": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#replicas"
+  },
+  {
+    "id": "serviceport.protocol",
+    "type_field": "io.k8s.api.core.v1.ServicePort/protocol",
+    "file": "serviceport.json",
+    "path": [
+      "protocol"
+    ],
+    "description": "The IP protocol for this port. Supports \"TCP\", \"UDP\", and \"SCTP\". Default is TCP.",
+    "schema": {
+      "enum": [
+        "TCP",
+        "UDP",
+        "SCTP",
+        null
+      ]
+    },
+    "reference": "https://kubernetes.io/docs/concepts/services-networking/service/#protocol-support"
+  },
+  {
+    "id": "podspec.restartPolicy",
+    "type_field": "io.k8s.api.core.v1.PodSpec/restartPolicy",
+    "file": "podspec.json",
+    "path": [
+      "restartPolicy"
+    ],
+    "description": "Restart policy for all containers within the pod. One of Always, OnFailure, Never. In some contexts, only a subset of those values may be permitted. Default to Always. More info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy",
+    "schema": {
+      "enum": [
+        "Always",
+        "OnFailure",
+        "Never",
+        null
+      ]
+    },
+    "reference": "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#restart-policy"
+  },
+  {
+    "id": "volumemount.mountPath",
+    "type_field": "io.k8s.api.core.v1.VolumeMount/mountPath",
+    "file": "volumemount.json",
+    "path": [
+      "mountPath"
+    ],
+    "description": "Path within the container at which the volume should be mounted.  Must not contain ':'.",
+    "schema": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "reference": "https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#volumes-1"
+  },
+  {
+    "id": "servicespec.type",
+    "type_field": "io.k8s.api.core.v1.ServiceSpec/type",
+    "file": "servicespec.json",
+    "path": [
+      "type"
+    ],
+    "description": "type determines how the Service is exposed. Defaults to ClusterIP. Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer. \"ClusterIP\" allocates a cluster-internal IP address for load-balancing to endpoints. Endpoints are determined by the selector or if that is not specified, by manual construction of an Endpoints object or EndpointSlice objects. If clusterIP is \"None\", no virtual IP is allocated and the endpoints are published as a set of endpoints rather than a virtual IP. \"NodePort\" builds on ClusterIP and allocates a port on every node which routes to the same endpoints as the clusterIP. \"LoadBalancer\" builds on NodePort and creates an external load-balancer (if supported in the current cloud) which routes to the same endpoints as the clusterIP. \"ExternalName\" aliases this service to the specified externalName. Several other fields do not apply to ExternalName services. More info: https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types",
+    "schema": {
+      "enum": [
+        "ClusterIP",
+        "NodePort",
+        "LoadBalancer",
+        "ExternalName",
+        "",
+        null
+      ]
+    },
+    "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+    "shim_reason": "OpenAPI declares a string and documents allowed values, but omits the enum. Empty and null preserve API defaulting.",
+    "defaulting_reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/v1/defaults.go#L106-L125",
+    "retire_when": "Upstream machine-readable schemas encode this domain, including defaulting, at the same API field."
+  },
+  {
+    "id": "servicespec.sessionAffinity",
+    "type_field": "io.k8s.api.core.v1.ServiceSpec/sessionAffinity",
+    "file": "servicespec.json",
+    "path": [
+      "sessionAffinity"
+    ],
+    "description": "Supports \"ClientIP\" and \"None\". Used to maintain session affinity. Enable client IP based session affinity. Must be ClientIP or None. Defaults to None. More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies",
+    "schema": {
+      "enum": [
+        "ClientIP",
+        "None",
+        "",
+        null
+      ]
+    },
+    "reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/validation/validation.go#L6557-L6559",
+    "shim_reason": "OpenAPI declares a string and documents allowed values, but omits the enum. Empty and null preserve API defaulting.",
+    "defaulting_reference": "https://github.com/kubernetes/kubernetes/blob/66452049f3d692768c39c797b21b793dce80314e/pkg/apis/core/v1/defaults.go#L106-L125",
+    "retire_when": "Upstream machine-readable schemas encode this domain, including defaulting, at the same API field."
+  }
+]

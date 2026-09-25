@@ -1,0 +1,69 @@
+{
+  "gates": {
+    "kind": "Gate",
+    "apiVersion": "polyad.astrivant.com/v1alpha1",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+            },
+            "namespace": {
+              "type": "string",
+              "maxLength": 63,
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+            },
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "spec": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "object",
+              "x-kubernetes-preserve-unknown-fields": true,
+              "required": [
+                "operator"
+              ],
+              "description": "Serialized Gate expression with operator, optional operands and signal name. Operators are signal, and, or, not, xor and nxor. Signals use NODE.started, NODE.ready, NODE.completed or NODE.failed; absent observations remain unknown."
+            },
+            "delaySeconds": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 315360000,
+              "description": "Standalone admission delay after dependencies are observed. Each graph instance persists its own deadline in status; waits do not occupy workers or slots."
+            }
+          },
+          "description": "Reusable Boolean expression or delay gate controlling admission to the next vertex.",
+          "x-kubernetes-validations": [
+            {
+              "rule": "has(self.expression) != has(self.delaySeconds)",
+              "message": "Gate requires exactly one of expression or delaySeconds"
+            }
+          ]
+        }
+      },
+      "required": [
+        "spec"
+      ],
+      "description": "Define a Boolean or delay gate. Instances keep delay observations on their containing graph."
+    }
+  }
+}

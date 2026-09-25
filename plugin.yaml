@@ -1,12 +1,17 @@
+apiVersion: v1
+type: cli/v1
 name: hypothesis
 version: "0.1.0"
-usage: "Generate and run chart value tests with Helm"
-description: "Schema-driven Hypothesis tests and template value discovery for Helm charts"
-ignoreFlags: false
-platformCommand:
-  - command: "$HELM_PLUGIN_DIR/scripts/run.sh"
-platformHooks:
-  install:
-    - command: "$HELM_PLUGIN_DIR/scripts/install.sh"
-  update:
-    - command: "$HELM_PLUGIN_DIR/scripts/install.sh"
+runtime: subprocess
+config:
+  usage: "hypothesis [command] [flags]"
+  shortHelp: "Schema-driven Hypothesis tests and template value discovery for Helm charts"
+  ignoreFlags: false
+runtimeConfig:
+  platformCommand:
+    - command: "$HELM_PLUGIN_DIR/scripts/run.sh"
+  platformHooks:
+    install:
+      - command: "$HELM_PLUGIN_DIR/scripts/install.sh"
+    update:
+      - command: "$HELM_PLUGIN_DIR/scripts/install.sh"

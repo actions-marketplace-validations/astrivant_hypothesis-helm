@@ -1,1 +1,5 @@
-"""Schedule property suites, manage processes, and persist results."""
+"""
+Coordinate suites with planning, workers, process runtime and reusable execution state.
+"""
+
+__all__ = ()

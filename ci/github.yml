@@ -1,0 +1,86 @@
+name: Helm chart tests and security
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/cache/restore@v5
+        id: outcomes
+        with:
+          path: .cache/hypothesis-helm/outcomes
+          key: helm-outcomes-v2-${{ runner.os }}-${{ runner.arch }}-1.35.0-${{ matrix.shard }}-of-3-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            helm-outcomes-v2-${{ runner.os }}-${{ runner.arch }}-1.35.0-${{ matrix.shard }}-of-3-
+      - uses: astrivant/hypothesis-helm@main
+        with:
+          chart: ./chart
+          incremental: 'true'
+          shard: ${{ matrix.shard }}/3
+          jobs: '2'
+          run-id: ${{ github.run_id }}-${{ github.run_attempt }}
+          schema-version: '1.35.0'
+          kubesec: 'true'
+          kubesec-score-minimum: '0'
+          rerun: ${{ startsWith(github.ref, 'refs/tags/') && 'all' || 'auto' }}
+          cache-dir: .cache/hypothesis-helm/outcomes
+      - uses: actions/cache/save@v5
+        if: ${{ always() && steps.outcomes.outputs.cache-primary-key != '' }}
+        with:
+          path: .cache/hypothesis-helm/outcomes
+          key: ${{ steps.outcomes.outputs.cache-primary-key }}
+  report:
+    needs: chart
+    if: ${{ always() && needs.chart.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: pip install 'git+https://github.com/astrivant/hypothesis-helm.git@main'
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: hypothesis-helm-chart-*
+          path: downloaded
+      - uses: actions/download-artifact@v8
+        if: ${{ always() }}
+        with:
+          pattern: hypothesis-helm-kubesec-chart-*
+          path: downloaded-security
+      - name: Write final report
+        if: ${{ always() }}
+        env:
+          HH_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          test_status=0
+          cat downloaded/*/report.json | hypothesis-helm aggregate \
+              --shards 3 --run-id "$HH_RUN_ID" --output-dir docs/reports/final || test_status=$?
+          security_status=0
+          hypothesis-helm-kubesec downloaded-security --aggregate --shards 3 \
+              --run-id "$HH_RUN_ID" --schema-version 1.35.0 --score-minimum 0 \
+              --output docs/reports/final/kubesec || security_status=$?
+          if ((test_status != 0)); then
+              exit "$test_status"
+          fi
+          exit "$security_status"
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: hypothesis-helm-final
+          path: docs/reports/final/
+          if-no-files-found: error
+          retention-days: 30

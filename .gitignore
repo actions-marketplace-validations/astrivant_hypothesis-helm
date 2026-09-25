@@ -5,10 +5,51 @@ __pycache__/
 .hypothesis/
 .ruff_cache/
 dist/
+build/
 *.egg-info/
-reports/
+/reports/
+/benchmarks/
 generated-tests/
 
 .cache/
 .mypy_cache/
 .env
+
+# Publish documents and figures only; run data and workers belong under .cache/.
+/studies/**
+!/studies/**/
+!/studies/**/*.md
+!/studies/**/*.pdf
+!/studies/**/*.png
+!/studies/**/*.svg
+/studies/**/*-runs/
+/studies/**/runs/
+/studies/**/cases/
+/studies/**/reports/
+/studies/**/helm/
+/docs/reports/**
+!/docs/reports/**/
+!/docs/reports/**/*.md
+!/docs/reports/**/*.pdf
+!/docs/reports/**/*.png
+!/docs/reports/**/*.svg
+# Complete audit findings linked from final reports, separate from ignored run data.
+!/docs/reports/*-data/*.audit.json.gz
+/docs/reports/**/*-runs/
+/docs/reports/**/runs/
+/docs/reports/**/cases/
+/docs/reports/**/reports/
+/docs/reports/**/helm/
+
+# Local infrastructure state, credentials and downloaded providers.
+terraform/**/.terraform/
+terraform/**/*.tfstate*
+terraform/**/*.tfplan
+terraform/**/terraform.tfvars
+terraform/**/outputs.json
+ansible/run.yml
+ansible/.collections/
+
+# Rebuildable Kubernetes schemas, upstream sources and development toolchains.
+/schemas/*
+!/schemas/README.md

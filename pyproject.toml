@@ -1,12 +1,52 @@
+[project]
+name = "hypothesis-helm"
+requires-python = ">=3.13,<4.0"
+dynamic = ["version", "description", "readme", "license", "authors", "keywords", "classifiers", "dependencies"]
+
+[project.optional-dependencies]
+benchmarking = ["hypothesis-helm-benchmarking>=0.1.0,<0.2.0"]
+symbolic = ["hypothesis-helm-benchmarking[symbolic]>=0.1.0,<0.2.0"]
+
 [tool.poetry]
 name = "hypothesis-helm"
-version = "0.1.0"
-description = "Property-based Helm chart testing and value-reference auditing"
+version = "1.3.0"
+description = "Property-based testing, input auditing, and reproducible failure reports for Helm charts"
 authors = ["Emma Doyle"]
 readme = "README.md"
 license = "GPL-3.0-only"
-packages = [{include = "hypothesis_helm", from = "pkg"}]
-include = [{path = "plugin.yaml", format = ["sdist"]}, {path = "scripts", format = ["sdist"]}]
+homepage = "https://github.com/astrivant/hypothesis-helm"
+repository = "https://github.com/astrivant/hypothesis-helm"
+documentation = "https://github.com/astrivant/hypothesis-helm/blob/main/docs/README.md"
+keywords = ["helm", "kubernetes", "hypothesis", "property-based-testing", "linting", "testing"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Systems Administration",
+]
+packages = [
+    {include = "hypothesis_helm", from = "pkg"},
+    {include = "pipeline", from = "pkg"},
+    {include = "hypothesis_helm_catalog", from = "pkg"},
+]
+include = [
+    {path = "plugin.yaml", format = ["sdist"]},
+    {path = "scripts", format = ["sdist"]},
+    {path = "pkg/hypothesis_helm/compiler/assets/*.json", format = ["sdist", "wheel"]},
+    {path = "pkg/hypothesis_helm/compiler/assets/renderer/*", format = ["sdist", "wheel"]},
+    {path = "pkg/hypothesis_helm/compiler/lua/*.lua", format = ["sdist", "wheel"]},
+]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/astrivant/hypothesis-helm/issues"
+"Source Code" = "https://github.com/astrivant/hypothesis-helm"
 
 [tool.poetry.dependencies]
 python = ">=3.13,<4.0"
@@ -14,9 +54,17 @@ hypothesis = "^6.131"
 hypothesis-jsonschema = "^0.23"
 jsonschema = "^4.23"
 "ruamel.yaml" = "^0.18"
+PyYAML = "^6.0"
 attrs = "^25.3"
 pytest = "^8.3"
 rich = ">=13,<15"
+cattrs = ">=25.3,<27"
+deepdiff = ">=9.1,<10"
+reportlab = ">=4,<5"
+matplotlib = ">=3.10,<4"
+immutables = ">=0.21,<1"
+lupa = ">=2.6,<3"
+hypothesis-helm-benchmarking = {path = "pkg/hypothesis_helm_benchmarking", develop = true, optional = true}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.15"
@@ -24,10 +72,29 @@ mypy = "^1.15"
 pydoclint = "0.6.6"
 pydocstyle = "6.3.0"
 pre-commit = "4.6.0"
+shfmt-py = "4.1.0"
 types-jsonschema = "^4.23"
+types-PyYAML = "^6.0"
+cogapp = ">=3.6,<4"
+numpy = ">=2,<3"
+pytest-xdist = ">=3.8,<4"
+setuptools = ">=77"
 
 [tool.poetry.scripts]
+hypothesis-helm-renderer = "hypothesis_helm.compiler.randomness.cli:main"
+hypothesis-helm-builtins = "hypothesis_helm_catalog.builtins:main"
+hypothesis-helm-catalog = "hypothesis_helm_catalog.builder:main"
+hypothesis-helm-docs = "hypothesis_helm.reporting.documentation.contents:main"
+hypothesis-helm-sensitivity = "hypothesis_helm.analysis.cli:main"
+hypothesis-helm-report-figures = "hypothesis_helm.analysis.repository:main"
+pipeline-example = "pipeline.example:main"
+hypothesis-helm-path-worker = "hypothesis_helm.execution.workers.path_queue:main"
 hypothesis-helm = "hypothesis_helm.cli:main"
+hypothesis-helm-complexity = "hypothesis_helm.compiler.passes.complexity:main"
+hypothesis-helm-kubesec = "hypothesis_helm.integrations.kubesec:main"
+hypothesis-helm-github-action = "hypothesis_helm.integrations.github_action:main"
+hypothesis-helm-ci-shell = "hypothesis_helm.integrations.ci_shell:main"
+hypothesis-helm-ci-policy = "hypothesis_helm.integrations.incremental:main"
 
 [build-system]
 requires = ["poetry-core>=2.0,<3.0"]
@@ -38,8 +105,11 @@ testpaths = ["pkg/hypothesis_helm/tests"]
 markers = ["integration: requires Helm", "astrivant: optional neighboring Astrivant chart", "hypothesis_helm_path(path): schema path exercised by a generated test"]
 
 [tool.ruff]
-line-length = 100
+line-length = 140
 target-version = "py313"
+# Retained report scripts are measured source snapshots, verified by their checksums.
+extend-exclude = ["third_party", "docs/reports"]
+force-exclude = true
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "D"]
@@ -49,9 +119,11 @@ ignore = ["D200", "D212"]
 convention = "google"
 
 [tool.mypy]
+# Bash-executed recipe snapshots retain their pre-migration type-checking scope.
+exclude = ["^pkg/hypothesis_helm_benchmarking/refresh/recipes/"]
 python_version = "3.13"
 strict = true
-files = ["pkg", "scripts"]
+files = ["pkg"]
 disallow_any_explicit = true
 disallow_any_unimported = true
 

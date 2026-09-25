@@ -1,159 +1,70 @@
 version: 2.1
-
-# Reference only: this inline orb is intentionally absent from all workflows.
-orbs:
-  hypothesis-helm:
-    commands:
-      test:
-        description: Test chart values with an installed Helm plugin and automatic CI sharding.
-        parameters:
-          chart:
-            type: string
-            default: examples/workload
-          jobs:
-            type: string
-            default: auto
-          max-examples:
-            type: integer
-            default: 100
-          seed:
-            type: integer
-            default: 0
-          schema-version:
-            type: string
-            default: latest
-          schema-cache-dir:
-            type: string
-            default: .cache/hypothesis-helm/schemas
-          artifact-dir:
-            type: string
-            default: reports/hypothesis-helm
-        steps:
-          - run:
-              name: Test Helm chart values
-              environment:
-                HH_CHART: << parameters.chart >>
-                HH_JOBS: << parameters.jobs >>
-                HH_MAX_EXAMPLES: << parameters.max-examples >>
-                HH_SEED: << parameters.seed >>
-                HH_SCHEMA_VERSION: << parameters.schema-version >>
-                HH_SCHEMA_CACHE_DIR: << parameters.schema-cache-dir >>
-                HH_ARTIFACT_DIR: << parameters.artifact-dir >>
-              command: |
-                mkdir -p "$HH_ARTIFACT_DIR"
-                helm hypothesis test "$HH_CHART" \
-                  --jobs "$HH_JOBS" \
-                  --max-examples "$HH_MAX_EXAMPLES" \
-                  --seed "$HH_SEED" \
-                  --kubeconform \
-                  --schema-version "$HH_SCHEMA_VERSION" \
-                  --schema-cache-dir "$HH_SCHEMA_CACHE_DIR" \
-                  --shard auto \
-                  --rerun all \
-                  --artifact-dir "$HH_ARTIFACT_DIR" \
-                  --output json > "$HH_ARTIFACT_DIR/manifests-${CIRCLE_NODE_INDEX:-0}.jsonl"
-    jobs:
-      test-chart:
-        description: Install the local plugin and test a chart; reference job, not scheduled.
-        parameters:
-          chart:
-            type: string
-            default: examples/workload
-          plugin-path:
-            type: string
-            default: .
-          kubeconform-version:
-            type: string
-            default: v0.7.0
-          helm-version:
-            type: string
-            default: v3.19.0
-          parallelism:
-            type: integer
-            default: 1
-          jobs:
-            type: string
-            default: auto
-          max-examples:
-            type: integer
-            default: 100
-          seed:
-            type: integer
-            default: 0
-          schema-version:
-            type: string
-            default: latest
-          schema-cache-dir:
-            type: string
-            default: .cache/hypothesis-helm/schemas
-          artifact-dir:
-            type: string
-            default: reports/hypothesis-helm
-        docker:
-          - image: cimg/python:3.13
-        parallelism: << parameters.parallelism >>
-        steps:
-          - checkout
-          - restore_cache:
-              keys:
-                - helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-
-          - run:
-              name: Install Helm and the local Hypothesis plugin
-              environment:
-                HH_KUBECONFORM_VERSION: << parameters.kubeconform-version >>
-                HH_HELM_VERSION: << parameters.helm-version >>
-                HH_PLUGIN_PATH: << parameters.plugin-path >>
-              command: |
-                install_dir="$(mktemp -d)"
-                curl -fsSL "https://get.helm.sh/helm-${HH_HELM_VERSION}-linux-amd64.tar.gz" \
-                  -o "$install_dir/helm.tar.gz"
-                tar -xzf "$install_dir/helm.tar.gz" -C "$install_dir"
-                sudo install "$install_dir/linux-amd64/helm" /usr/local/bin/helm
-                curl -fsSL "https://github.com/yannh/kubeconform/releases/download/${HH_KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
-                  -o "$install_dir/kubeconform.tar.gz"
-                tar -xzf "$install_dir/kubeconform.tar.gz" -C "$install_dir" kubeconform
-                sudo install "$install_dir/kubeconform" /usr/local/bin/kubeconform
-                PYTHON=python3.13 helm plugin install "$HH_PLUGIN_PATH"
-          - run:
-              name: Prepare Kubernetes schemas before testing
-              environment:
-                HH_SCHEMA_VERSION: << parameters.schema-version >>
-                HH_SCHEMA_CACHE_DIR: << parameters.schema-cache-dir >>
-              command: |
-                helm hypothesis schemas --schema-version "$HH_SCHEMA_VERSION" \
-                  --schema-cache-dir "$HH_SCHEMA_CACHE_DIR"
-          - save_cache:
-              key: helm-schemas-v1-{{ arch }}-<< parameters.schema-version >>-{{ epoch }}-{{ .Environment.CIRCLE_NODE_INDEX }}
-              paths:
-                - << parameters.schema-cache-dir >>
-          - test:
-              schema-version: << parameters.schema-version >>
-              schema-cache-dir: << parameters.schema-cache-dir >>
-              chart: << parameters.chart >>
-              jobs: << parameters.jobs >>
-              max-examples: << parameters.max-examples >>
-              seed: << parameters.seed >>
-              artifact-dir: << parameters.artifact-dir >>
-          - store_test_results:
-              path: << parameters.artifact-dir >>
-          - store_artifacts:
-              path: << parameters.artifact-dir >>
+parameters:
+  binary-cache:
+    type: boolean
+    default: true
 
 jobs:
   test-python:
+    environment:
+      HELM_VERSION: v4.3.0
     docker:
       - image: cimg/python:3.13
     steps:
       - checkout
+      - run:
+          name: Download benchmark and scan data from Git LFS
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y git-lfs
+            git lfs install --local
+            git lfs pull
       - run: pip install poetry==2.1.3 pre-commit==4.6.0
-      - run: poetry install
+      - run: poetry install --extras benchmarking
+      - run:
+          name: Install GNU Parallel and ShellCheck
+          command: |
+            sudo apt-get update
+            sudo apt-get install -y parallel shellcheck
+      - when:
+          condition: << pipeline.parameters.binary-cache >>
+          steps:
+            - restore_cache:
+                keys:
+                  - hh-binary-v1-linux-amd64-helm-{{ .Environment.HELM_VERSION }}-exact
       - run:
           name: Install Helm for chart integration tests
+          environment:
+            BINARY_CACHE: "<< pipeline.parameters.binary-cache >>"
           command: |
-            curl -fsSL https://get.helm.sh/helm-v3.19.0-linux-amd64.tar.gz -o /tmp/helm.tar.gz
-            tar -xzf /tmp/helm.tar.gz -C /tmp
-            sudo install /tmp/linux-amd64/helm /usr/local/bin/helm
-      - run: bash scripts/check.sh --junitxml=reports/pytest.xml
+            platform=linux
+            architecture=amd64
+            binary_root=".cache/hypothesis-helm/binaries"
+            if [[ "$BINARY_CACHE" != "true" ]]; then
+                binary_root="$(mktemp -d)"
+            fi
+            binary_dir="$binary_root/helm-${HELM_VERSION}-${platform}-${architecture}"
+            if [[ ! -x "$binary_dir/helm" ]]; then
+                download_dir="$(mktemp -d)"
+                curl -fsSL "https://get.helm.sh/helm-${HELM_VERSION}-${platform}-${architecture}.tar.gz" -o "$download_dir/archive.tar.gz"
+                tar -xzf "$download_dir/archive.tar.gz" -C "$download_dir" "${platform}-${architecture}/helm"
+                mkdir -p "$binary_dir"
+                install "$download_dir/${platform}-${architecture}/helm" "$binary_dir/helm.pending"
+                mv "$binary_dir/helm.pending" "$binary_dir/helm"
+                rm -rf "$download_dir"
+            fi
+            sudo install "$binary_dir/helm" /usr/local/bin/helm
+      - when:
+          condition: << pipeline.parameters.binary-cache >>
+          steps:
+            - save_cache:
+                key: hh-binary-v1-linux-amd64-helm-{{ .Environment.HELM_VERSION }}-exact
+                paths:
+                  - .cache/hypothesis-helm/binaries
+      - run: bash scripts/check.sh --junitxml=.cache/tests/pytest.xml
+      - run:
+          name: Exercise the shared benchmark chart and stress plots
+          command: bash scripts/project-run.sh hypothesis-helm-benchmark smoke
       - run: poetry build
       - run:
           name: Verify end-user Helm testing commands
@@ -164,9 +75,11 @@ jobs:
             helm hypothesis generate examples/workload --output /tmp/generated-workload --max-examples 5
             helm hypothesis run /tmp/generated-workload
       - store_test_results:
-          path: reports
+          path: .cache/tests
       - store_artifacts:
           path: dist
+      - store_artifacts:
+          path: .cache/benchmarks/smoke
 
 workflows:
   verify-all:

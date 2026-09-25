@@ -1,6 +1,39 @@
 # Helm command reference
 
-Install with Helm 3 and Python 3.13+ available:
+<!-- toc:start -->
+<details>
+<summary>Table of contents</summary>
+
+- [Test a chart](#test-a-chart)
+- [Inspect and rerun generated suites](#inspect-and-rerun-generated-suites)
+- [Coalescing, paths, and strategies](#coalescing-paths-and-strategies)
+- [Audit and rendering limits](#audit-and-rendering-limits)
+- [Whole-chart modes](#whole-chart-modes)
+  - [Interaction coverage](#interaction-coverage)
+    - [Targeted exhaustive groups](#targeted-exhaustive-groups)
+    - [Counts, timing and previous-run comparisons](#counts-timing-and-previous-run-comparisons)
+  - [Sampling and full enumeration](#sampling-and-full-enumeration)
+- [Examples and Astrivant](#examples-and-astrivant)
+- [Live logs](#live-logs)
+- [Stream rendered manifests](#stream-rendered-manifests)
+- [Adaptive parallel test execution](#adaptive-parallel-test-execution)
+- [Progress and interruption](#progress-and-interruption)
+- [Distributed sharding](#distributed-sharding)
+- [Values structure baselines](#values-structure-baselines)
+- [Persistent path results](#persistent-path-results)
+- [Kubernetes API conformity](#kubernetes-api-conformity)
+  - [Preparing schemas independently](#preparing-schemas-independently)
+  - [Timing estimates](#timing-estimates)
+- [Cache-aware dry runs](#cache-aware-dry-runs)
+- [Stop on findings](#stop-on-findings)
+  - [In-memory rendered-output comparison](#in-memory-rendered-output-comparison)
+  - [Shared typed values model](#shared-typed-values-model)
+  - [Exact-equivalence pruning](#exact-equivalence-pruning)
+
+</details>
+<!-- toc:end -->
+
+Install with Helm 4 and Python 3.13+ available:
 
 ```sh
 PYTHON=python3.13 helm plugin install https://github.com/astrivant/hypothesis-helm
@@ -14,24 +47,35 @@ need neither Poetry nor a separately installed test runner. Helm 4 is unverified
 
 ```sh
 helm hypothesis test ./chart
-helm hypothesis test ./chart --max-examples 50 --seed 42
+helm hypothesis test ./chart --paths --max-examples 50 --seed 42
 helm hypothesis test ./chart --match replicas
 helm hypothesis test ./chart --collect-only
 ```
 
 Inside a chart directory, `helm hypothesis test` uses the current directory.
 
-`test` loads the chart, coalesces its undocumented template levers, generates one
-Python property per value path, and runs the resulting suite. `--max-examples`
-is a budget **per property**, not a total across the chart. `--match` selects
+`test` chooses coverage automatically when it can list every allowed input choice.
+It multiplies the number of choices for each field to count possible configurations
+before applying constraints between fields. If that count is **less than 10,000**
+and fits the case budget, it tests the full space. Larger finite spaces receive
+coverage of every allowed pair of choices, plus full coverage within selected
+groups of related fields when affordable. Otherwise, it tests values paths
+individually and logs the reason.<sup>[\[1\]](#interaction-coverage)</sup>
+
+`--paths` explicitly selects the generated-suite workflow: it adds fields discovered
+in templates to the working input model, generates one Python test per values path, and executes the
+suite. Collection and distributed sharding also select this workflow. Recursive
+repository tests support `--jobs N` directly: charts run in sequence, with N workers
+sharing the current chart's path queue and timeout.
+`--max-examples` defaults to **10 per property** for `test` and `scan`.
+Shrinking a failure can require additional attempts. `--match` selects
 Python test names with a pytest keyword expression; path segments are included in
 those names. `--collect-only` generates and lists the tests without rendering.
-An empty selection returns a nonzero status rather than reporting success.
+An empty selection returns a nonzero status.
 
-Progress is logged for each path as it is coalesced, assigned a generated test,
+Progress is logged for each path as it is added to the input model, assigned a generated test,
 and tested. Generation messages go to stderr so `generate` keeps its JSON output
-on stdout. Test progress appears live, once per selected property rather than once
-per Hypothesis example:
+on stdout. Test progress appears live, once per selected property:
 
 ```text
 [INFO] Coalescing path $.image.tag
@@ -42,7 +86,7 @@ per Hypothesis example:
 `audit` similarly logs each audited path. Wildcard items appear as `[*]`; unusual
 keys use quoted bracket notation.
 `--match` limits test execution logs to selected properties. `--collect-only`
-logs generation and lists tests without claiming to execute them.
+logs generation and lists the tests selected for execution.
 
 The plugin invokes pytest with its own Python interpreter, pins the invocation's
 Hypothesis seed, and streams failures and progress to the Helm console. Ambient
@@ -53,7 +97,7 @@ and editable.
 Use a dedicated artifact directory for each chart/run:
 
 ```sh
-helm hypothesis test ./chart --artifact-dir reports/my-chart \
+helm hypothesis test ./chart --artifact-dir .cache/hypothesis-helm/my-chart \
   --release example --namespace testing --kube-version 1.31.0 --timeout 30
 ```
 
@@ -88,7 +132,7 @@ suite or edit the saved Python. Both commands use the plugin's bundled dependenc
 | `report.json` | Run status, pytest exit code, seed, selection and result location |
 | `hypothesis-helm.pytest.ini` | Dedicated pytest configuration for the plugin invocation |
 
-`test` writes these beneath `--artifact-dir` (default `reports/hypothesis-helm`).
+`test` writes these beneath `--artifact-dir` (default `.cache/hypothesis-helm/runs`).
 `run` writes results beside the saved suite. Reusing a directory overwrites its
 artifacts; regenerate after chart changes. Generated chart paths are relative to
 the suite directory. Keep that relationship when moving the repository.
@@ -141,7 +185,7 @@ then use `helm hypothesis run` to execute it.
 
 ```sh
 helm hypothesis audit ./chart
-helm hypothesis audit ./chart --strict
+helm hypothesis audit ./chart --fail
 ```
 
 The template AST resolves direct values, root access, simple aliases, lexical
@@ -166,11 +210,192 @@ Recursive schema paths are rejected instead of reported as covered.
 
 Rendered YAML must contain resource envelopes with nonempty `apiVersion`, `kind`
 and `metadata.name`; duplicate identities are rejected and `List` items checked
-recursively. This is not Kubernetes admission or application behavior validation.
-JSON null follows Helm's deletion semantics. Path coverage does not prove that
-all template guards were activated or every execution branch was reached.
+recursively. Kubernetes admission and application behavior require their own
+validation stages. JSON null follows Helm's deletion semantics. Path coverage
+records exercised input paths; branch coverage requires tracking template guards
+and execution branches.
 
 ## Whole-chart modes
+
+### Interaction coverage
+
+A **configuration** is one complete set of input values. A **factor** is a field,
+or a container treated as one choice, that the planner varies. Its **domain** is
+the set of allowed choices. An **interaction** specifies choices for several
+factors together. Pairwise coverage means every allowed pair of choices occurs
+in at least one tested configuration; it does not mean every complete
+configuration is tested.<sup>[\[2\]](getting-started/README.md#quick-start)</sup>
+
+Choose the interaction strength with `--permutations`:
+
+```sh
+helm hypothesis test ./chart --permutations 2
+helm hypothesis test ./chart --permutations 3 --max-cases 5000 --max-candidates 1000000
+helm hypothesis test ./chart --permutations 2 --exhaustive-group ingress,service
+helm hypothesis test ./chart --dry-run
+```
+
+`2` covers every schema-valid pair of factor values in at least one complete
+configuration; `3` covers every valid triple. Increasing the strength increases
+the coverage requirement. A strength at least as large as the number of factors
+tests every distinct feasible configuration. This is a coverage requirement, not a
+random-example budget. `--max-examples` does not control this mode. The default
+automatic strength for larger finite spaces is `2`.
+
+Small spaces are promoted to full enumeration even with an explicit interaction
+strength. `--exhaustive-threshold 10000` is the default: **multiply the number of
+choices for each factor**, including choices that constraints may later rule out.
+That count must be strictly smaller than the threshold and fit `--max-cases`.
+This affordability decision uses the unconstrained product. A heavily constrained
+larger space still exceeds the threshold even when few inputs satisfy the schema. Set `--exhaustive-threshold 0` to disable
+promotion and retain the requested interaction strength. If the strength already
+includes every factor, full enumeration is required regardless of the threshold.
+
+#### Targeted exhaustive groups
+
+Repeat `--exhaustive-group` to require all distinct feasible assignments within selected
+groups, in addition to the global interaction coverage:
+
+```sh
+helm hypothesis test ./chart --permutations 2 \
+  --exhaustive-group ingress,service,tls \
+  --exhaustive-group persistence,storage
+```
+
+Selectors are dotted paths or JSON Pointer prefixes; `/a.b,/service` selects the
+literal key `a.b` and the `service` container. Containers expand to their finite
+factors. Each feasible group assignment appears in a full schema-valid chart
+configuration, with other factors chosen to satisfy constraints. It is unnecessary
+to cross every group with every unrelated setting. Unknown explicit selectors
+and required coverage exceeding the planning budgets fail the command.
+
+Automatic grouping uses local structural evidence:
+
+1. Each schema dependency forms a group of its trigger and referenced fields.
+   Conditional `if`/`then`/`else` constraints and composition expressions contribute
+   the paths they mention.
+2. Resolved references in one template expression form a candidate group. An
+   `if`, `with` or `range` block contributes its guard and subtree references,
+   including nested branches. Existing discovery resolves supported aliases and
+   scopes; references sharing a source line can conservatively be grouped together.
+3. The planner maps those references to finite factors and evaluates each candidate
+   separately. It **does not transitively merge overlapping groups** or infer
+   importance merely from similar names or shared YAML ancestry.
+
+Inferred groups default to at most **256 candidate assignments** each; adjust
+`--max-group-cases` or disable inference with `--no-infer-groups`. Oversized or
+unresolved inferred groups are recorded as skipped with their reason. Explicit
+groups are mandatory and are governed by the overall planning limits instead.
+Overlapping groups share rendering cases where possible. Full enumeration already
+covers every group, so it adds no redundant group cases.
+
+Reports preserve group factor paths, source locations, candidate sizes and
+accepted/skipped status. Dynamic includes, unresolved contexts and other discovery
+limitations are logged and recorded for review. This is a heuristic for finding
+useful groups, not proof that every semantically important interaction was found.
+
+Factors come from the original values schema. Required closed objects are
+expanded into nested leaf factors, so `ingress.enabled` can interact with
+`service.type`. Optional objects and bounded arrays are atomic factors with all
+their supported finite values; optional fields also include omission. Strings
+need `enum` or `const`, integers need bounds, and objects must be closed with
+`additionalProperties: false`. Unsupported or oversized factor domains fail
+with a diagnostic identifying the path; this mode does not silently substitute
+sampled values for an unbounded domain.
+
+Planning validates complete configurations against the schema and checks that
+their merge with chart defaults is schema-valid. Cross-field constraints on
+closed object schemas restrict which interactions are feasible. An interaction
+is excluded only after its possible completions have been checked. Leaf domains
+retain the finite enumerator's restrictions on references and compositions.
+The coverage planner reasons about valid assignments, but finite execution tests
+each distinct normalized configuration only once. Overrides are normalized using
+the runner's existing defaults-merge and null-deletion rules. A canonical typed
+JSON identity ignores mapping order while preserving array order and scalar types.
+Omission and an explicit default can therefore share one test. The baseline is
+tested first and any equivalent planned assignments are removed. Deduplication
+uses input values, not rendered manifests: distinct configurations remain distinct
+tests even if the chart happens to produce identical resources.
+
+The planner fills uncovered interactions deterministically without materializing
+the entire Cartesian product. It does not promise a minimum-size suite, and
+restrictive constraints can still require a large completion search. Two limits
+bound work before Helm is invoked:
+
+- `--max-cases` defaults to `10000`, limiting both planned configurations and each
+  factor's candidate domain.
+- `--max-candidates` defaults to `100000`, independently limiting the interaction
+  inventory and the number of complete assignments examined during planning.
+
+If either limit is exceeded, the command fails before rendering instead of
+claiming partial coverage. Increase the limits or reduce the interaction strength.
+The limits bound counts, not bytes or elapsed time.
+
+The JSON report includes requested and effective strength, factor paths and
+domains, valid interaction count, planned cases, planning candidates, and
+`coverage_complete`. Coverage is complete only after every planned case passes.
+`planned_cases` counts distinct additional configurations after deduplication;
+`unique_configurations` and `planned_iterations` include the defaults, counted once.
+Successful `attempts` therefore equals `planned_iterations`. Failures stop execution
+and save the failing values and report for
+replay; this deterministic mode does not shrink counterexamples.
+
+#### Counts, timing and previous-run comparisons
+
+Before rendering, stderr logs the selected strategy, distinct configuration count,
+duplicate cases removed, total iterations, candidate assignments, coverage targets
+and planning time. For example, after a 19-iteration run, a 24-iteration plan reports:
+
+```text
+Permutation comparison: 19 -> 24 iterations (+5 versus previous); all 24 iterations will run
+Permutation progress: 0/24 completed, 24 remaining (0 attempted); elapsed 0.00s; estimated total 48.00s; ETA 48.00s (previous_run)
+```
+
+These durations are illustrative. The initial estimate uses measured successful
+iteration timings from the previous run when execution settings match. Without
+compatible history it is `unknown`; completed iterations provide a current-run
+average and update the estimate. Planning duration is reported separately from
+execution elapsed time and ETA. Estimates are approximate: changing chart contents,
+resource counts or machine load can change iteration costs.
+
+Progress is logged after the first iteration, approximately once per second at
+iteration boundaries, and on completion or failure. JSON statistics include
+`planned_iterations`, `attempted_iterations`, `completed_iterations`,
+`remaining_iterations`, `unattempted_iterations`, `previous_planned_iterations`,
+`iteration_delta`, `additional_iterations`, `elapsed_seconds`,
+`seconds_per_iteration`, `estimated_total_seconds`, `estimated_remaining_seconds`
+and `estimate_source`. `unique_configurations` is the actual number of planned tests;
+`candidate_cases` includes the baseline and selected assignments before deduplication,
+and `duplicate_cases_removed` explains the difference. `candidate_assignments` is
+the conservative factor-domain count before cross-field constraints and effective-value
+deduplication. Iterations include the defaults once. Failed or
+interrupted iterations remain incomplete: remaining work includes those iterations
+as well as unattempted ones.
+
+Successful, failed and interrupted runs save `report.json` and a fresh `junit.xml`.
+The JUnit testcase represents the entire finite coverage plan; iteration counts
+are included as properties, and failures preserve the renderer diagnostic. A chart-specific
+baseline is stored atomically under `<artifact-dir>/permutation-history/`, keyed
+by the absolute chart path and shared across strengths and group selections.
+Reuse the artifact directory to compare runs; changing chart paths or directories
+starts a new baseline. History is diagnostic and does not reuse successful cases:
+all planned iterations execute again. Concurrent runs read the last completed
+baseline; the last writer supplies the next baseline.
+
+`--dry-run` performs finite planning, logs the comparison and returns the statistics
+without rendering, writing artifacts or replacing the baseline. For generated
+per-path cache estimates specifically, use `--paths --dry-run`.
+
+`--paths`, `--permutations`, `--whole-chart`, and `--exhaustive` are mutually exclusive.
+Interaction suites execute serially and use the original chart schema. Like
+the other whole-chart modes, they do not support per-path filtering, collection,
+per-path cache estimates, or distributed sharding. `--seed` does not change the
+deterministic coverage plan. Use `--shard none` when CI would otherwise enable
+automatic sharding. Kubernetes validation and manifest streaming remain available.
+Interaction coverage records combinations of input values. Template branch coverage
+and application behavior require separate checks.
+
+### Sampling and full enumeration
 
 ```sh
 helm hypothesis test ./chart --whole-chart --max-examples 100 --seed 42
@@ -184,10 +409,10 @@ not generate a per-path suite and do not accept `--match` or `--collect-only`.
 Failures save `values.json` and `report.json` for replay:
 
 ```sh
-helm template hypothesis ./chart --values reports/hypothesis-helm/values.json
+helm template hypothesis ./chart --values .cache/hypothesis-helm/runs/values.json
 ```
 
-Sampling is evidence from tested inputs, not a proof of totality. Exhaustive
+Sampling provides evidence from the tested inputs. Exhaustive
 coverage is limited to the declared finite input domain and rendering environment.
 
 ## Examples and Astrivant
@@ -198,7 +423,7 @@ helm hypothesis test examples/configmap
 helm hypothesis test examples/broken
 helm hypothesis test examples/hidden-levers
 helm hypothesis test ../astrivant/helm/astrivant --collect-only \
-  --artifact-dir reports/astrivant
+  --artifact-dir .cache/hypothesis-helm/astrivant
 helm hypothesis run reports/astrivant --match networkPolicy
 ```
 
@@ -206,14 +431,33 @@ The broken chart intentionally fails on `replicas: 0`. The hidden-lever chart
 exercises recovered template fallbacks. Astrivant has incomplete schema entries
 and dynamic references; its generated tests may expose real chart failures.
 
+## Live logs
+
+Local commands log progress at INFO and findings at their configured severity: ERROR, WARNING or INFO, to stdout by default.
+With `--log-color`, errors appear in red and warnings in yellow. Severity overrides also apply to worker logs.
+Each finding includes the chart,
+values path, code and a short preview of the triggering overrides. The final counterexample uses the same severity after shrinking;
+full evidence remains in the report artifacts. Repeated shrink attempts do not repeat the same finding announcement.
+
+Use `--log-file ./logs/chart.log` to append logs to a file instead. For a JSON report on stdout, send logs elsewhere:
+
+```sh
+helm hypothesis test ./chart --filter --log-file /dev/stderr > report.json
+```
+
+Repository refresh jobs tee live diagnostics to the terminal and their per-job log files while saving report JSON separately.
+With manifest streaming enabled, console logs and reports go to stderr so stdout remains suitable for downstream tools.
+
 ## Stream rendered manifests
 
-Use `helm hypothesis test ./chart --output json` (or `-o json`) to emit
+Use `helm hypothesis test ./chart --output-format json` (or `-o json`) to emit
 newline-delimited JSON: one compact Kubernetes resource per line, flushed as
-each Helm render completes. The same flag works with `helm hypothesis run
-reports/hypothesis-helm`, `--whole-chart`, and `--exhaustive`. Progress,
+each render reaches coordinator verification. Parallel exhaustive runs preserve seeded order and emit complete records from one coordinator.
+The same flag works with `helm hypothesis run
+.cache/hypothesis-helm/runs`, `--whole-chart`, and `--exhaustive`. Progress,
 pytest output, reports, and errors go to stderr; stdout contains only manifests.
-Collection-only runs emit no manifests.
+The flag also works with remote `scan` commands. Use `--output-format yaml` (or `-o yaml`) for YAML documents separated by `---`.
+Collection-only runs emit no manifests. Parallel path workers serialize complete documents through a shared lock.
 
 Every rendered example is included, including repeated examples during shrinking.
 Documents are emitted before resource-envelope checks, so a JSON-serializable
@@ -221,30 +465,25 @@ resource that fails those checks still reaches the validator. Failed Helm
 invocations and unparseable YAML cannot produce JSON manifests. Empty renders
 emit no lines. This is a JSON Lines stream, not one JSON array.
 
-To validate each manifest with both tools as it arrives, use this Bash pipeline.
-Each validator receives the original resource separately, and either failure
-makes the pipeline fail:
+Enable API validation in the test command and pipe the manifest stream to Kubesec for security checks:
 
 ```bash
 set -o pipefail
-helm hypothesis test ./chart -o json |
+helm hypothesis test ./chart --filter --validate-schemas --schema-version 1.35.0 -o json |
   (
     status=0
     while IFS= read -r manifest; do
-      printf '%s\n' "$manifest" | kubeconform -strict || status=1
       printf '%s\n' "$manifest" | kubesec scan /dev/stdin || status=1
     done
     exit "$status"
   )
 ```
 
-The per-line loop avoids requiring validators to understand JSON Lines.
-[Kubeconform](https://github.com/yannh/kubeconform) validates Kubernetes resource
-schemas; [Kubesec](https://github.com/controlplaneio/kubesec) analyzes security
-configuration. Their exit statuses determine pipeline success; external validator
-findings are not fed back into Hypothesis for shrinking or recorded as pytest
-assertions. Configure any score threshold separately from Kubesec's scan exit
-status. In `generate`, `--output` continues to specify the suite directory.
+The per-line loop avoids requiring Kubesec to understand JSON Lines. Use this example with Kubesec-supported workloads;
+the [CI wrapper](ci.md#optional-kubesec-scans) routes mixed bundles and parallelizes scans.
+Built-in API schema failures participate in Hypothesis shrinking. External Kubesec findings are not fed back into
+Hypothesis or recorded as pytest assertions. Configure any security score threshold separately from Kubesec's exit status.
+In `generate`, `--output` continues to specify the suite directory.
 
 ## Adaptive parallel test execution
 
@@ -257,8 +496,8 @@ Use `--jobs N` / `-j N` for fixed concurrency, or `--jobs 1` for serial executio
 ```sh
 helm hypothesis test ./chart
 helm hypothesis test ./chart --jobs auto -o json
-helm hypothesis run reports/hypothesis-helm --jobs 4
-helm hypothesis run reports/hypothesis-helm -j 1
+helm hypothesis run .cache/hypothesis-helm/runs --jobs 4
+helm hypothesis run .cache/hypothesis-helm/runs -j 1
 ```
 
 The controller measures completed tests per second, including interpreter startup,
@@ -273,8 +512,8 @@ levels and estimates the marginal throughput change per worker. A PID controller
 uses that gradient to approach zero marginal gain, with a filtered derivative,
 integral anti-windup, and a one-worker adjustment limit per measurement window.
 Periodic probes allow further exploration; flat throughput favors fewer workers.
-This seeks a local throughput maximum within the bounds, rather than guaranteeing
-an optimum for heterogeneous tests or changing host load. Short suites may finish
+This seeks a local throughput maximum within the bounds. Heterogeneous tests
+and changing host load can shift that maximum. Short suites may finish
 before enough measurements exist to adjust concurrency.
 
 A thread pool dispatches one selected property at a time into an isolated pytest
@@ -293,9 +532,9 @@ records each completed test, elapsed time, exit code, active count, target count
 and latest measured throughput. Target changes also appear in progress logs.
 Any failed worker fails the command.
 
-Collection-only runs stay serial. The explicit `--whole-chart` and
-`--exhaustive` modes remain serial; `auto` does not change their execution and
-they reject numeric `--jobs` values above one.
+Collection-only runs stay serial. Explicit `--exhaustive` supports concurrent
+Helm processes with `--jobs N`; `auto` uses the available CPU count.
+Other whole-chart modes remain serial and reject numeric `--jobs` values above one.
 The pre-commit hook inherits `--jobs auto` without configuration changes.
 
 ## Progress and interruption
@@ -334,7 +573,7 @@ helm hypothesis test ./chart --shard 3/3 --jobs auto --seed 42
 helm hypothesis test ./chart --shard 1/3 --match image --collect-only
 
 # Partition an existing suite, with reports in a separate location:
-helm hypothesis run generated-tests --shard 1/3 --artifact-dir reports/distributed
+helm hypothesis run generated-tests --shard 1/3 --artifact-dir .cache/hypothesis-helm/distributed
 ```
 
 The partition algorithm (`sha256-nodeid-v1`) hashes the UTF-8 pytest node ID
@@ -410,7 +649,7 @@ their entire cache over the main branch's cache. The GitHub Action accepts
 Without the flag, completed or interrupted test runs save their starting structure.
 Collection errors leave the baseline intact. `--dry-run` and `--collect-only` never
 update it; `--no-cache` disables both marker reads and writes. The flag does not
-change kubeconform schema downloads or `--schema-cache-dir`.
+change Kubernetes schema downloads or `--schema-cache-dir`.
 
 ## Persistent path results
 
@@ -436,7 +675,7 @@ schema cache adds the initial fetch and sparse checkout. Path discovery and suit
 generation still occur on subsequent `test` invocations; cached successes save
 property execution time. Filters and shards reduce the executed selection, while
 CI defaults and `--rerun all` continue to execute it in full. This path traversal
-is not exhaustive enumeration of every possible values combination.
+is not exhaustive testing of every distinct configuration.
 
 ```bash
 helm hypothesis test ./chart                         # local failed-path rerun
@@ -448,8 +687,10 @@ CI=true helm hypothesis test ./chart --rerun failed  # explicitly retry in CI
 
 `--rerun auto` is the default. CI runs execute every selected path while recording
 results. `$CI` is case-insensitive: empty, `0`, `false`, `no`, and `off` mean local;
-other nonempty values mean CI. If `$CI` is absent, `GITHUB_ACTIONS`, `GITLAB_CI`, and
-`CIRCLECI` provide fallback detection. An explicit `$CI` takes precedence.
+other nonempty values mean CI. If `$CI` is absent, provider markers for GitHub Actions,
+GitLab CI, CircleCI, Azure Pipelines, Jenkins, and Buildkite provide fallback detection.
+An explicit `$CI` takes precedence for retry defaults. Progress bars stay disabled when
+any provider marker is enabled, even with `CI=false`.
 
 Cache keys include the suite source, coalesced values, schema, original chart files
 (including dependencies), framework source, Python version, seed, keyword selection,
@@ -462,14 +703,13 @@ changing external tools or environment-dependent behavior, or to resample passin
 
 ## Kubernetes API conformity
 
-Enable strict [kubeconform](https://github.com/yannh/kubeconform) validation for each
-rendered YAML stream. Install Git and kubeconform first (`brew install git kubeconform`
-on macOS), then use the Helm command:
+Use `--validate-schemas` to validate rendered resources in Python against cached Kubernetes JSON Schemas.
+Git is needed to prepare the cache. No separate validator binary or Go toolchain is needed for ordinary testing:
 
 ```bash
-helm hypothesis test ./chart --kubeconform
-helm hypothesis test ./chart --kubeconform --schema-version 1.35.0
-helm hypothesis run ./generated-tests --kubeconform --schema-version 1.35.0
+helm hypothesis test ./chart --validate-schemas
+helm hypothesis test ./chart --validate-schemas --schema-version 1.35.0
+helm hypothesis run ./generated-tests --validate-schemas --schema-version 1.35.0
 ```
 
 `--schema-version latest` is the default: it selects the highest stable `X.Y.Z`
@@ -480,14 +720,14 @@ the same version when testing a specific cluster target.
 
 The tool fetches Git metadata with `--depth=1 --filter=blob:none` and sparsely checks
 out only the selected `vX.Y.Z-standalone-strict` directory. The cache defaults to
-`.cache/hypothesis-helm/schemas`; override it with `--schema-cache-dir PATH`. A file
+`schemas`; override it with `--schema-cache-dir PATH`. A file
 lock serializes checkout updates, and immutable snapshots let threads and shards
 validate against the same schema content even while another run updates the checkout.
-Online runs refresh the catalog. To use only previously downloaded schemas:
+Online runs refresh the schema checkout. To use only previously downloaded schemas:
 
 ```bash
-helm hypothesis test ./chart --kubeconform --schema-version 1.35.0 \
-  --schema-cache-dir .cache/hypothesis-helm/schemas --schema-offline
+helm hypothesis test ./chart --validate-schemas --schema-version 1.35.0 \
+  --schema-cache-dir schemas --schema-offline
 ```
 
 Offline mode fails clearly if the requested schemas are absent. Restore/save the
@@ -495,16 +735,19 @@ entire schema cache directory in CI, including its Git metadata. This cache is
 separate from path-result caching; `--no-cache` disables cached test outcomes, while
 schema caching remains active. `--collect-only` does not fetch schemas or run the validator.
 
-Validation uses local schema files, strict mode, and one kubeconform worker per
-property worker to avoid nested concurrency. Invalid resources, unsupported API
-versions, and missing schemas fail the property and participate in Hypothesis shrinking.
-Custom resources require schemas beyond the upstream Kubernetes catalog and currently
-fail as missing schemas. This checks API structure, not admission policies or live
-cluster behavior. Manifests still stream through `--output json` before validation,
-including failing examples. Use `--kubeconform-binary PATH` for a specific executable.
+Validation runs inside each property worker, using local strict schemas that reject undeclared fields.
+Compiled validators are reused within that process. Invalid resources, unsupported API
+versions, and missing built-in schemas fail the property and participate in Hypothesis shrinking.
+Custom resources use [explicit resource schemas](input-domains/README.md#custom-resources)
+beyond the upstream Kubernetes catalog. Supplied schemas validate those resources locally.
+Custom resources without a supplied schema skip schema validation by default; `--strict` reports missing contracts as `HH1108`.
+Built-in resource validation continues in either mode. Add `--fail` to stop at the first unsuppressed finding.
+This checks API structure, not admission policies or live cluster behavior.
+Manifests still stream through `--output-format json` before validation,
+including failing examples.
 
 Path-result cache keys include the schema content identity, resolved Kubernetes
-version, and validator binary digest. Enabling validation or changing any of these
+version, validator implementation, and the rebuilt catalog digest when one is selected. Enabling validation or changing any of these
 requires a fresh property run. Use `--rerun all` to validate fresh manifests again
 when an unchanged local suite previously passed.
 
@@ -512,10 +755,10 @@ when an unchanged local suite previously passed.
 ### Preparing schemas independently
 
 `helm hypothesis schemas --schema-version latest --schema-cache-dir
-.cache/hypothesis-helm/schemas` fetches the remote catalog, sparsely checks out the
+schemas` fetches the remote catalog, sparsely checks out the
 selected strict schema version, and prints the resolved configuration as JSON.
 Use it before a CI cache-save step when schema downloads must survive a later
-failing test. It accepts `--schema-offline` and `--kubeconform-binary` as well.
+failing test. It accepts `--schema-offline` to reuse an existing cache without network access.
 
 ### Timing estimates
 
@@ -532,9 +775,9 @@ Preview work without executing property examples, rendering charts, validating
 manifests, or downloading schemas:
 
 ```bash
-helm hypothesis test ./chart --dry-run
-helm hypothesis test ./chart --dry-run --rerun all --kubeconform \
-  --schema-version latest --schema-cache-dir .cache/hypothesis-helm/schemas
+helm hypothesis test ./chart --paths --dry-run
+helm hypothesis test ./chart --paths --dry-run --rerun all --validate-schemas \
+  --schema-version latest --schema-cache-dir schemas
 helm hypothesis run generated-tests --dry-run --match replicas
 ```
 
@@ -545,15 +788,15 @@ execution. `selected_properties` counts properties after filtering and sharding;
 cached successes omitted by the rerun policy. Each property includes its prior
 outcome, planned action, and literal `max_examples` setting when known.
 
-`successful_example_budget` sums those settings for scheduled properties. It is
-not an exact render count or an exhaustive count of the value domain: Hypothesis
-may stop early or do additional work for rejection, replay, and shrinking. If a
+`successful_example_budget` sums those settings for scheduled properties.
+Actual render counts depend on early stopping and additional work for rejection,
+replay and shrinking. The selected strategy determines input-domain coverage. If a
 hand-edited test has an unknown budget, the aggregate is `null`. All cached
 successes produce zero scheduled properties and a zero budget locally; CI or
 `--rerun all` still schedules the full selected suite. Cache files do not contain
 reliable timing histories, so `estimated_seconds` remains `null` when work exists.
 
-With `--kubeconform`, the dry run inspects locally available schemas using offline
+With `--validate-schemas`, the dry run inspects locally available schemas using offline
 preparation. Missing schemas or a missing validator are reported without downloading
 anything, and cached successes are not reused when validation identity cannot be
 established. An online execution can refresh schema content and invalidate the
@@ -563,26 +806,32 @@ estimated cache hit; `schema_cache.note` makes this uncertainty explicit. Use
 Chart tests are generated in temporary storage at their intended logical location,
 so their fingerprint matches a real run. Existing generated files, reports, and
 result caches are preserved. Pytest collection imports suite modules and conftest
-files, so custom import-time side effects still apply. `--dry-run` is for per-path
-suites and cannot be combined with `--collect-only`, `--whole-chart`, or `--exhaustive`.
+files, so custom import-time side effects still apply. Use `--paths --dry-run`
+for these per-path cache estimates; automatic finite plans have their own
+[iteration statistics](#counts-timing-and-previous-run-comparisons).
+Dry runs cannot combine with `--collect-only`, `--whole-chart`, or `--exhaustive`.
 
-## Strict source values
+## Stop on findings
 
-`--strict` requires every configurable path declared by the schema or resolved from
-templates to be explicitly present in the chart's original `values.yaml`. Optional
+`--fail` stops on any unsuppressed finding and returns `1`, including schema-documentation warnings and unresolved template accesses.
+Without it, scans report audit warnings and continue; actual test failures can still make the completed scan return `1`.
+The earlier `--strict` option has been removed. Use [finding controls](rules/README.md) for intentional exceptions.
+
+The audit checks that every configurable path declared by the schema or resolved from
+templates is explicitly present in the chart's original `values.yaml`. Optional
 schema fields count too, even if no template currently references them. A schema
 `default`, Helm `default`/`dig` fallback, or value inserted into the in-memory
 coalesced document does not satisfy this requirement.
 
 ```sh
-helm hypothesis audit ./chart --strict
-helm hypothesis test ./chart --strict
-helm hypothesis generate ./chart --strict --output generated-tests
-helm hypothesis run generated-tests --strict
+helm hypothesis audit ./chart --fail
+helm hypothesis test ./chart --fail
+helm hypothesis generate ./chart --fail --output generated-tests
+helm hypothesis run generated-tests --fail
 ```
 
 Missing fields produce `no-default` findings with their paths and available template
-locations. Strict commands exit with status 1 before generation, rendering, or schema
+locations. Commands using `--fail` exit with status 1 before generation, rendering, or schema
 downloads when the audit has findings or unresolved accesses. Existing checks for
 undocumented or untyped fields and missing descriptions still apply. A cached passing
 test result cannot bypass this preflight, including during `--dry-run`.
@@ -591,9 +840,85 @@ Presence is checked by key, so an explicit `null` leaf is present; it must still
 satisfy the schema and render successfully when tested. A null parent does not
 supply nested keys. Named fields inside arrays or dynamic maps must appear in every
 entry. Empty collections are acceptable for scalar item values, but cannot demonstrate
-nested named fields: strict mode requires representative entries containing those
+nested named fields: `--fail` requires representative entries containing those
 fields. Fixed array positions must exist as well.
 
-Saved suites use `chart-source.json` to audit their original chart rather than the
-coalesced snapshot. Regenerate older suites without this metadata before using
-`run --strict`. Strict checks never modify the source `values.yaml`.
+Saved suites use `chart-source.json` to audit their original chart. Regenerate older suites without this metadata before using
+`run --fail`. Audit checks never modify the source `values.yaml`.
+
+### In-memory rendered-output comparison
+
+Each render is hashed with SHA-256 over the complete parsed manifest bundle.
+Canonical mapping keys ignore YAML formatting, comments and key order; resource
+order, array order, scalar types and resource contents remain significant.
+Digest-set membership is average O(1); parsing and hashing still process the output.
+Memory grows with the number of distinct output and validation-context digests.
+
+Repeated output reuses successful resource-envelope and API schema validation
+under the same validation configuration. Failed validation is never cached.
+Helm still runs for every selected input, manifest streaming is preserved, and
+custom assertions and the empty-output policy still execute for every input.
+This output cache is separate from distinct-input planning and does not change
+permutation coverage or its iteration count.
+
+`report.json` includes `render_hashes` counters for observed, unique and duplicate
+bundles and successful validation cache hits. Whole-chart checks start a fresh
+run-local index. Generated pytest suites use a process-local index reset each
+session. Parallel workers report summed local counts: `worker_unique_bundles`
+is not global uniqueness, so `global_unique_bundles` is null. Interrupted workers
+that cannot finish may not export counters. Only counters are written; hashes
+remain in memory.
+
+Independent CI jobs do not share this index. Processes on one host could use a
+shared service or multiprocessing manager; cross-job reuse needs an accessible
+external store. A future shared cache must identify the validator and schema as
+well as the render, and publish success only after validation completes.
+
+### Shared typed values model
+
+Permutation analysis compiles the supplied schema into a `ValuesModel`. Declared
+objects become dynamic attrs classes; scalar and array annotations come from
+schema types or explicit enum/const domains. Each attrs field carries its original
+values key and a shared `ValueNode` containing the schema, path and requiredness.
+The model exists independently of which optional fields appear in `values.yaml`.
+
+Factor extraction, schema relationship analysis and template group resolution
+reference these same nodes. The planner assigns finite choices into typed attrs
+instances and uses the model's cattrs converter to restore values mappings for
+JSON Schema validation and Helm. No model metadata enters the rendered values.
+
+```python
+from hypothesis_helm import Chart
+from hypothesis_helm.schemas.model import ValuesModel
+
+chart = Chart.load("./chart")
+model = ValuesModel.from_schema(chart.schema)
+values = model.structure(chart.defaults)
+service = model.reference(("service",)).target
+assert model.unstructure(values) == chart.defaults
+```
+
+Conversion preserves explicit null, omission, arrays, extra values and original
+keys, including keys requiring Python attribute aliases. Schema defaults are not
+inserted and scalars are not coerced. `structure(..., validate=False)` is reserved
+for partial candidates; normal conversion validates against the full schema.
+Untyped or opaque schema fragments remain lossless raw values, with their
+constraints enforced by JSON Schema. This does not broaden the supported finite
+domains or turn type declarations into evidence of cross-field interaction:
+template guards and schema constraints still supply that evidence. Unresolved
+references and inference limits retain their existing diagnostics.
+
+### Exact-equivalence pruning
+
+`--prune-equivalent` enables conservative pre-render pruning for whole-chart
+candidates. It skips Helm only when the proof compiler establishes the same
+output as an earlier successful render. Schema validation and custom assertions
+still run per candidate; unsupported behavior falls back to Helm.
+
+```sh
+helm hypothesis test ./chart --permutations 2 --prune-equivalent
+```
+
+Reports distinguish candidate checks, actual renders and equivalence certificates.
+See the [compiler stages, soundness contract and limitations](safe-pruning.md)
+before extending the supported template language or introducing another metric.

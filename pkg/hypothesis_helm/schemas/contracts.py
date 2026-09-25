@@ -1,13 +1,27 @@
 """
-Typed boundaries for JSON schemas and round-trip YAML values.
+Provide typed JSON and YAML boundaries shared by schema analysis and execution.
 """
 
+import json
 from typing import cast
 
-from hypothesis.strategies import SearchStrategy
-from hypothesis_jsonschema import from_schema
+__all__ = ("Json", "configuration_key", "json_value", "mapping", "number", "sequence", "text")
+
 
 type Json = None | bool | int | float | str | list[Json] | dict[str, Json]
+
+
+def configuration_key(values: dict[str, object]) -> str:
+    """
+    Identify a configuration independently of map order while preserving arrays and types.
+
+    Args:
+        values (dict[str, object]): Raw or normalized chart values.
+
+    Returns:
+        str: Canonical JSON identity retaining scalar types and ordered array contents.
+    """
+    return json.dumps(values, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def mapping(value: object) -> dict[str, object]:
@@ -81,16 +95,3 @@ def json_value(value: object) -> Json:
         Json: Result of the documented operation.
     """
     return cast(Json, value)
-
-
-def schema_strategy(schema: dict[str, object]) -> SearchStrategy[object]:
-    """
-    Adapt the schema library's JSON strategy to the public object boundary.
-
-    Args:
-        schema (dict[str, object]): JSON Schema defining the accepted value domain.
-
-    Returns:
-        SearchStrategy[object]: Result of the documented operation.
-    """
-    return from_schema(cast(dict[str, Json], schema))

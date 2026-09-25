@@ -1,7 +1,28 @@
 # Development
 
+<!-- toc:start -->
+**Table of contents**
+
+- [Environment](#environment)
+- [Checks](#checks)
+  - [Shell checks](#shell-checks)
+  - [Project checks](#project-checks)
+- [Plugin verification](#plugin-verification)
+- [GitHub workflows](#github-workflows)
+- [Documentation contents](#documentation-contents)
+- [Publishing to PyPI](#publishing-to-pypi)
+- [Pre-commit hook](#pre-commit-hook)
+- [Package organization](#package-organization)
+- [Shared environment settings](#shared-environment-settings)
+- [Repository map](#repository-map)
+- [Preserved scheduler and separate Reflow project](#preserved-scheduler-and-separate-reflow-project)
+<!-- toc:end -->
+
 This document is for contributors modifying the framework. End-user chart testing
 is entirely through [Helm commands](usage.md).
+
+For upstream upgrades, use the [dependency maintenance inventory](dependencies.md). It covers both Go modules, Python packages,
+generated compiler/schema data, CI tools and remote-worker dependencies, including the files that must change together.
 
 ## Environment
 
@@ -11,18 +32,90 @@ inside the checkout. Preserve an older environment elsewhere before recreating i
 when upgrading from Python 3.10.
 
 ```sh
-python3.13 -m venv .venv
-env -u VIRTUAL_ENV -u PYENV_VERSION -u PYENV_VIRTUAL_ENV poetry install
-bash scripts/project-python.sh -m pre_commit install
+bash scripts/setup-dev.sh
+bash scripts/setup-dev.sh --check
+# Also rebuild the ignored Kubernetes schema cache and input catalog:
+bash scripts/setup-dev.sh --schemas
 ```
 
-`scripts/project-python.sh` uses this checkout's interpreter even when another
+The setup script supports macOS with Homebrew and Debian/Ubuntu Linux with apt. It installs Git, Git LFS, GNU Parallel and ShellCheck;
+uses a pinned uv bootstrap to provision Python 3.13 and Poetry 2.1.3 locally; and installs checksum-verified Go 1.25.0 and Helm 4.3.0
+under `.cache/dev-tools/`. Python linting, formatting, typing and testing dependencies come from the Poetry lock.
+It creates `.venv` only when absent, installs the benchmarking extra and pre-commit hooks, and registers the Helm plugin.
+It prints the PATH command to use in your current shell. Other Linux distributions need their OS packages installed first.
+
+Ordinary chart testing needs Python and Helm. Go is required only for rebuilding source-derived catalogs and compiler facts; GNU Parallel
+also supports optional Kubesec scanning. Kubesec itself is optional and is installed by the CI integrations when enabled.
+Generated [schema caches](../schemas/README.md) are ignored by Git and can be restored from CI cache or rebuilt at any time.
+
+`scripts/project-run.sh` uses this checkout's installed commands even when another
 virtual environment is active. Pytest is a runtime dependency because Helm runs
 generated suites inside the plugin environment; linting tools remain development
 dependencies. The Poetry lock pins contributor/CI dependencies. Plugin installation
 resolves the package's runtime constraints.
 
+Register application CLIs in `[tool.poetry.scripts]` in `pyproject.toml` and invoke
+the installed binaries. Use `bash scripts/project-run.sh COMMAND` for commands in
+the checkout environment; avoid Python module-launcher wrappers.
+
 ## Checks
+
+### Shell checks
+
+Use four spaces for each shell indentation level. In YAML, these spaces are added
+after the YAML block's indentation. Write control flow on separate lines and
+keep interpolated CI inputs in `env`, then reference quoted shell variables.
+Use `pushd` and `popd` for temporary directory changes. New shell functions follow
+the description and typed-argument comments in [setup-dev.sh](../scripts/setup-dev.sh).
+
+Pre-commit formats maintained `.sh` files and shell blocks in GitHub workflows,
+composite actions, and the GitLab/CircleCI examples. ShellCheck checks both forms;
+diagnostics for embedded code point to its YAML filename and line number.
+The formatter preserves surrounding YAML, comments and heredoc contents. Python
+and PowerShell steps are excluded from shell checks.
+
+```sh
+# Check embedded scripts without changing files:
+bash scripts/project-run.sh hypothesis-helm-ci-shell
+# Format embedded scripts and report remaining ShellCheck findings:
+bash scripts/project-run.sh hypothesis-helm-ci-shell --write
+# Run all shell hooks against maintained files:
+bash scripts/project-run.sh pre-commit run shfmt --all-files
+bash scripts/project-run.sh pre-commit run shellcheck --all-files
+bash scripts/project-run.sh pre-commit run ci-shell --all-files
+```
+
+`scripts/check.sh`, including its CI and refresh callers, runs the same checks
+without rewriting files. `scripts/setup-dev.sh` installs ShellCheck; Poetry
+installs the pinned shfmt formatter.
+
+### Project checks
+
+Raw benchmark datasets, compressed artifacts and scan logs are stored with Git LFS.
+After installing Git LFS, download them before running checks or a full refresh:
+
+```sh
+git lfs install --local
+git lfs pull
+```
+
+Raw-data publication is currently paused. The published benchmark remains tracked,
+and new raw measurements are ignored by [`.gitignore`](../.gitignore). The
+`lfs-snapshot` pre-commit check rejects staged changes to existing LFS files; use
+`git restore --staged -- <paths>` to unstage them while keeping your local results.
+Markdown, plots, PDFs and chart schemas can still be committed normally. After
+regenerating plots, their new raw measurements remain local until explicitly published.
+
+To deliberately publish another snapshot, add the chosen ignored files with
+`git add -f -- <paths>`, then use `SKIP=lfs-snapshot git commit`. Other pre-commit
+checks still run, and the LFS pre-push hook uploads the new content. Keep that
+upload hook enabled so pushed pointers remain downloadable.
+
+The LFS patterns remain in [`.gitattributes`](../.gitattributes) so the existing
+snapshot can still be downloaded. Pausing updates does not remove LFS data already
+present in unpushed commits.
+LFS tracking does not remove large blobs from earlier commits; that requires a
+separate history migration.
 
 ```sh
 bash scripts/check.sh
@@ -30,10 +123,41 @@ poetry build
 ```
 
 The validation command runs Ruff lint/format, strict mypy, pydocstyle, pydoclint,
-and the package's pytest suite. Source and test docstrings follow Astrivant's
+the generated CLI reference check, and the package's pytest suite. Source and test docstrings follow Astrivant's
 Google-style convention. No type-checking exclusions weaken the source checks.
 
-Unit and integration tests live under `pkg/hypothesis_helm/tests`. Helm must be
+After changing CLI arguments, regenerate the [CLI reference](cli/README.md):
+
+```sh
+bash scripts/project-run.sh cog -r docs/cli/README.md
+```
+
+Unit and integration tests live under [`pkg/hypothesis_helm/tests`](../pkg/hypothesis_helm/tests), grouped by the behavior they verify:
+
+| Directory | What it tests |
+| --- | --- |
+| `compiler/` | Template parsing, value origins, helper contracts, destination constraints, and analysis limits. |
+| `generation/` | Typed values, field settings, finite domains, and interaction coverage. |
+| `filtering/` | Sampling, calibration, trimming, and input prioritization. |
+| `execution/` | Workers, traversal, caching, sharding, time limits, and shutdown. |
+| `charts/` | Chart discovery, repository scans, saved suites, and minimal-values exports. |
+| `findings/` | Finding codes, severity thresholds, suppressions, and fail-fast behavior. |
+| `reporting/` | Aggregation, diagnostics, links, provenance, and diagrams. |
+| `schemas/` | Source-derived catalogs, Kubernetes and CRD schemas, and YAML parsers. |
+| `integrations/` | CI workflows, Kubesec, installers, release tooling, and remote shards. |
+| `benchmarking/` | Synthetic fixtures, measurements, plots, and study publication. |
+| `refresh/` | Refresh orchestration, distributed runs, and resuming interrupted work. |
+| `pipeline/` | Work graphs, routing gates, scheduling, and process ownership. |
+| `package/` | Public exports, shared exceptions, and environment configuration. |
+
+Run one category by passing its directory to pytest:
+
+```sh
+bash scripts/project-run.sh pytest -n auto pkg/hypothesis_helm/tests/compiler
+```
+
+The full test command still discovers every category. Shared chart fixtures stay in `tests/fixtures/`,
+and `tests/conftest.py` applies the same environment isolation throughout the suite. Helm must be
 available for render tests; the neighboring Astrivant audit skips when absent.
 `ASTRIVANT_CHART=<path>` opts into the full whole-chart Astrivant integration gate.
 Fixture schemas deliberately containing documentation gaps are not processed by
@@ -48,12 +172,74 @@ helm hypothesis generate examples/workload --output /tmp/generated-workload
 helm hypothesis run /tmp/generated-workload
 ```
 
-CircleCI checks the framework and the end-user plugin workflow, then builds the
-wheel and source distribution. Generated-suite execution uses the plugin's
+## GitHub workflows
+
+Each workflow has one purpose, with the same name shown in GitHub's Actions list:
+
+| Workflow | Purpose | When it runs |
+| --- | --- | --- |
+| [Code checks and tests](../.github/workflows/checks.yml) | Pre-commit hooks, Go tests and parallel Python tests. | PRs, `main`, manual, release verification. |
+| [Chart tests and security](../.github/workflows/chart-validation.yml) | Test the example chart, validate schemas, run Kubesec and aggregate shards. | PRs, `main`, manual, release verification. |
+| [Package build and plugin tests](../.github/workflows/package.yml) | Build distributions and exercise the installed Helm plugin; verify the catalog on tags. | PRs, `main`, manual, release verification. |
+| [Benchmark smoke tests](../.github/workflows/benchmark-smoke.yml) | Check benchmark recipes and plot generation with short runs. | PRs, `main`, manual, release verification and full refresh. |
+| [Benchmark and report refresh](../.github/workflows/benchmark-refresh.yml) | Run all studies, regenerate plots and scan Bitnami and Prometheus. | Manual only. |
+| [Publish to PyPI](../.github/workflows/publish-pypi.yml) | Require all four verification workflows, then publish their versioned distributions. | Pushed version tags only. |
+
+The four verification workflows run independently, so their results are visible separately.
+The full refresh is a dedicated manual workflow; there is no additional switch to enable it.
+The shared [project setup action](../.github/actions/setup-project/action.yml) installs the same tools for checks, builds and benchmarks.
+Every pull request update runs all configured pre-commit hooks against all files and tests the PR's head commit.
+Pytest uses all available CPUs. The verification job defaults to `ubuntu-latest-8-cores`;
+enable an eight-core Ubuntu x64 larger runner with that name, or set the repository variable `HH_CI_RUNNER`
+to your configured runner's label. See [GitHub's larger runner setup](https://docs.github.com/en/actions/how-tos/manage-runners/larger-runners/manage-larger-runners).
+JUnit results, distributions, and smoke outputs are retained as artifacts for 30 days, including after failures.
+The versioned Helm binary cache is enabled by default; disable it with the manual `binary-cache` input
+or the repository variable `HH_BINARY_CACHE=false`.
+Generated-suite execution uses the plugin's
 interpreter, with unrelated pytest configuration and auto-loaded plugins disabled.
 The saved suite's own code and conftest remain editable.
 
 Publishing and remote repository-setting changes are not automated by local checks.
+
+## Documentation contents
+
+Run `hypothesis-helm-docs` from the checkout root after editing headings. It updates linked tables of contents in maintained
+Markdown pages; `hypothesis-helm-docs --check` verifies them without writing. Pre-commit updates the Markdown files in a commit,
+and project checks verify the full documentation set. Regenerated study and scan reports include contents automatically.
+Guides include all heading levels. Scan reports list sections and charts, leaving individual error entries out of their contents.
+Archived run snapshots and third-party sources are excluded to preserve recorded checksums and upstream files.
+
+## Publishing to PyPI
+
+Create the GitHub environment `pypi` and add your PyPI API token as its `PYPI_API_TOKEN` secret.
+The publishing job uses this environment and follows its configured protection rules.
+Set the version with `poetry version 0.1.0` and commit the updated `pyproject.toml` before tagging that commit:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Only a pushed version tag triggers the [publishing workflow](../.github/workflows/publish-pypi.yml).
+Branch pushes, pull requests, and publishing a GitHub release do not upload to PyPI.
+CI checks that the tag matches the package version before building. Prerelease names normalize to Python's version format:
+
+| Git tag | Package version (`poetry version ...`) |
+| --- | --- |
+| `v1.3.0-alpha` | `1.3.0a0` |
+| `v1.3.0-alpha.1` | `1.3.0a1` |
+| `v1.3.0-beta.2` | `1.3.0b2` |
+| `v1.3.0-rc.1` | `1.3.0rc1` |
+| `v1.3.0` | `1.3.0` |
+
+Canonical tags such as `v1.3.0rc1` also work. An omitted prerelease number means zero.
+Set and commit the matching package version before pushing its tag; prerelease and final versions remain distinct.
+
+Poetry embeds that version in the wheel and source distribution. CI names the artifact
+`python-distributions-<version>`; the publishing job checks the version again and uploads that exact artifact
+with `poetry publish`. Full CI must pass before publication.
+The token is available only to the publishing step, using [Poetry's token configuration](https://python-poetry.org/docs/repositories/#configuring-credentials).
+No `.pypirc` is needed: Poetry uses its own configuration and the token environment variable above.
 
 ## Pre-commit hook
 
@@ -87,28 +273,102 @@ pre-commit run helm-hypothesis --all-files
       require_serial: true
 ```
 
-Pre-commit local hooks repeat the manifest fields rather than importing another
-checkout's manifest. Chart or vendored dependency changes trigger the hook.
+Pre-commit local hooks declare the manifest fields in the consuming checkout. Chart or vendored dependency changes trigger the hook.
 A failing property blocks the commit; the generated suite and results are saved
-under `reports/hypothesis-helm`. Ten examples per property keeps the default
-sampling budget modest; this does not guarantee complete branch coverage.
+under `.cache/hypothesis-helm/runs`. Ten examples per property keeps the default
+sampling budget modest. Use branch analysis and broader testing to assess coverage.
 
 ## Package organization
 
-The package root contains the CLI and the lazy public API (`Chart`, `check_chart`,
-`coalesce`, and `generate_tests`). Related implementation modules live together:
+Every maintained Python module declares `__all__` explicitly. Export functions, classes, type aliases, and constants owned by that module,
+plus intentional re-exports from another project module. Keep standard-library and third-party imports, loggers, generic type variables,
+and internal execution state out of the list. The shared `env` dictionary is an explicit public configuration interface.
+Import dependencies directly from their own packages.
+
+An organizing package can use `__all__ = ()`; it does not need to eagerly import all its submodules. The root `hypothesis_helm` API stays lazy
+so importing it does not initialize the testing engine. Refresh recipe scripts also have empty exports because they are executable steps,
+not library interfaces. Tests check export ownership and representative wildcard imports.
+
+`__all__` controls `from module import *`, not access permissions. Explicit imports and attribute access still follow Python's usual rules.
+Use short comments near decisions that need context: why a branch remains unresolved, what a cache entry proves, which process owns cleanup,
+or how a measurement stays comparable. Avoid comments that merely repeat the next statement; update them with the behavior they explain.
+
+The package root contains the CLI, lightweight environment helpers (`env`, `refresh_env`, `set_env`), and the lazy chart API
+(`Chart`, `check_chart`, `coalesce`, and `generate_tests`). Related implementation modules live together:
 
 | Subpackage | Responsibility |
 | --- | --- |
 | `charts/` | Template discovery, YAML handling, property generation, and chart rendering. |
-| `schemas/` | Value contracts, finite schema enumeration, and Kubernetes API conformity. |
-| `execution/` | Suite execution, worker scheduling, PID feedback, process cleanup, and result caching. |
-| `reporting/` | Progress display, path logging, and JSON manifest streaming. |
+| `schemas/` | Shared value models and paths, with [configuration, generation, and Kubernetes validation subpackages](architecture/README.md#schema-package-layout). |
+| `execution/` | Suite coordination, with `planning/`, `workers/`, `runtime/` and `state/` groups. See the [execution layout](architecture/README.md#execution-package-layout). |
+| `reporting/` | [Console output, saved evidence, reports, coverage statistics, and documentation helpers](architecture/README.md#reporting-package-layout). |
 | `integrations/` | CI provider configuration, shard detection, and the GitHub Action adapter. |
 | `tests/` | Package-local unit and integration tests. |
 
-Generated suites import runtime helpers from `hypothesis_helm.charts.generated`.
+Generated suites import runtime helpers from `hypothesis_helm.charts.suites.runtime`.
 Regenerate previously saved suites with `helm hypothesis generate` after upgrading
 from the flat module layout, or update that import in a manually maintained suite.
 Helm commands and the public package exports retain their existing names. Result
 cache fingerprints cover implementation modules recursively across all subpackages.
+
+## Shared environment settings
+
+Package code reads environment variables from one process-local dictionary:
+
+```python
+from hypothesis_helm import env, refresh_env, set_env
+
+ignored = env.get("HYPOTHESIS_HELM_IGNORED_RULES", "[]")
+refresh_env()  # Pick up changes made directly to os.environ by the caller or another library.
+previous = set_env("HYPOTHESIS_HELM_IGNORED_RULES", "[]")
+try:
+    ...
+finally:
+    set_env("HYPOTHESIS_HELM_IGNORED_RULES", previous)
+```
+
+[`environment.py`](../pkg/hypothesis_helm/environment.py) owns the dictionary and the only direct environment reads and writes.
+`refresh_env()` updates that same object, including removing deleted variables, so imported references remain valid.
+CLI entry points refresh before starting work. Library callers should refresh after changing `os.environ` themselves,
+before starting worker threads; refreshing several settings is not an atomic configuration change for concurrent readers.
+
+Use `set_env(name, value)` for application-owned changes, or `None` to remove a variable. It updates both the dictionary and
+`os.environ`, so external libraries and child processes see the setting too. Temporary chart scopes and CLI overrides restore both
+on exit. The process owner copies the shared dictionary when no explicit child environment is supplied; a provided mapping,
+including an empty one, takes precedence. Each worker process has its own snapshot, rather than shared memory between processes.
+
+The catalog and optional benchmarking package use this same environment API. Tests that change the process environment explicitly
+refresh the snapshot, and test teardown restores it to prevent settings leaking between cases.
+
+## Repository map
+
+Project folders and Python modules under `pkg/` use underscores, as in
+`pkg/hypothesis_helm`. Published distribution names and CLI commands keep their existing names.
+
+| Location | Responsibility |
+| --- | --- |
+| [`pkg/hypothesis_helm/`](../pkg/hypothesis_helm) | CLI and public API; implementation grouped under charts, schemas, execution, reporting, and integrations. |
+| [`pkg/hypothesis_helm/tests/`](../pkg/hypothesis_helm/tests) | Unit tests and real Helm integration tests. |
+| [`pkg/hypothesis_helm_benchmarking/`](../pkg/hypothesis_helm_benchmarking) | Independently packaged benchmark commands, studies, and refresh automation. |
+| [`pkg/hypothesis_helm_catalog/`](../pkg/hypothesis_helm_catalog) | Shipped input-domain catalog and its rebuild command. |
+| [`pkg/pipeline/`](../pkg/pipeline) | Shared work scheduling and balancing. |
+| [`examples/`](../examples) | Small charts and a checked-in generated workload suite. |
+| [`scripts/`](../scripts) | Project command runner, validation command and Helm plugin hooks. |
+| [`action.yml`](../action.yml) | GitHub Action with automatic CI sharding and artifact uploads. |
+| [`plugin.yaml`](../plugin.yaml) | Installable Helm plugin manifest. |
+| [`.github/workflows/`](../.github/workflows/) | Separate code checks, chart validation, package verification, benchmarks, refresh and publication. |
+| [`.github/settings.yml`](../.github/settings.yml) | Declarative repository settings. |
+| [`docs/`](.) | Development setup, CLI behavior and testing limitations. |
+
+
+## Preserved scheduler and separate Reflow project
+
+The local `pkg/pipeline` package contains the scheduler retained from before the Reflow extraction.
+Hypothesis Helm's refresh code imports this local package. Its tests and graph documentation remain here.
+
+The independent [Reflow project](https://github.com/astrivant/reflow) lives at `../reflow`, with its own `reflow.graph` and
+`reflow.balance` packages. Development there does not change the local benchmark scheduler. Hypothesis Helm currently does
+not depend on that sibling project; switching refresh to Reflow should be a deliberate migration after the existing runs finish.
+
+Existing refresh workspaces retain their frozen sources, source hashes, logs and journals under `.cache/refresh/`.
+Restoring the local packages does not alter those snapshots or restart a running process.
